@@ -5,18 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Downhole Tool Tracker</title>
 <style>
-:root {
-  --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --bg4:#2d333b;
-  --border:#30363d; --border2:#444c56;
-  --text:#e6edf3; --text2:#8b949e; --text3:#6e7681;
-  --green:#3fb950; --green-bg:rgba(63,185,80,0.1); --green-bd:rgba(63,185,80,0.25);
-  --red:#f85149; --red-bg:rgba(248,81,73,0.1); --red-bd:rgba(248,81,73,0.25);
-  --amber:#d29922; --amber-bg:rgba(210,153,34,0.1); --amber-bd:rgba(210,153,34,0.25);
-  --blue:#58a6ff; --blue-bg:rgba(88,166,255,0.08); --blue-bd:rgba(88,166,255,0.2);
+:root{
+  --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;
+  --border:#30363d;--border2:#444c56;
+  --text:#e6edf3;--text2:#8b949e;--text3:#6e7681;
+  --green:#3fb950;--green-bg:rgba(63,185,80,0.1);--green-bd:rgba(63,185,80,0.25);
+  --red:#f85149;--red-bg:rgba(248,81,73,0.1);--red-bd:rgba(248,81,73,0.25);
+  --amber:#d29922;--amber-bg:rgba(210,153,34,0.1);--amber-bd:rgba(210,153,34,0.25);
+  --blue:#58a6ff;--blue-bg:rgba(88,166,255,0.08);--blue-bd:rgba(88,166,255,0.2);
   --purple:#bc8cff;
-  --r:8px; --rl:12px;
+  --r:8px;--rl:12px;
   --font:'Segoe UI',system-ui,sans-serif;
-  --mono:'Cascadia Code','Fira Code',Consolas,monospace;
+  --mono:Consolas,'Fira Code',monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.5;min-height:100vh}
@@ -31,18 +31,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 .nav-item:hover{background:var(--bg3);color:var(--text)}
 .nav-item.active{background:var(--blue-bg);color:var(--blue)}
 .nav-icon{font-size:14px;width:16px;text-align:center}
-.nav-badge{margin-left:auto;background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-bd);font-size:10px;padding:1px 6px;border-radius:10px}
-.nav-badge.done{background:var(--green-bg);color:var(--green);border-color:var(--green-bd)}
 .sb-foot{padding:10px;border-top:1px solid var(--border)}
-.conn-pill{display:flex;align-items:center;gap:7px;padding:7px 10px;border-radius:6px;background:var(--bg3);border:1px solid var(--border);cursor:pointer;font-size:12px;color:var(--text2);transition:border-color .15s}
-.conn-pill:hover{border-color:var(--border2)}
-.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;transition:background .3s}
+.conn-pill{display:flex;align-items:center;gap:7px;padding:7px 10px;border-radius:6px;background:var(--bg3);border:1px solid var(--border);cursor:pointer;font-size:12px;color:var(--text2)}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .dot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
 .dot.err{background:var(--red);box-shadow:0 0 6px var(--red)}
 .dot.pulsing{background:var(--amber);animation:bl 1s infinite}
 .dot.off{background:var(--text3)}
 @keyframes bl{0%,100%{opacity:1}50%{opacity:.3}}
-.main{flex:1;overflow-x:hidden;display:flex;flex-direction:column}
+.main{flex:1;overflow-x:hidden}
 .topbar{background:var(--bg2);border-bottom:1px solid var(--border);height:52px;padding:0 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20}
 .topbar-title{font-size:15px;font-weight:600}
 .topbar-actions{display:flex;gap:8px;align-items:center}
@@ -52,28 +49,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 .btn-primary:hover{background:#2ea043}
 .btn-secondary{background:transparent;border-color:var(--border2);color:var(--text)}
 .btn-secondary:hover{background:var(--bg3)}
-.btn-danger{background:transparent;border-color:var(--red-bd);color:var(--red)}
-.btn-danger:hover{background:var(--red-bg)}
-.btn-info{background:transparent;border-color:var(--blue-bd);color:var(--blue)}
-.btn-info:hover{background:var(--blue-bg)}
 .btn-sm{padding:4px 10px;font-size:12px}
-.btn-icon{padding:5px;width:28px;height:28px;justify-content:center}
 .btn:disabled{opacity:.5;cursor:not-allowed}
-.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);padding:18px;margin-bottom:16px}
-.card-title{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px}
-.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:18px}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px}
 .stat{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px}
-.stat-val{font-size:24px;font-weight:600}
+.stat-val{font-size:28px;font-weight:600}
 .stat-lbl{font-size:12px;color:var(--text2);margin-top:2px}
 .table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden}
 .table-bar{padding:11px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .search{display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:5px 10px}
-.search input{background:none;border:none;outline:none;color:var(--text);font-size:13px;width:170px;font-family:var(--font)}
+.search input{background:none;border:none;outline:none;color:var(--text);font-size:13px;width:200px;font-family:var(--font)}
 .search input::placeholder{color:var(--text3)}
 .fsel{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:12px;padding:4px 8px;cursor:pointer;font-family:var(--font)}
 table{width:100%;border-collapse:collapse}
-thead th{padding:9px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);background:var(--bg3);white-space:nowrap;cursor:pointer;user-select:none}
-thead th:hover{color:var(--text)}
+thead th{padding:9px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);background:var(--bg3);white-space:nowrap}
 tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
 tbody tr:last-child{border-bottom:none}
 tbody tr:hover{background:var(--bg3)}
@@ -87,27 +76,8 @@ td{padding:9px 14px;font-size:13px;vertical-align:middle}
 .bg-a{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-bd)}
 .bg-b{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-bd)}
 .bg-p{background:rgba(188,140,255,.1);color:var(--purple);border:1px solid rgba(188,140,255,.2)}
-.deploy-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.sc{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:14px;position:relative;transition:border-color .2s}
-.sc.done{border-color:var(--green-bd);background:rgba(63,185,80,0.04)}
-.sc.active-step{border-color:var(--blue-bd);background:var(--blue-bg)}
-.step-num{font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
-.step-title{font-size:13px;font-weight:600;margin-bottom:4px}
-.step-desc{font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:10px}
-.step-check{position:absolute;top:12px;right:12px;width:20px;height:20px;border-radius:50%;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px}
-.sc.done .step-check{background:var(--green);border-color:var(--green);color:#fff}
-.step-actions{display:flex;gap:6px;flex-wrap:wrap}
-.dlog{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px;font-family:var(--mono);font-size:12px;color:var(--text2);max-height:180px;overflow-y:auto}
-.ll{padding:1px 0;display:flex;gap:8px}
-.lt{color:var(--text3);flex-shrink:0}
-.lok{color:var(--green)}.lerr{color:var(--red)}.lwarn{color:var(--amber)}.linfo{color:var(--blue)}
-.dc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin-bottom:14px}
-.dc{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:11px}
-.dc-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
-.dc-val{font-size:13px;font-weight:500}
-.ok{color:var(--green)}.er{color:var(--red)}.wa{color:var(--amber)}.in{color:var(--blue)}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(2px);padding:16px}
-.modal{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);width:100%;max-width:560px;max-height:90vh;overflow-y:auto}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);width:100%;max-width:580px;max-height:90vh;overflow-y:auto}
 .mhead{padding:15px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .mtitle{font-size:15px;font-weight:600}
 .mclose{background:none;border:none;color:var(--text2);cursor:pointer;font-size:20px;padding:0 4px;border-radius:4px;line-height:1;font-family:var(--font)}
@@ -122,352 +92,184 @@ input,select,textarea{background:var(--bg3);border:1px solid var(--border);borde
 input:focus,select:focus,textarea:focus{border-color:var(--blue)}
 select option{background:var(--bg2)}
 textarea{resize:vertical;min-height:65px}
-.code-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;font-family:var(--mono);font-size:11px;color:var(--text2);line-height:1.7;white-space:pre-wrap;word-break:break-all;margin-bottom:10px}
-.hl{color:var(--blue)}.hlg{color:var(--green)}.hla{color:var(--amber)}
-.upload-zone{border:2px dashed var(--border2);border-radius:var(--rl);padding:32px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg3)}
-.upload-zone:hover,.upload-zone.drag{border-color:var(--blue);background:var(--blue-bg)}
-.upload-zone input{display:none}
-.up-icon{font-size:32px;margin-bottom:8px}
-.up-title{font-size:14px;font-weight:500;margin-bottom:4px}
-.up-sub{font-size:12px;color:var(--text3)}
-.up-preview{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;max-height:260px;overflow-y:auto}
-.up-row{display:flex;gap:0;padding:6px 12px;border-bottom:1px solid var(--border);font-size:11px;font-family:var(--mono)}
-.up-row:last-child{border-bottom:none}
-.up-row.hdr{background:var(--bg4);font-weight:600;color:var(--text2);font-family:var(--font)}
-.up-cell{min-width:90px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);padding-right:8px}
-.prog-wrap{background:var(--bg3);border-radius:10px;height:6px;overflow:hidden;margin-top:8px}
-.prog-bar{height:100%;border-radius:10px;background:var(--green);transition:width .5s ease}
 .toasts{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:200}
 .toast{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;font-size:13px;display:flex;align-items:center;gap:8px;min-width:240px;box-shadow:0 4px 20px rgba(0,0,0,.4);animation:tin .2s ease}
 .toast.ok{border-left:3px solid var(--green)}.toast.err{border-left:3px solid var(--red)}.toast.info{border-left:3px solid var(--blue)}
 @keyframes tin{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
 .spin-el{width:15px;height:15px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:rot .7s linear infinite;flex-shrink:0}
 @keyframes rot{to{transform:rotate(360deg)}}
-@media(max-width:680px){.sidebar{display:none}.deploy-grid{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg)}
+.login-box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);padding:32px;width:100%;max-width:360px}
+.login-logo-icon{width:48px;height:48px;background:#1a3a5c;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 10px}
+.login-title{font-size:18px;font-weight:600;text-align:center;margin-bottom:4px}
+.login-sub{font-size:12px;color:var(--text2);text-align:center;margin-bottom:24px}
+.login-err{background:var(--red-bg);border:1px solid var(--red-bd);color:var(--red);border-radius:var(--r);padding:8px 12px;font-size:12px;margin-bottom:14px;display:none}
+.user-pill{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);font-size:12px;color:var(--text2);margin-bottom:8px}
+.user-dot{width:24px;height:24px;border-radius:50%;background:var(--blue-bg);border:1px solid var(--blue-bd);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--blue);flex-shrink:0}
+@media(max-width:680px){.sidebar{display:none}.fgrid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-<div class="app">
 
-<aside class="sidebar">
-  <div class="sb-head">
-    <div class="sb-logo">⬡</div>
-    <div><div class="sb-title">Tool Tracker</div><div class="sb-sub">DOWNHOLE OPS</div></div>
-  </div>
-  <nav class="nav">
-    <button class="nav-item active" onclick="pg('tools')" id="nav-tools"><span class="nav-icon">🔧</span> Tools</button>
-    <button class="nav-item" onclick="pg('deploy')" id="nav-deploy"><span class="nav-icon">🚀</span> Deployment <span class="nav-badge" id="deploy-badge">2/6</span></button>
-    <button class="nav-item" onclick="pg('upload')" id="nav-upload"><span class="nav-icon">📤</span> Upload Data</button>
-    <button class="nav-item" onclick="pg('diag')" id="nav-diag"><span class="nav-icon">📡</span> Diagnostics</button>
-    <button class="nav-item" onclick="pg('settings')" id="nav-settings"><span class="nav-icon">⚙️</span> Settings</button>
-  </nav>
-  <div class="sb-foot">
-    <div class="conn-pill" onclick="pg('diag');runDiag()">
-      <span class="dot off" id="sb-dot"></span>
-      <span id="sb-txt" style="flex:1">Not tested</span>
-      <span style="font-size:10px;color:var(--text3)">test ↗</span>
-    </div>
-  </div>
-</aside>
-
-<div class="main">
-
-<!-- TOOLS -->
-<div id="pg-tools">
-  <div class="topbar">
-    <div class="topbar-title">Downhole Tools</div>
-    <div class="topbar-actions">
-      <button class="btn btn-secondary btn-sm" onclick="loadTools()">↻ Refresh</button>
-      <button class="btn btn-primary btn-sm" onclick="openAdd()">+ Add Tool</button>
-    </div>
-  </div>
-  <div class="content">
-    <div class="stats-row">
-      <div class="stat"><div class="stat-val" id="s-total">—</div><div class="stat-lbl">Total Tools</div></div>
-      <div class="stat"><div class="stat-val ok" id="s-active">—</div><div class="stat-lbl">Active</div></div>
-      <div class="stat"><div class="stat-val wa" id="s-maint">—</div><div class="stat-lbl">Maintenance</div></div>
-      <div class="stat"><div class="stat-val" style="color:var(--text3)" id="s-ret">—</div><div class="stat-lbl">Retired</div></div>
-    </div>
-    <div class="table-wrap">
-      <div class="table-bar">
-        <div class="search"><span style="color:var(--text3)">🔍</span><input id="q" placeholder="Search tools…" oninput="renderTools()"></div>
-        <select class="fsel" id="fs" onchange="renderTools()"><option value="">All Status</option><option>Active</option><option>Maintenance</option><option>Retired</option></select>
-        <select class="fsel" id="ft" onchange="renderTools()"><option value="">All Types</option><option>MWD</option><option>LWD</option><option>BHA</option><option>RSS</option><option>Motor</option><option>Stabilizer</option></select>
-        <div id="src-badge" style="margin-left:auto;font-size:11px;color:var(--text3)"></div>
-      </div>
-      <div style="overflow-x:auto">
-        <table>
-          <thead><tr>
-            <th onclick="srt('serialNumber')">Serial # ↕</th>
-            <th onclick="srt('toolName')">Tool Name ↕</th>
-            <th onclick="srt('toolType')">Type</th>
-            <th onclick="srt('status')">Status</th>
-            <th onclick="srt('location')">Location</th>
-            <th onclick="srt('runHours')" style="text-align:right">Run Hrs ↕</th>
-            <th onclick="srt('lastInspection')">Last Inspection</th>
-            <th>Actions</th>
-          </tr></thead>
-          <tbody id="tbody"></tbody>
-        </table>
-      </div>
-    </div>
+<div class="login-wrap" id="login-wrap">
+  <div class="login-box">
+    <div class="login-logo-icon">⬡</div>
+    <div class="login-title">Downhole Tool Tracker</div>
+    <div class="login-sub">Baker Hughes — Downhole Operations</div>
+    <div class="login-err" id="login-err"></div>
+    <div class="fg" style="margin-bottom:12px"><label>Username</label><input id="l-user" placeholder="admin" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="fg" style="margin-bottom:20px"><label>Password</label><input type="password" id="l-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center" id="l-btn" onclick="doLogin()">Sign In</button>
   </div>
 </div>
 
-<!-- DEPLOYMENT -->
-<div id="pg-deploy" style="display:none">
-  <div class="topbar">
-    <div class="topbar-title">Deployment Checklist</div>
-    <div class="topbar-actions"><span id="deploy-prog-lbl" style="font-size:12px;color:var(--text2)">2 of 6 complete</span></div>
-  </div>
-  <div class="content">
-    <div class="card" style="padding:14px 18px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div style="font-size:13px;font-weight:500">Azure Deployment Progress</div>
-        <div style="font-size:12px;color:var(--text2)" id="pct-lbl">33%</div>
-      </div>
-      <div class="prog-wrap"><div class="prog-bar" id="prog-bar" style="width:33%"></div></div>
+<div class="app" id="app-wrap" style="display:none">
+  <aside class="sidebar">
+    <div class="sb-head">
+      <div class="sb-logo">⬡</div>
+      <div><div class="sb-title">Tool Tracker</div><div class="sb-sub">DOWNHOLE OPS</div></div>
     </div>
-    <div class="deploy-grid">
-
-      <div class="sc done" id="sc1">
-        <div class="step-check">✓</div>
-        <div class="step-num">Step 1</div>
-        <div class="step-title">SQL Firewall — Azure Services</div>
-        <div class="step-desc">Azure SQL → Networking → "Allow Azure services and resources" is enabled. ✓</div>
-        <div class="step-actions"><span class="badge bg-g">Complete</span></div>
+    <nav class="nav">
+      <button class="nav-item active" onclick="pg('inventory')" id="nav-inventory"><span class="nav-icon">📦</span> Inventory</button>
+      <button class="nav-item" onclick="pg('callouts')" id="nav-callouts"><span class="nav-icon">📋</span> Callouts</button>
+      <button class="nav-item" onclick="pg('audit')" id="nav-audit"><span class="nav-icon">🕐</span> Audit Trail</button>
+    </nav>
+    <div class="sb-foot">
+      <div class="user-pill">
+        <div class="user-dot" id="user-init">?</div>
+        <div style="flex:1"><div id="user-name" style="color:var(--text);font-size:12px;font-weight:500">—</div><div id="user-role" style="font-size:10px;color:var(--text3)">—</div></div>
+        <button onclick="doLogout()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;font-family:var(--font)">out</button>
       </div>
+      <div class="conn-pill" onclick="testConn()">
+        <span class="dot off" id="sb-dot"></span>
+        <span id="sb-txt" style="flex:1;font-size:11px">Not tested</span>
+      </div>
+    </div>
+  </aside>
 
-      <div class="sc active-step" id="sc2">
-        <div class="step-check" style="border-color:var(--blue);color:var(--blue)">2</div>
-        <div class="step-num">Step 2 — Action Required Now</div>
-        <div class="step-title">Add Connection String to App Service</div>
-        <div class="step-desc">API is returning HTTP 500. The SQL connection string is missing from App Service Configuration.</div>
-        <div class="code-box">Azure Portal → App Service → <span class="hl">Configuration</span>
-→ Connection strings → <span class="hlg">+ New connection string</span>
+  <div class="main">
 
-  Name:  <span class="hlg">DefaultConnection</span>
-  Type:  <span class="hla">SQLAzure</span>
-  Value: Server=tcp:&lt;SERVER&gt;.database.windows.net,1433;
-         Initial Catalog=&lt;DB_NAME&gt;;
-         User ID=&lt;USERNAME&gt;;Password=&lt;PASSWORD&gt;;
-         Encrypt=True;TrustServerCertificate=False;
-
-→ Save  →  <span class="hla">Restart the App Service</span></div>
-        <div class="step-actions">
-          <button class="btn btn-info btn-sm" onclick="pg('diag');runDiag()">Re-test API</button>
-          <button class="btn btn-secondary btn-sm" onclick="markDone(2)">Mark Done</button>
+    <div id="pg-inventory">
+      <div class="topbar">
+        <div class="topbar-title">Inventory</div>
+        <div class="topbar-actions">
+          <span id="src-badge" style="font-size:11px;color:var(--text3)"></span>
+          <button class="btn btn-secondary btn-sm" onclick="loadInventory()">↻ Refresh</button>
         </div>
       </div>
-
-      <div class="sc" id="sc3">
-        <div class="step-check" style="color:var(--text3)">3</div>
-        <div class="step-num">Step 3</div>
-        <div class="step-title">Verify Tracker Reads Azure SQL</div>
-        <div class="step-desc">After Step 2, confirm live data loads. The API test will auto-complete this step on success.</div>
-        <div class="step-actions">
-          <button class="btn btn-secondary btn-sm" onclick="loadTools();pg('tools')">Load Live Data</button>
-          <button class="btn btn-secondary btn-sm" onclick="markDone(3)">Mark Done</button>
+      <div class="content">
+        <div class="stats-row">
+          <div class="stat"><div class="stat-val" id="s-total">—</div><div class="stat-lbl">Total Tools</div></div>
+          <div class="stat"><div class="stat-val" style="color:var(--green)" id="s-good">—</div><div class="stat-lbl">Good</div></div>
+          <div class="stat"><div class="stat-val" style="color:var(--amber)" id="s-repair">—</div><div class="stat-lbl">Repair / Maint.</div></div>
+          <div class="stat"><div class="stat-val" style="color:var(--blue)" id="s-site">—</div><div class="stat-lbl">On Site</div></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-bar">
+            <div class="search"><span style="color:var(--text3)">🔍</span><input id="q-inv" placeholder="Serial, asset, location, contract…" oninput="renderInv()"></div>
+            <select class="fsel" id="f-st" onchange="renderInv()">
+              <option value="">All Status</option>
+              <option>Good</option><option>Maintenance</option><option>Repair</option><option>Redress</option><option>Deployed</option><option>Lost</option>
+            </select>
+            <select class="fsel" id="f-lo" onchange="renderInv()">
+              <option value="">All Locations</option>
+              <option>Our Base</option><option>Rig Site</option>
+            </select>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr>
+                <th>Serial</th><th>Size / Asset</th><th>Description</th>
+                <th>Location</th><th>Status</th><th>Sub-Location</th>
+                <th>Contract</th><th>Rig</th><th>Well</th><th>Supplier</th><th>Notes</th>
+              </tr></thead>
+              <tbody id="inv-body"></tbody>
+            </table>
+          </div>
         </div>
       </div>
+    </div>
 
-      <div class="sc" id="sc4">
-        <div class="step-check" style="color:var(--text3)">4</div>
-        <div class="step-num">Step 4</div>
-        <div class="step-title">Deploy as Azure Static Web App</div>
-        <div class="step-desc">Host this file as a Static Web App — free tier, global CDN, auto HTTPS.</div>
-        <div class="code-box">Azure Portal → Create resource → <span class="hl">Static Web App</span>
-Plan: <span class="hlg">Free</span>  |  Build preset: <span class="hlg">HTML</span>
-Source: GitHub repo  -OR-  upload manually via CLI:
-
-az staticwebapp create \
-  --name tooltracker \
-  --resource-group &lt;RG&gt; \
-  --source ./ \
-  --location westeurope
-
-After deploy, add your *.azurestaticapps.net URL to:
-App Service → API → <span class="hla">CORS → Allowed Origins</span></div>
-        <div class="step-actions">
-          <button class="btn btn-info btn-sm" onclick="downloadApp()">⬇ Download HTML</button>
-          <button class="btn btn-secondary btn-sm" onclick="markDone(4)">Mark Done</button>
+    <div id="pg-callouts" style="display:none">
+      <div class="topbar">
+        <div class="topbar-title">Callouts</div>
+        <div class="topbar-actions">
+          <button class="btn btn-secondary btn-sm" onclick="loadCallouts()">↻ Refresh</button>
+          <button class="btn btn-primary btn-sm" onclick="openCal()">+ Add Callout</button>
         </div>
       </div>
-
-      <div class="sc" id="sc5">
-        <div class="step-check" style="color:var(--text3)">5</div>
-        <div class="step-num">Step 5</div>
-        <div class="step-title">Add Team Member Logins</div>
-        <div class="step-desc">Azure Static Web Apps has built-in auth (GitHub, AAD, Microsoft) — no extra infrastructure needed.</div>
-        <div class="code-box"><span class="hla">staticwebapp.config.json  (add to repo root)</span>
-{
-  "auth": {
-    "identityProviders": {
-      "azureActiveDirectory": {
-        "userDetailsClaim": "emails",
-        "registration": {
-          "openIdIssuer": "https://login.microsoftonline.com/&lt;TENANT_ID&gt;/v2.0",
-          "clientIdSettingName": "AAD_CLIENT_ID",
-          "clientSecretSettingName": "AAD_CLIENT_SECRET"
-        }
-      }
-    }
-  },
-  "routes": [
-    { "route": "/*", "allowedRoles": ["authenticated"] }
-  ],
-  "responseOverrides": {
-    "401": { "redirect": "/.auth/login/aad", "statusCode": 302 }
-  }
-}</div>
-        <div class="step-actions"><button class="btn btn-secondary btn-sm" onclick="markDone(5)">Mark Done</button></div>
-      </div>
-
-      <div class="sc" id="sc6">
-        <div class="step-check" style="color:var(--text3)">6</div>
-        <div class="step-num">Step 6</div>
-        <div class="step-title">Upload Real Tool Data</div>
-        <div class="step-desc">Import your existing inventory via CSV. The Upload page handles parsing and sends each row to Azure SQL via the API.</div>
-        <div class="step-actions">
-          <button class="btn btn-info btn-sm" onclick="pg('upload')">Go to Upload →</button>
-          <button class="btn btn-secondary btn-sm" onclick="markDone(6)">Mark Done</button>
+      <div class="content">
+        <div class="stats-row">
+          <div class="stat"><div class="stat-val" id="c-tot">—</div><div class="stat-lbl">Total</div></div>
+          <div class="stat"><div class="stat-val" style="color:var(--amber)" id="c-pend">—</div><div class="stat-lbl">Need to Assign</div></div>
+          <div class="stat"><div class="stat-val" style="color:var(--blue)" id="c-act">—</div><div class="stat-lbl">Active</div></div>
+          <div class="stat"><div class="stat-val" style="color:var(--green)" id="c-ret">—</div><div class="stat-lbl">Returned</div></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-bar">
+            <div class="search"><span style="color:var(--text3)">🔍</span><input id="q-cal" placeholder="Asset, rig, well, contract…" oninput="renderCal()"></div>
+            <select class="fsel" id="f-cs" onchange="renderCal()">
+              <option value="">All Status</option>
+              <option>Need_to_Assign</option><option>Assigned</option><option>On Site</option><option>Returned</option>
+            </select>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr>
+                <th>Asset</th><th>Qty</th><th>Serial Assigned</th>
+                <th>Contract</th><th>Rig</th><th>Well</th>
+                <th>Required</th><th>Baker By</th><th>Exp. Return</th>
+                <th>Status</th><th>For</th><th>Notes</th>
+              </tr></thead>
+              <tbody id="cal-body"></tbody>
+            </table>
+          </div>
         </div>
       </div>
-
     </div>
-  </div>
-</div>
 
-<!-- UPLOAD -->
-<div id="pg-upload" style="display:none">
-  <div class="topbar">
-    <div class="topbar-title">Upload Tool Data</div>
-    <div class="topbar-actions">
-      <button class="btn btn-secondary btn-sm" onclick="dlTemplate()">⬇ CSV Template</button>
-    </div>
-  </div>
-  <div class="content">
-    <div class="card">
-      <div class="card-title">Import from CSV</div>
-      <div class="upload-zone" id="dz" onclick="document.getElementById('csv-in').click()"
-           ondragover="event.preventDefault();this.classList.add('drag')"
-           ondragleave="this.classList.remove('drag')"
-           ondrop="handleDrop(event)">
-        <input type="file" id="csv-in" accept=".csv" onchange="handleFile(this.files[0])">
-        <div class="up-icon">📂</div>
-        <div class="up-title">Drop CSV here or click to browse</div>
-        <div class="up-sub">Columns: SerialNumber, ToolName, ToolType, Status, Location, RunHours, OD, MaxTemp, LastInspection, Notes</div>
+    <div id="pg-audit" style="display:none">
+      <div class="topbar">
+        <div class="topbar-title">Audit Trail</div>
+        <div class="topbar-actions"><button class="btn btn-secondary btn-sm" onclick="loadAudit()">↻ Refresh</button></div>
       </div>
-      <div id="up-preview" style="margin-top:14px;display:none"></div>
-      <div id="up-actions" style="margin-top:12px;display:none;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn btn-primary" onclick="importCSV()">⬆ Import <span id="up-count">0</span> records to Azure SQL</button>
-        <button class="btn btn-secondary" onclick="clearUpload()">Clear</button>
-        <div id="up-result" style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px"></div>
+      <div class="content">
+        <div class="table-wrap">
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Time</th><th>Serial</th><th>Field</th><th>From</th><th>To</th><th>By</th></tr></thead>
+              <tbody id="audit-body"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-title">Expected Format</div>
-      <div class="code-box">SerialNumber,ToolName,ToolType,Status,Location,RunHours,OD,MaxTemp,LastInspection,Notes
-<span class="hlg">MWD-2024-001,Pulsar MWD Mk3,MWD,Active,Aberdeen Base,1240,6.75,175,2025-11-10,Good condition</span>
-<span class="hlg">LWD-2024-003,RestoLog LWD,LWD,Active,Well 14/20-A,520,8.25,200,2026-01-05,</span>
-<span class="hlg">RSS-2022-012,AutoTrak G3,RSS,Retired,Storage Yard,12400,6.75,150,2024-03-18,End of life</span></div>
-      <div style="font-size:12px;color:var(--text2)">Dates: YYYY-MM-DD &nbsp;|&nbsp; OD in inches &nbsp;|&nbsp; MaxTemp in °C &nbsp;|&nbsp; Status: Active / Maintenance / Retired</div>
-    </div>
+
   </div>
 </div>
 
-<!-- DIAGNOSTICS -->
-<div id="pg-diag" style="display:none">
-  <div class="topbar">
-    <div class="topbar-title">API Diagnostics</div>
-    <div class="topbar-actions"><button class="btn btn-primary btn-sm" onclick="runDiag()">▶ Run Full Test</button></div>
-  </div>
-  <div class="content">
-    <div class="card">
-      <div class="card-title">Connection Status</div>
-      <div class="dc-grid">
-        <div class="dc"><div class="dc-lbl">Endpoint</div><div class="dc-val mono" id="d-ep" style="font-size:10px;word-break:break-all">—</div></div>
-        <div class="dc"><div class="dc-lbl">HTTP Status</div><div class="dc-val" id="d-st">—</div></div>
-        <div class="dc"><div class="dc-lbl">Latency</div><div class="dc-val" id="d-ms">—</div></div>
-        <div class="dc"><div class="dc-lbl">Azure SQL</div><div class="dc-val" id="d-sql">—</div></div>
-        <div class="dc"><div class="dc-lbl">Records</div><div class="dc-val" id="d-rec">—</div></div>
-        <div class="dc"><div class="dc-lbl">CORS Header</div><div class="dc-val" id="d-cors">—</div></div>
-      </div>
-      <div class="card-title">Test Log</div>
-      <div class="dlog" id="dlog"><div class="ll"><span class="lt">--:--:--</span><span class="linfo">Ready — click Run Full Test to begin</span></div></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Current Issue: HTTP 500</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">The App Service is responding but crashing on SQL init. <strong style="color:var(--text)">Most likely cause: connection string not set in App Service Configuration.</strong></div>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:13px">
-          <div style="font-size:12px;font-weight:600;color:var(--amber);margin-bottom:7px">① Add the connection string (most likely fix)</div>
-          <div class="code-box">App Service → Configuration → Connection strings → New
-  Name: <span class="hlg">DefaultConnection</span>  |  Type: <span class="hla">SQLAzure</span>
-  Server=tcp:YOUR_SERVER.database.windows.net,1433;
-  Initial Catalog=YOUR_DB;Uid=USER;Pwd=PASS;
-  Encrypt=True;TrustServerCertificate=False;
-→ Save → <span class="hla">Restart App Service</span></div>
-        </div>
-        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:13px">
-          <div style="font-size:12px;font-weight:600;color:var(--amber);margin-bottom:7px">② Read the actual error from App Service logs</div>
-          <div class="code-box">App Service → <span class="hl">Log stream</span>  (Monitoring section, left menu)
-Or: Advanced Tools (Kudu) → Debug Console → LogFiles\Application</div>
-        </div>
-        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:13px">
-          <div style="font-size:12px;font-weight:600;color:var(--amber);margin-bottom:7px">③ CORS — required once you host on Static Web App</div>
-          <div class="code-box">App Service → API → CORS → Allowed Origins:
-  <span class="hlg">https://YOUR-APP.azurestaticapps.net</span>  (add your deployed URL)
-  <span class="hla">*</span>  ← only for testing, remove before go-live</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- SETTINGS -->
-<div id="pg-settings" style="display:none">
-  <div class="topbar"><div class="topbar-title">Settings</div></div>
-  <div class="content">
-    <div class="card">
-      <div class="card-title">API Configuration</div>
-      <div class="fg" style="margin-bottom:12px"><label>Azure API URL</label><input id="cfg-url" value="https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker"></div>
-      <div class="fg" style="margin-bottom:16px"><label>Bearer Token / API Key (if required)</label><input type="password" id="cfg-key" placeholder="Leave blank if not needed"></div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-primary btn-sm" onclick="saveSettings()">Save</button>
-        <button class="btn btn-secondary btn-sm" onclick="pg('diag');runDiag()">Test Connection</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-</div><!-- /main -->
-</div><!-- /app -->
-
-<!-- TOOL MODAL -->
-<div class="overlay" id="tool-modal" style="display:none">
+<div class="overlay" id="cal-modal" style="display:none">
   <div class="modal">
-    <div class="mhead"><div class="mtitle" id="m-title">Add Tool</div><button class="mclose" onclick="closeM()">×</button></div>
+    <div class="mhead"><div class="mtitle">Add Callout</div><button class="mclose" onclick="closeCal()">×</button></div>
     <div class="mbody">
       <div class="fgrid">
-        <div class="fg"><label>Serial Number *</label><input id="f-sn" placeholder="MWD-2024-001"></div>
-        <div class="fg"><label>Tool Name *</label><input id="f-nm" placeholder="Pulsar MWD Mk3"></div>
-        <div class="fg"><label>Tool Type</label>
-          <select id="f-ty"><option>MWD</option><option>LWD</option><option>BHA</option><option>RSS</option><option>Motor</option><option>Stabilizer</option><option>Other</option></select></div>
+        <div class="fg"><label>Asset *</label><input id="m-asset" placeholder='12-1/8" STRING STAB'></div>
+        <div class="fg"><label>Qty</label><input type="number" id="m-qty" value="1" min="1"></div>
+        <div class="fg"><label>Contract / Client</label><input id="m-contract" placeholder="ADNOC DRILLING"></div>
+        <div class="fg"><label>Rig</label><input id="m-rig"></div>
+        <div class="fg"><label>Well</label><input id="m-well"></div>
+        <div class="fg"><label>Required Date</label><input type="date" id="m-needed"></div>
+        <div class="fg"><label>Required @ Baker Base</label><input type="date" id="m-baker"></div>
+        <div class="fg"><label>Expected Return</label><input type="date" id="m-return"></div>
         <div class="fg"><label>Status</label>
-          <select id="f-st"><option>Active</option><option>Maintenance</option><option>Retired</option></select></div>
-        <div class="fg"><label>Location / Yard</label><input id="f-lo" placeholder="Aberdeen Base"></div>
-        <div class="fg"><label>Run Hours</label><input type="number" id="f-rh" placeholder="0" min="0"></div>
-        <div class="fg"><label>OD (inches)</label><input type="number" step="0.001" id="f-od" placeholder="6.75"></div>
-        <div class="fg"><label>Max Temp (°C)</label><input type="number" id="f-mt" placeholder="175"></div>
-        <div class="fg"><label>Last Inspection</label><input type="date" id="f-li"></div>
-        <div class="fg"><label>Next Service Due</label><input type="date" id="f-ns"></div>
-        <div class="fg full"><label>Notes</label><textarea id="f-no" placeholder="Any notes…"></textarea></div>
+          <select id="m-status"><option>Need_to_Assign</option><option>Assigned</option><option>On Site</option><option>Returned</option></select></div>
+        <div class="fg"><label>Hole Section / For</label><input id="m-hole"></div>
+        <div class="fg full"><label>Notes</label><textarea id="m-notes"></textarea></div>
       </div>
     </div>
     <div class="mfoot">
-      <button class="btn btn-secondary" onclick="closeM()">Cancel</button>
-      <button class="btn btn-primary" id="m-save" onclick="saveTool()">Save Tool</button>
+      <button class="btn btn-secondary" onclick="closeCal()">Cancel</button>
+      <button class="btn btn-primary" id="m-save" onclick="saveCal()">Add Callout</button>
     </div>
   </div>
 </div>
@@ -475,297 +277,214 @@ Or: Advanced Tools (Kudu) → Debug Console → LogFiles\Application</div>
 <div class="toasts" id="toasts"></div>
 
 <script>
-const DEFAULT_API='https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
-const LS_URL='tt_url2',LS_KEY='tt_key2',LS_STEPS='tt_steps2';
-let tools=[],editId=null,sortF='',sortA=true,csvRows=[];
-let steps=JSON.parse(localStorage.getItem(LS_STEPS)||'{"1":true,"2":false,"3":false,"4":false,"5":false,"6":false}');
+const API = 'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
+let inv=[], cals=[], user=null;
 
-function apiUrl(){return localStorage.getItem(LS_URL)||DEFAULT_API;}
-function apiKey(){return localStorage.getItem(LS_KEY)||'';}
-function hdrs(){const h={'Content-Type':'application/json'};const k=apiKey();if(k)h['Authorization']='Bearer '+k;return h;}
-
-function pg(name){
-  ['tools','deploy','upload','diag','settings'].forEach(p=>{
-    document.getElementById('pg-'+p).style.display=p===name?'':'none';
-    const nb=document.getElementById('nav-'+p);if(nb)nb.classList.toggle('active',p===name);
-  });
-  if(name==='settings')document.getElementById('cfg-url').value=apiUrl();
-  if(name==='diag')document.getElementById('d-ep').textContent=apiUrl();
-}
-
-function markDone(n){
-  steps[n]=true;localStorage.setItem(LS_STEPS,JSON.stringify(steps));
-  renderSteps();toast('Step '+n+' marked complete','ok');
-}
-function renderSteps(){
-  const done=Object.values(steps).filter(Boolean).length;
-  const pct=Math.round(done/6*100);
-  document.getElementById('prog-bar').style.width=pct+'%';
-  document.getElementById('pct-lbl').textContent=pct+'%';
-  document.getElementById('deploy-prog-lbl').textContent=done+' of 6 complete';
-  const b=document.getElementById('deploy-badge');b.textContent=done+'/6';b.className='nav-badge'+(done===6?' done':'');
-  for(let i=1;i<=6;i++){
-    const el=document.getElementById('sc'+i);if(!el)continue;
-    if(steps[i]){el.className='sc done';const ck=el.querySelector('.step-check');ck.textContent='✓';ck.style.cssText='';}
-  }
+async function call(action, data=null){
+  const res=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data?{action,data}:{action})});
+  const j=await res.json();
+  if(!res.ok) throw new Error(j.error||'HTTP '+res.status);
+  return j;
 }
 
 function toast(msg,type='info'){
-  const w=document.getElementById('toasts');const el=document.createElement('div');
+  const w=document.getElementById('toasts'),el=document.createElement('div');
   el.className='toast '+(type==='ok'?'ok':type==='err'?'err':'info');
   el.innerHTML=(type==='ok'?'✓':type==='err'?'✕':'ℹ')+' '+msg;
   w.appendChild(el);setTimeout(()=>el.remove(),3800);
 }
-function log(msg,type='info'){
-  const el=document.getElementById('dlog');if(!el)return;
-  const t=new Date().toLocaleTimeString('en-GB',{hour12:false});
-  const c={ok:'lok',err:'lerr',warn:'lwarn',info:'linfo'}[type]||'linfo';
-  el.innerHTML+=`<div class="ll"><span class="lt">${t}</span><span class="${c}">${msg}</span></div>`;
-  el.scrollTop=el.scrollHeight;
-}
-function setDot(state,text){document.getElementById('sb-dot').className='dot '+state;document.getElementById('sb-txt').textContent=text;}
 
-async function runDiag(){
-  const url=apiUrl();
-  document.getElementById('d-ep').textContent=url;
-  ['d-st','d-ms','d-sql','d-rec','d-cors'].forEach(id=>{const el=document.getElementById(id);el.textContent='…';el.className='dc-val';});
-  log('─────────────────────────────────','info');
-  log('Testing: '+url,'info');
+function setDot(s,t){document.getElementById('sb-dot').className='dot '+s;document.getElementById('sb-txt').textContent=t;}
+
+async function testConn(){
   setDot('pulsing','Testing…');
-  const t0=Date.now();
+  try{const d=await call('test');setDot('ok',d.inventoryCount+' tools in DB');}
+  catch(e){setDot('err','Offline');}
+}
+
+async function doLogin(){
+  const u=document.getElementById('l-user').value.trim();
+  const p=document.getElementById('l-pass').value.trim();
+  if(!u||!p)return;
+  const btn=document.getElementById('l-btn');
+  btn.disabled=true;btn.textContent='Signing in…';
+  document.getElementById('login-err').style.display='none';
   try{
-    const res=await fetch(url,{method:'GET',headers:hdrs(),signal:AbortSignal.timeout(12000)});
-    const ms=Date.now()-t0;
-    document.getElementById('d-ms').textContent=ms+'ms';
-    document.getElementById('d-ms').className='dc-val '+(ms<800?'ok':ms<2000?'wa':'er');
-    document.getElementById('d-st').textContent=res.status+' '+res.statusText;
-    const corsH=res.headers.get('access-control-allow-origin');
-    document.getElementById('d-cors').textContent=corsH?'Present ✓':'Not set';
-    document.getElementById('d-cors').className='dc-val '+(corsH?'ok':'wa');
-    log('HTTP '+res.status+' — '+ms+'ms','ok');
-    if(res.ok){
-      document.getElementById('d-st').className='dc-val ok';
-      let data;try{data=await res.json();}catch(e){data=null;}
-      const arr=Array.isArray(data)?data:(data?.value||data?.data||null);
-      if(arr){
-        log('Azure SQL connected — '+arr.length+' tool records','ok');
-        document.getElementById('d-sql').textContent='Connected ✓';document.getElementById('d-sql').className='dc-val ok';
-        document.getElementById('d-rec').textContent=arr.length;document.getElementById('d-rec').className='dc-val ok';
-        setDot('ok','Azure SQL OK');
-        tools=arr;renderTools();updateStats();
-        document.getElementById('src-badge').textContent='Live from Azure SQL';
-        if(!steps[2]||!steps[3]){steps[2]=true;steps[3]=true;localStorage.setItem(LS_STEPS,JSON.stringify(steps));renderSteps();toast('Steps 2 & 3 auto-completed — live connection confirmed!','ok');}
-      } else {
-        log('Response not an array — check API shape','warn');
-        document.getElementById('d-sql').textContent='Unexpected shape';document.getElementById('d-sql').className='dc-val wa';
-        setDot('ok','Connected (check shape)');
-      }
-    } else if(res.status===500){
-      document.getElementById('d-st').className='dc-val er';
-      document.getElementById('d-sql').textContent='Conn string missing?';document.getElementById('d-sql').className='dc-val er';
-      document.getElementById('d-rec').textContent='—';
-      log('HTTP 500 — App Service alive, SQL init failed','err');
-      log('→ Add DefaultConnection string in App Service → Configuration','warn');
-      log('→ Check Log stream for the exact SQL exception','warn');
-      setDot('err','500 — add conn string');
-    } else if(res.status===404){
-      document.getElementById('d-st').className='dc-val er';
-      log('404 — /api/ToolTracker route not found on this App Service','err');
-      setDot('err','Route not found');
-    } else if(res.status===401||res.status===403){
-      document.getElementById('d-st').className='dc-val er';
-      log('Auth error '+res.status+' — add API key in Settings','err');
-      setDot('err','Auth error');
-    } else {
-      document.getElementById('d-st').className='dc-val wa';
-      log('Unexpected HTTP '+res.status,'warn');
-      setDot('err','HTTP '+res.status);
+    const res=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'login',data:{username:u,password:p}})});
+    const d=await res.json();
+    if(res.ok&&d.id){
+      user=d;
+      document.getElementById('login-wrap').style.display='none';
+      document.getElementById('app-wrap').style.display='flex';
+      document.getElementById('user-name').textContent=d.fullName||d.username;
+      document.getElementById('user-role').textContent=d.role||'';
+      document.getElementById('user-init').textContent=(d.fullName||d.username).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+      loadInventory();testConn();
+    }else{
+      const e=document.getElementById('login-err');
+      e.textContent=d.error||'Invalid credentials';e.style.display='block';
     }
   }catch(e){
-    const ms=Date.now()-t0;
-    document.getElementById('d-ms').textContent=ms+'ms';
-    document.getElementById('d-st').textContent='Network Error';document.getElementById('d-st').className='dc-val er';
-    document.getElementById('d-sql').textContent='Unreachable';document.getElementById('d-sql').className='dc-val er';
-    if(e.name==='TimeoutError'){log('Timed out (12s) — App Service sleeping or firewall blocking','err');setDot('err','Timeout');}
-    else{
-      const m=e.message||'';
-      if(m.includes('CORS')||m.includes('Failed to fetch')||m.includes('NetworkError')){
-        log('CORS or network error: '+m,'err');
-        log('→ App Service → API → CORS → add this page origin','warn');
-        document.getElementById('d-cors').textContent='Blocked';document.getElementById('d-cors').className='dc-val er';
-      } else {log('Error: '+m,'err');}
-      setDot('err','Network error');
-    }
-    toast('API unreachable','err');
+    const er=document.getElementById('login-err');
+    er.textContent='Cannot reach API: '+e.message;er.style.display='block';
   }
+  btn.disabled=false;btn.textContent='Sign In';
 }
 
-async function loadTools(){
-  document.getElementById('tbody').innerHTML='<tr><td colspan="8" class="empty-td"><div style="display:flex;align-items:center;justify-content:center;gap:8px"><div class="spin-el"></div>Loading from Azure SQL…</div></td></tr>';
-  setDot('pulsing','Loading…');
+function doLogout(){
+  user=null;
+  document.getElementById('app-wrap').style.display='none';
+  document.getElementById('login-wrap').style.display='flex';
+  document.getElementById('l-pass').value='';
+}
+
+function pg(name){
+  ['inventory','callouts','audit'].forEach(p=>{
+    document.getElementById('pg-'+p).style.display=p===name?'':'none';
+    document.getElementById('nav-'+p)?.classList.toggle('active',p===name);
+  });
+  if(name==='callouts'&&cals.length===0)loadCallouts();
+  if(name==='audit')loadAudit();
+}
+
+// INVENTORY
+async function loadInventory(){
+  document.getElementById('inv-body').innerHTML='<tr><td colspan="11" class="empty-td"><div style="display:flex;align-items:center;justify-content:center;gap:8px"><div class="spin-el"></div>Loading from Azure SQL…</div></td></tr>';
   try{
-    const res=await fetch(apiUrl(),{headers:hdrs(),signal:AbortSignal.timeout(10000)});
-    if(res.ok){
-      const data=await res.json();
-      tools=Array.isArray(data)?data:(data?.value||data?.data||[]);
-      document.getElementById('src-badge').textContent='Live from Azure SQL';
-      setDot('ok','Azure SQL OK');renderTools();updateStats();
-    } else if(res.status===500){setDot('err','500 — needs conn string');demoData();toast('API 500 — demo data loaded. See Deployment → Step 2.','err');}
-    else{demoData();setDot('err','HTTP '+res.status);}
-  }catch(e){demoData();setDot('err','Offline');}
-}
-function demoData(){
-  tools=[
-    {id:1,serialNumber:'MWD-2024-001',toolName:'Pulsar MWD Mk3',toolType:'MWD',status:'Active',location:'Aberdeen Base',runHours:1240,od:6.75,maxTemp:175,lastInspection:'2025-11-10',notes:'Demo — not from SQL'},
-    {id:2,serialNumber:'MWD-2023-007',toolName:'Pulsar MWD Mk2',toolType:'MWD',status:'Maintenance',location:'Workshop Bay 2',runHours:3850,od:6.75,maxTemp:150,lastInspection:'2025-09-22',notes:'Battery replacement'},
-    {id:3,serialNumber:'LWD-2024-003',toolName:'RestoLog LWD',toolType:'LWD',status:'Active',location:'Well 14/20-A',runHours:520,od:8.25,maxTemp:200,lastInspection:'2026-01-05',notes:''},
-    {id:4,serialNumber:'RSS-2022-012',toolName:'AutoTrak G3',toolType:'RSS',status:'Retired',location:'Storage Compound',runHours:12400,od:6.75,maxTemp:150,lastInspection:'2024-03-18',notes:'End of life'},
-    {id:5,serialNumber:'MTR-2024-002',toolName:'Navi-Drill 6.75"',toolType:'Motor',status:'Active',location:'Well 14/20-B',runHours:320,od:6.75,maxTemp:135,lastInspection:'2025-12-01',notes:''},
-  ];
-  document.getElementById('src-badge').textContent='⚠ Demo data — connect Azure SQL';
-  renderTools();updateStats();
+    const d=await call('getInventory');
+    inv=Array.isArray(d)?d:[];
+    document.getElementById('src-badge').textContent='✓ Live — '+inv.length+' records';
+    setDot('ok',inv.length+' tools');
+    renderInv();invStats();
+  }catch(e){toast('Load failed: '+e.message,'err');setDot('err','Error');}
 }
 
-function sbadge(s){const m={Active:'bg-g',Maintenance:'bg-a',Retired:'bg-b'};return`<span class="badge ${m[s]||'bg-p'}">${s||'?'}</span>`;}
-function tbadge(t){return`<span class="badge bg-p" style="font-size:10px;padding:1px 6px">${t||'—'}</span>`;}
-function fmtDate(d){if(!d)return'—';try{return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}catch{return d;}}
-
-function renderTools(){
-  let arr=[...tools];
-  const q=(document.getElementById('q').value||'').toLowerCase();
-  const fs=document.getElementById('fs').value;
-  const ft=document.getElementById('ft').value;
-  if(q)arr=arr.filter(t=>[t.serialNumber,t.toolName,t.toolType,t.location,t.status].some(v=>v&&v.toLowerCase().includes(q)));
-  if(fs)arr=arr.filter(t=>t.status===fs);
-  if(ft)arr=arr.filter(t=>t.toolType===ft);
-  if(sortF)arr.sort((a,b)=>{const av=a[sortF]??'',bv=b[sortF]??'';return typeof av==='number'?(sortA?av-bv:bv-av):(sortA?String(av).localeCompare(String(bv)):String(bv).localeCompare(String(av)));});
-  const tb=document.getElementById('tbody');
-  if(!arr.length){tb.innerHTML='<tr><td colspan="8" class="empty-td">No tools found</td></tr>';return;}
-  tb.innerHTML=arr.map(t=>`<tr>
-    <td class="mono">${t.serialNumber||'—'}</td>
-    <td style="font-weight:500">${t.toolName||'—'}</td>
-    <td>${tbadge(t.toolType)}</td>
-    <td>${sbadge(t.status)}</td>
-    <td style="color:var(--text2)">${t.location||'—'}</td>
-    <td style="color:var(--text2);text-align:right">${t.runHours!=null?Number(t.runHours).toLocaleString():'—'}</td>
-    <td style="color:var(--text2)">${fmtDate(t.lastInspection)}</td>
-    <td><div style="display:flex;gap:4px">
-      <button class="btn btn-secondary btn-sm btn-icon" onclick="openEdit(${t.id})" title="Edit">✏</button>
-      <button class="btn btn-danger btn-sm btn-icon" onclick="delTool(${t.id},'${(t.serialNumber||'').replace(/'/g,'')}')" title="Delete">🗑</button>
-    </div></td></tr>`).join('');
-}
-function srt(f){if(sortF===f)sortA=!sortA;else{sortF=f;sortA=true;}renderTools();}
-function updateStats(){
-  document.getElementById('s-total').textContent=tools.length;
-  document.getElementById('s-active').textContent=tools.filter(t=>t.status==='Active').length;
-  document.getElementById('s-maint').textContent=tools.filter(t=>t.status==='Maintenance').length;
-  document.getElementById('s-ret').textContent=tools.filter(t=>t.status==='Retired').length;
+function sbadge(s){
+  const m={'Good':'bg-g','Maintenance':'bg-a','Repair':'bg-r','Redress':'bg-a','Deployed':'bg-b','Lost':'bg-r'};
+  return`<span class="badge ${m[s]||'bg-p'}">${s||'—'}</span>`;
 }
 
-function clearForm(){['sn','nm','lo','rh','od','mt','li','ns','no'].forEach(k=>{const e=document.getElementById('f-'+k);if(e)e.value='';});document.getElementById('f-ty').value='MWD';document.getElementById('f-st').value='Active';}
-function openAdd(){editId=null;document.getElementById('m-title').textContent='Add Tool';document.getElementById('m-save').textContent='Add Tool';clearForm();document.getElementById('tool-modal').style.display='flex';}
-function openEdit(id){
-  const t=tools.find(x=>x.id===id);if(!t)return;
-  editId=id;document.getElementById('m-title').textContent='Edit Tool';document.getElementById('m-save').textContent='Save Changes';
-  document.getElementById('f-sn').value=t.serialNumber||'';
-  document.getElementById('f-nm').value=t.toolName||'';
-  document.getElementById('f-ty').value=t.toolType||'MWD';
-  document.getElementById('f-st').value=t.status||'Active';
-  document.getElementById('f-lo').value=t.location||'';
-  document.getElementById('f-rh').value=t.runHours||'';
-  document.getElementById('f-od').value=t.od||'';
-  document.getElementById('f-mt').value=t.maxTemp||'';
-  document.getElementById('f-li').value=t.lastInspection?t.lastInspection.split('T')[0]:'';
-  document.getElementById('f-ns').value=t.nextServiceDue?t.nextServiceDue.split('T')[0]:'';
-  document.getElementById('f-no').value=t.notes||'';
-  document.getElementById('tool-modal').style.display='flex';
+function renderInv(){
+  let a=[...inv];
+  const q=(document.getElementById('q-inv').value||'').toLowerCase();
+  const fs=document.getElementById('f-st').value;
+  const fl=document.getElementById('f-lo').value;
+  if(q)a=a.filter(r=>[r.serial,r.asset,r.description,r.location,r.contract,r.rig,r.well,r.supplier,r.notes,r.subLocation].some(v=>v&&String(v).toLowerCase().includes(q)));
+  if(fs)a=a.filter(r=>r.status===fs);
+  if(fl)a=a.filter(r=>r.location&&r.location.includes(fl));
+  const tb=document.getElementById('inv-body');
+  if(!a.length){tb.innerHTML='<tr><td colspan="11" class="empty-td">No records found</td></tr>';return;}
+  tb.innerHTML=a.map(r=>`<tr>
+    <td class="mono">${r.serial||'—'}</td>
+    <td style="font-weight:500;white-space:nowrap">${r.asset||'—'}</td>
+    <td style="color:var(--text2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.description||'').replace(/"/g,'&quot;')}">${r.description||'—'}</td>
+    <td>${r.location||'—'}</td>
+    <td>${sbadge(r.status)}</td>
+    <td style="color:var(--text2)">${r.subLocation&&r.subLocation!=='nan'?r.subLocation:'—'}</td>
+    <td style="color:var(--text2)">${r.contract&&r.contract!=='nan'?r.contract:'—'}</td>
+    <td style="color:var(--text2)">${r.rig&&r.rig!=='nan'?r.rig:'—'}</td>
+    <td style="color:var(--text2)">${r.well&&r.well!=='nan'?r.well:'—'}</td>
+    <td style="color:var(--text2)">${r.supplier||'—'}</td>
+    <td style="color:var(--text2);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.notes&&r.notes!=='nan'?r.notes:'—'}</td>
+  </tr>`).join('');
 }
-function closeM(){document.getElementById('tool-modal').style.display='none';}
 
-async function saveTool(){
-  const sn=document.getElementById('f-sn').value.trim();
-  const nm=document.getElementById('f-nm').value.trim();
-  if(!sn||!nm){toast('Serial number and name required','err');return;}
-  const p={serialNumber:sn,toolName:nm,toolType:document.getElementById('f-ty').value,status:document.getElementById('f-st').value,location:document.getElementById('f-lo').value,runHours:parseFloat(document.getElementById('f-rh').value)||0,od:parseFloat(document.getElementById('f-od').value)||null,maxTemp:parseFloat(document.getElementById('f-mt').value)||null,lastInspection:document.getElementById('f-li').value||null,nextServiceDue:document.getElementById('f-ns').value||null,notes:document.getElementById('f-no').value};
+function invStats(){
+  document.getElementById('s-total').textContent=inv.length;
+  document.getElementById('s-good').textContent=inv.filter(r=>r.status==='Good').length;
+  document.getElementById('s-repair').textContent=inv.filter(r=>['Maintenance','Repair','Redress'].includes(r.status)).length;
+  document.getElementById('s-site').textContent=inv.filter(r=>r.rig&&r.rig!=='nan'&&r.rig!=='').length;
+}
+
+// CALLOUTS
+async function loadCallouts(){
+  document.getElementById('cal-body').innerHTML='<tr><td colspan="12" class="empty-td"><div style="display:flex;align-items:center;justify-content:center;gap:8px"><div class="spin-el"></div>Loading…</div></td></tr>';
+  try{const d=await call('getCallouts');cals=Array.isArray(d)?d:[];renderCal();calStats();}
+  catch(e){toast('Load failed: '+e.message,'err');}
+}
+
+function fmtD(d){if(!d||d==='nan'||d==='')return'—';try{return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'});}catch{return d;}}
+
+function cbadge(s){
+  const m={'Need_to_Assign':'bg-a','Assigned':'bg-b','On Site':'bg-g','Returned':'bg-p'};
+  return`<span class="badge ${m[s]||'bg-p'}" style="font-size:10px">${s||'—'}</span>`;
+}
+
+function renderCal(){
+  let a=[...cals];
+  const q=(document.getElementById('q-cal').value||'').toLowerCase();
+  const fs=document.getElementById('f-cs').value;
+  if(q)a=a.filter(r=>[r.asset,r.contract,r.rig,r.well,r.serialAssigned].some(v=>v&&String(v).toLowerCase().includes(q)));
+  if(fs)a=a.filter(r=>r.status===fs);
+  const tb=document.getElementById('cal-body');
+  if(!a.length){tb.innerHTML='<tr><td colspan="12" class="empty-td">No callouts found</td></tr>';return;}
+  tb.innerHTML=a.map(r=>`<tr>
+    <td style="font-weight:500;white-space:nowrap">${r.asset||'—'}</td>
+    <td style="color:var(--text2)">${r.qty||1}</td>
+    <td class="mono">${r.serialAssigned&&r.serialAssigned!=='nan'?r.serialAssigned:`<span style="color:var(--amber)">Unassigned</span>`}</td>
+    <td style="color:var(--text2)">${r.contract&&r.contract!=='nan'?r.contract:'—'}</td>
+    <td style="color:var(--text2)">${r.rig||'—'}</td>
+    <td style="color:var(--text2)">${r.well||'—'}</td>
+    <td style="color:var(--text2)">${fmtD(r.needed)}</td>
+    <td style="color:var(--text2)">${fmtD(r.bakerBy)}</td>
+    <td style="color:var(--text2)">${fmtD(r.expectedReturn)}</td>
+    <td>${cbadge(r.status)}</td>
+    <td style="color:var(--text2)">${r.holeSection&&r.holeSection!=='nan'?r.holeSection:'—'}</td>
+    <td style="color:var(--text2)">${r.notes&&r.notes!=='nan'?r.notes:'—'}</td>
+  </tr>`).join('');
+}
+
+function calStats(){
+  document.getElementById('c-tot').textContent=cals.length;
+  document.getElementById('c-pend').textContent=cals.filter(r=>r.status==='Need_to_Assign').length;
+  document.getElementById('c-act').textContent=cals.filter(r=>r.status==='Assigned'||r.status==='On Site').length;
+  document.getElementById('c-ret').textContent=cals.filter(r=>r.status==='Returned').length;
+}
+
+// ADD CALLOUT
+function openCal(){document.getElementById('cal-modal').style.display='flex';}
+function closeCal(){document.getElementById('cal-modal').style.display='none';}
+
+async function saveCal(){
+  const asset=document.getElementById('m-asset').value.trim();
+  if(!asset){toast('Asset name required','err');return;}
   const btn=document.getElementById('m-save');btn.disabled=true;btn.textContent='Saving…';
   try{
-    let res;
-    if(editId)res=await fetch(apiUrl()+'/'+editId,{method:'PUT',headers:hdrs(),body:JSON.stringify({id:editId,...p})});
-    else res=await fetch(apiUrl(),{method:'POST',headers:hdrs(),body:JSON.stringify(p)});
-    if(res.ok||res.status===201||res.status===204){toast(editId?'Updated':'Added','ok');closeM();await loadTools();}
-    else{localSave(p);toast((editId?'Updated':'Added')+' locally (API '+res.status+')','info');closeM();}
-  }catch(e){localSave(p);toast('Saved locally (API offline)','info');closeM();}
-  finally{btn.disabled=false;btn.textContent=editId?'Save Changes':'Add Tool';}
+    await call('addCallout',{
+      asset,type:asset,qty:parseInt(document.getElementById('m-qty').value)||1,
+      contract:document.getElementById('m-contract').value,
+      rig:document.getElementById('m-rig').value,well:document.getElementById('m-well').value,
+      needed:document.getElementById('m-needed').value,bakerBy:document.getElementById('m-baker').value,
+      expectedReturn:document.getElementById('m-return').value,
+      status:document.getElementById('m-status').value,
+      holeSection:document.getElementById('m-hole').value,
+      notes:document.getElementById('m-notes').value,
+      date:document.getElementById('m-needed').value,serialAssigned:'',config:'',revision:''
+    });
+    toast('Callout added','ok');closeCal();loadCallouts();
+  }catch(e){toast('Failed: '+e.message,'err');}
+  btn.disabled=false;btn.textContent='Add Callout';
 }
-function localSave(p){
-  if(editId){const i=tools.findIndex(t=>t.id===editId);if(i>-1)tools[i]={id:editId,...p};}
-  else tools.push({id:Date.now(),...p});
-  renderTools();updateStats();
-}
-async function delTool(id,sn){
-  if(!confirm('Delete '+sn+'?'))return;
+
+// AUDIT
+async function loadAudit(){
+  document.getElementById('audit-body').innerHTML='<tr><td colspan="6" class="empty-td"><div style="display:flex;align-items:center;justify-content:center;gap:8px"><div class="spin-el"></div>Loading…</div></td></tr>';
   try{
-    const res=await fetch(apiUrl()+'/'+id,{method:'DELETE',headers:hdrs()});
-    if(res.ok||res.status===204)toast('Deleted','ok');
-    else toast('Removed locally (API '+res.status+')','info');
-  }catch{toast('Removed locally (API offline)','info');}
-  tools=tools.filter(t=>t.id!==id);renderTools();updateStats();
+    const d=await call('getFullAudit');
+    const a=Array.isArray(d)?d:[];
+    if(!a.length){document.getElementById('audit-body').innerHTML='<tr><td colspan="6" class="empty-td">No audit records yet</td></tr>';return;}
+    document.getElementById('audit-body').innerHTML=a.map(r=>`<tr>
+      <td class="mono" style="color:var(--text2);white-space:nowrap">${r.changedAt?new Date(r.changedAt).toLocaleString('en-GB'):'—'}</td>
+      <td class="mono">${r.serial||'—'}</td>
+      <td style="color:var(--text2)">${r.fieldChanged||'—'}</td>
+      <td style="color:var(--red)">${r.fromValue||'—'}</td>
+      <td style="color:var(--green)">${r.toValue||'—'}</td>
+      <td style="color:var(--text2)">${r.changedBy||'—'}</td>
+    </tr>`).join('');
+  }catch(e){toast('Failed: '+e.message,'err');}
 }
 
-function handleDrop(ev){ev.preventDefault();document.getElementById('dz').classList.remove('drag');const f=ev.dataTransfer.files[0];if(f&&f.name.endsWith('.csv'))handleFile(f);else toast('Drop a .csv file','err');}
-function handleFile(file){
-  if(!file)return;
-  const r=new FileReader();
-  r.onload=e=>{
-    const lines=e.target.result.split(/\r?\n/).filter(l=>l.trim());
-    if(lines.length<2){toast('Need header + at least 1 data row','err');return;}
-    const headers=lines[0].split(',').map(h=>h.trim().replace(/^"|"$/g,''));
-    csvRows=lines.slice(1).map(line=>{
-      const vals=splitCSVLine(line);
-      const obj={};headers.forEach((h,i)=>{const k=h.charAt(0).toLowerCase()+h.slice(1);obj[k]=vals[i]||'';});
-      return obj;
-    }).filter(o=>o.serialNumber||o.SerialNumber);
-    showPreview(headers,csvRows);
-    document.getElementById('up-count').textContent=csvRows.length;
-    const ua=document.getElementById('up-actions');ua.style.display='flex';
-  };
-  r.readAsText(file);
-}
-function splitCSVLine(line){
-  const result=[];let cur='',inQ=false;
-  for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){inQ=!inQ;}else if(c===','&&!inQ){result.push(cur.trim());cur='';}else cur+=c;}
-  result.push(cur.trim());return result;
-}
-function showPreview(headers,rows){
-  const el=document.getElementById('up-preview');el.style.display='';
-  const prev=rows.slice(0,8);
-  el.innerHTML=`<div class="up-preview">
-    <div class="up-row hdr">${headers.map(h=>`<span class="up-cell">${h}</span>`).join('')}</div>
-    ${prev.map(r=>`<div class="up-row">${headers.map(h=>{const k=h.charAt(0).toLowerCase()+h.slice(1);return`<span class="up-cell">${r[k]||''}</span>`;}).join('')}</div>`).join('')}
-    ${rows.length>8?`<div class="up-row" style="color:var(--text3);font-family:var(--font);font-size:12px">… and ${rows.length-8} more rows</div>`:''}
-  </div>`;
-}
-async function importCSV(){
-  if(!csvRows.length)return;
-  const re=document.getElementById('up-result');re.innerHTML='<div class="spin-el"></div> Uploading…';
-  let ok=0,fail=0;
-  for(const row of csvRows){
-    const p={serialNumber:row.serialNumber||row.SerialNumber||'',toolName:row.toolName||row.ToolName||'',toolType:row.toolType||row.ToolType||'',status:row.status||row.Status||'Active',location:row.location||row.Location||'',runHours:parseFloat(row.runHours||row.RunHours||0)||0,od:parseFloat(row.od||row.OD||0)||null,maxTemp:parseFloat(row.maxTemp||row.MaxTemp||0)||null,lastInspection:row.lastInspection||row.LastInspection||null,notes:row.notes||row.Notes||''};
-    try{const res=await fetch(apiUrl(),{method:'POST',headers:hdrs(),body:JSON.stringify(p)});if(res.ok||res.status===201)ok++;else{fail++;if(fail<=3)log('Row failed ('+res.status+'): '+p.serialNumber,'warn');}}
-    catch(e){fail++;}
-  }
-  if(ok>0&&fail===0){re.innerHTML=`<span style="color:var(--green)">✓ ${ok} records imported</span>`;toast(ok+' tools uploaded to Azure SQL','ok');loadTools();markDone(6);}
-  else if(ok>0){re.innerHTML=`<span style="color:var(--amber)">${ok} imported, ${fail} failed</span>`;toast(ok+' uploaded, '+fail+' failed','info');loadTools();}
-  else{re.innerHTML=`<span style="color:var(--red)">✕ All ${fail} failed — is the API connected?</span>`;toast('Upload failed — check API connection first','err');}
-}
-function clearUpload(){csvRows=[];document.getElementById('up-preview').style.display='none';document.getElementById('up-actions').style.display='none';document.getElementById('csv-in').value='';document.getElementById('up-result').innerHTML='';}
-function dlTemplate(){const csv='SerialNumber,ToolName,ToolType,Status,Location,RunHours,OD,MaxTemp,LastInspection,Notes\nMWD-2024-001,Pulsar MWD Mk3,MWD,Active,Aberdeen Base,1240,6.75,175,2025-11-10,Good condition\n';const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='tool_tracker_template.csv';a.click();}
-function downloadApp(){const a=document.createElement('a');a.href='data:text/html;charset=utf-8,'+encodeURIComponent(document.documentElement.outerHTML);a.download='downhole_tool_tracker.html';a.click();toast('Downloaded — deploy to Azure Static Web App','ok');}
-function saveSettings(){localStorage.setItem(LS_URL,document.getElementById('cfg-url').value.trim());localStorage.setItem(LS_KEY,document.getElementById('cfg-key').value.trim());toast('Settings saved','ok');}
-
-document.getElementById('tool-modal').addEventListener('click',function(e){if(e.target===this)closeM();});
-renderSteps();
-loadTools();
+document.getElementById('cal-modal').addEventListener('click',function(e){if(e.target===this)closeCal();});
 </script>
 </body>
 </html>
