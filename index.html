@@ -950,6 +950,7 @@ function renderForecast(){
 
 // ── AI ─────────────────────────────────────────────────────────
 function parseBHADocument(text){
+  // ── Step 1: Clean spaced-out text (from PDF copy) ──────────
   function cleanSpaced(str){
     return str.split('\n').map(line=>{
       const chars=line.split('');
@@ -959,58 +960,248 @@ function parseBHADocument(text){
     }).join('\n');
   }
   const raw=cleanSpaced(text);
-  const rigM=raw.match(/[Rr]ig\s*[:\-#]?\s*([A-Z]{1,4}[-\s]?\d{1,3}[A-Z]?)/i)||raw.match(/([A-Z]{2,4}[-]\d{1,3})/);
-  const rig=rigM?rigM[1].trim():'';
-  const wellM=raw.match(/[Ww]ell\s*[:\-]?\s*([A-Z0-9\-\/]+)/i);
-  const well=wellM?wellM[1].trim():'';
-  const holeM=raw.match(/([\d]{1,2}[-][\d]{1,4}\/[\d]{1,2}|[\d]{1,2}\.[\d]+)\s*["'\u2033]/i)||raw.match(/hole\s*[:\-]?\s*([\d\-\/]+["'\u2033]?)/i);
-  const holeSection=holeM?holeM[1].trim().replace(/\s/g,'-'):'';
-  let requestDate='';
-  const datePatterns=[/[Rr]equired\s*[Dd]ate\s*[:\-]?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/,/(\d{4}[-\/]\d{2}[-\/]\d{2})/,/(\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/];
-  for(const p of datePatterns){const m=raw.match(p);if(m){try{const d=new Date(m[1]);if(!isNaN(d))requestDate=d.toISOString().split('T')[0];}catch{}break;}}
-  const bakerBaseDate=requestDate?calcBakerDate(requestDate):'';
-  const revM=raw.match(/[Rr]ev(?:ision)?\s*([A-Z])\b/);
-  const revision=revM?'Rev '+revM[1]:'New';
-  const revisionDetected=!!revM;
-  const contract=/ADNOC\s*ON?SHORE/i.test(raw)?'ADNOC Onshore':/ADNOC\s*OFFSHORE/i.test(raw)?'ADNOC Offshore':'ADNOC DRILLING';
-  const RULES=[
-    {p:['SENSOR SUB','BCPM SUB','BCPM'],type:'NMDC',label:'NMDC-SLICK'},
-    {p:['FLOAT SUB','FLOAT VALVE'],type:'FLOAT',label:'Float Sub'},
-    {p:['HYD-MEC','HYD MEC','HYDRAULIC MECHANICAL'],type:'HYD-MEC',label:'HYD-MEC D.JAR'},
-    {p:['HYD JAR','HYD D.JAR','HYDRAULIC JAR','D.JAR'],type:'HYD',label:'HYD D.JAR'},
-    {p:['STRING STAB','STR STAB','STABILIZER','STAB'],type:'STAB',label:'String Stab'},
-    {p:['NB STAB','NEAR BIT','NEAR-BIT'],type:'NB',label:'NB Stab'},
-    {p:['NMDC','NON-MAG DRILL COLLAR','NONMAG'],type:'NMDC',label:'NMDC-SLICK'},
-    {p:['DIVERTER'],type:'DIV',label:'Diverter'},
-    {p:['BOP'],type:'BOP',label:'BOP'},
+  const allText=raw.toUpperCase();
+
+  // ── Step 2: Extract Rig ─────────────────────────────────────
+  // Handles: "ADNOC AD-33", "Rig: AD-33", "AD-130", "MUHAIMAT", etc.
+  let rig='';
+  const rigPatterns=[
+    /ADNOC\s+(AD[-\s]?\d{1,3}[A-Z]?)/i,          // ADNOC AD-33
+    /[Rr]ig\s*[:\-#]?\s*(AD[-\s]?\d{1,3}[A-Z]?)/i, // Rig: AD-33
+    /[Rr]ig\s*[:\-#]?\s*([A-Z]{2,10}[-\s]\d{1,3})/i,// Rig: MUHAIMAT-1
+    /\b(AD[-]\d{1,3})\b/,                           // standalone AD-33
+    /\b(MUHAIMAT|RAMHAN|NASR|ZAKUM)\b/i,            // named rigs
   ];
-  function extractOD(line){const m=line.match(/([\d]{1,2}[-][\d\/]{1,4})\s*["'\u2033]/)||line.match(/([\d]+\.[\d]+)/);if(m){const v=parseFloat(m[1]);if(v===8.5)return'8-1/2';if(v===12.25)return'12-1/4';if(v===17.5)return'17-1/2';return m[1].trim();}return'';}
-  function detectConfig(l){const u=l.toUpperCase();if(/PORTED\s*\+?\s*NON.?MAG|NON.?MAG\s*\+?\s*PORTED/i.test(u))return'PORTED + Non-Mag';if(/PORTED/i.test(u))return'PORTED';if(/NON.?MAG/i.test(u))return'Non-Mag';if(/XT.?39/i.test(u))return'XT39';return'';}
-  const lines=raw.split('\n').map(l=>l.trim()).filter(Boolean);
+  for(const p of rigPatterns){const m=raw.match(p);if(m){rig=m[1].trim();break;}}
+  // If found as "ADNOC AD-33", strip "ADNOC " prefix if captured
+  rig=rig.replace(/^ADNOC\s+/i,'').trim();
+
+  // ── Step 3: Extract Well ────────────────────────────────────
+  let well='';
+  const wellPatterns=[
+    /[Ww]ell\s*[Nn]ame\s*[:\-]?\s*([A-Z0-9\-\/]+(?:-\d+[A-Z]?)?)/i,
+    /[Ww]ell\s*[:\-]?\s*([A-Z]{1,6}\d+[-\/][A-Z0-9\-]+)/i,
+    /\b(GH\d{3,4}[-\/]\d{2,3}[A-Z0-9\-]*)/i,      // GH0413-01H
+    /\b([A-Z]{2,4}\d{3,4}[-\/]\d{2,3}[A-Z]?)\b/i,  // any field format
+  ];
+  for(const p of wellPatterns){const m=raw.match(p);if(m){well=m[1].trim();break;}}
+
+  // ── Step 4: Extract Hole Size ───────────────────────────────
+  // Handles: 12 1/4", 12-1/4", 8 1/2", 8-1/2", 17 1/2"
+  let holeSection='';
+  const holePat=[
+    /[Hh]ole\s*[Ss]ize\s*[:\-]?\s*([\d]{1,2}[\s-][\d]{1,2}\/[\d]{1,2})/,  // Hole Size 12 1/4
+    /[Hh]ole\s*[:\-]?\s*([\d]{1,2}[\s-][\d]{1,2}\/[\d]{1,2})/,
+    /([\d]{1,2}[\s-][\d]{1,2}\/[\d]{1,2})\s*["'\u2033]/,                    // 12 1/4"
+    /([\d]{1,2}\.[\d]+)\s*["'\u2033]/,                                       // 8.5"
+  ];
+  for(const p of holePat){const m=raw.match(p);if(m){holeSection=m[1].trim().replace(/\s/g,'-');break;}}
+  // Normalise: "12-1/4" stays, "8.5" → "8-1/2" etc.
+  if(holeSection==='8.5'||holeSection==='8-5')holeSection='8-1/2';
+  if(holeSection==='12.25')holeSection='12-1/4';
+  if(holeSection==='17.5')holeSection='17-1/2';
+  if(holeSection&&!holeSection.includes('"'))holeSection=holeSection+'"';
+
+  // ── Step 5: Extract Request Date ────────────────────────────
+  let requestDate='';
+  const datePat=[
+    /[Rr]equest\s*[Dd]ate\s*[:\-]?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/,
+    /[Rr]equired\s*[Dd]ate\s*[:\-]?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/,
+    /(\d{4}[-\/]\d{2}[-\/]\d{2})/,
+    /(\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/,
+    /(\d{1,2}[\/-]\d{1,2}[\/-]\d{2})/,
+  ];
+  for(const p of datePat){
+    const m=raw.match(p);
+    if(m){
+      try{
+        // Try parsing — handle d/m/y format
+        const parts=m[1].split(/[\/\-]/);
+        let d;
+        if(parts[2]&&parts[2].length===4) d=new Date(`${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`);
+        else d=new Date(m[1]);
+        if(!isNaN(d.getTime()))requestDate=d.toISOString().split('T')[0];
+      }catch{}
+      if(requestDate)break;
+    }
+  }
+  const bakerBaseDate=requestDate?calcBakerDate(requestDate):'';
+
+  // ── Step 6: Revision & Contract ─────────────────────────────
+  const revM=raw.match(/[Rr]evision\s*([A-Z])\b|[Rr]ev\s*([A-Z])\b/);
+  const revLetter=revM?(revM[1]||revM[2]):'';
+  const revision=revLetter?'Rev '+revLetter:'New';
+  const revisionDetected=!!revLetter;
+  const contract=/ADNOC\s*ON?SHORE/i.test(raw)?'ADNOC Onshore':/ADNOC\s*OFFSHORE/i.test(raw)?'ADNOC Offshore':'ADNOC DRILLING';
+
+  // ── Step 7: Tool Rules ──────────────────────────────────────
+  const RULES=[
+    // SENSOR SUB = NMDC-SLICK (use tool OD from same block)
+    {p:['SENSOR SUB','BCPM SUB','BCPM','B1 - SENSOR','B2 - SENSOR'],type:'NMDC',label:'NMDC-SLICK',useToolOD:true},
+    // FLOAT SUB
+    {p:['FLOAT SUB','C2 - FLOAT','FLOAT VALVE'],type:'FLOAT',label:'Float Sub',useToolOD:true},
+    // HYD-MEC JAR (must check before generic HYD JAR)
+    {p:['HYD-MEC','HYD MEC','HYDRO MECHANICAL','HYDRO-MECHANICAL','HYDROMECHANICAL','HYDRO MEC'],type:'HYD-MEC',label:'HYD-MEC D.JAR',useToolOD:true},
+    // HYD JAR
+    {p:['HYD JAR','HYD D.JAR','HYDRAULIC JAR','D1 - JAR','J1 - JAR','D.JAR'],type:'HYD',label:'HYD D.JAR',useToolOD:true},
+    // JARS generic (comment says hydro mechanical → HYD-MEC)
+    {p:['- JARS','- JAR'],type:'JAR',label:'JAR',useToolOD:true},
+    // STABILIZER — use BLADE OD not tool OD
+    {p:['STRING STAB','STR STAB','C1 - STABILIZER','I1 - STABILIZER','- STABILIZER','STAB'],type:'STAB',label:'String Stab',useBladeOD:true},
+    // NB STAB
+    {p:['NB STAB','NEAR BIT STAB','NEAR-BIT'],type:'NB',label:'NB Stab',useBladeOD:true},
+    // NMDC
+    {p:['NMDC','NON-MAG DRILL COLLAR','NONMAG'],type:'NMDC',label:'NMDC-SLICK',useToolOD:true},
+    // FILTER SUB — not our tool, flag it
+    {p:['FILTER SUB','C3 - FILTER'],type:'FILTER',label:'Filter Sub (NOT our tool)',useToolOD:true,notOurTool:true},
+    // DIVERTER / BOP
+    {p:['DIVERTER'],type:'DIV',label:'Diverter',useToolOD:true},
+    {p:['BOP'],type:'BOP',label:'BOP',useToolOD:true},
+  ];
+
+  // ── Step 8: OD extraction helpers ───────────────────────────
+  function normaliseOD(s){
+    if(!s)return'';
+    s=s.trim().replace(/["'\u2033]/g,'');
+    const v=parseFloat(s);
+    if(v===8||s==='8')return'8';
+    if(v===8.5||s==='8-1/2'||s==='8 1/2')return'8-1/2';
+    if(v===9.5||s==='9-1/2'||s==='9 1/2')return'9-1/2';
+    if(v===12||s==='12')return'12';
+    if(v===12.25||s==='12-1/4'||s==='12 1/4')return'12-1/4';
+    if(v===17.5||s==='17-1/2'||s==='17 1/2')return'17-1/2';
+    if(v===6.75||s==='6-3/4')return'6-3/4';
+    if(v===4.75||s==='4-3/4')return'4-3/4';
+    return s.replace(/\s/g,'-');
+  }
+  function extractToolOD(block){
+    // Matches: OD 9 1/2", OD9-1/2", "9 1/2"", 9.5"
+    const m=block.match(/\bOD\s*([\d]{1,2}[\s\-][\d]{1,2}\/[\d]{1,2})/i)
+      ||block.match(/\bOD\s*([\d]+\.[\d]+)/i)
+      ||block.match(/\bOD\s*([\d]{1,2})\s*["'\u2033]/i)
+      ||block.match(/\bTool\s*[Ss]ize\s*([\d]{1,2}[\s\-][\d]{1,2}\/[\d]{1,2})/i)
+      ||block.match(/([\d]{1,2}[\s\-][\d]{1,2}\/[\d]{1,2})\s*["'\u2033]/);
+    return m?normaliseOD(m[1]):'';
+  }
+  function extractBladeOD(block){
+    // Blade OD 12", Blade OD 12 1/4"
+    const m=block.match(/[Bb]lade\s*OD\s*([\d]{1,2}[\s\-]?[\d]{0,2}\/?\d{0,2})\s*["'\u2033]?/i)
+      ||block.match(/[Bb]lade\s*OD\s*([\d]+\.[\d]+)/i)
+      ||block.match(/[Bb]lade\s*OD\s*([\d]{1,2})\s*["'\u2033]/i);
+    return m?normaliseOD(m[1]):'';
+  }
+  function detectConfig(l){
+    const u=l.toUpperCase();
+    if(/PORTED\s*\+?\s*NON.?MAG|NON.?MAG\s*\+?\s*PORTED/i.test(u))return'PORTED + Non-Mag';
+    if(/PORTED/i.test(u))return'PORTED';
+    if(/NON.?MAG|NON-MAG/i.test(u))return'Non-Mag';
+    if(/XT.?39/i.test(u))return'XT39';
+    return'';
+  }
+
+  // ── Extract Pin/Box connections ─────────────────────────────
+  function extractConnections(block){
+    const found=[];
+    // "Connections 7 5/8" REG P X B" or "Pin Connection 6 5/8 Reg"
+    const c1=block.match(/[Cc]onnections?\s*[:\-]?\s*([\d]{1,2}[\s\/\-]+[\d]{1,2}["'\s]*[A-Za-z\s]+(?:REG|FH|NC|IF|SH)[^\n]*)/i);
+    if(c1)found.push(c1[1].trim().replace(/\s+/g,' '));
+    const c2=block.match(/[Pp]in\s*[Cc]onn[a-z]*\s*[:\-]?\s*([\d]{1,2}[\s\/\-]+[\d]{1,2}["'\s]*[A-Za-z\s]+)/i);
+    if(c2&&!found.length)found.push('Pin: '+c2[1].trim().replace(/\s+/g,' '));
+    const c3=block.match(/[Bb]ox\s*[Cc]onn[a-z]*\s*[:\-]?\s*([\d]{1,2}[\s\/\-]+[\d]{1,2}["'\s]*[A-Za-z\s]+)/i);
+    if(c3)found.push('Box: '+c3[1].trim().replace(/\s+/g,' '));
+    // Clean trailing N/A
+    return found.map(s=>s.replace(/N\/A.*/i,'').trim()).filter(s=>s.length>2).join(' | ');
+  }
+
+  // ── Extract comments / special notes ───────────────────────
+  function extractComment(block){
+    const found=[];
+    const cm=block.match(/[Cc]omment\s*(?:only)?\s*[:\-]?\s*([^\n]+)/i);
+    if(cm){const v=cm[1].trim();if(v&&!/^N\/A$/i.test(v)&&v.length>1)found.push(v);}
+    const sr=block.match(/[Ss]pecial\s*[Rr]eq[a-z]*\s*[:\-]?\s*([^\n]+)/i);
+    if(sr){const v=sr[1].trim();if(v&&!/^N\/A$/i.test(v)&&v.length>1)found.push('Spec: '+v);}
+    const js=block.match(/[Jj]ar\s*[Ss]etting\s*[:\-]?\s*([^\n]+)/i);
+    if(js){const v=js[1].trim();if(v&&!/^N\/A$/i.test(v)&&v.length>1)found.push('Jar Setting: '+v);}
+    const fv=block.match(/[Ff]loat\s*[Vv]alve\s*(?:[Tt]ype|[Ss]erial)?\s*[:\-]?\s*([^\n]+)/i);
+    if(fv){const v=fv[1].trim();if(v&&!/^N\/A$/i.test(v)&&v.length>1)found.push('Float valve: '+v);}
+    const ct=block.match(/[Cc]ollar\s*[Tt]ype\s*[:\-]?\s*([^\n]+)/i);
+    if(ct){const v=ct[1].trim();if(v&&!/^(N\/A|SLICK)$/i.test(v)&&v.length>1)found.push('Collar: '+v);}
+    return found.join(' | ');
+  }
+
+  // ── Step 9: Parse document in blocks ────────────────────────
+  const blockSplitter=/\n(?=[A-Z]\d\s*-\s*)/g;
+  const blocks=('\n'+raw).split(blockSplitter).filter(b=>b.trim());
+
   const tools=[]; const warnings=[];
-  for(const line of lines){
-    const ul=line.toUpperCase();
+  const jarCommentHydMec=/[Cc]omment\s*only\s*[Hh]ydro\s*[Mm]ech|[Hh]ydro\s*[Mm]echanical\s*[Jj]ar/;
+
+  for(const block of blocks){
+    const ul=block.toUpperCase();
     const rule=RULES.find(r=>r.p.some(p=>ul.includes(p)));
     if(!rule)continue;
-    if(/TOOL TYPE|DESCRIPTION|ITEM NO|QUANTITY|HEADER/i.test(line))continue;
-    const od=extractOD(line);
-    const config=detectConfig(line);
-    const qtyM=line.match(/[Qq]ty\s*[:\-]?\s*(\d+)/)||line.match(/^(\d+)\s+/);
-    const qty=qtyM?parseInt(qtyM[1]):1;
-    const ourTool=od?`${od}" ${rule.label.toUpperCase()}`:rule.label.toUpperCase();
-    const existing=tools.find(t=>t.ourTool===ourTool&&t.config===config);
-    if(existing){existing.qty+=qty;continue;}
-    const assetQ=ourTool.split(' ')[0];
-    const avail=inventory.filter(t=>t.location==='Our Base'&&t.status==='Good'&&(t.asset||'').toUpperCase().includes(assetQ));
+    if(/TOOL TYPE|DESCRIPTION|ITEM NO|QUANTITY\s*:\s*\d|HEADER/i.test(block)&&block.length<30)continue;
+
+    let od='';
+    if(rule.useBladeOD) od=extractBladeOD(block)||extractToolOD(block);
+    else od=extractToolOD(block);
+
+    const config=detectConfig(block);
+    const connections=extractConnections(block);
+    const comment=extractComment(block);
+
+    let finalRule=rule;
+    if(rule.type==='JAR'){
+      if(jarCommentHydMec.test(block)) finalRule={...rule,label:'HYD-MEC D.JAR',type:'HYD-MEC'};
+      else finalRule={...rule,label:'HYD D.JAR',type:'HYD'};
+    }
+
+    const ourTool=od?`${od}" ${finalRule.label.toUpperCase()}`:finalRule.label.toUpperCase();
+    const qty=1;
+
+    if(finalRule.notOurTool){
+      warnings.push(`Filter Sub detected — this is typically NOT an Emdad rental tool (verify with BHA coordinator)`);
+      continue;
+    }
+
+    const existing=tools.find(t=>t.ourTool===ourTool&&t.config===config&&!finalRule.notOurTool);
+    if(existing){
+      existing.qty+=qty;
+      existing.bhaItem+=', '+block.split('\n')[0].trim().slice(0,30);
+      // Merge connections/comments if different
+      if(connections&&!existing.connections.includes(connections))existing.connections=(existing.connections?existing.connections+' | ':'')+connections;
+      if(comment&&!existing.comment.includes(comment))existing.comment=(existing.comment?existing.comment+' | ':'')+comment;
+      continue;
+    }
+
+    const assetQ=od?od.split('-')[0]:ourTool.split(' ')[0];
+    const avail=inventory.filter(t=>{
+      if(t.location!=='Our Base'||t.status!=='Good')return false;
+      const a=(t.asset||'').toUpperCase();
+      const typeKw=finalRule.label.split(' ')[0].toUpperCase();
+      return(od?a.includes(od.replace('-','-')||od):true)&&(a.includes(typeKw)||a.includes(assetQ));
+    });
     const shortfall=Math.max(0,qty-avail.length);
     if(shortfall>0)warnings.push(`Shortfall: ${shortfall}× ${ourTool} not available at base`);
     if(config==='PORTED')warnings.push(`PORTED config required for ${ourTool} — verify stock`);
-    tools.push({bhaItem:line.slice(0,60),ourTool,type:rule.label,qty,config,availableCount:avail.length,availableSerials:avail.slice(0,3).map(t=>t.serial),shortfall,notes:od?`OD: ${od}"`:'',od});
+
+    tools.push({
+      bhaItem:block.split('\n')[0].trim().slice(0,60),
+      ourTool,type:finalRule.label,qty,config,connections,comment,
+      availableCount:avail.length,
+      availableSerials:avail.slice(0,3).map(t=>t.serial),
+      shortfall,notes:od?`OD: ${od}"`:'',od
+    });
   }
-  const summary=tools.length>0?`Detected ${tools.length} tool line(s) for ${rig||'unknown rig'} / ${well||'unknown well'}${holeSection?' — '+holeSection+' hole section':''}.${requestDate?' Required '+fmtDate(requestDate)+'.':''}`:'No tools detected — paste the BHA table rows from the callout document.';
-  if(!tools.length)warnings.push('No tools detected — paste the BHA/tool table section');
-  if(!requestDate)warnings.push('Required date not found — Baker Base date cannot be calculated');
-  if(!rig)warnings.push('Rig name not detected');
+
+  // ── Step 10: Summary & warnings ─────────────────────────────
+  const summary=tools.length>0
+    ?`Detected ${tools.length} tool type(s) for ${rig||'unknown rig'} / ${well||'unknown well'}${holeSection?' — '+holeSection+' hole':''}.${requestDate?' Required '+fmtDate(requestDate)+', Baker Base by '+fmtDate(bakerBaseDate)+'.':''}`
+    :'No tools detected. Try pasting the full document text including the tool blocks (B1, C1, C2, D1 etc).';
+  if(!tools.length)warnings.push('No tools detected — paste the full callout document text');
+  if(!requestDate)warnings.push('Request date not found — Baker Base deadline cannot be calculated');
+  if(!rig)warnings.push('Rig name not detected — check document has "ADNOC AD-XX" format');
+  if(!well)warnings.push('Well name not detected');
   return{rig,well,holeSection,requestDate,bakerBaseDate,contract,revision,revisionDetected,tools,summary,warnings};
 }
 async function runAI(){
@@ -1033,7 +1224,12 @@ function renderAIResult(p){
     </div>
     ${p.warnings.length?`<div style="background:#fff8e1;border:1px solid #ffb300;border-radius:8px;padding:10px;margin-bottom:12px">${p.warnings.map(w=>`<div style="font-size:11px;color:#e65100;padding:2px 0">⚠ ${w}</div>`).join('')}</div>`:''}
     ${p.tools.map(t=>`<div class="ai-tool-row">
-      <div style="flex:1;min-width:140px"><div style="font-size:10px;color:var(--color-text-secondary)">${t.bhaItem}</div><div style="font-size:13px;font-weight:700">${t.ourTool}</div></div>
+      <div style="flex:1;min-width:140px">
+        <div style="font-size:10px;color:var(--color-text-secondary)">${t.bhaItem}</div>
+        <div style="font-size:13px;font-weight:700">${t.ourTool}</div>
+        ${t.connections?`<div style="font-size:11px;color:#1565c0;margin-top:2px">🔗 ${t.connections}</div>`:''}
+        ${t.comment?`<div style="font-size:11px;color:#7c4dff;margin-top:2px">💬 ${t.comment}</div>`:''}
+      </div>
       <span style="background:#eceff1;color:#37474f;border:1px solid #90a4ae;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">Qty: ${t.qty}</span>
       ${nan2e(t.config)?configTag(t.config):''}
       <span style="background:${t.shortfall>0?'#fce4ec':t.availableCount>0?'#e8f5e9':'#fff8e1'};color:${t.shortfall>0?'#c62828':t.availableCount>0?'#2e7d32':'#e65100'};border:1px solid ${t.shortfall>0?'#f06292':t.availableCount>0?'#66bb6a':'#ffb300'};padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">${t.availableCount} available${t.shortfall>0?' — shortfall: '+t.shortfall:''}</span>
@@ -1048,7 +1244,7 @@ async function createCalloutsFromAI(p){
   let created=0;
   for(const t of p.tools){
     try{
-      await apiCall('addCallout',{asset:t.ourTool||t.bhaItem,type:t.type||t.ourTool,qty:t.qty||1,contract:p.contract||'ADNOC DRILLING',rig:p.rig||'',well:p.well||'',needed:p.requestDate||'',bakerBy:p.bakerBaseDate||'',expectedReturn:'',status:'Pending',holeSection:p.holeSection||'',config:nan2e(t.config),notes:(p.revision||'')+(t.notes?' — '+t.notes:''),date:TODAY,serialAssigned:'',revision:p.revision||''});
+      await apiCall('addCallout',{asset:t.ourTool||t.bhaItem,type:t.type||t.ourTool,qty:t.qty||1,contract:p.contract||'ADNOC DRILLING',rig:p.rig||'',well:p.well||'',needed:p.requestDate||'',bakerBy:p.bakerBaseDate||'',expectedReturn:'',status:'Pending',holeSection:p.holeSection||'',config:nan2e(t.config),notes:[(p.revision&&p.revision!=='New'?p.revision:''),nan2e(t.connections),nan2e(t.comment)].filter(Boolean).join(' | '),date:TODAY,serialAssigned:'',revision:p.revision||''});
       created++;
     }catch(e){}
   }
