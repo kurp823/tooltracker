@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tool Tracker — Bulk Data Uploader</title>
+<style>
+:root {
+  --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;
+  --text:#e6edf3;--text2:#8b949e;--text3:#6e7681;
+  --green:#3fb950;--green-bg:rgba(63,185,80,0.1);--green-bd:rgba(63,185,80,0.3);
+  --red:#f85149;--red-bg:rgba(248,81,73,0.1);
+  --blue:#58a6ff;--blue-bg:rgba(88,166,255,0.08);
+  --amber:#d29922;--amber-bg:rgba(210,153,34,0.1);
+  --font:'Segoe UI',system-ui,sans-serif;--mono:Consolas,monospace;--r:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;min-height:100vh;padding:24px}
+h1{font-size:20px;font-weight:600;margin-bottom:4px}
+.sub{font-size:13px;color:var(--text2);margin-bottom:24px}
+.api-bar{display:flex;gap:8px;margin-bottom:24px;align-items:center}
+.api-bar input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:12px;padding:8px 12px;font-family:var(--mono);outline:none}
+.api-bar input:focus{border-color:var(--blue)}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+@media(max-width:600px){.cards{grid-template-columns:1fr}}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px}
+.card-title{font-size:14px;font-weight:600;margin-bottom:4px}
+.card-sub{font-size:12px;color:var(--text2);margin-bottom:14px}
+.drop{border:2px dashed var(--border);border-radius:var(--r);padding:24px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg3)}
+.drop:hover,.drop.drag{border-color:var(--blue);background:var(--blue-bg)}
+.drop input{display:none}
+.drop-icon{font-size:28px;margin-bottom:6px}
+.drop-title{font-size:13px;font-weight:500;margin-bottom:2px}
+.drop-sub{font-size:11px;color:var(--text3)}
+.preview{margin-top:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;max-height:200px;overflow-y:auto}
+.prow{display:flex;padding:5px 10px;border-bottom:1px solid var(--border);font-size:11px;font-family:var(--mono);gap:8px}
+.prow:last-child{border-bottom:none}
+.prow.hdr{background:var(--bg);font-weight:600;color:var(--text2);font-family:var(--font)}
+.pcell{min-width:80px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.status-bar{margin-top:12px;padding:10px 12px;border-radius:var(--r);font-size:12px;display:none}
+.status-bar.ok{background:var(--green-bg);border:1px solid var(--green-bd);color:var(--green)}
+.status-bar.err{background:var(--red-bg);border:1px solid rgba(248,81,73,0.3);color:var(--red)}
+.status-bar.info{background:var(--blue-bg);border:1px solid rgba(88,166,255,0.2);color:var(--blue)}
+.prog-wrap{background:var(--bg3);border-radius:10px;height:6px;margin-top:8px;overflow:hidden;display:none}
+.prog-bar{height:100%;border-radius:10px;background:var(--green);transition:width .3s}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--r);font-size:13px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:all .14s;font-family:var(--font)}
+.btn-primary{background:#238636;border-color:#2ea043;color:#fff}
+.btn-primary:hover{background:#2ea043}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-secondary{background:transparent;border-color:#444c56;color:var(--text)}
+.btn-secondary:hover{background:var(--bg3)}
+.actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
+.count-badge{font-size:12px;color:var(--text2);padding:4px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:20px}
+.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:rot .7s linear infinite;flex-shrink:0}
+@keyframes rot{to{transform:rotate(360deg)}}
+.log-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px;font-family:var(--mono);font-size:11px;max-height:150px;overflow-y:auto;margin-top:8px;display:none}
+.ll{padding:1px 0;display:flex;gap:8px}
+.lt{color:var(--text3);flex-shrink:0}
+.lok{color:var(--green)}.lerr{color:var(--red)}.linfo{color:var(--blue)}.lwarn{color:var(--amber)}
+</style>
+</head>
+<body>
+
+<h1>⬡ Tool Tracker — Bulk Data Uploader</h1>
+<div class="sub">Upload your inventory and callouts CSV files directly to Azure SQL via the live API</div>
+
+<div class="api-bar">
+  <input type="text" id="api-url" value="https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker" placeholder="API URL">
+  <button class="btn btn-secondary" onclick="testConn()">Test Connection</button>
+  <span id="conn-status" style="font-size:12px;color:var(--text3)">Not tested</span>
+</div>
+
+<div class="cards">
+
+  <!-- INVENTORY -->
+  <div class="card">
+    <div class="card-title">📦 Inventory Upload</div>
+    <div class="card-sub">Drop your <strong>inventory_upload.csv</strong> file here</div>
+    <div class="drop" id="inv-drop" onclick="document.getElementById('inv-file').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')"
+         ondragleave="this.classList.remove('drag')"
+         ondrop="handleDrop(event,'inv')">
+      <input type="file" id="inv-file" accept=".csv" onchange="loadFile(this.files[0],'inv')">
+      <div class="drop-icon">📂</div>
+      <div class="drop-title">Drop inventory_upload.csv here</div>
+      <div class="drop-sub">or click to browse</div>
+    </div>
+    <div id="inv-preview"></div>
+    <div class="actions" id="inv-actions" style="display:none">
+      <button class="btn btn-primary" id="inv-btn" onclick="uploadData('inv')">⬆ Upload <span id="inv-count">0</span> Inventory Records</button>
+      <button class="btn btn-secondary" onclick="clearData('inv')">Clear</button>
+    </div>
+    <div class="prog-wrap" id="inv-prog-wrap"><div class="prog-bar" id="inv-prog" style="width:0%"></div></div>
+    <div class="status-bar" id="inv-status"></div>
+    <div class="log-box" id="inv-log"></div>
+  </div>
+
+  <!-- CALLOUTS -->
+  <div class="card">
+    <div class="card-title">📋 Callouts Upload</div>
+    <div class="card-sub">Drop your <strong>callouts_upload.csv</strong> file here</div>
+    <div class="drop" id="cal-drop" onclick="document.getElementById('cal-file').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')"
+         ondragleave="this.classList.remove('drag')"
+         ondrop="handleDrop(event,'cal')">
+      <input type="file" id="cal-file" accept=".csv" onchange="loadFile(this.files[0],'cal')">
+      <div class="drop-icon">📂</div>
+      <div class="drop-title">Drop callouts_upload.csv here</div>
+      <div class="drop-sub">or click to browse</div>
+    </div>
+    <div id="cal-preview"></div>
+    <div class="actions" id="cal-actions" style="display:none">
+      <button class="btn btn-primary" id="cal-btn" onclick="uploadData('cal')">⬆ Upload <span id="cal-count">0</span> Callout Records</button>
+      <button class="btn btn-secondary" onclick="clearData('cal')">Clear</button>
+    </div>
+    <div class="prog-wrap" id="cal-prog-wrap"><div class="prog-bar" id="cal-prog" style="width:0%"></div></div>
+    <div class="status-bar" id="cal-status"></div>
+    <div class="log-box" id="cal-log"></div>
+  </div>
+
+</div>
+
+<script>
+const API = () => document.getElementById('api-url').value.trim();
+let invData = [], calData = [];
+
+function log(type, msg, level='info') {
+  const el = document.getElementById(type+'-log');
+  el.style.display = 'block';
+  const t = new Date().toLocaleTimeString('en-GB',{hour12:false});
+  const c = {ok:'lok',err:'lerr',info:'linfo',warn:'lwarn'}[level]||'linfo';
+  el.innerHTML += `<div class="ll"><span class="lt">${t}</span><span class="${c}">${msg}</span></div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStatus(type, msg, kind) {
+  const el = document.getElementById(type+'-status');
+  el.textContent = msg; el.className = 'status-bar '+kind; el.style.display = 'block';
+}
+
+async function testConn() {
+  const s = document.getElementById('conn-status');
+  s.textContent = 'Testing…'; s.style.color = 'var(--amber)';
+  try {
+    const r = await fetch(API()+'?action=test');
+    const d = await r.json();
+    if(d.success) {
+      s.textContent = '✓ Connected — '+d.inventoryCount+' inv records';
+      s.style.color = 'var(--green)';
+    } else {
+      s.textContent = '✗ '+JSON.stringify(d);
+      s.style.color = 'var(--red)';
+    }
+  } catch(e) {
+    s.textContent = '✗ '+e.message;
+    s.style.color = 'var(--red)';
+  }
+}
+
+function handleDrop(ev, type) {
+  ev.preventDefault();
+  document.getElementById(type+'-drop').classList.remove('drag');
+  const f = ev.dataTransfer.files[0];
+  if(f) loadFile(f, type);
+}
+
+function splitCSV(line) {
+  const r=[]; let cur='', inQ=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){inQ=!inQ;}
+    else if(c===','&&!inQ){r.push(cur.trim());cur='';}
+    else cur+=c;
+  }
+  r.push(cur.trim()); return r;
+}
+
+function loadFile(file, type) {
+  if(!file) return;
+  const r = new FileReader();
+  r.onload = e => {
+    const lines = e.target.result.split(/\r?\n/).filter(l=>l.trim());
+    if(lines.length < 2) { alert('File needs header + data rows'); return; }
+    const headers = splitCSV(lines[0]);
+    const rows = lines.slice(1).map(line => {
+      const vals = splitCSV(line);
+      const obj = {};
+      headers.forEach((h,i) => obj[h.trim()] = (vals[i]||'').trim());
+      return obj;
+    }).filter(o => Object.values(o).some(v=>v));
+
+    if(type==='inv') invData = rows;
+    else calData = rows;
+
+    document.getElementById(type+'-count').textContent = rows.length;
+    document.getElementById(type+'-actions').style.display = 'flex';
+    showPreview(type, headers, rows);
+    log(type, `Loaded ${rows.length} rows from ${file.name}`, 'ok');
+  };
+  r.readAsText(file);
+}
+
+function showPreview(type, headers, rows) {
+  const el = document.getElementById(type+'-preview');
+  const show = headers.slice(0,5);
+  const prev = rows.slice(0,5);
+  el.innerHTML = `<div class="preview">
+    <div class="prow hdr">${show.map(h=>`<span class="pcell">${h}</span>`).join('')}</div>
+    ${prev.map(r=>`<div class="prow">${show.map(h=>`<span class="pcell">${r[h]||''}</span>`).join('')}</div>`).join('')}
+    ${rows.length>5?`<div class="prow" style="color:var(--text3);font-family:var(--font)">… ${rows.length-5} more rows</div>`:''}
+  </div>`;
+}
+
+async function uploadData(type) {
+  const data = type==='inv' ? invData : calData;
+  const action = type==='inv' ? 'saveInventoryBulk' : 'saveCalloutsBulk';
+  const btn = document.getElementById(type+'-btn');
+  const prog = document.getElementById(type+'-prog');
+  const progWrap = document.getElementById(type+'-prog-wrap');
+
+  if(!data.length) return;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div> Uploading…';
+  progWrap.style.display = 'block';
+  prog.style.width = '5%';
+
+  log(type, `Starting bulk upload of ${data.length} records…`, 'info');
+  log(type, `Action: ${action}`, 'info');
+
+  try {
+    // Send in batches of 100
+    const batchSize = 100;
+    let totalOk = 0;
+
+    for(let i=0; i<data.length; i+=batchSize) {
+      const batch = data.slice(i, i+batchSize);
+      const pct = Math.round((i/data.length)*90)+5;
+      prog.style.width = pct+'%';
+
+      const res = await fetch(API(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, data: batch })
+      });
+
+      const result = await res.json();
+      if(res.ok && result.success) {
+        totalOk += batch.length;
+        log(type, `Batch ${Math.ceil(i/batchSize)+1}: ${batch.length} records saved`, 'ok');
+      } else {
+        throw new Error(result.error || 'Batch failed with status '+res.status);
+      }
+    }
+
+    prog.style.width = '100%';
+    setStatus(type, `✓ ${totalOk} records uploaded successfully to Azure SQL!`, 'ok');
+    log(type, `Upload complete — ${totalOk} records in database`, 'ok');
+    btn.innerHTML = '✓ Upload Complete';
+
+    // Re-test to confirm count
+    setTimeout(testConn, 1000);
+
+  } catch(e) {
+    setStatus(type, '✗ Upload failed: '+e.message, 'err');
+    log(type, 'Error: '+e.message, 'err');
+    btn.disabled = false;
+    btn.innerHTML = '↻ Retry Upload';
+  }
+}
+
+function clearData(type) {
+  if(type==='inv') invData=[];
+  else calData=[];
+  document.getElementById(type+'-preview').innerHTML = '';
+  document.getElementById(type+'-actions').style.display = 'none';
+  document.getElementById(type+'-status').style.display = 'none';
+  document.getElementById(type+'-log').style.display = 'none';
+  document.getElementById(type+'-log').innerHTML = '';
+  document.getElementById(type+'-prog-wrap').style.display = 'none';
+  document.getElementById(type+'-count').textContent = '0';
+  const btn = document.getElementById(type+'-btn');
+  btn.disabled = false;
+  btn.innerHTML = `⬆ Upload <span id="${type}-count">0</span> ${type==='inv'?'Inventory':'Callout'} Records`;
+  document.getElementById(type+'-file').value = '';
+}
+
+// Auto-test on load
+testConn();
+</script>
+</body>
+</html>
