@@ -1459,9 +1459,9 @@ function renderTopbar(){
 function getModule(){return new URLSearchParams(window.location.search).get('module')||'dashboard';}
 
 function navTo(mod){
-  // Always open in a NEW tab
   const url=window.location.pathname+'?module='+mod;
-  window.open(url,'_blank');
+  history.pushState({module:mod}, '', url);
+  renderModule(mod);
 }
 
 // ── ROUTER ─────────────────────────────────────────
@@ -1594,7 +1594,7 @@ function pageInventory(){
   <div class="card" style="padding:12px 16px;margin-bottom:14px">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <div style="position:relative">
-        <input class="inp inp-sm" id="inv-q" placeholder="🔍  Search serial, description, size..." value="${esc(IQ)}" oninput="IQ=this.value;IPG=1;reInv()" style="width:280px;padding-left:10px">
+        <input class="inp inp-sm" id="inv-q" placeholder="🔍  Search serial, description, size..." oninput="IQ=this.value;IPG=1;reInvTable()" style="width:280px;padding-left:10px">
       </div>
       <select class="inp inp-sm" id="inv-st" onchange="IFS=this.value;IPG=1;reInv()" style="width:130px">
         <option value="">All Status</option>
@@ -1654,7 +1654,29 @@ function invRow(t,i){
     ${canWrite('inventory')?`<td><button class="btn btn-ghost btn-xs" onclick="mEditTool('${esc(t.id)}')">Edit</button></td>`:''}
   </tr>`;
 }
-function reInv(){renderModule('inventory');}
+function reInv(){
+  const el=document.getElementById('inv-q');
+  const val=el?el.value:'';
+  const pos=el?el.selectionStart:0;
+  renderModule('inventory');
+  // Restore focus and cursor after re-render
+  const el2=document.getElementById('inv-q');
+  if(el2){el2.value=val;el2.focus();try{el2.setSelectionRange(pos,pos);}catch(e){}}
+}
+
+function reInvTable(){
+  // Re-render only table area — preserves search input focus
+  const q=document.getElementById('inv-q');
+  if(q) IQ=q.value;
+  IPG=1;
+  const container=document.getElementById('inv-table-wrap');
+  if(!container){reInv();return;}
+  const fil=filterInv();
+  const start=(IPG-1)*IPS;
+  const page=fil.slice(start,start+IPS);
+  const totalPages=Math.max(1,Math.ceil(fil.length/IPS));
+  container.innerHTML=invTableHTML(page,fil.length,totalPages);
+}
 
 function mAddTool(){
   const iv=state.inventory;
@@ -2907,7 +2929,7 @@ function pageSettings(){
     </div>
     <div class="card">
       <div class="card-hdr"><div class="card-title">System Info</div></div>
-      ${alert_('green','🟢','🟢 LIVE — Connected to <b>ToolTrackingDB</b> on Azure SQL UAE North. All data is real.')}
+      ${alert_('green','🟢','🟢 LIVE — Connected to ToolTrackingDB.')}
       <button class="btn btn-danger" onclick="resetAll()" style="width:100%;margin-top:4px">⚠ Reset All Data</button>
       <div style="margin-top:14px">
         <div style="font-size:11px;font-weight:700;color:var(--s600);margin-bottom:8px">Role Access Summary</div>
