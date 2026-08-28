@@ -1161,7 +1161,6 @@ loadFromAPI().catch(err => {
     if(btn){ btn.textContent = 'Sign In →'; btn.disabled = false; }
   });
 }
-
 async function loadFromAPI(){
     const syncBadge = document.getElementById('tb-sync');
     if(syncBadge) syncBadge.style.display = '';
@@ -4986,7 +4985,6 @@ async function doLoginUI(){
   CU = user;
   sessionStorage.setItem(SK.usr, JSON.stringify({id: user.id, username: user.username}));
 
-  // Non-blocking UI transition
   const loginPage = document.getElementById('login-page');
   if(loginPage) loginPage.style.display = 'none';
   
@@ -4996,66 +4994,52 @@ async function doLoginUI(){
   renderSidebar();
   renderModule('dashboard');
 
-  // ── FAST PATH ─────────────────────────────────────────────
-  // Known users sign in instantly against the local list — no waiting
-  // on the Azure Function / SQL round-trip (which can cold-start for
-  // several seconds and was the cause of the slow-to-load home page).
-  // Azure SQL is still checked afterwards, in the background, purely
-  // to record LastLogin and to catch a deactivated/changed account.
-  const localUser=doLogin(u,p);
+  const localUser = doLogin(u, p);
   if(localUser){
-    errEl.style.display='none';
+    errEl.style.display = 'none';
     initApp();
-    if(btn){btn.textContent='Sign In →';btn.disabled=false;}
-    API('login',{username:u,password:p}).then(apiUser=>{
-      if(apiUser)CU={id:apiUser.id,username:apiUser.username,name:apiUser.name,role:apiUser.role};
-    }).catch(()=>{ /* offline or API still cold — local session stays valid */ });
+    if(btn){ btn.textContent = 'Sign In →'; btn.disabled = false; }
+    API('login', {username: u, password: p}).then(apiUser => {
+      if(apiUser) CU = {id: apiUser.id, username: apiUser.username, name: apiUser.name, role: apiUser.role};
+    }).catch(() => {});
     return;
   }
 
-  // ── SLOW PATH ─────────────────────────────────────────────
-  // Not in the local list — this can only be an Azure-SQL-only account,
-  // so we have no choice but to wait on the API here.
-  if(btn){btn.textContent='Signing in...';btn.disabled=true;}
+  if(btn){ btn.textContent = 'Signing in...'; btn.disabled = true; }
   try{
-    const apiUser=await API('login',{username:u,password:p});
+    const apiUser = await API('login', {username: u, password: p});
     if(apiUser){
-      CU={id:apiUser.id,username:apiUser.username,name:apiUser.name,role:apiUser.role};
-      sessionStorage.setItem(SK.usr,JSON.stringify({id:CU.id,username:CU.username}));
-      errEl.style.display='none';
+      CU = {id: apiUser.id, username: apiUser.username, name: apiUser.name, role: apiUser.role};
+      sessionStorage.setItem(SK.usr, JSON.stringify({id: CU.id, username: CU.username}));
+      errEl.style.display = 'none';
       initApp();
       return;
     }
-  } catch(e){
-    // fall through to invalid-credentials message below
-  }
-  errEl.textContent='Invalid username or password';
-  errEl.style.display='';
-  if(btn){btn.textContent='Sign In →';btn.disabled=false;}
+  } catch(e){}
+  
+  errEl.textContent = 'Invalid username or password';
+  errEl.style.display = '';
+  if(btn){ btn.textContent = 'Sign In →'; btn.disabled = false; }
 }
 
 function initApp(){
   if(!CU){console.error('initApp: no CU');return;}
   load();
-  document.getElementById('login-page').style.display='none';
-  const jobHubId=new URLSearchParams(location.search).get('jobHub');
+  document.getElementById('login-page').style.display = 'none';
+  const jobHubId = new URLSearchParams(location.search).get('jobHub');
   if(jobHubId){
-    document.getElementById('app').style.display='none';
-    document.getElementById('job-hub-root').style.display='';
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('job-hub-root').style.display = '';
     renderJobHubFullPage(jobHubId);
     return;
   }
-  document.getElementById('app').style.display='';
+  document.getElementById('app').style.display = '';
   renderSidebar();
-  const d=document.getElementById('tb-date');if(d)d.textContent=fdL(TODAY);
-  const mod=getModule();
-  renderModule(canAccess(mod)?mod:'dashboard');
+  const d = document.getElementById('tb-date'); if(d) d.textContent = fdL(TODAY);
+  const mod = getModule();
+  renderModule(canAccess(mod) ? mod : 'dashboard');
 }
 
 (function boot(){
-  if(checkAuth()&&CU)initApp();
+  if(checkAuth() && CU) initApp();
 })();
-
-</script>
-</body>
-</html>
