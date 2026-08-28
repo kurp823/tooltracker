@@ -1172,11 +1172,13 @@ async function loadFromAPI(){
             save();
         }
         if(syncBadge) syncBadge.style.display = 'none';
+        renderModule(CURRENT_MODULE);
+        renderSidebar();
     } catch(e) {
         console.warn('Background sync skipped:', e.message);
         if(syncBadge) {
             syncBadge.style.display = '';
-            syncBadge.textContent = '⚠ Offline Mode';
+            syncBadge.textContent = '⚠ Offline Mode (Cached)';
             syncBadge.style.color = '#f97316';
         }
     }
@@ -4952,12 +4954,41 @@ function pageSettings(){
 // ════════════════════════════════════════════════════
 // BOOT
 // ════════════════════════════════════════════════════
+// ── ROBUST NON-BLOCKING LOGIN FOR 25+ USERS ─────────────────
 async function doLoginUI(){
-  const u=document.getElementById('lu').value.trim();
-  const p=document.getElementById('lp').value;
-  const errEl=document.getElementById('lerr');
-  const btn=document.querySelector('.login-wrap .btn-primary');
-  if(!u||!p){errEl.textContent='Please enter username and password';errEl.style.display='';return;}
+  const u = document.getElementById('lu').value.trim();
+  const p = document.getElementById('lp').value;
+  const errEl = document.getElementById('lerr');
+  const btn = document.querySelector('.login-wrap .btn-primary');
+  
+  if(!u || !p){
+    errEl.textContent = 'Please enter username and password';
+    errEl.style.display = '';
+    return;
+  }
+
+  const user = USERS.find(x => x.username.toLowerCase() === u.toLowerCase() && x.pass === p);
+  if(!user){
+    errEl.textContent = 'Invalid username or password';
+    errEl.style.display = '';
+    return;
+  }
+
+  errEl.style.display = 'none';
+  if(btn){ btn.textContent = 'Signing in...'; btn.disabled = true; }
+
+  CU = user;
+  sessionStorage.setItem(SK.usr, JSON.stringify({id: user.id, username: user.username}));
+
+  // INSTANT UI TRANSITION (Non-blocking)
+  const loginPage = document.getElementById('login-page');
+  if(loginPage) loginPage.style.display = 'none';
+  
+  const appContainer = document.getElementById('app');
+  if(appContainer) appContainer.style.display = 'flex';
+
+  renderSidebar();
+  renderModule('dashboard');
 
   // ── FAST PATH ─────────────────────────────────────────────
   // Known users sign in instantly against the local list — no waiting
