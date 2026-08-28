@@ -1162,25 +1162,21 @@ async function loadFromAPI(){
 
     try {
         const bootstrap = await API('getbootstrap');
-        if (bootstrap) {
+        if (bootstrap && bootstrap.inventory) {
             state.inventory = (bootstrap.inventory || []).map(mapInvRow);
             state.jobs = (bootstrap.jobs || []).map(mapJobRow);
             state.contracts = bootstrap.contracts || [];
             state.assetCategoryMap = Object.fromEntries(
                 (bootstrap.assetCategoryMap || []).map(r => [r.SerialNo, r.Category])
             );
+            save();
         }
-        
-        // Save to local cache for initial render
-        save();
-        renderModule(CURRENT_MODULE);
-        
         if(syncBadge) syncBadge.style.display = 'none';
     } catch(e) {
-        console.warn('Bootstrap sync failed, falling back to cache:', e.message);
+        console.warn('Background sync skipped:', e.message);
         if(syncBadge) {
             syncBadge.style.display = '';
-            syncBadge.textContent = '⚠ Using cached data (offline mode)';
+            syncBadge.textContent = '⚠ Offline Mode';
             syncBadge.style.color = '#f97316';
         }
     }
