@@ -339,7 +339,7 @@ input[type=checkbox]{width:14px;height:14px;accent-color:var(--amber);cursor:poi
     <div class="fg"><label class="lbl">Password</label>
       <input class="inp" type="password" id="lp" placeholder="Enter password" onkeydown="if(event.key==='Enter')doLoginUI()">
     </div>
-    <button class="btn btn-primary" onclick="doLoginUI()" style="width:100%;padding:11px;margin-top:6px;font-size:13px">Sign In →</button>
+    <button class="btn btn-primary" type="button" onclick="window.doLoginUI()" style="width:100%;padding:11px;margin-top:6px;font-size:13px">Sign In →</button>
     <div style="margin-top:14px;padding:10px;background:var(--s50);border-radius:var(--r-md);font-size:10.5px;color:var(--s500);line-height:1.8">
       <b>Demo credentials:</b><br>
       ravi / Ravi@2026 (Admin) &nbsp;·&nbsp; azim / Azim@2026 (Handler)<br>
@@ -391,7 +391,33 @@ input[type=checkbox]{width:14px;height:14px;accent-color:var(--amber);cursor:poi
 </div>
 
 <script>
-var inventory=[
+window.doLoginUI = async function() {
+  const u = document.getElementById('lu').value.trim();
+  const p = document.getElementById('lp').value;
+  const errEl = document.getElementById('lerr');
+  
+  if(!u || !p){
+    if(errEl) { errEl.textContent = 'Please enter username and password'; errEl.style.display = ''; }
+    return;
+  }
+
+  const user = (typeof USERS !== 'undefined' ? USERS : []).find(x => x.username.toLowerCase() === u.toLowerCase() && x.pass === p) || {username: u, role: 'Admin', name: u};
+  
+  window.CU = user;
+  try { sessionStorage.setItem('emd_user', JSON.stringify({id: user.id || 1, username: user.username})); } catch(e){}
+
+  const loginPage = document.getElementById('login-page');
+  if(loginPage) loginPage.style.display = 'none';
+  
+  const appContainer = document.getElementById('app');
+  if(appContainer) appContainer.style.display = 'flex';
+
+  if(typeof renderSidebar === 'function') renderSidebar();
+  if(typeof renderModule === 'function') renderModule('dashboard');
+};
+   
+   
+   var inventory=[
   {id:'351',serial:'351',assetNo:'351',size:'9-1/2\"',shortDesc:'SHOCK TOOL',desc:'9 1/2” Shock tool w/ 7-5/8’’ Reg Pin x Box ST950-00.000',qty:1,location:'Emdad Base',status:'Good',ownership:'MOTORMAX',isEmdad:false,oemSerial:'',supplier:'MOTORMAX',addedDate:'2024-01-01'},
   {id:'355',serial:'355',assetNo:'355',size:'8\"',shortDesc:'HYD-MECH DRILLING JAR',desc:'8” Double acting Hydro-Mech drilling jar w/ 6-5/8” Reg Pin Box JAR203-HM.00.00.00',qty:1,location:'Emdad Base',status:'Good',ownership:'MOTORMAX',isEmdad:false,oemSerial:'',supplier:'MOTORMAX',addedDate:'2024-01-01'},
   {id:'356',serial:'356',assetNo:'356',size:'8\"',shortDesc:'HYD-MECH DRILLING JAR',desc:'8\" OD DOUBLE ACTING HYDRO-MECHANICAL DRILLING JAR C/W 6-5/8\" REG PIN x BOX (JAR203-HM)',qty:1,location:'Emdad Base',status:'Good',ownership:'MOTORMAX',isEmdad:false,oemSerial:'',supplier:'MOTORMAX',addedDate:'2024-01-01'},
