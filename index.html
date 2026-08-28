@@ -1157,9 +1157,34 @@ function load(){
 }
 
 async function loadFromAPI(){
-  const el=document.getElementById('mc-main');
-  const syncBadge=document.getElementById('tb-sync');
-  if(syncBadge)syncBadge.style.display='';
+    const syncBadge = document.getElementById('tb-sync');
+    if(syncBadge) syncBadge.style.display = '';
+
+    try {
+        const bootstrap = await API('getbootstrap');
+        if (bootstrap) {
+            state.inventory = (bootstrap.inventory || []).map(mapInvRow);
+            state.jobs = (bootstrap.jobs || []).map(mapJobRow);
+            state.contracts = bootstrap.contracts || [];
+            state.assetCategoryMap = Object.fromEntries(
+                (bootstrap.assetCategoryMap || []).map(r => [r.SerialNo, r.Category])
+            );
+        }
+        
+        // Save to local cache for initial render
+        save();
+        renderModule(CURRENT_MODULE);
+        
+        if(syncBadge) syncBadge.style.display = 'none';
+    } catch(e) {
+        console.warn('Bootstrap sync failed, falling back to cache:', e.message);
+        if(syncBadge) {
+            syncBadge.style.display = '';
+            syncBadge.textContent = '⚠ Using cached data (offline mode)';
+            syncBadge.style.color = '#f97316';
+        }
+    }
+}
 
   // Each endpoint loads independently (allSettled, not all) — a single
   // action failing (e.g. the backend hasn't been redeployed yet with a
