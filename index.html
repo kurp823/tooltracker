@@ -1143,8 +1143,8 @@ async function apiSaveMaintenance(m)  { return safeAPI('savemaintenance',{mainte
 async function apiSaveGatePass(g)     { return safeAPI('savegatepass',  {gatepass:g,env:window.EMDAD_ENV}); }
 async function apiSaveContract(c)     { return safeAPI('savecontract', {contract:c,env:window.EMDAD_ENV}); }
 async function apiLogMove(log)        { return safeAPI('logmovement',   {log,        env:window.EMDAD_ENV}); }
+// ── 1. UNIFIED LOAD & BOOTSTRAP (Place where load() was located) ───────────
 function load(){
-  // Load from localStorage cache first (instant)
   try{
     const inv=localStorage.getItem(SK.inv);
     state.inventory=inv?JSON.parse(inv):inventory.map(t=>({...t}));
@@ -1152,15 +1152,9 @@ function load(){
      [SK.ins,'inspections'],[SK.mnt,'maintenance'],[SK.gps,'gatePasses'],[SK.logs,'movLogs']]
     .forEach(([k,p])=>{const d=localStorage.getItem(k);state[p]=d?JSON.parse(d):[];});
   }catch(e){state.inventory=inventory.map(t=>({...t}));}
-  // Then refresh from Azure SQL in background
   loadFromAPI();
 }
-loadFromAPI().catch(err => {
-    console.warn('Background sync deferred:', err.message);
-  }).finally(() => {
-    if(btn){ btn.textContent = 'Sign In →'; btn.disabled = false; }
-  });
-}
+
 async function loadFromAPI(){
     const syncBadge = document.getElementById('tb-sync');
     if(syncBadge) syncBadge.style.display = '';
@@ -1188,7 +1182,6 @@ async function loadFromAPI(){
         }
     }
 }
-
   // Each endpoint loads independently (allSettled, not all) — a single
   // action failing (e.g. the backend hasn't been redeployed yet with a
   // newer feature like getcontracts) must never fall the WHOLE app back
@@ -4959,7 +4952,7 @@ function pageSettings(){
 // ════════════════════════════════════════════════════
 // BOOT
 // ════════════════════════════════════════════════════
-// ── ROBUST NON-BLOCKING LOGIN FOR 25+ USERS ─────────────────
+// ── 2. NON-BLOCKING LOGIN HANDLER (Place at the bottom of the script) ─────
 async function doLoginUI(){
   const u = document.getElementById('lu').value.trim();
   const p = document.getElementById('lp').value;
@@ -4985,6 +4978,7 @@ async function doLoginUI(){
   CU = user;
   sessionStorage.setItem(SK.usr, JSON.stringify({id: user.id, username: user.username}));
 
+  // Instant UI transition to dashboard (Zero Lag)
   const loginPage = document.getElementById('login-page');
   if(loginPage) loginPage.style.display = 'none';
   
