@@ -391,32 +391,8 @@ input[type=checkbox]{width:14px;height:14px;accent-color:var(--amber);cursor:poi
 </div>
 
 <script>
-window.doLoginUI = async function() {
-  const u = document.getElementById('lu').value.trim();
-  const p = document.getElementById('lp').value;
-  const errEl = document.getElementById('lerr');
-  
-  if(!u || !p){
-    if(errEl) { errEl.textContent = 'Please enter username and password'; errEl.style.display = ''; }
-    return;
-  }
+// doLoginUI defined below after all functions are loaded
 
-  const user = (typeof USERS !== 'undefined' ? USERS : []).find(x => x.username.toLowerCase() === u.toLowerCase() && x.pass === p) || {username: u, role: 'Admin', name: u};
-  
-  window.CU = user;
-  try { sessionStorage.setItem('emd_user', JSON.stringify({id: user.id || 1, username: user.username})); } catch(e){}
-
-  const loginPage = document.getElementById('login-page');
-  if(loginPage) loginPage.style.display = 'none';
-  
-  const appContainer = document.getElementById('app');
-  if(appContainer) appContainer.style.display = 'flex';
-
-  if(typeof renderSidebar === 'function') renderSidebar();
-  if(typeof renderModule === 'function') renderModule('dashboard');
-};
-   
-   
    var inventory=[
   {id:'351',serial:'351',assetNo:'351',size:'9-1/2\"',shortDesc:'SHOCK TOOL',desc:'9 1/2” Shock tool w/ 7-5/8’’ Reg Pin x Box ST950-00.000',qty:1,location:'Emdad Base',status:'Good',ownership:'MOTORMAX',isEmdad:false,oemSerial:'',supplier:'MOTORMAX',addedDate:'2024-01-01'},
   {id:'355',serial:'355',assetNo:'355',size:'8\"',shortDesc:'HYD-MECH DRILLING JAR',desc:'8” Double acting Hydro-Mech drilling jar w/ 6-5/8” Reg Pin Box JAR203-HM.00.00.00',qty:1,location:'Emdad Base',status:'Good',ownership:'MOTORMAX',isEmdad:false,oemSerial:'',supplier:'MOTORMAX',addedDate:'2024-01-01'},
@@ -1185,8 +1161,6 @@ async function loadFromAPI(){
   const syncBadge = document.getElementById('tb-sync');
   if(syncBadge) syncBadge.style.display = '';
 
-  // Each endpoint loads independently (allSettled, not all) — a single
-  // action failing must never fall the WHOLE app back to demo data.
   const endpoints=[
     ['inv','getinventory'],['cals','getcallouts'],['jobs','getjobs'],
     ['dts','getdtbatches'],['rts','getrtbatches'],['ins','getinspections'],
@@ -1201,7 +1175,7 @@ async function loadFromAPI(){
     failed.push(endpoints[i][1]);
     return null;
   };
-  const inv=val(0), cals=val(1), jobs=val(2), dts=val(3), rts=val(4), ins=val(5), mnt=val(6), gps=val(7), cons=val(8), acm=val(9);
+  const inv=val(0),cals=val(1),jobs=val(2),dts=val(3),rts=val(4),ins=val(5),mnt=val(6),gps=val(7),cons=val(8),acm=val(9);
 
   if(inv!==null) state.inventory   = inv.map(mapInvRow);
   if(cals!==null)state.callouts    = cals;
@@ -1222,7 +1196,7 @@ async function loadFromAPI(){
     console.warn('API load partially failed for:', failed.join(', '));
     if(syncBadge){
       syncBadge.style.display='';
-      syncBadge.textContent=`⚠ ${failed.length} of ${endpoints.length} failed to sync (${failed.join(', ')}) — showing cached data for those`;
+      syncBadge.textContent=`⚠ ${failed.length} failed (${failed.join(', ')}) — cached`;
       syncBadge.style.color='#f97316';
     }
   } else if(syncBadge){
@@ -5013,6 +4987,17 @@ async function doLoginUI(){
   errEl.style.display = '';
   if(btn){ btn.textContent = 'Sign In →'; btn.disabled = false; }
 }
+
+function showLogin(){
+  const lp=document.getElementById('login-page');
+  const app=document.getElementById('app');
+  if(lp)lp.style.display='';
+  if(app)app.style.display='none';
+}
+
+// Wire window.doLoginUI to the real function now that everything is defined
+window.doLoginUI = doLoginUI;
+
 
 function initApp(){
   if(!CU){console.error('initApp: no CU');return;}
