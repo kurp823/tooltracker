@@ -1182,37 +1182,11 @@ function load(){
 }
 
 async function loadFromAPI(){
-    const syncBadge = document.getElementById('tb-sync');
-    if(syncBadge) syncBadge.style.display = '';
+  const syncBadge = document.getElementById('tb-sync');
+  if(syncBadge) syncBadge.style.display = '';
 
-    try {
-        const bootstrap = await API('getbootstrap');
-        if (bootstrap && bootstrap.inventory) {
-            state.inventory = (bootstrap.inventory || []).map(mapInvRow);
-            state.jobs = (bootstrap.jobs || []).map(mapJobRow);
-            state.contracts = bootstrap.contracts || [];
-            state.assetCategoryMap = Object.fromEntries(
-                (bootstrap.assetCategoryMap || []).map(r => [r.SerialNo, r.Category])
-            );
-            save();
-        }
-        if(syncBadge) syncBadge.style.display = 'none';
-        renderModule(CURRENT_MODULE);
-        renderSidebar();
-    } catch(e) {
-        console.warn('Background sync skipped:', e.message);
-        if(syncBadge) {
-            syncBadge.style.display = '';
-            syncBadge.textContent = '⚠ Offline Mode (Cached)';
-            syncBadge.style.color = '#f97316';
-        }
-    }
-}
   // Each endpoint loads independently (allSettled, not all) — a single
-  // action failing (e.g. the backend hasn't been redeployed yet with a
-  // newer feature like getcontracts) must never fall the WHOLE app back
-  // to demo data. Whatever succeeds, loads; whatever fails, keeps its
-  // last-known cached value and gets logged clearly by name.
+  // action failing must never fall the WHOLE app back to demo data.
   const endpoints=[
     ['inv','getinventory'],['cals','getcallouts'],['jobs','getjobs'],
     ['dts','getdtbatches'],['rts','getrtbatches'],['ins','getinspections'],
@@ -1229,8 +1203,6 @@ async function loadFromAPI(){
   };
   const inv=val(0), cals=val(1), jobs=val(2), dts=val(3), rts=val(4), ins=val(5), mnt=val(6), gps=val(7), cons=val(8), acm=val(9);
 
-  // Map API field names to frontend field names — only overwrite state
-  // for endpoints that actually succeeded; keep prior cached value otherwise.
   if(inv!==null) state.inventory   = inv.map(mapInvRow);
   if(cals!==null)state.callouts    = cals;
   if(jobs!==null)state.jobs        = jobs.map(mapJobRow);
@@ -1242,8 +1214,9 @@ async function loadFromAPI(){
   if(cons!==null)state.contracts   = cons;
   if(acm!==null) state.assetCategoryMap = Object.fromEntries((acm||[]).map(r=>[r.SerialNo||r.serialNo, r.Category||r.category]));
 
-  save(); // update localStorage cache with whatever succeeded
-  renderModule(CURRENT_MODULE); // re-render with the freshest data available
+  save();
+  renderModule(CURRENT_MODULE);
+  renderSidebar();
 
   if(failed.length){
     console.warn('API load partially failed for:', failed.join(', '));
@@ -1256,7 +1229,6 @@ async function loadFromAPI(){
     syncBadge.style.display='none';
   }
 }
-
 // Map Azure SQL field names (PascalCase) → frontend field names (camelCase)
 function mapInvRow(r){
   return {
