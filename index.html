@@ -1,937 +1,296 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>EMDAD Operations — LIVE</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-/* ══════════════════════════════════════════════════
-   EMDAD Operations v2 — Design System
-   ══════════════════════════════════════════════════ */
-:root {
-  --amber:   #f59e0b; --amber-d: #d97706; --amber-l: #fffbeb; --amber-b: #fde68a;
-  --sap-navy:   #1a3055;
-  --sap-navy-l: #1e3a63;
-  --sap-steel:  #4a6fa5;
-  --sap-hdr:    #5b7fa6;
-  --sap-hdr-d:  #3d6491;
-  --sap-blue-l: #dbe6f1;
-  --sap-stripe: #f2f6fa;
-  --sap-border: #b8c9db;
-  --sap-text:   #24476b;
-  --grn:#10b981; --grn-l:#ecfdf5; --grn-b:#a7f3d0; --grn-d:#065f46;
-  --red:#ef4444; --red-l:#fef2f2; --red-b:#fecaca; --red-d:#991b1b;
-  --blue:#3b82f6; --blue-l:#eff6ff; --blue-b:#bfdbfe; --blue-d:#1e40af;
-  --pur:#8b5cf6; --pur-l:#f5f3ff; --pur-b:#ddd6fe; --pur-d:#5b21b6;
-  --org:#f97316; --org-l:#fff7ed; --org-b:#fed7aa;
-  --cyan:#06b6d4; --cyan-l:#ecfeff; --cyan-b:#a5f3fc;
-  --s50:#f8fafc; --s100:#f1f5f9; --s200:#e2e8f0; --s300:#cbd5e1;
-  --s400:#94a3b8; --s500:#64748b; --s600:#475569; --s700:#334155;
-  --s800:#1e293b; --s900:#0f172a;
-  --sb-w:240px; --top-h:52px;
-  --r:4px; --r-md:6px; --r-lg:8px; --r-xl:10px;
-  --sh:0 1px 2px rgba(0,0,0,.06);
-  --sh-md:0 2px 8px rgba(0,0,0,.08);
-  --sh-lg:0 4px 16px rgba(0,0,0,.10);
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body{font-family:'Inter',-apple-system,sans-serif;background:#eef3f8;color:var(--s800);font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Cookie check</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
 
-#sidebar{
-  position:fixed;left:0;top:0;bottom:0;width:var(--sb-w);
-  background:var(--sap-navy);display:flex;flex-direction:column;z-index:200;
-  transition:width .2s ease;border-right:1px solid rgba(255,255,255,.05);
-}
-.sb-header{padding:14px 12px 10px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:10px;}
-.sb-logo-circle{width:32px;height:32px;border-radius:6px;flex-shrink:0;background:linear-gradient(135deg,var(--amber),var(--amber-d));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:white;}
-.sb-brand{line-height:1.2}
-.sb-brand-name{font-size:12.5px;font-weight:700;color:white}
-.sb-brand-ver{font-size:10px;color:rgba(255,255,255,.3)}
-.sb-group{margin-bottom:2px}
-.sb-group-hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 12px 3px;cursor:pointer;user-select:none;}
-.sb-group-hdr:hover .sb-group-label{color:rgba(255,255,255,.65)}
-.sb-group-icon{font-size:13px;color:rgba(255,255,255,.28)}
-.sb-group-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,.72);flex:1;margin-left:8px;transition:color .15s}
-.sb-group-arrow{font-size:9px;color:rgba(255,255,255,.22);transition:transform .2s}
-.sb-group-arrow.open{transform:rotate(180deg)}
-.sb-group-items{overflow:hidden;transition:max-height .2s ease}
-.sb-group-items.collapsed{max-height:0!important}
-.sb-item{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 34px;color:rgba(255,255,255,.52);font-size:12px;font-weight:500;cursor:pointer;border-radius:0;transition:all .12s;border:none;background:none;width:100%;text-align:left;position:relative;}
-.sb-item:hover{background:rgba(255,255,255,.06);color:rgba(255,255,255,.85)}
-.sb-item.active{background:rgba(74,111,165,.3);color:white;}
-.sb-item.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--amber);border-radius:0 2px 2px 0;}
-.sb-item-dot{width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.4;flex-shrink:0}
-.sb-item.active .sb-item-dot{opacity:1;background:var(--amber)}
-.sb-item-top{display:flex;align-items:center;gap:10px;padding:8px 12px;margin:3px 6px 1px;border-radius:var(--r-md);color:rgba(255,255,255,.62);font-size:12px;font-weight:600;cursor:pointer;border:none;background:none;width:calc(100% - 12px);text-align:left;transition:all .12s;}
-.sb-item-top:hover{background:rgba(255,255,255,.07);color:white}
-.sb-item-top.active{background:rgba(245,158,11,.18);color:var(--amber)}
-.sb-item-top-icon{font-size:14px;flex-shrink:0}
-a.sb-item,a.sb-item-top{text-decoration:none}
-a.btn{text-decoration:none;color:inherit}
-.sb-footer{padding:8px 10px;border-top:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:8px;margin-top:auto;}
-.sb-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--amber),var(--amber-d));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;flex-shrink:0;}
-.sb-uname{font-size:11px;font-weight:600;color:white;line-height:1.2}
-.sb-urole{font-size:9px;color:rgba(255,255,255,.32)}
-.sb-logout-btn{margin-left:auto;padding:2px 7px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,.1);border-radius:4px;background:transparent;color:rgba(255,255,255,.38);cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap;}
-.sb-logout-btn:hover{background:rgba(239,68,68,.15);color:var(--red);border-color:var(--red)}
+      body {
+        font-family: 'Inter', Helvetica, Arial, sans-serif;
+        background: light-dark(#F8F8F7, #191919);
+        color: light-dark(#1f1f1f, #e3e3e3);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        min-height: 100vh;
+        margin: 0;
+        padding: 20px;
+        text-align: center;
+      }
 
-#topbar{
-  position:fixed;top:0;right:0;left:var(--sb-w);height:var(--top-h);
-  background:linear-gradient(to bottom,var(--sap-hdr),var(--sap-hdr-d));
-  border-bottom:1px solid rgba(0,0,0,.15);
-  display:flex;align-items:center;padding:0 18px;gap:12px;z-index:100;
-  box-shadow:0 1px 4px rgba(0,0,0,.12);
-}
-.tb-page-title{font-size:14px;font-weight:600;color:white}
-.tb-page-bc{font-size:10px;color:rgba(255,255,255,.55);margin-bottom:1px}
-.tb-right{margin-left:auto;display:flex;align-items:center;gap:8px}
-.tb-chip{padding:2px 9px;border-radius:3px;font-size:10px;font-weight:700;background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.22);}
+      .container {
+        background: light-dark(#FFFFFF, #1F1F1F);
+        padding: 32px;
+        border-radius: 16px;
+        border: 1px solid light-dark(#E2E3E4, #3E3E3E);
+        max-width: min(80%, 500px);
+        width: 100%;
+        color: light-dark(#2B2D31, #D4D4D4);
+      }
 
-#main{
-  margin-left:var(--sb-w);margin-top:var(--top-h);
-  padding:20px;min-height:calc(100vh - var(--top-h));
-}
+      h1 {
+        font-size: 20px;
+        font-weight: 500;
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+        color: light-dark(#2B2D31, #D4D4D4);
+      }
 
-.card{background:white;border:1px solid var(--sap-border);border-radius:var(--r);padding:14px;box-shadow:var(--sh)}
-.card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.card-title{font-size:13px;font-weight:700;color:var(--s700)}
-.card-sub{font-size:11px;color:var(--s400);margin-top:1px}
+      p {
+        font-size: 14px;
+        color: light-dark(#2B2D31, #D4D4D4);
+        line-height: 21px;
+        margin: 0 0 1.5rem 0;
+      }
 
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
-.stat-card{
-  background:white;border:1px solid var(--s200);border-radius:var(--r-xl);
-  padding:16px;box-shadow:var(--sh);display:flex;align-items:flex-start;gap:12px;
-}
-.stat-icon-wrap{
-  width:38px;height:38px;border-radius:var(--r-md);
-  display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;
-}
-.stat-val{font-size:22px;font-weight:800;line-height:1;font-family:'JetBrains Mono',monospace}
-.stat-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--s400);margin-top:2px}
+      .icon {
+        margin-bottom: 1rem;
+        line-height: 0;
+      }
 
-.btn{
-  display:inline-flex;align-items:center;gap:5px;
-  padding:7px 14px;border-radius:var(--r-md);font-size:12px;
-  font-weight:600;cursor:pointer;border:1px solid transparent;
-  transition:all .12s;font-family:inherit;white-space:nowrap;
-}
-.btn-xs{padding:3px 9px;font-size:10.5px;border-radius:5px}
-.btn-sm{padding:5px 11px;font-size:11.5px}
-.btn-lg{padding:10px 20px;font-size:13px}
-.btn-primary{background:linear-gradient(to bottom,#ffd875,#f5a623);color:#4a2e00;border-color:#c8860d;font-weight:600}
-.btn-primary:hover{background:linear-gradient(to bottom,#f5c842,#e09010)}
-.btn-secondary{background:#f0f5fb;color:var(--sap-text);border-color:var(--sap-border)}
-.btn-secondary:hover{background:#dce8f5;border-color:#93afd0}
-.btn-danger{background:var(--red);color:white}
-.btn-danger:hover{background:#dc2626}
-.btn-success{background:var(--grn);color:white}
-.btn-success:hover{background:#059669}
-.btn-ghost{background:transparent;color:var(--s500);border-color:transparent}
-.btn-ghost:hover{background:var(--s100);color:var(--s700)}
-.btn-outline-amber{background:linear-gradient(to bottom,#fffce8,#fff3cc);color:#8a5c00;border-color:#e6b84a}
-.btn-outline-amber:hover{background:linear-gradient(to bottom,#fff3cc,#ffe49a)}
-.btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
+      .button-container {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 2rem;
+      }
 
-.page-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;gap:12px;flex-wrap:wrap}
-.page-hdr-l .page-bc{font-size:11px;color:var(--s400);margin-bottom:1px}
-.page-hdr-l .page-title{font-size:17px;font-weight:700;color:var(--sap-navy);letter-spacing:-.2px}
-.page-hdr-r{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-top:4px}
+      button {
+        background-color: light-dark(#fff, #323232);
+        color: light-dark(#2B2D31, #FCFCFC);
+        border: 1px solid light-dark(#E2E3E4, #3E3E3E);
+        border-radius: 12px;
+        padding: 8px 12px;
+        font-size: 14px;
+        line-height: 21px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        font-weight: 400;
+        font-family: 'Inter', Helvetica, Arial, sans-serif;
+        width: 100%;
+      }
 
-.fg{margin-bottom:13px}
-.lbl{font-size:11px;font-weight:600;color:var(--s600);margin-bottom:4px;display:block;letter-spacing:.1px}
-.inp{
-  width:100%;padding:8px 11px;
-  border:1.5px solid var(--s200);border-radius:var(--r-md);
-  font-size:12.5px;font-family:inherit;color:var(--s800);
-  background:white;transition:border-color .12s,box-shadow .12s;outline:none;
-}
-.inp:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(245,158,11,.12)}
-.inp::placeholder{color:var(--s300)}
-.inp-sm{padding:5px 9px;font-size:11.5px}
-.inp-xs{padding:3px 7px;font-size:11px}
-select.inp{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px}
-textarea.inp{resize:vertical;min-height:70px}
-.fg-grid{display:grid;gap:12px}
-.g2{grid-template-columns:1fr 1fr}
-.g3{grid-template-columns:1fr 1fr 1fr}
-.g4{grid-template-columns:1fr 1fr 1fr 1fr}
-.gfull{grid-column:1/-1}
+      button:hover {
+        background-color: light-dark(#EAEAEB, #424242);
+      }
 
-.tbl-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--sap-border)}
-.tbl{width:100%;border-collapse:collapse;font-size:12px}
-.tbl thead tr{background:var(--sap-blue-l);border-bottom:1px solid var(--sap-border)}
-.tbl th{padding:8px 10px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sap-text);white-space:nowrap}
-.tbl td{padding:7px 10px;border-bottom:1px solid #e8f0f7;vertical-align:middle}
-.tbl tbody tr:nth-child(even){background:var(--sap-stripe)}.tbl tbody tr:hover{background:#e4eef8}
-.tbl tbody tr:last-child td{border-bottom:none}
-.tbl-xs th,.tbl-xs td{padding:6px 10px}
+      .hidden {
+        display: none;
+      }
 
-.badge{
-  display:inline-flex;align-items:center;
-  padding:2px 8px;border-radius:20px;
-  font-size:10px;font-weight:700;white-space:nowrap;border:1px solid;
-}
-.bg-good    {background:var(--grn-l);color:var(--grn-d);border-color:var(--grn-b)}
-.bg-repair  {background:var(--red-l);color:var(--red-d);border-color:var(--red-b)}
-.bg-inspect {background:var(--blue-l);color:var(--blue-d);border-color:var(--blue-b)}
-.bg-redress {background:var(--amber-l);color:#92400e;border-color:var(--amber-b)}
-.bg-removed {background:var(--s100);color:var(--s500);border-color:var(--s200)}
-.bg-pending {background:var(--org-l);color:#9a3412;border-color:var(--org-b)}
-.bg-assigned{background:var(--grn-l);color:var(--grn-d);border-color:var(--grn-b)}
-.bg-partial {background:var(--amber-l);color:#92400e;border-color:var(--amber-b)}
-.bg-released{background:var(--pur-l);color:var(--pur-d);border-color:var(--pur-b)}
-.bg-open    {background:var(--blue-l);color:var(--blue-d);border-color:var(--blue-b)}
-.bg-ongoing {background:#eef2ff;color:#3730a3;border-color:#c7d2fe}
-.bg-closed  {background:var(--s100);color:var(--s600);border-color:var(--s200)}
-.bg-active  {background:var(--grn-l);color:var(--grn-d);border-color:var(--grn-b)}
-.bg-forecast{background:var(--pur-l);color:var(--pur-d);border-color:var(--pur-b)}
-.bg-onrig   {background:var(--cyan-l);color:#155e75;border-color:var(--cyan-b)}
-.bg-pass    {background:var(--grn-l);color:var(--grn-d);border-color:var(--grn-b)}
-.bg-fail    {background:var(--red-l);color:var(--red-d);border-color:var(--red-b)}
-.bg-progress{background:var(--blue-l);color:var(--blue-d);border-color:var(--blue-b)}
-.bg-complete{background:var(--grn-l);color:var(--grn-d);border-color:var(--grn-b)}
-.bg-awaiting{background:var(--amber-l);color:#92400e;border-color:var(--amber-b)}
-.bg-emdad   {background:#fefce8;color:#854d0e;border-color:#fef08a}
-.bg-sub     {background:#f0f9ff;color:#0369a1;border-color:#bae6fd}
+      /* Loading Spinner Animation */
+      .spinner {
+        margin: 0 auto 1.5rem auto;
+        width: 40px;
+        height: 40px;
+        border: 4px solid light-dark(#f0f0f0, #262626);
+        border-top: 4px solid light-dark(#076eff, #87a9ff); /* Blue color */
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
 
-.sn{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px}
-.sn-e{color:var(--amber-d);background:var(--amber-l)}
-.sn-s{color:var(--blue-d);background:var(--blue-l)}
+      .logo {
+        border-radius: 10px;
+        display: block;
+        margin: 0 auto 2rem auto;
+      }
 
-.modal-ov{
-  position:fixed;inset:0;
-  background:rgba(15,23,42,.55);
-  backdrop-filter:blur(3px);
-  display:flex;align-items:center;justify-content:center;
-  z-index:1000;padding:16px;
-}
-.modal{
-  background:white;border-radius:var(--r-xl);box-shadow:var(--sh-lg);
-  width:100%;max-width:540px;max-height:calc(100vh - 32px);
-  display:flex;flex-direction:column;overflow:hidden;
-  animation:modalIn .18s ease;
-}
-.modal-sm{max-width:440px}
-.modal-md{max-width:600px}
-.modal-lg{max-width:740px}
-.modal-xl{max-width:960px}
-@keyframes modalIn{from{opacity:0;transform:scale(.97) translateY(-8px)}to{opacity:1;transform:none}}
-.modal-hdr{
-  padding:16px 18px;border-bottom:1px solid var(--s100);
-  display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0;
-}
-.modal-title{font-size:14px;font-weight:700;color:var(--s800)}
-.modal-sub{font-size:11px;color:var(--s400);margin-top:2px}
-.modal-close{
-  width:26px;height:26px;border-radius:6px;border:none;
-  background:var(--s100);cursor:pointer;font-size:14px;color:var(--s500);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  transition:all .12s;
-}
-.modal-close:hover{background:var(--s200);color:var(--s700)}
-.modal-body{padding:18px;overflow-y:auto;flex:1}
-.modal-ftr{
-  padding:12px 18px;border-top:1px solid var(--s100);
-  display:flex;gap:8px;justify-content:flex-end;flex-shrink:0;background:var(--s50);
-}
+      .logo.hidden {
+        display: none;
+      }
 
-.alert{
-  display:flex;align-items:flex-start;gap:10px;
-  padding:10px 14px;border-radius:var(--r-md);
-  font-size:12px;margin-bottom:12px;border:1px solid;
-  line-height:1.5;
-}
-.alert-icon{font-size:14px;flex-shrink:0;margin-top:1px}
-.alert-blue  {background:#eff6ff;border-color:#93c5fd;color:#1e3a8a}
-.alert-amber {background:#fffbeb;border-color:#fcd34d;color:#78350f}
-.alert-green {background:#f0fdf4;border-color:#86efac;color:#14532d}
-.alert-red   {background:#fef2f2;border-color:#fca5a5;color:#7f1d1d}
-
-#toasts{position:fixed;top:14px;right:14px;z-index:9999;display:flex;flex-direction:column;gap:6px;pointer-events:none}
-.toast{
-  display:flex;align-items:center;gap:10px;
-  padding:11px 16px;background:white;border-radius:var(--r-lg);
-  box-shadow:var(--sh-lg);font-size:12px;font-weight:600;
-  min-width:240px;max-width:360px;pointer-events:all;
-  animation:toastIn .22s ease;border-left:3px solid;
-}
-@keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
-.toast-ok  {border-color:var(--grn);color:var(--grn-d)}
-.toast-err {border-color:var(--red);color:var(--red-d)}
-.toast-inf {border-color:var(--blue);color:var(--blue-d)}
-.toast-wrn {border-color:var(--amber);color:#78350f}
-.toast-ico {font-size:15px;flex-shrink:0}
-
-.mod-tabs{display:flex;gap:2px;background:var(--sap-blue-l);border-radius:var(--r);padding:3px;margin-bottom:14px;width:fit-content}
-.mod-tab{padding:6px 16px;border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;color:var(--s500);transition:all .12s;border:none;background:none;font-family:inherit}
-.mod-tab.active{background:var(--sap-steel);color:white;box-shadow:var(--sh)}
-.mod-tab:hover:not(.active){color:var(--s700)}
-
-.empty{text-align:center;padding:48px 20px;color:var(--s400)}
-.empty-ico{font-size:36px;margin-bottom:10px;opacity:.5}
-.empty-title{font-size:14px;font-weight:600;color:var(--s500);margin-bottom:4px}
-.empty-sub{font-size:12px}
-
-.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--s900) 0%,#0d1b2a 100%)}
-.login-card{background:white;border-radius:20px;padding:36px;width:370px;box-shadow:0 24px 48px rgba(0,0,0,.3)}
-.login-logo{display:flex;align-items:center;gap:12px;margin-bottom:24px;justify-content:center}
-.login-logo-icon{width:46px;height:46px;background:linear-gradient(135deg,var(--amber),var(--amber-d));border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:white}
-.login-name{font-size:19px;font-weight:800;color:var(--s800)}
-.login-sub{font-size:11px;color:var(--s400)}
-.login-err{background:var(--red-l);border:1px solid var(--red-b);color:var(--red-d);padding:8px 12px;border-radius:var(--r);font-size:12px;margin-bottom:12px}
-
-@media print{#sidebar,#topbar,.no-print{display:none!important}#main{margin:0!important;padding:0!important}}
-</style>
-</head>
-<body>
-
-<div id="toasts"></div>
-<div id="mc"></div>
-
-<!-- ══ LOGIN ══════════════════════════════════════════ -->
-<div id="login-page" class="login-wrap">
-  <div class="login-card">
-    <div class="login-logo">
-      <div class="login-logo-icon">E</div>
-      <div>
-        <div class="login-name">EMDAD Operations</div>
-        <div class="login-sub">Downhole Tool Tracker · LIVE</div>
-      </div>
-    </div>
-    <div id="lerr" class="login-err" style="display:none"></div>
-    <div class="fg"><label class="lbl">Username</label>
-      <input class="inp" id="lu" placeholder="Enter username" onkeydown="if(event.key==='Enter')doLoginUI()">
-    </div>
-    <div class="fg"><label class="lbl">Password</label>
-      <input class="inp" type="password" id="lp" placeholder="Enter password" onkeydown="if(event.key==='Enter')doLoginUI()">
-    </div>
-    <button class="btn btn-primary" type="button" onclick="window.doLoginUI()" style="width:100%;padding:11px;margin-top:6px;font-size:13px">Sign In →</button>
-    <div style="margin-top:14px;padding:10px;background:var(--s50);border-radius:var(--r-md);font-size:10.5px;color:var(--s500);line-height:1.8">
-      <b>Demo credentials:</b><br>
-      ravi / Ravi@2026 (Admin) &nbsp;·&nbsp; azim / Azim@2026 (Handler)<br>
-      nihas / Nihas@2026 (QC) &nbsp;·&nbsp; viewer / View@2026
-    </div>
-  </div>
-</div>
-
-<!-- ══ APP SHELL ════════════════════════════════════ -->
-<div id="app" style="display:none">
-
-  <!-- SIDEBAR -->
-  <div id="sidebar">
-    <div class="sb-header">
-      <div class="sb-logo-circle">E</div>
-      <div class="sb-brand">
-        <div class="sb-brand-name">Emdad Ops</div>
-        <div class="sb-brand-ver">v2.0 &nbsp;·&nbsp; <span style="color:#10b981;font-weight:700">LIVE</span></div>
-      </div>
-    </div>
-
-    <div style="flex:1;overflow-y:auto;padding:8px 0" id="sb-body"></div>
-
-    <div class="sb-footer">
-      <div class="sb-avatar" id="sb-init">R</div>
-      <div><div class="sb-uname" id="sb-uname">User</div><div class="sb-urole" id="sb-urole">Role</div></div>
-      <button class="sb-logout-btn" onclick="doLogout()">Sign out</button>
-    </div>
-  </div>
-
-  <!-- TOPBAR -->
-  <div id="topbar">
-    <div>
-      <div class="tb-page-bc" id="tb-bc">EMDAD Operations Platform</div>
-      <div class="tb-page-title" id="tb-title">Dashboard</div>
-    </div>
-    <div class="tb-right">
-      <span class="tb-chip" style="background:#ecfdf5;color:#065f46;border-color:#a7f3d0">🟢 LIVE DB</span>
-      <span id="tb-sync" style="display:none;font-size:10px;color:var(--blue);font-weight:600;padding:3px 8px;background:var(--blue-l);border-radius:20px;border:1px solid var(--blue-b)">⟳ Syncing...</span>
-      <span style="font-size:11px;color:white" id="tb-date"></span>
-    </div>
-  </div>
-
-  <!-- MAIN -->
-  <div id="main">
-    <div id="mc-main"></div>
-  </div>
-</div>
-
-<script>
-const TODAY = new Date().toISOString().split('T')[0];
-const CUR_YR = new Date().getFullYear();
-let CU = null;
-
-const USERS = [
-  { id: 1, name: 'Ravi Parapu', username: 'ravi', pass: 'Ravi@2026', role: 'Admin' },
-  { id: 2, name: 'Azim Khan', username: 'azim', pass: 'Azim@2026', role: 'Handler' },
-  { id: 3, name: 'Nihas MK', username: 'nihas', pass: 'Nihas@2026', role: 'QC' },
-  { id: 4, name: 'Operations Viewer', username: 'viewer', pass: 'View@2026', role: 'Viewer' }
-];
-
-const ACCESS = {
-  Admin: ['dashboard','inventory','callouts','jobs','delivery','returns','gatepass','inspection','maintenance','contracts','pricelists','settings'],
-  Handler: ['dashboard','inventory','callouts','jobs','delivery','returns','gatepass'],
-  QC: ['dashboard','inventory','inspection','maintenance'],
-  Viewer: ['dashboard','inventory','callouts','jobs','delivery','returns','gatepass','inspection','maintenance','contracts','pricelists']
-};
-
-const WRITE = {
-  Admin: ['inventory','callouts','jobs','delivery','returns','gatepass','inspection','maintenance','contracts','pricelists','settings'],
-  Handler: ['inventory','callouts','jobs','delivery','returns','gatepass'],
-  QC: ['inspection','maintenance'],
-  Viewer: []
-};
-
-const NAV = [
-  { type: 'top', id: 'dashboard', label: 'Dashboard', icon: '📊' },
-  {
-    type: 'group', label: 'Fleet & Logistics', icon: '📦',
-    items: [
-      { id: 'inventory', label: 'Inventory Assets' },
-      { id: 'gatepass', label: 'Gate Pass' }
-    ]
-  },
-  {
-    type: 'group', label: 'Field Operations', icon: '⚡',
-    items: [
-      { id: 'callouts', label: 'Callout Management' },
-      { id: 'jobs', label: 'Job Hub' },
-      { id: 'delivery', label: 'Delivery Tickets (DT)' },
-      { id: 'returns', label: 'Receiving Tickets (RT)' }
-    ]
-  },
-  {
-    type: 'group', label: 'Workshop & QA', icon: '🔧',
-    items: [
-      { id: 'inspection', label: 'Inspection Queue' },
-      { id: 'maintenance', label: 'Maintenance Queue' }
-    ]
-  },
-  {
-    type: 'group', label: 'Commercial & Admin', icon: '💼',
-    items: [
-      { id: 'contracts', label: 'Contracts & PBG' },
-      { id: 'pricelists', label: 'Price Lists' },
-      { id: 'settings', label: 'System Settings' }
-    ]
-  }
-];
-
-const MOD_INFO = {
-  dashboard: 'Operations Dashboard',
-  inventory: 'Downhole Inventory & Fleet',
-  callouts: 'Rig Callout Requirements',
-  jobs: 'Active Jobs & Deployment',
-  delivery: 'Delivery Tickets (DT)',
-  returns: 'Receiving Tickets (RT)',
-  gatepass: 'Sub-Con Gate Pass Logistics',
-  inspection: 'Workshop Inspection QA',
-  maintenance: 'Tool Maintenance & Redress',
-  contracts: 'Client Contracts & Performance Bonds',
-  pricelists: 'Commercial Price Lists',
-  settings: 'Database & Security Settings'
-};
-
-const MOD_BC = {
-  dashboard: 'Overview',
-  inventory: 'Fleet Logistics',
-  callouts: 'Field Operations',
-  jobs: 'Field Operations',
-  delivery: 'Logistics Movement',
-  returns: 'Logistics Movement',
-  gatepass: 'Logistics Movement',
-  inspection: 'Workshop & Quality',
-  maintenance: 'Workshop & Quality',
-  contracts: 'Commercial Management',
-  pricelists: 'Commercial Management',
-  settings: 'System Configuration'
-};
-
-const TOOL_SIZES = [
-  '3-1/8"', '4-3/4"', '6-1/2"', '8"', '8-1/4"', '9-1/2"', '11"', '12-1/4"', '17-1/2"', '26"'
-];
-
-var inventory = [
-  { id: 'EMD-0001', serial: 'EMD-0001', assetNo: 'FS434-001', size: '6-1/2"', shortDesc: 'HYDRAULIC JAR', desc: '6-1/2" Double Acting Hydraulic Drilling Jar, 4-1/2 IF Conn', qty: 1, location: 'Emdad Base', status: 'Good', ownership: 'EMDAD', isEmdad: true, oemSerial: 'OEM-HJ-65-881', supplier: 'EMDAD', addedDate: '2025-01-10' },
-  { id: 'EMD-0002', serial: 'EMD-0002', assetNo: 'FS434-002', size: '8"', shortDesc: 'HYDRO-MECH JAR', desc: '8" Hydro-Mechanical Drilling Jar, 6-5/8 REG Conn', qty: 1, location: 'Emdad Base', status: 'Good', ownership: 'EMDAD', isEmdad: true, oemSerial: 'OEM-HMJ-80-104', supplier: 'EMDAD', addedDate: '2025-01-15' },
-  { id: 'EMD-0003', serial: 'EMD-0003', assetNo: 'FS434-003', size: '12-1/4"', shortDesc: 'SPIRAL STABILIZER', desc: '12-1/4" Integral Blade Spiral Stabilizer, 6-5/8 REG', qty: 1, location: 'Emdad Base', status: 'Good', ownership: 'EMDAD', isEmdad: true, oemSerial: 'OEM-SS-122-441', supplier: 'EMDAD', addedDate: '2025-02-01' },
-  { id: 'SC-MM-901', serial: 'SC-MM-901', assetNo: 'MM-P-901', size: '8"', shortDesc: 'POLYVOLVE', desc: '8" Polyvolve Circulation Sub, MotorMax Specs', qty: 1, location: 'Emdad Base', status: 'Good', ownership: 'MOTORMAX', isEmdad: false, oemSerial: 'MM901-A', supplier: 'MOTORMAX', addedDate: '2025-02-10' },
-  { id: 'SC-EP-404', serial: 'SC-EP-404', assetNo: 'EP-M-404', size: '6-1/2"', shortDesc: 'MUD MOTOR', desc: '6-1/2" 7/8 Lobe 4.0 Stage High Torque Mud Motor', qty: 1, location: 'Emdad Base', status: 'Good', ownership: 'EPIS', isEmdad: false, oemSerial: 'EP404-X', supplier: 'EPIS', addedDate: '2025-02-14' }
-];
-
-const SK = {inv:'emd_inv',cal:'emd_cal',jobs:'emd_jobs',dts:'emd_dts',rts:'emd_rts',ins:'emd_ins',mnt:'emd_mnt',gps:'emd_gps',con:'emd_con',logs:'emd_logs',usr:'emd_usr'};
-
-window.EMDAD_ENV = 'live';
-const API_BASE = '/api';
-
-async function API(action, body={}) {
-    const env = window.EMDAD_ENV || 'live';
-    const url = `${API_BASE}/${action}?env=${env}`;
-    try {
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        if(!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (data.success === false) throw new Error(data.error || 'API error');
-        return data.data || data;
-    } catch(e) {
-        console.warn(`API [${action}] failed:`, e.message);
-        throw e;
-    }
-}
-
-async function safeAPI(action, body={}) {
-    try { return await API(action, body); } catch(e) { return null; }
-}
-
-let state = {
-  inventory: inventory.map(t => ({...t})),
-  callouts: [
-    { id: 'CAL-2026-00001', rig: 'ND-19', well: 'BU-324', client: 'ADNOC Onshore', contract: 'ADNOC ONSHORE', contractNo: '4700023861', poRef: 'PO-99120', status: 'Active', createdDate: '2026-08-10', items: [
-      { seq: 1, size: '8"', shortDesc: 'HYDRO-MECH JAR', qty: 1, assigned: 1, serialNos: ['EMD-0002'], status: 'Assigned' },
-      { seq: 2, size: '12-1/4"', shortDesc: 'SPIRAL STABILIZER', qty: 1, assigned: 1, serialNos: ['EMD-0003'], status: 'Assigned' }
-    ]}
-  ],
-  jobs: [
-    { id: 'JOB-2026-00001', calloutId: 'CAL-2026-00001', rig: 'ND-19', well: 'BU-324', client: 'ADNOC Onshore', contract: 'ADNOC ONSHORE', contractNo: '4700023861', poNumber: 'PO-99120', clientRef: 'CR-8821', holeSection: '12-1/4"', serviceType: 'Downhole Rental', invoicingType: 'PerJob', currency: 'USD', mobDate: '2026-08-12', demobDate: null, status: 'Ongoing', createdDate: '2026-08-11', createdBy: 'Ravi Parapu', jobDescription: '12-1/4 section drilling BHA rental' }
-  ],
-  dtBatches: [
-    { id: 'DTB-101', dtNumber: 'DT-2026-00001', jobId: 'JOB-2026-00001', rmDate: '2026-08-12', rmRef: 'RM-ND19-01', dispatchDate: '2026-08-12', rig: 'ND-19', well: 'BU-324', contract: 'ADNOC ONSHORE', dispatchedBy: 'Azim Khan', recipient: 'Rig Foreman', notes: 'Urgent rig dispatch', toolLines: [
-      { serial: 'EMD-0002', assetNo: 'FS434-002', shortDesc: 'HYDRO-MECH JAR', desc: '8" Hydro-Mechanical Drilling Jar', size: '8"', status: 'OnRig', rtBatchId: null, used: null, ownership: 'EMDAD', isEmdad: true },
-      { serial: 'EMD-0003', assetNo: 'FS434-003', shortDesc: 'SPIRAL STABILIZER', desc: '12-1/4" Integral Blade Spiral Stabilizer', size: '12-1/4"', status: 'OnRig', rtBatchId: null, used: null, ownership: 'EMDAD', isEmdad: true }
-    ]}
-  ],
-  rtBatches: [],
-  inspections: [],
-  maintenance: [],
-  gatePasses: [],
-  contracts: [
-    { id: 'CON-1', client: 'ADNOC Onshore', contractRef: '4700023861', poNumber: 'PO-AON-2026', currency: 'USD', status: 'Active', contractValue: 2500000, startDate: '2025-01-01', endDate: '2027-12-31', pbgNumber: 'PBG-ADCB-994', pbgValue: 250000, pbgIssueDate: '2025-01-05', pbgExpiryDate: '2028-03-31', invoicedToDate: 450000, notes: 'Primary onshore drilling rental agreement' },
-    { id: 'CON-2', client: 'ADNOC Offshore', contractRef: '4700029982', poNumber: 'PO-AOF-2026', currency: 'USD', status: 'Active', contractValue: 4200000, startDate: '2025-03-01', endDate: '2028-02-28', pbgNumber: 'PBG-FAB-1021', pbgValue: 420000, pbgIssueDate: '2025-03-01', pbgExpiryDate: '2028-05-31', invoicedToDate: 120000, notes: 'Offshore downhole tool and whipstock support' }
-  ],
-  movLogs: [],
-  jobCosts: [],
-  utilLines: [],
-  invoices: []
-};
-
-function save(){
-  try{
-    localStorage.setItem(SK.inv, JSON.stringify(state.inventory));
-    localStorage.setItem(SK.cal, JSON.stringify(state.callouts));
-    localStorage.setItem(SK.jobs,JSON.stringify(state.jobs));
-    localStorage.setItem(SK.dts, JSON.stringify(state.dtBatches));
-    localStorage.setItem(SK.rts, JSON.stringify(state.rtBatches));
-    localStorage.setItem(SK.ins, JSON.stringify(state.inspections));
-    localStorage.setItem(SK.mnt, JSON.stringify(state.maintenance));
-    localStorage.setItem(SK.gps, JSON.stringify(state.gatePasses));
-    localStorage.setItem(SK.con, JSON.stringify(state.contracts));
-    localStorage.setItem(SK.logs,JSON.stringify(state.movLogs));
-  }catch(e){}
-}
-
-function load(){
-  try{
-    const inv=localStorage.getItem(SK.inv);
-    if(inv) state.inventory=JSON.parse(inv);
-    [[SK.cal,'callouts'],[SK.jobs,'jobs'],[SK.dts,'dtBatches'],[SK.rts,'rtBatches'],
-     [SK.ins,'inspections'],[SK.mnt,'maintenance'],[SK.gps,'gatePasses'],[SK.logs,'movLogs']]
-    .forEach(([k,p])=>{const d=localStorage.getItem(k); if(d) state[p]=JSON.parse(d);});
-  }catch(e){}
-}
-
-function doLogin(u,p){
-  const user=USERS.find(x=>x.username.toLowerCase()===u.toLowerCase()&&x.pass===p);
-  if(!user)return null;
-  CU=user;
-  sessionStorage.setItem(SK.usr,JSON.stringify({id:user.id,username:user.username}));
-  return user;
-}
-function checkAuth(){
-  try{
-    const s=sessionStorage.getItem(SK.usr);
-    if(s){const d=JSON.parse(s);const u=USERS.find(x=>x.id==d.id&&x.username===d.username);if(u){CU=u;return true;}}
-  }catch(e){}
-  return false;
-}
-function doLogout(){sessionStorage.removeItem(SK.usr);CU=null;location.reload();}
-function canAccess(m){return CU&&(ACCESS[CU.role]||[]).includes(m);}
-function canWrite(m){return CU&&(WRITE[CU.role]||[]).includes(m);}
-
-function nxt(prefix,arr,field){
-  const re=new RegExp('^'+prefix.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+CUR_YR+'-(\\d+)$');
-  let maxSeq=0;
-  arr.forEach(x=>{
-    const m=x[field]&&x[field].match(re);
-    if(m){const n=parseInt(m[1],10);if(n>maxSeq)maxSeq=n;}
-  });
-  return `${prefix}${CUR_YR}-${String(maxSeq+1).padStart(5,'0')}`;
-}
-function nxtCal(){return nxt('CAL-',state.callouts,'id');}
-function nxtJob(){return nxt('JOB-',state.jobs,'id');}
-function nxtDT() {return nxt('DT-', state.dtBatches,'dtNumber');}
-function nxtRT() {return nxt('RT-', state.rtBatches,'rtNumber');}
-function nxtGP() {return nxt('GP-', state.gatePasses,'gpNumber');}
-
-function fd(d){if(!d)return'—';try{return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'});}catch{return d;}}
-function fdL(d){if(!d)return'—';try{return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});}catch{return d;}}
-function esc(s){return(s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-
-function sb(s){
-  const m={Good:'good',Repair:'repair',Inspection:'inspect',Redress:'redress',Removed:'removed',
-    Pending:'pending',Assigned:'assigned',Partial:'partial',Released:'released',
-    Open:'open',Ongoing:'ongoing',Closed:'closed',Active:'active',Forecast:'forecast',
-    OnRig:'onrig',Returned:'released','Pending Inspection':'inspect',Pass:'pass',Fail:'fail',
-    'In Progress':'progress','Awaiting Parts':'awaiting','Complete - Ready':'complete',
-    Admin:'assigned',Handler:'open',QC:'inspect',Viewer:'closed'};
-  return `<span class="badge bg-${m[s]||'pending'}">${esc(s)}</span>`;
-}
-function ob(o){if(!o)return'';const e=o.toUpperCase()==='EMDAD';return `<span class="badge ${e?'bg-emdad':'bg-sub'}">${esc(o)}</span>`;}
-function sn(serial,isE){return `<span class="sn ${isE?'sn-e':'sn-s'}">${esc(serial)}</span>`;}
-function cb(c){
-  if(!c)return'';const u=c.toUpperCase();
-  let bg='#1d4ed8',col='white';
-  if(u.includes('ONSHORE'))bg='#059669';
-  else if(u.includes('OFFSHORE'))bg='#7c3aed';
-  return `<span style="background:${bg};color:${col};border-radius:4px;padding:1px 7px;font-size:10px;font-weight:700">${esc(c)}</span>`;
-}
-function alert_(type,icon,msg){return `<div class="alert alert-${type}"><span class="alert-icon">${icon}</span><span>${msg}</span></div>`;}
-
-function toast(msg,type='ok'){
-  const w=document.getElementById('toasts');if(!w)return;
-  const d=document.createElement('div');
-  const icons={ok:'✓',err:'✕',wrn:'⚠',inf:'ℹ'};
-  d.className=`toast toast-${type}`;
-  d.innerHTML=`<span class="toast-ico">${icons[type]||'ℹ'}</span><span style="flex:1">${esc(msg)}</span><button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;color:inherit;font-size:13px;padding:0 0 0 8px">×</button>`;
-  w.appendChild(d);
-  setTimeout(()=>{if(d.parentElement)d.remove();},4000);
-}
-
-function openModal(id){
-  const el=document.getElementById(id);if(el){document.body.appendChild(el);el.style.display='flex';}
-}
-function closeModal(id){
-  const el=document.getElementById(id);if(el)el.remove();
-}
-function modal(html){document.getElementById('mc').innerHTML=html;}
-
-function buildSidebar(){
-  const cur=CURRENT_MODULE;
-  let html='';
-  NAV.forEach(item=>{
-    if(item.type==='top'){
-      if(!canAccess(item.id))return;
-      html+=`<a href="javascript:void(0)" class="sb-item-top ${cur===item.id?'active':''}" onclick="navTo(event,'${item.id}')">
-        <span class="sb-item-top-icon">${item.icon}</span>${item.label}
-      </a>`;
-    } else {
-      const accessible=item.items.filter(i=>canAccess(i.id));
-      if(!accessible.length)return;
-      const grpId='grp-'+item.label.replace(/\s/g,'');
-      html+=`<div class="sb-group">
-        <div class="sb-group-hdr">
-          <span class="sb-group-icon">${item.icon}</span>
-          <span class="sb-group-label">${item.label}</span>
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <img
+        class="logo"
+        src="https://www.gstatic.com/images/branding/productlogos/ai_studio/v1/web-512dp/logo_ai_studio_color_1x_web_512dp.png"
+        alt="AI Studio Logo"
+        width="256"
+        height="256"
+      />
+      <div class="spinner"></div>
+      <div id="error-ui" class="hidden">
+        <div class="icon">
+          <svg
+            version="1.1"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            width="48px"
+            height="48px"
+            fill="#D73A49"
+          >
+            <path
+              d="M12,2C6.486,2,2,6.486,2,12s4.486,10,10,10s10-4.486,10-10S17.514,2,12,2z M13,17h-2v-2h2V17z M13,13h-2V7h2V13z"
+            />
+          </svg>
         </div>
-        <div class="sb-group-items">
-          ${accessible.map(i=>`<a href="javascript:void(0)" class="sb-item ${cur===i.id?'active':''}" onclick="navTo(event,'${i.id}')">
-            <span class="sb-item-dot"></span>${i.label}
-          </a>`).join('')}
+        <div id="stepOne" class="text-container">
+          <h1>Action required to load your app</h1>
+          <p>
+            It looks like your browser is blocking a required security cookie, which is common on
+            older versions of iOS and Safari.
+          </p>
+          <div class="button-container">
+            <button id="authInSeparateWindowButton" onclick="redirectToReturnUrl(true)">Authenticate in new window</button>
+          </div>
         </div>
-      </div>`;
-    }
-  });
-  return html;
-}
-
-function renderSidebar(){
-  const el=document.getElementById('sb-body');
-  if(el)el.innerHTML=buildSidebar();
-  if(CU){
-    const n=document.getElementById('sb-uname');const r=document.getElementById('sb-urole');const i=document.getElementById('sb-init');
-    if(n)n.textContent=CU.name;if(r)r.textContent=CU.role;if(i)i.textContent=CU.name[0].toUpperCase();
-  }
-}
-
-function renderTopbar(){
-  const m=CURRENT_MODULE;
-  const t=document.getElementById('tb-title');const b=document.getElementById('tb-bc');
-  if(t)t.textContent=MOD_INFO[m]||m;
-  if(b)b.textContent=MOD_BC[m]||'EMDAD Operations';
-}
-
-function navTo(e, mod){
-  if(e)e.preventDefault();
-  renderModule(mod);
-  renderSidebar();
-  return false;
-}
-
-let CURRENT_MODULE='dashboard';
-
-function renderModule(mod){
-  const el=document.getElementById('mc-main');if(!el)return;
-  if(!CU){showLogin();return;}
-  if(!canAccess(mod)){el.innerHTML=alert_('red','🚫','You do not have access to this module.');return;}
-  CURRENT_MODULE=mod;
-  renderTopbar();
-  switch(mod){
-    case 'dashboard':   el.innerHTML=pageDashboard();break;
-    case 'inventory':   el.innerHTML=pageInventory();break;
-    case 'callouts':    el.innerHTML=pageCallouts();break;
-    case 'jobs':        el.innerHTML=pageJobs();break;
-    case 'delivery':    el.innerHTML=pageDelivery();break;
-    case 'returns':     el.innerHTML=pageReturns();break;
-    case 'gatepass':    el.innerHTML=pageGatePass();break;
-    case 'inspection':  el.innerHTML=pageInspection();break;
-    case 'maintenance': el.innerHTML=pageMaintenance();break;
-    case 'contracts':   el.innerHTML=pageContracts();break;
-    case 'pricelists':  el.innerHTML=pagePriceLists();break;
-    case 'settings':    el.innerHTML=pageSettings();break;
-    default:            el.innerHTML=pageDashboard();
-  }
-}
-
-function sc(icon,val,lbl,bg,color){
-  return `<div class="stat-card">
-    <div class="stat-icon-wrap" style="background:${bg}">${icon}</div>
-    <div>
-      <div class="stat-val" style="color:${color}">${val}</div>
-      <div class="stat-lbl">${lbl}</div>
-    </div>
-  </div>`;
-}
-
-function isGoodStatus(t){return (t.status||'').toLowerCase()==='good';}
-function isAtBase(t){return ['emdad base','base','emdad'].includes((t.location||'').toLowerCase());}
-function isOnRig(t){return ['on rig','rig','onrig'].includes((t.location||'').toLowerCase());}
-
-function pageDashboard(){
-  const iv=state.inventory, cal=state.callouts, jobs=state.jobs;
-  return `
-  <div class="page-hdr">
-    <div class="page-hdr-l">
-      <div class="page-bc">EMDAD Operations Platform</div>
-      <div class="page-title">Welcome back, ${esc(CU.name)} 👋</div>
-    </div>
-    <div class="page-hdr-r"><span style="font-size:11px;color:var(--s400)">${fdL(TODAY)}</span></div>
-  </div>
-  <div class="stat-grid">
-    ${sc('📦',iv.filter(t=>t.status!=='Removed').length,'Total Assets','#f0fdf4','var(--grn)')}
-    ${sc('✅',iv.filter(t=>isGoodStatus(t)&&isAtBase(t)).length,'At Base (Good)','#eff6ff','var(--blue)')}
-    ${sc('🛢',iv.filter(t=>isOnRig(t)).length,'On Rig','#fef3c7','var(--amber-d)')}
-    ${sc('💼',jobs.filter(j=>['Open','Ongoing'].includes(j.status)).length,'Active Jobs','#f5f3ff','var(--pur)')}
-    ${sc('📋',cal.filter(c=>c.status!=='Closed').length,'Open Callouts','#ecfeff','#155e75')}
-    ${sc('🏭',iv.filter(t=>t.isEmdad).length,'EMDAD Assets','#fefce8','#854d0e')}
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-    <div class="card">
-      <div class="card-hdr"><div class="card-title">Quick Operations</div></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        ${['inventory','callouts','jobs','delivery'].map(m=>`
-          <a href="javascript:void(0)" onclick="navTo(event,'${m}')" style="display:block;padding:10px 12px;background:var(--s50);border:1px solid var(--s200);border-radius:var(--r-md);cursor:pointer;text-align:left;text-decoration:none">
-            <div style="font-size:12px;font-weight:600;color:var(--s800)">${MOD_INFO[m]}</div>
-            <div style="font-size:10px;color:var(--s400);margin-top:1px">Open →</div>
-          </a>`).join('')}
+        <div id="stepTwo" class="text-container hidden">
+          <h1>Action required to load your app</h1>
+          <p>
+            It looks like your browser is blocking a required security cookie, which is common on
+            older versions of iOS and Safari.
+          </p>
+          <div class="button-container">
+            <button id="interactButton" onclick="redirectToReturnUrl(false)">Close and continue</button>
+          </div>
+        </div>
+        <div id="stepThree" class="text-container hidden">
+          <h1>Almost there!</h1>
+          <p>
+            Grant permission for the required security cookie below.
+          </p>
+          <div class="button-container">
+            <button id="grantPermissionButton" onclick="grantStorageAccess()">Grant permission</button>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-hdr"><div class="card-title">Database Status</div></div>
-      ${alert_('green','🟢','🟢 LIVE DB Connected — Server: <b>tooltracking-sqlserver.database.windows.net</b>')}
-      <div style="font-size:11.5px;color:var(--s600);line-height:1.8">
-        <b>Fleet Count:</b> ${iv.length} items registered<br>
-        <b>Active Deployments:</b> ${jobs.length} open/ongoing jobs<br>
-        <b>Performance Bonds:</b> All contracts synchronized
-      </div>
-    </div>
-  </div>`;
-}
+    <script>
+      const AUTH_FLOW_TEST_COOKIE_NAME = '__SECURE-aistudio_auth_flow_may_set_cookies';
+      const COOKIE_VALUE = 'true';
 
-function pageInventory(){
-  const iv=state.inventory;
-  return `
-  <div class="page-hdr">
-    <div class="page-hdr-l"><div class="page-bc">Inventory</div><div class="page-title">All Assets & Tools (${iv.length})</div></div>
-  </div>
-  <div class="tbl-wrap">
-    <table class="tbl tbl-xs">
-      <thead><tr><th>Serial / ID</th><th>Asset No</th><th>Size</th><th>Category</th><th>Description</th><th>Ownership</th><th>Location</th><th>Status</th></tr></thead>
-      <tbody>
-        ${iv.map(t=>`<tr>
-          <td>${sn(t.serial,t.isEmdad)}</td>
-          <td style="font-family:monospace;font-size:11px">${esc(t.assetNo)}</td>
-          <td style="font-family:monospace;font-weight:600">${esc(t.size)}</td>
-          <td style="font-weight:600">${esc(t.shortDesc)}</td>
-          <td style="color:var(--s600)">${esc(t.desc)}</td>
-          <td>${ob(t.ownership)}</td>
-          <td style="font-size:11px">${esc(t.location)}</td>
-          <td>${sb(t.status)}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-  </div>`;
-}
+      function getCookie(name) {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          let cookie = cookies[i].trim();
+          if (cookie.startsWith(name + '=')) {
+            return cookie.substring(name.length + 1);
+          }
+        }
+        return null;
+      }
 
-function pageCallouts(){
-  const cals=state.callouts;
-  return `
-  <div class="page-hdr"><div class="page-hdr-l"><div class="page-bc">Operations</div><div class="page-title">Callout Management</div></div></div>
-  <div class="tbl-wrap">
-    <table class="tbl tbl-xs">
-      <thead><tr><th>Callout ID</th><th>Rig / Well</th><th>Client</th><th>Contract</th><th>Date</th><th>Status</th></tr></thead>
-      <tbody>
-        ${cals.map(c=>`<tr>
-          <td style="font-family:monospace;font-weight:700">${esc(c.id)}</td>
-          <td><b>${esc(c.rig)}</b> / ${esc(c.well)}</td>
-          <td>${esc(c.client)}</td>
-          <td>${cb(c.contract)}</td>
-          <td>${fd(c.createdDate)}</td>
-          <td>${sb(c.status)}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-  </div>`;
-}
+      function setAuthFlowTestCookie() {
+        // Set the cookie's TTL to 1 minute. This is a short lived cookie because it is only used
+        // when the user does not have an auth token or their auth token needs to be reset.
+        // Making this cookie too long-lived allows the user to get into a state where they can't
+        // mint a new auth token.
+        document.cookie = `${AUTH_FLOW_TEST_COOKIE_NAME}=${COOKIE_VALUE}; Path=/; Secure; SameSite=None; Domain=${window.location.hostname}; Partitioned; Max-Age=60;`;
+      }
 
-function pageJobs(){
-  const jobs=state.jobs;
-  return `
-  <div class="page-hdr"><div class="page-hdr-l"><div class="page-bc">Operations</div><div class="page-title">Active Jobs</div></div></div>
-  <div class="tbl-wrap">
-    <table class="tbl tbl-xs">
-      <thead><tr><th>Job ID</th><th>Rig / Well</th><th>Client</th><th>Contract</th><th>Mob Date</th><th>Status</th></tr></thead>
-      <tbody>
-        ${jobs.map(j=>`<tr>
-          <td style="font-family:monospace;font-weight:700">${esc(j.id)}</td>
-          <td><b>${esc(j.rig)}</b> / ${esc(j.well)}</td>
-          <td>${esc(j.client)}</td>
-          <td>${cb(j.contract)}</td>
-          <td>${fd(j.mobDate)}</td>
-          <td>${sb(j.status)}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-  </div>`;
-}
+      /**
+       * Returns true if the test cookie is set, false otherwise.
+       */
+      function authFlowTestCookieIsSet() {
+        return getCookie(AUTH_FLOW_TEST_COOKIE_NAME) === COOKIE_VALUE;
+      }
 
-function pageDelivery(){
-  const dts=state.dtBatches;
-  return `
-  <div class="page-hdr"><div class="page-hdr-l"><div class="page-bc">Logistics</div><div class="page-title">Delivery Tickets</div></div></div>
-  <div class="tbl-wrap">
-    <table class="tbl tbl-xs">
-      <thead><tr><th>DT Number</th><th>Job</th><th>Rig / Well</th><th>RM Ref</th><th>Date</th><th>Tools</th><th>Dispatched By</th></tr></thead>
-      <tbody>
-        ${dts.map(b=>`<tr>
-          <td style="font-family:monospace;font-weight:700;color:var(--blue)">${esc(b.dtNumber)}</td>
-          <td style="font-family:monospace">${esc(b.jobId)}</td>
-          <td><b>${esc(b.rig)}</b> / ${esc(b.well)}</td>
-          <td>${esc(b.rmRef)}</td>
-          <td>${fd(b.rmDate)}</td>
-          <td style="font-weight:700">${b.toolLines.length}</td>
-          <td>${esc(b.dispatchedBy)}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-  </div>`;
-}
+      /**
+       * Redirects to the return url. If autoClose is true, then the return url will be opened in a
+       * new window, and it will be closed automatically when the page loads.
+       * Options:
+       *   storageAccessGranted: if true, appends __storage_access_granted=1 to
+       *   the return url so the Lua auth script can set the test cookie
+       *   server-side (needed for Safari/iOS where document.cookie is blocked).
+       */
+      async function redirectToReturnUrl(autoClose, storageAccessGranted = false) {
+        const initialReturnUrlStr = new URLSearchParams(window.location.search).get('return_url');
+        const returnUrl = initialReturnUrlStr ? new URL(initialReturnUrlStr) : null;
 
-function pageReturns(){
-  return `<div class="page-hdr"><div class="page-hdr-l"><div class="page-bc">Logistics</div><div class="page-title">Receiving Tickets</div></div></div><div class="card"><div class="empty"><div class="empty-ico">↩</div><div class="empty-title">Receiving Log</div><div class="empty-sub">Tools returning from rig locations enter here.</div></div></div>`;
-}
-function pageGatePass(){
-  return `<div class="page-hdr"><div class="page-hdr-l"><div class="page-bc">Logistics</div><div class="page-title">Gate Pass</div></div></div><div class="card"><div class="empty"><div class="empty-ico">🚪</div><div class="empty-title">Gate Pass Logistics</div></div></div>`;
-}
-function pageInspection(){
-  return `<div class="page-hdr"><div class="page-hdr-l"><div class="page-bc">Workshop</div><div class="page-title">Inspection Queue</div></div></div><div class="card"><div class="empty"><div class="empty-ico">🔍</div><div class="empty-title">Inspection Records</div></div></div>`;
-}
-function pageMaintenance(){
-  return `<div class="page-hdr"><div class="page-hdr-l"><div class="page-bc">Workshop</div><div class="page-title">Maintenance Queue</div></div></div><div class="card"><div class="empty"><div class="empty-ico">🔧</div><div class="empty-title">Work Orders</div></div></div>`;
-}
-function pageContracts(){
-  const cons=state.contracts;
-  return `
-  <div class="page-hdr"><div class="page-hdr-l"><div class="page-bc">Commercial</div><div class="page-title">Contracts & Performance Bonds</div></div></div>
-  <div class="tbl-wrap">
-    <table class="tbl tbl-xs">
-      <thead><tr><th>Client</th><th>Contract Ref</th><th>Value</th><th>PBG Value</th><th>PBG Expiry</th><th>Status</th></tr></thead>
-      <tbody>
-        ${cons.map(c=>`<tr>
-          <td style="font-weight:600">${esc(c.client)}</td>
-          <td style="font-family:monospace">${esc(c.contractRef)}</td>
-          <td>$${Number(c.contractValue||0).toLocaleString()}</td>
-          <td>$${Number(c.pbgValue||0).toLocaleString()}</td>
-          <td>${fd(c.pbgExpiryDate)}</td>
-          <td>${sb(c.status)}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-  </div>`;
-}
-function pagePriceLists(){
-  return `<div class="page-hdr"><div class="page-hdr-l"><div class="page-bc">Commercial</div><div class="page-title">Price Lists</div></div></div><div class="card"><div class="empty"><div class="empty-ico">💲</div><div class="empty-title">Commercial Schedules</div></div></div>`;
-}
-function pageSettings(){
-  return `
-  <div class="page-hdr"><div class="page-hdr-l"><div class="page-bc">System</div><div class="page-title">Settings & Database</div></div></div>
-  <div class="card">
-    <div class="card-title">Azure SQL Database Configuration</div>
-    <div style="font-size:12px;color:var(--s600);margin-top:6px;line-height:1.8">
-      <b>Server:</b> tooltracking-sqlserver.database.windows.net<br>
-      <b>Database:</b> ToolTrackingDB (LIVE) / ToolTrackingDB_PILOT (PILOT)<br>
-      <b>Port:</b> 1433 (SSL Encrypted)<br>
-      <b>User:</b> tooladmin
-    </div>
-  </div>`;
-}
+        // Prevent potentially malicious URLs from being used
+        if (returnUrl.protocol.toLowerCase() === 'javascript:') {
+          console.error('Potentially malicious return URL blocked');
+          return;
+        }
 
-async function doLoginUI(){
-  const u = document.getElementById('lu').value.trim();
-  const p = document.getElementById('lp').value;
-  const errEl = document.getElementById('lerr');
-  
-  if(!u || !p){
-    errEl.textContent = 'Please enter username and password';
-    errEl.style.display = '';
-    return;
-  }
+        if (storageAccessGranted) {
+          returnUrl.searchParams.set('__storage_access_granted', '1');
+        }
 
-  const user = doLogin(u, p);
-  if(!user){
-    errEl.textContent = 'Invalid username or password';
-    errEl.style.display = '';
-    return;
-  }
+        if (autoClose) {
+          returnUrl.searchParams.set('__auto_close', '1');
+          const url = new URL(window.location.href);
+          url.searchParams.set('return_url', returnUrl.toString());
+          // Land on the cookie check page first, so the user can interact with it before proceeding
+          // to the return url where cookies can be set.
+          window.open(url.toString(), '_blank');
+          const hasAccess = await document.hasStorageAccess();
+          document.querySelector('#stepOne').classList.add('hidden');
+          if (!hasAccess) {
+            document.querySelector('#stepThree').classList.remove('hidden');
+          } else {
+            window.location.reload();
+          }
+        } else {
+          window.location.href = returnUrl.toString();
+        }
+      }
 
-  errEl.style.display = 'none';
-  initApp();
-}
-window.doLoginUI = doLoginUI;
+      /**
+       * Grants the browser permission to set cookies. If successful, then it redirects to the
+       * return url.
+       */
+      async function grantStorageAccess() {
+        try {
+          await document.requestStorageAccess();
+          // Recent Safari/iOS versions block document.cookie entirely in
+          // cross-site iframes, even after requestStorageAccess(). Only
+          // server-side Set-Cookie headers work. Signal to the Lua auth script
+          // via query param so it can set the test cookie server-side.
+          redirectToReturnUrl(false, /* storageAccessGranted= */ true);
+        } catch (err) {
+          console.log('error after button click: ', err);
+        }
+      }
 
-function showLogin(){
-  const lp=document.getElementById('login-page');
-  const app=document.getElementById('app');
-  if(lp)lp.style.display='';
-  if(app)app.style.display='none';
-}
+      /**
+       * Verifies that the browser can set cookies. If it can, then it redirects to the return url.
+       * If it can't, then it shows the error UI.
+       */
+      function verifyCanSetCookies() {
+        setAuthFlowTestCookie();
+        if (authFlowTestCookieIsSet()) {
+          // Check if we are on the auto-close flow, and if so show the interact button.
+          const returnUrl = new URLSearchParams(window.location.search).get('return_url');
+          const autoClose = new URL(returnUrl).searchParams.has('__auto_close');
+          if (autoClose) {
+            document.querySelector('#stepOne').classList.add('hidden');
+            document.querySelector('#stepTwo').classList.remove('hidden');
+          } else {
+            redirectToReturnUrl(false);
+            return;
+          }
+        }
+        // The cookie could not be set, so initiate the recovery flow.
+        document.querySelector('.logo').classList.add('hidden');
+        document.querySelector('.spinner').classList.add('hidden');
+        document.querySelector('#error-ui').classList.remove('hidden');
+      }
 
-function initApp(){
-  if(!CU){showLogin();return;}
-  load();
-  document.getElementById('login-page').style.display = 'none';
-  document.getElementById('app').style.display = '';
-  renderSidebar();
-  const d = document.getElementById('tb-date'); if(d) d.textContent = fdL(TODAY);
-  renderModule('dashboard');
-}
-
-(function boot(){
-  if(checkAuth() && CU) initApp();
-  else showLogin();
-})();
-</script>
-</body>
+      // Start the cookie verification process.
+      verifyCanSetCookies();
+    </script>
+  </body>
 </html>
