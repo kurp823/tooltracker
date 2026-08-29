@@ -1,296 +1,1535 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title>Cookie check</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <style>
-      :root {
-        color-scheme: light dark;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EMDAD Oilfield Operations Platform - Standalone Edition</title>
+  <!-- Tailwind CSS via CDN for standalone single-file distribution -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #eef3f8;
+      color: #1e293b;
+    }
+    .font-mono {
+      font-family: 'IBM Plex Mono', monospace;
+    }
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    @media print {
+      .no-print { display: none !important; }
+      .print-only { display: block !important; }
+      body { background: white !important; }
+    }
+  </style>
+<script src="/_aistudio-iframe.js?v=2f1c016a"></script></head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-amber-500/30 selection:text-amber-900">
 
-      body {
-        font-family: 'Inter', Helvetica, Arial, sans-serif;
-        background: light-dark(#F8F8F7, #191919);
-        color: light-dark(#1f1f1f, #e3e3e3);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        box-sizing: border-box;
-        min-height: 100vh;
-        margin: 0;
-        padding: 20px;
-        text-align: center;
-      }
-
-      .container {
-        background: light-dark(#FFFFFF, #1F1F1F);
-        padding: 32px;
-        border-radius: 16px;
-        border: 1px solid light-dark(#E2E3E4, #3E3E3E);
-        max-width: min(80%, 500px);
-        width: 100%;
-        color: light-dark(#2B2D31, #D4D4D4);
-      }
-
-      h1 {
-        font-size: 20px;
-        font-weight: 500;
-        margin-top: 1rem;
-        margin-bottom: 1rem;
-        color: light-dark(#2B2D31, #D4D4D4);
-      }
-
-      p {
-        font-size: 14px;
-        color: light-dark(#2B2D31, #D4D4D4);
-        line-height: 21px;
-        margin: 0 0 1.5rem 0;
-      }
-
-      .icon {
-        margin-bottom: 1rem;
-        line-height: 0;
-      }
-
-      .button-container {
-        display: flex;
-        justify-content: flex-end;
-        gap: 10px;
-        margin-top: 2rem;
-      }
-
-      button {
-        background-color: light-dark(#fff, #323232);
-        color: light-dark(#2B2D31, #FCFCFC);
-        border: 1px solid light-dark(#E2E3E4, #3E3E3E);
-        border-radius: 12px;
-        padding: 8px 12px;
-        font-size: 14px;
-        line-height: 21px;
-        cursor: pointer;
-        transition: background-color 0.2s;
-        font-weight: 400;
-        font-family: 'Inter', Helvetica, Arial, sans-serif;
-        width: 100%;
-      }
-
-      button:hover {
-        background-color: light-dark(#EAEAEB, #424242);
-      }
-
-      .hidden {
-        display: none;
-      }
-
-      /* Loading Spinner Animation */
-      .spinner {
-        margin: 0 auto 1.5rem auto;
-        width: 40px;
-        height: 40px;
-        border: 4px solid light-dark(#f0f0f0, #262626);
-        border-top: 4px solid light-dark(#076eff, #87a9ff); /* Blue color */
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-      }
-
-      .logo {
-        border-radius: 10px;
-        display: block;
-        margin: 0 auto 2rem auto;
-      }
-
-      .logo.hidden {
-        display: none;
-      }
-
-      @keyframes spin {
-        0% {
-          transform: rotate(0deg);
-        }
-        100% {
-          transform: rotate(360deg);
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <img
-        class="logo"
-        src="https://www.gstatic.com/images/branding/productlogos/ai_studio/v1/web-512dp/logo_ai_studio_color_1x_web_512dp.png"
-        alt="AI Studio Logo"
-        width="256"
-        height="256"
-      />
-      <div class="spinner"></div>
-      <div id="error-ui" class="hidden">
-        <div class="icon">
-          <svg
-            version="1.1"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            width="48px"
-            height="48px"
-            fill="#D73A49"
-          >
-            <path
-              d="M12,2C6.486,2,2,6.486,2,12s4.486,10,10,10s10-4.486,10-10S17.514,2,12,2z M13,17h-2v-2h2V17z M13,13h-2V7h2V13z"
-            />
-          </svg>
+  <!-- ========================================================================= -->
+  <!-- TOP APPLICATION BAR                                                       -->
+  <!-- ========================================================================= -->
+  <header class="bg-[#1a3055] text-white px-5 py-2.5 flex items-center justify-between shadow-md border-b border-[#0f1f38] no-print sticky top-0 z-40">
+    <div class="flex items-center space-x-3">
+      <div class="w-8 h-8 rounded bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-[#1a3055] text-sm shadow">
+        E
+      </div>
+      <div>
+        <div class="flex items-center space-x-2">
+          <span class="font-extrabold text-sm tracking-wide text-white">EMDAD SERVICES LLC</span>
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/40">
+            OFFLINE SINGLE-FILE EDITION
+          </span>
         </div>
-        <div id="stepOne" class="text-container">
-          <h1>Action required to load your app</h1>
-          <p>
-            It looks like your browser is blocking a required security cookie, which is common on
-            older versions of iOS and Safari.
-          </p>
-          <div class="button-container">
-            <button id="authInSeparateWindowButton" onclick="redirectToReturnUrl(true)">Authenticate in new window</button>
-          </div>
-        </div>
-        <div id="stepTwo" class="text-container hidden">
-          <h1>Action required to load your app</h1>
-          <p>
-            It looks like your browser is blocking a required security cookie, which is common on
-            older versions of iOS and Safari.
-          </p>
-          <div class="button-container">
-            <button id="interactButton" onclick="redirectToReturnUrl(false)">Close and continue</button>
-          </div>
-        </div>
-        <div id="stepThree" class="text-container hidden">
-          <h1>Almost there!</h1>
-          <p>
-            Grant permission for the required security cookie below.
-          </p>
-          <div class="button-container">
-            <button id="grantPermissionButton" onclick="grantStorageAccess()">Grant permission</button>
-          </div>
-        </div>
+        <div class="text-[10px] text-slate-300">Oilfield Tool Tracking, Rental Operations & Logistics ERP</div>
       </div>
     </div>
-    <script>
-      const AUTH_FLOW_TEST_COOKIE_NAME = '__SECURE-aistudio_auth_flow_may_set_cookies';
-      const COOKIE_VALUE = 'true';
 
-      function getCookie(name) {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-          let cookie = cookies[i].trim();
-          if (cookie.startsWith(name + '=')) {
-            return cookie.substring(name.length + 1);
-          }
-        }
-        return null;
+    <!-- Right utility controls -->
+    <div class="flex items-center space-x-3 text-xs">
+      <!-- Role Switcher -->
+      <div class="flex items-center space-x-1.5 bg-[#24426d] px-2.5 py-1 rounded border border-[#3b5d8f]">
+        <span class="text-slate-300 text-[11px]">Role:</span>
+        <select id="role-select" onchange="switchRole(this.value)" class="bg-transparent text-white font-bold outline-none cursor-pointer text-xs">
+          <option value="Admin" class="text-slate-900">Admin (Full Access)</option>
+          <option value="Operations" selected class="text-slate-900">Operations Lead</option>
+          <option value="Handler" class="text-slate-900">Handler / Dispatch</option>
+          <option value="QC" class="text-slate-900">QC Inspector</option>
+          <option value="Finance" class="text-slate-900">Finance (Invoicing)</option>
+          <option value="Viewer" class="text-slate-900">Viewer (Read Only)</option>
+        </select>
+      </div>
+
+      <!-- Quick Actions -->
+      <button onclick="downloadSelfHtml()" class="inline-flex items-center space-x-1.5 px-3 py-1 rounded bg-amber-400 hover:bg-amber-300 text-[#1a3055] font-bold transition shadow-sm" title="Save this standalone file to disk">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+        <span>Save Standalone HTML</span>
+      </button>
+
+      <button onclick="resetDataToDefault()" class="text-slate-300 hover:text-white px-2 py-1 rounded hover:bg-white/10 transition text-[11px]" title="Reset sample database to default values">
+        ↻ Reset Demo Data
+      </button>
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- MAIN WORKSPACE LAYOUT (SIDEBAR + MAIN VIEW)                               -->
+  <!-- ========================================================================= -->
+  <div class="flex-1 flex flex-row overflow-hidden">
+    
+    <!-- LEFT NAVIGATION SIDEBAR -->
+    <aside class="w-64 bg-[#1e3a61] text-white flex flex-col border-r border-[#152945] flex-shrink-0 no-print">
+      
+      <!-- Module Navigation List -->
+      <div class="flex-1 overflow-y-auto p-3 space-y-4">
+        
+        <!-- SECTION 1: EXECUTIVE -->
+        <div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Executive & Overview</div>
+          <div class="space-y-0.5">
+            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold bg-white/15 text-white">
+              <span class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                <span>Operations Dashboard</span>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <!-- SECTION 2: FLEET & LOGISTICS -->
+        <div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Fleet & Rig Operations</div>
+          <div class="space-y-0.5">
+            <button onclick="switchTab('inventory')" id="nav-inventory" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                <span>Tool Inventory</span>
+              </span>
+              <span id="badge-inventory-count" class="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] font-mono font-bold">48</span>
+            </button>
+
+            <button onclick="switchTab('callouts')" id="nav-callouts" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                <span>Rig Callouts</span>
+              </span>
+              <span id="badge-callouts-count" class="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold">4</span>
+            </button>
+
+            <button onclick="switchTab('jobs')" id="nav-jobs" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                <span>Drilling Jobs</span>
+              </span>
+              <span id="badge-jobs-count" class="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">6</span>
+            </button>
+
+            <button onclick="switchTab('dt')" id="nav-dt" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                <span>Delivery Tickets (DT)</span>
+              </span>
+            </button>
+
+            <button onclick="switchTab('rt')" id="nav-rt" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg>
+                <span>Receiving Tickets (RT)</span>
+              </span>
+            </button>
+
+            <button onclick="switchTab('gatepass')" id="nav-gatepass" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                <span>Security Gate Passes</span>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <!-- SECTION 3: WORKSHOP & QUALITY -->
+        <div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Quality & Workshop</div>
+          <div class="space-y-0.5">
+            <button onclick="switchTab('inspection')" id="nav-inspection" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span>QC Inspection Bay</span>
+              </span>
+            </button>
+
+            <button onclick="switchTab('maintenance')" id="nav-maintenance" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                <span>Workshop & Redress</span>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <!-- SECTION 4: COMMERCIAL & REVENUE -->
+        <div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Commercial & Finance</div>
+          <div class="space-y-0.5">
+            <button onclick="switchTab('utilization')" id="nav-utilization" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span>Utilization & Billing</span>
+              </span>
+            </button>
+
+            <button onclick="switchTab('contracts')" id="nav-contracts" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg>
+                <span>Master Contracts & PBG</span>
+              </span>
+            </button>
+
+            <button onclick="switchTab('jobhub')" id="nav-jobhub" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                <span>Job P&L & Costing</span>
+              </span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Sidebar Footer Status -->
+      <div class="p-3 bg-[#152945] border-t border-[#0f1f38] text-[11px] space-y-1">
+        <div class="flex items-center justify-between text-slate-300 font-mono">
+          <span>STORAGE:</span>
+          <span class="text-emerald-400 font-bold">LOCAL BROWSER</span>
+        </div>
+        <div class="text-[10px] text-slate-400">100% Offline Single File Capable</div>
+      </div>
+    </aside>
+
+    <!-- MAIN VIEWPORT CONTAINER -->
+    <main class="flex-1 overflow-y-auto p-5 bg-[#eef3f8]">
+      
+      <!-- TOAST NOTIFICATION CONTAINER -->
+      <div id="toast-box" class="fixed top-14 right-6 z-50 transition-all duration-300 transform translate-y-[-20px] opacity-0 pointer-events-none">
+        <div class="bg-[#1a3055] text-white px-4 py-2.5 rounded shadow-xl flex items-center space-x-2 text-xs font-semibold border border-amber-400">
+          <span id="toast-icon">✓</span>
+          <span id="toast-text">Operation completed</span>
+        </div>
+      </div>
+
+      <!-- DYNAMIC CONTENT CONTAINER -->
+      <div id="view-container"></div>
+    </main>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL CONTAINER (Popups for Add/Edit, Print Slip, SOX Unlock, etc.)       -->
+  <!-- ========================================================================= -->
+  <div id="modal-backdrop" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 hidden">
+    <div id="modal-content" class="bg-white rounded border border-[#b8c9db] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"></div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- JAVASCRIPT LOGIC & STATE ENGINE (Completely self-contained)               -->
+  <!-- ========================================================================= -->
+  <script>
+    // Initial Seed Database
+    const DEFAULT_DATA = {
+      inventory: [
+        { SerialNo: "MD-8001-A", AssetName: "8.00\" Motor Assembly (Sperry/Halliburton 7/8 4.0)", Category: "Motor", Size: "8.00\"", ThreadConnection: "6-5/8 REG", TotalHours: 142.5, MaxHoursLimit: 250.0, HoursSinceInspection: 18.0, CurrentLocation: "Mina Zayed Yard", CurrentJob: "JOB-2026-001", Status: "Dispatched", CriticalAlert: "Normal", DailyRentalRate: 2450.0 },
+        { SerialNo: "MD-6750-C", AssetName: "6.75\" High Torque Performance Mud Motor", Category: "Motor", Size: "6.75\"", ThreadConnection: "4-1/2 IF", TotalHours: 215.0, MaxHoursLimit: 250.0, HoursSinceInspection: 45.0, CurrentLocation: "Mina Zayed Yard", CurrentJob: "JOB-2026-002", Status: "Dispatched", CriticalAlert: "Normal", DailyRentalRate: 1950.0 },
+        { SerialNo: "MD-4750-A", AssetName: "4.75\" Slim Hole Power Section Motor", Category: "Motor", Size: "4.75\"", ThreadConnection: "3-1/2 IF", TotalHours: 85.0, MaxHoursLimit: 200.0, HoursSinceInspection: 12.0, CurrentLocation: "Mina Zayed Yard", CurrentJob: "", Status: "Available", CriticalAlert: "Normal", DailyRentalRate: 1450.0 },
+        { SerialNo: "RSS-675-01", AssetName: "6.75\" Push-the-Bit Rotary Steerable System", Category: "RSS", Size: "6.75\"", ThreadConnection: "4-1/2 IF", TotalHours: 198.0, MaxHoursLimit: 220.0, HoursSinceInspection: 198.0, CurrentLocation: "Mina Zayed Yard", CurrentJob: "", Status: "Inspection", CriticalAlert: "Critical_Overdue", DailyRentalRate: 7800.0 },
+        { SerialNo: "RSS-825-02", AssetName: "8.25\" Point-the-Bit Rotary Steerable System", Category: "RSS", Size: "8.25\"", ThreadConnection: "6-5/8 REG", TotalHours: 110.0, MaxHoursLimit: 220.0, HoursSinceInspection: 25.0, CurrentLocation: "Mina Zayed Yard", CurrentJob: "JOB-2026-003", Status: "Dispatched", CriticalAlert: "Normal", DailyRentalRate: 9200.0 },
+        { SerialNo: "JAR-800-09", AssetName: "8.00\" Double Acting Hydraulic Drilling Jar", Category: "Jar", Size: "8.00\"", ThreadConnection: "6-5/8 REG", TotalHours: 320.0, MaxHoursLimit: 400.0, HoursSinceInspection: 40.0, CurrentLocation: "Mina Zayed Yard", CurrentJob: "JOB-2026-001", Status: "Dispatched", CriticalAlert: "Normal", DailyRentalRate: 850.0 },
+        { SerialNo: "JAR-650-14", AssetName: "6.50\" Integral Mechanical/Hydraulic Jar", Category: "Jar", Size: "6.50\"", ThreadConnection: "4-1/2 IF", TotalHours: 395.0, MaxHoursLimit: 400.0, HoursSinceInspection: 95.0, CurrentLocation: "Workshop Redress", CurrentJob: "", Status: "Repair", CriticalAlert: "Warning_Approaching", DailyRentalRate: 720.0 },
+        { SerialNo: "MWD-PUL-04", AssetName: "Positive Pulse MWD Directional Gamma Module", Category: "MWD", Size: "6.50\"", ThreadConnection: "Probe Based", TotalHours: 165.0, MaxHoursLimit: 300.0, HoursSinceInspection: 30.0, CurrentLocation: "Mina Zayed Yard", CurrentJob: "JOB-2026-002", Status: "Dispatched", CriticalAlert: "Normal", DailyRentalRate: 3100.0 },
+        { SerialNo: "MWD-EM-02", AssetName: "Electromagnetic (EM) High-Speed MWD Tool", Category: "MWD", Size: "4.75\"", ThreadConnection: "Probe Based", TotalHours: 90.0, MaxHoursLimit: 300.0, HoursSinceInspection: 15.0, CurrentLocation: "Mina Zayed Yard", CurrentJob: "", Status: "Available", CriticalAlert: "Normal", DailyRentalRate: 3400.0 },
+        { SerialNo: "UBHO-950-1", AssetName: "9.50\" Universal Borehole Orientation Sub (UBHO)", Category: "Sub", Size: "9.50\"", ThreadConnection: "7-5/8 REG", TotalHours: 410.0, MaxHoursLimit: 600.0, HoursSinceInspection: 10.0, CurrentLocation: "Mina Zayed Yard", CurrentJob: "JOB-2026-001", Status: "Dispatched", CriticalAlert: "Normal", DailyRentalRate: 280.0 },
+        { SerialNo: "XO-650-450", AssetName: "6.50\" x 4.50\" Crossover Sub (NC50 Pin x 4-1/2 IF Box)", Category: "Sub", Size: "6.50\"", ThreadConnection: "NC50 x 4-1/2 IF", TotalHours: 520.0, MaxHoursLimit: 600.0, HoursSinceInspection: 5.0, CurrentLocation: "Mina Zayed Yard", CurrentJob: "JOB-2026-002", Status: "Dispatched", CriticalAlert: "Normal", DailyRentalRate: 150.0 },
+        { SerialNo: "SHK-800-03", AssetName: "8.00\" Downhole Shock Sub Absorber", Category: "Other", Size: "8.00\"", ThreadConnection: "6-5/8 REG", TotalHours: 280.0, MaxHoursLimit: 500.0, HoursSinceInspection: 20.0, CurrentLocation: "Mina Zayed Yard", CurrentJob: "JOB-2026-003", Status: "Dispatched", CriticalAlert: "Normal", DailyRentalRate: 450.0 }
+      ],
+      callouts: [
+        { CalloutID: "CAL-2026-088", Client: "ADNOC Offshore", Rig: "Al Yasat (Jackup)", Well: "AY-402 Horizontal", RequiredDate: "2026-08-30", Status: "Assigned", CreatedBy: "Eng. Tariq Al Nuaimi", Remarks: "Urgent 8-1/2\" reservoir section motor and jar dispatch with premium inspection certs." },
+        { CalloutID: "CAL-2026-089", Client: "ADNOC Onshore", Rig: "ND-19 (Desert Rig)", Well: "BUH-771 Gas Injector", RequiredDate: "2026-09-01", Status: "Pending", CreatedBy: "Salim Al Mansoori", Remarks: "6.75\" high torque BHA for abrasive sandstone section." },
+        { CalloutID: "CAL-2026-090", Client: "OXY Oman", Rig: "Dalma-4", Well: "MKM-12 Deep", RequiredDate: "2026-08-28", Status: "Dispatched", CreatedBy: "Johnathan Miller", Remarks: "Full directional package mobilized under DT-2026-104." }
+      ],
+      jobs: [
+        { JobID: "JOB-2026-001", Client: "ADNOC Offshore", Rig: "Al Yasat (Jackup)", Well: "AY-402 Horizontal", HoleSection: "8.50\" Res Drain", StartDate: "2026-08-15", EndDate: "", Status: "Active", ContractID: "CNT-ADNOC-2025-09", InvoicedAmountUSD: 148500, IsInvoiceLocked: true, ERPInvoiceNo: "INV-DXB-99214" },
+        { JobID: "JOB-2026-002", Client: "ADNOC Onshore", Rig: "ND-19 (Desert Rig)", Well: "BUH-771 Gas Injector", HoleSection: "12.25\" Intermediate", StartDate: "2026-08-20", EndDate: "", Status: "Active", ContractID: "CNT-ADNOC-2025-09", InvoicedAmountUSD: 89400, IsInvoiceLocked: false, ERPInvoiceNo: "" },
+        { JobID: "JOB-2026-003", Client: "OXY Oman", Rig: "Dalma-4", Well: "MKM-12 Deep", HoleSection: "6.00\" Lateral", StartDate: "2026-08-10", EndDate: "", Status: "Active", ContractID: "CNT-OXY-2024-11", InvoicedAmountUSD: 215000, IsInvoiceLocked: true, ERPInvoiceNo: "INV-OXY-44102" }
+      ],
+      dtBatches: [
+        { DTNo: "DT-2026-103", JobID: "JOB-2026-001", DispatchDate: "2026-08-16", Rig: "Al Yasat (Jackup)", Transporter: "Al Masaood Heavy Transport", DriverName: "K. Ramachandran", TruckNo: "AUH-77412", Status: "Delivered", ItemsCount: 4 },
+        { DTNo: "DT-2026-104", JobID: "JOB-2026-002", DispatchDate: "2026-08-21", Rig: "ND-19 (Desert Rig)", Transporter: "Desert Express Logistics", DriverName: "Ali Mohammed", TruckNo: "DXB-99120", Status: "In_Transit", ItemsCount: 3 }
+      ],
+      rtBatches: [
+        { RTNo: "RT-2026-041", JobID: "JOB-2026-001", ReceiveDate: "2026-08-27", Rig: "Al Yasat (Jackup)", ReceivedBy: "K. Johnson (Base Yard)", Status: "Completed", TotalTools: 2, Notes: "Returned after drilling Section 1. Transferred to QC bay for MPI." }
+      ],
+      gatePasses: [
+        { PassID: "GP-2026-0051", PassType: "Outward", VehicleNo: "AUH-77412", DriverName: "K. Ramachandran", Destination: "Mina Zayed Port (Offshore Jetty)", Purpose: "Mobilization of DT-2026-103 BHA Tools", IssuedBy: "Security Sgt. Mansour", IssuedAt: "2026-08-16 08:30", Status: "Executed" },
+        { PassID: "GP-2026-0052", PassType: "Inward", VehicleNo: "DXB-44190", DriverName: "Saeed Al Zaabi", Destination: "Mina Zayed Main Yard", Purpose: "Delivery of New Redress Elastomers from Vendor", IssuedBy: "Security Sgt. Mansour", IssuedAt: "2026-08-28 11:15", Status: "Executed" }
+      ],
+      inspections: [
+        { InspectionID: "INSP-2026-092", SerialNo: "RSS-675-01", InspectionType: "MPI & Ultrasonic", Inspector: "Bureau Veritas (S. Kumar)", InspectionDate: "2026-08-28", Result: "Pending", Comments: "Visual threads OK; ultrasonic scan underway on lower bearing collar.", NextDueDate: "2026-11-28" },
+        { InspectionID: "INSP-2026-088", SerialNo: "MD-8001-A", InspectionType: "Full API Spec 7-1", Inspector: "EMDAD QC Lead", InspectionDate: "2026-08-10", Result: "Pass", Comments: "Magnetic particle inspection clean. Thread profile within API tolerances.", NextDueDate: "2026-11-10" }
+      ],
+      maintenance: [
+        { MaintenanceID: "MNT-2026-031", SerialNo: "JAR-650-14", MaintenanceType: "Full Redress & Seal Kit Replacement", Workshop: "EMDAD Mussafah Workshop", StartDate: "2026-08-25", EstimatedCompletion: "2026-08-31", Status: "In_Progress", CostUSD: 3400, Technician: "Master Mech. Rashid" }
+      ],
+      contracts: [
+        { ContractID: "CNT-ADNOC-2025-09", Client: "ADNOC Offshore & Onshore", Title: "Master Drilling Tool Rental & Directional Drilling Services Agreement", StartDate: "2025-01-01", EndDate: "2027-12-31", Currency: "USD", PBGAmountUSD: 500000, PBGExpiryDate: "2026-09-15", PBGIssuingBank: "First Abu Dhabi Bank (FAB)", Status: "Active" },
+        { ContractID: "CNT-OXY-2024-11", Client: "OXY Oman", Title: "North Field Deep Horizontal Well Rental Rate Schedule", StartDate: "2024-06-01", EndDate: "2026-12-31", Currency: "USD", PBGAmountUSD: 250000, PBGExpiryDate: "2026-11-30", PBGIssuingBank: "Bank Muscat", Status: "Active" }
+      ],
+      jobCosts: [
+        { CostID: "CST-01", JobID: "JOB-2026-001", CostCategory: "SubCon", Description: "Third-party heavy lift crane & hotshot mobilization to Mina Zayed", Supplier: "Al Masaood Logistics", PONumber: "PO-CON-8819", AmountUSD: 4200, CostDate: "2026-08-16" },
+        { CostID: "CST-02", JobID: "JOB-2026-001", CostCategory: "Personnel", Description: "Lead Directional Drilling Specialist Offshore Day Rate (8 Days)", Supplier: "Internal Operations", PONumber: "DIR-PERS-102", AmountUSD: 9600, CostDate: "2026-08-24" },
+        { CostID: "CST-03", JobID: "JOB-2026-002", CostCategory: "Workshop", Description: "Pre-job motor stator reline and rotor chrome polishing", Supplier: "Mussafah Tech Center", PONumber: "WO-MNT-441", AmountUSD: 5800, CostDate: "2026-08-19" }
+      ],
+      unlockAudits: [
+        { AuditID: "AUD-001", JobID: "JOB-2026-001", InvoiceNo: "INV-DXB-99214", Action: "LOCKED", User: "Finance Lead (M. Al Blooshi)", Reason: "Invoice finalized and submitted to ADNOC Maximo ERP.", Timestamp: "2026-08-25 14:20:00" }
+      ]
+    };
+
+    // Load from LocalStorage or Fallback to Default
+    let appState = {
+      activeTab: 'dashboard',
+      currentRole: 'Operations',
+      data: JSON.parse(localStorage.getItem('EMDAD_ERP_DATA') || JSON.stringify(DEFAULT_DATA))
+    };
+
+    function saveState() {
+      localStorage.setItem('EMDAD_ERP_DATA', JSON.stringify(appState.data));
+    }
+
+    function resetDataToDefault() {
+      if (confirm("Reset all local ERP data back to clean demonstration values?")) {
+        appState.data = JSON.parse(JSON.stringify(DEFAULT_DATA));
+        saveState();
+        showToast("Demo database reset successfully", "✓");
+        renderCurrentView();
+      }
+    }
+
+    function downloadSelfHtml() {
+      const htmlContent = document.documentElement.outerHTML;
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `EMDAD_Oilfield_ERP_Standalone_${new Date().toISOString().split('T')[0]}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast("Standalone HTML file downloaded! You can open it in any browser offline.", "📥");
+    }
+
+    function showToast(text, icon = "✓") {
+      const box = document.getElementById('toast-box');
+      document.getElementById('toast-icon').innerText = icon;
+      document.getElementById('toast-text').innerText = text;
+      box.classList.remove('opacity-0', 'translate-y-[-20px]', 'pointer-events-none');
+      box.classList.add('opacity-100', 'translate-y-0');
+      setTimeout(() => {
+        box.classList.add('opacity-0', 'translate-y-[-20px]', 'pointer-events-none');
+        box.classList.remove('opacity-100', 'translate-y-0');
+      }, 3500);
+    }
+
+    function switchRole(role) {
+      appState.currentRole = role;
+      showToast(`Switched active role to: ${role}`, "👤");
+      renderCurrentView();
+    }
+
+    function switchTab(tab) {
+      appState.activeTab = tab;
+      
+      // Update sidebar nav active styling
+      document.querySelectorAll('.nav-item').forEach(el => {
+        el.className = "nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white";
+      });
+      const activeEl = document.getElementById(`nav-${tab}`);
+      if (activeEl) {
+        activeEl.className = "nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold bg-white/15 text-white shadow-xs";
       }
 
-      function setAuthFlowTestCookie() {
-        // Set the cookie's TTL to 1 minute. This is a short lived cookie because it is only used
-        // when the user does not have an auth token or their auth token needs to be reset.
-        // Making this cookie too long-lived allows the user to get into a state where they can't
-        // mint a new auth token.
-        document.cookie = `${AUTH_FLOW_TEST_COOKIE_NAME}=${COOKIE_VALUE}; Path=/; Secure; SameSite=None; Domain=${window.location.hostname}; Partitioned; Max-Age=60;`;
+      renderCurrentView();
+    }
+
+    // Modal helpers
+    function openModal(htmlContent) {
+      const backdrop = document.getElementById('modal-backdrop');
+      const container = document.getElementById('modal-content');
+      container.innerHTML = htmlContent;
+      backdrop.classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('modal-backdrop').classList.add('hidden');
+    }
+
+    // =========================================================================
+    // VIEW RENDERERS
+    // =========================================================================
+
+    function renderCurrentView() {
+      const container = document.getElementById('view-container');
+      const { activeTab, data, currentRole } = appState;
+
+      // Update sidebar counts
+      document.getElementById('badge-inventory-count').innerText = data.inventory.length;
+      document.getElementById('badge-callouts-count').innerText = data.callouts.filter(c => c.Status !== 'Dispatched').length;
+      document.getElementById('badge-jobs-count').innerText = data.jobs.filter(j => j.Status === 'Active').length;
+
+      switch (activeTab) {
+        case 'dashboard':
+          container.innerHTML = renderDashboardView(data);
+          break;
+        case 'inventory':
+          container.innerHTML = renderInventoryView(data, currentRole);
+          break;
+        case 'callouts':
+          container.innerHTML = renderCalloutsView(data, currentRole);
+          break;
+        case 'jobs':
+          container.innerHTML = renderJobsView(data, currentRole);
+          break;
+        case 'dt':
+          container.innerHTML = renderDTView(data, currentRole);
+          break;
+        case 'rt':
+          container.innerHTML = renderRTView(data, currentRole);
+          break;
+        case 'gatepass':
+          container.innerHTML = renderGatePassView(data, currentRole);
+          break;
+        case 'inspection':
+          container.innerHTML = renderInspectionView(data, currentRole);
+          break;
+        case 'maintenance':
+          container.innerHTML = renderMaintenanceView(data, currentRole);
+          break;
+        case 'utilization':
+          container.innerHTML = renderUtilizationView(data, currentRole);
+          break;
+        case 'contracts':
+          container.innerHTML = renderContractsView(data, currentRole);
+          break;
+        case 'jobhub':
+          container.innerHTML = renderJobHubView(data, currentRole);
+          break;
+        default:
+          container.innerHTML = `<div class="p-8 text-center text-slate-500">View not found</div>`;
       }
+    }
 
-      /**
-       * Returns true if the test cookie is set, false otherwise.
-       */
-      function authFlowTestCookieIsSet() {
-        return getCookie(AUTH_FLOW_TEST_COOKIE_NAME) === COOKIE_VALUE;
+    // 1. DASHBOARD VIEW
+    function renderDashboardView(data) {
+      const totalTools = data.inventory.length;
+      const onRig = data.inventory.filter(i => i.Status === 'Dispatched').length;
+      const inQC = data.inventory.filter(i => i.Status === 'Inspection').length;
+      const inWorkshop = data.inventory.filter(i => i.Status === 'Repair').length;
+      const totalRevenue = data.jobs.reduce((s, j) => s + (j.InvoicedAmountUSD || 0), 0);
+
+      return `
+        <div class="space-y-4">
+          <!-- Page Title Ribbon -->
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium">Executive Overview</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Integrated Fleet Operations & Drilling Dispatch Control</h1>
+            </div>
+            <div class="flex space-x-2">
+              <button onclick="openAddToolModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">
+                + New Asset
+              </button>
+              <button onclick="openNewCalloutModal()" class="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-sm">
+                + Rig Callout
+              </button>
+            </div>
+          </div>
+
+          <!-- KPI Metric Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm border-t-3 border-t-[#5b7fa6]">
+              <div class="text-[11px] text-slate-500 font-medium">Total Fleet Tools</div>
+              <div class="mt-1 text-2xl font-extrabold font-mono text-[#1a3055]">${totalTools}</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">${data.inventory.filter(i => i.Status === 'Available').length} Ready for Rig Deployment</div>
+            </div>
+
+            <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm border-t-3 border-t-emerald-600">
+              <div class="text-[11px] text-slate-500 font-medium">Tools Operating on Rigs</div>
+              <div class="mt-1 text-2xl font-extrabold font-mono text-emerald-700">${onRig}</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Across ${data.jobs.filter(j => j.Status === 'Active').length} Active Drilling Operations</div>
+            </div>
+
+            <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm border-t-3 border-t-amber-500">
+              <div class="text-[11px] text-slate-500 font-medium">QC Bay & Workshop</div>
+              <div class="mt-1 text-2xl font-extrabold font-mono text-amber-700">${inQC + inWorkshop}</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">${inQC} In Inspection, ${inWorkshop} In Redress</div>
+            </div>
+
+            <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm border-t-3 border-t-[#1a3055]">
+              <div class="text-[11px] text-slate-500 font-medium">Billed Job Revenue</div>
+              <div class="mt-1 text-2xl font-extrabold font-mono text-[#1a3055]">$${totalRevenue.toLocaleString()}</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Active Contract Portfolios</div>
+            </div>
+          </div>
+
+          <!-- Active Operations Table -->
+          <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+            <div class="px-4 py-2.5 bg-[#dbe6f1] border-b border-[#b8c9db] flex justify-between items-center">
+              <h3 class="text-xs font-bold text-[#1a3055] uppercase tracking-wide">Active Drilling Operations & Rig Status</h3>
+              <button onclick="switchTab('jobs')" class="text-xs text-blue-700 font-bold hover:underline">View All Jobs &rarr;</button>
+            </div>
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
+                <tr>
+                  <th class="px-3 py-2">JOB ID</th>
+                  <th class="px-3 py-2">CLIENT</th>
+                  <th class="px-3 py-2">RIG & WELL</th>
+                  <th class="px-3 py-2">HOLE SECTION</th>
+                  <th class="px-3 py-2">STATUS</th>
+                  <th class="px-3 py-2">INVOICE LOCK</th>
+                  <th class="px-3 py-2 text-right">REVENUE (USD)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#e2e8f0]">
+                ${data.jobs.map(j => `
+                  <tr class="hover:bg-[#e4eef8]">
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${j.JobID}</td>
+                    <td class="px-3 py-2 font-bold text-[#1a3055]">${j.Client}</td>
+                    <td class="px-3 py-2 font-medium">${j.Rig} <span class="text-slate-400">|</span> ${j.Well}</td>
+                    <td class="px-3 py-2 font-mono text-slate-600">${j.HoleSection}</td>
+                    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">${j.Status}</span></td>
+                    <td class="px-3 py-2 font-mono">${j.IsInvoiceLocked ? '<span class="text-emerald-700 font-bold">🔒 LOCKED (' + j.ERPInvoiceNo + ')</span>' : '<span class="text-amber-700 font-bold">🔓 Open</span>'}</td>
+                    <td class="px-3 py-2 text-right font-mono font-bold text-emerald-800">$${(j.InvoicedAmountUSD || 0).toLocaleString()}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    // 2. INVENTORY VIEW
+    function renderInventoryView(data, role) {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium">Fleet & Asset Management</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Master Tool Inventory & Downhole Hours Tracking</h1>
+            </div>
+            ${role !== 'Viewer' ? `
+              <button onclick="openAddToolModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">
+                + Register New Tool Asset
+              </button>
+            ` : ''}
+          </div>
+
+          <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+            <div class="p-3 bg-[#dbe6f1] border-b border-[#b8c9db] flex items-center justify-between">
+              <input type="text" id="inv-search" onkeyup="filterInventoryTable()" placeholder="Search serial #, asset name, or category..." class="bg-white border border-[#b8c9db] rounded px-3 py-1 text-xs w-72 outline-none font-medium" />
+              <div class="text-xs font-bold text-slate-700">${data.inventory.length} Registered Assets</div>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table id="inv-table" class="w-full text-left text-xs border-collapse">
+                <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
+                  <tr>
+                    <th class="px-3 py-2">SERIAL #</th>
+                    <th class="px-3 py-2">TOOL ASSET NAME</th>
+                    <th class="px-3 py-2">CATEGORY</th>
+                    <th class="px-3 py-2">SIZE & THREAD</th>
+                    <th class="px-3 py-2">HOURS (RUN / LIMIT)</th>
+                    <th class="px-3 py-2">LOCATION</th>
+                    <th class="px-3 py-2">STATUS</th>
+                    <th class="px-3 py-2 text-right">DAY RATE (USD)</th>
+                    <th class="px-3 py-2 text-center">ACTION</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-[#e2e8f0]">
+                  ${data.inventory.map(item => `
+                    <tr class="hover:bg-[#e4eef8]">
+                      <td class="px-3 py-2 font-mono font-bold text-amber-900">${item.SerialNo}</td>
+                      <td class="px-3 py-2 font-bold text-[#1a3055]">${item.AssetName}</td>
+                      <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded bg-slate-100 border text-slate-700 text-[10px] font-bold">${item.Category}</span></td>
+                      <td class="px-3 py-2 font-mono text-slate-600">${item.Size} | ${item.ThreadConnection}</td>
+                      <td class="px-3 py-2 font-mono font-bold">${item.TotalHours} / ${item.MaxHoursLimit} hrs</td>
+                      <td class="px-3 py-2 text-slate-800">${item.CurrentLocation}</td>
+                      <td class="px-3 py-2">
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          item.Status === 'Available' ? 'bg-emerald-100 text-emerald-800' :
+                          item.Status === 'Dispatched' ? 'bg-blue-100 text-blue-800' :
+                          item.Status === 'Inspection' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                        }">${item.Status}</span>
+                      </td>
+                      <td class="px-3 py-2 text-right font-mono font-bold text-emerald-800">$${item.DailyRentalRate.toLocaleString()}</td>
+                      <td class="px-3 py-2 text-center">
+                        <button onclick="openEditToolModal('${item.SerialNo}')" class="text-blue-700 hover:underline font-bold text-[11px]">Edit</button>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function filterInventoryTable() {
+      const val = document.getElementById('inv-search').value.toLowerCase();
+      const rows = document.querySelectorAll('#inv-table tbody tr');
+      rows.forEach(r => {
+        r.style.display = r.innerText.toLowerCase().includes(val) ? '' : 'none';
+      });
+    }
+
+    // Modal: Add Tool Asset
+    function openAddToolModal() {
+      openModal(`
+        <div class="px-4 py-3 bg-[#5b7fa6] text-white flex justify-between items-center">
+          <h3 class="font-bold text-sm">Register New Tool Asset</h3>
+          <button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button>
+        </div>
+        <form onsubmit="handleAddTool(event)" class="p-4 space-y-3 text-xs">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Serial Number *</label>
+              <input type="text" id="m-serial" required placeholder="MD-8002-B" class="w-full border rounded px-2.5 py-1.5 font-mono" />
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Asset Category *</label>
+              <select id="m-cat" class="w-full border rounded px-2.5 py-1.5">
+                <option value="Motor">Mud Motor</option>
+                <option value="RSS">Rotary Steerable System (RSS)</option>
+                <option value="MWD">MWD / LWD Tool</option>
+                <option value="Jar">Drilling Jar</option>
+                <option value="Sub">Sub / X-Over</option>
+                <option value="Other">Other Asset</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block font-bold mb-1">Asset Description Name *</label>
+            <input type="text" id="m-name" required placeholder="8.00in Performance Mud Motor 7/8 Lobe" class="w-full border rounded px-2.5 py-1.5" />
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Outer Diameter (Size)</label>
+              <input type="text" id="m-size" value="8.00\"" class="w-full border rounded px-2.5 py-1.5 font-mono" />
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Thread Connection</label>
+              <input type="text" id="m-conn" value="6-5/8 REG" class="w-full border rounded px-2.5 py-1.5 font-mono" />
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Daily Rate (USD)</label>
+              <input type="number" id="m-rate" value="2200" class="w-full border rounded px-2.5 py-1.5 font-mono" />
+            </div>
+          </div>
+          <div class="pt-3 border-t flex justify-end space-x-2">
+            <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold">Cancel</button>
+            <button type="submit" class="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold">Save Asset</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function handleAddTool(e) {
+      e.preventDefault();
+      const newTool = {
+        SerialNo: document.getElementById('m-serial').value,
+        AssetName: document.getElementById('m-name').value,
+        Category: document.getElementById('m-cat').value,
+        Size: document.getElementById('m-size').value,
+        ThreadConnection: document.getElementById('m-conn').value,
+        TotalHours: 0,
+        MaxHoursLimit: 250,
+        HoursSinceInspection: 0,
+        CurrentLocation: "Mina Zayed Yard",
+        CurrentJob: "",
+        Status: "Available",
+        CriticalAlert: "Normal",
+        DailyRentalRate: parseFloat(document.getElementById('m-rate').value) || 1500
+      };
+      appState.data.inventory.unshift(newTool);
+      saveState();
+      closeModal();
+      showToast(`✓ Registered asset ${newTool.SerialNo}`);
+      renderCurrentView();
+    }
+
+    function openEditToolModal(serial) {
+      const tool = appState.data.inventory.find(i => i.SerialNo === serial);
+      if (!tool) return;
+
+      openModal(`
+        <div class="px-4 py-3 bg-[#5b7fa6] text-white flex justify-between items-center">
+          <h3 class="font-bold text-sm">Update Asset: ${tool.SerialNo}</h3>
+          <button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button>
+        </div>
+        <form onsubmit="handleUpdateTool(event, '${tool.SerialNo}')" class="p-4 space-y-3 text-xs">
+          <div>
+            <label class="block font-bold mb-1">Status</label>
+            <select id="u-status" class="w-full border rounded px-2.5 py-1.5 font-bold">
+              <option value="Available" ${tool.Status === 'Available' ? 'selected' : ''}>Available (Base Yard)</option>
+              <option value="Dispatched" ${tool.Status === 'Dispatched' ? 'selected' : ''}>Dispatched (Active on Rig)</option>
+              <option value="Inspection" ${tool.Status === 'Inspection' ? 'selected' : ''}>Inspection (QC Bay)</option>
+              <option value="Repair" ${tool.Status === 'Repair' ? 'selected' : ''}>Repair (Workshop Redress)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold mb-1">Current Physical Location</label>
+            <input type="text" id="u-loc" value="${tool.CurrentLocation}" class="w-full border rounded px-2.5 py-1.5" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Total Circulating Hours</label>
+              <input type="number" step="0.5" id="u-hours" value="${tool.TotalHours}" class="w-full border rounded px-2.5 py-1.5 font-mono" />
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Daily Rental Rate (USD)</label>
+              <input type="number" id="u-rate" value="${tool.DailyRentalRate}" class="w-full border rounded px-2.5 py-1.5 font-mono" />
+            </div>
+          </div>
+          <div class="pt-3 border-t flex justify-end space-x-2">
+            <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold">Cancel</button>
+            <button type="submit" class="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold">Save Changes</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function handleUpdateTool(e, serial) {
+      e.preventDefault();
+      const tool = appState.data.inventory.find(i => i.SerialNo === serial);
+      if (tool) {
+        tool.Status = document.getElementById('u-status').value;
+        tool.CurrentLocation = document.getElementById('u-loc').value;
+        tool.TotalHours = parseFloat(document.getElementById('u-hours').value) || tool.TotalHours;
+        tool.DailyRentalRate = parseFloat(document.getElementById('u-rate').value) || tool.DailyRentalRate;
+        saveState();
+        closeModal();
+        showToast(`✓ Updated asset ${serial}`);
+        renderCurrentView();
       }
+    }
 
-      /**
-       * Redirects to the return url. If autoClose is true, then the return url will be opened in a
-       * new window, and it will be closed automatically when the page loads.
-       * Options:
-       *   storageAccessGranted: if true, appends __storage_access_granted=1 to
-       *   the return url so the Lua auth script can set the test cookie
-       *   server-side (needed for Safari/iOS where document.cookie is blocked).
-       */
-      async function redirectToReturnUrl(autoClose, storageAccessGranted = false) {
-        const initialReturnUrlStr = new URLSearchParams(window.location.search).get('return_url');
-        const returnUrl = initialReturnUrlStr ? new URL(initialReturnUrlStr) : null;
+    // 3. CALLOUTS VIEW
+    function renderCalloutsView(data, role) {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium">Rig Mobilization</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Rig Callout Manager & Tool Allocations</h1>
+            </div>
+            ${role !== 'Viewer' ? `
+              <button onclick="openNewCalloutModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">
+                + New Rig Callout Request
+              </button>
+            ` : ''}
+          </div>
 
-        // Prevent potentially malicious URLs from being used
-        if (returnUrl.protocol.toLowerCase() === 'javascript:') {
-          console.error('Potentially malicious return URL blocked');
-          return;
-        }
+          <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
+                <tr>
+                  <th class="px-3 py-2">CALLOUT ID</th>
+                  <th class="px-3 py-2">CLIENT</th>
+                  <th class="px-3 py-2">RIG & WELL</th>
+                  <th class="px-3 py-2">REQUIRED DATE</th>
+                  <th class="px-3 py-2">REQUESTED BY</th>
+                  <th class="px-3 py-2">STATUS</th>
+                  <th class="px-3 py-2">REMARKS</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#e2e8f0]">
+                ${data.callouts.map(c => `
+                  <tr class="hover:bg-[#e4eef8]">
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${c.CalloutID}</td>
+                    <td class="px-3 py-2 font-bold text-[#1a3055]">${c.Client}</td>
+                    <td class="px-3 py-2 font-medium">${c.Rig} <span class="text-slate-400">|</span> ${c.Well}</td>
+                    <td class="px-3 py-2 font-mono text-slate-700">${c.RequiredDate}</td>
+                    <td class="px-3 py-2 text-slate-800">${c.CreatedBy}</td>
+                    <td class="px-3 py-2">
+                      <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        c.Status === 'Dispatched' ? 'bg-emerald-100 text-emerald-800' :
+                        c.Status === 'Assigned' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                      }">${c.Status}</span>
+                    </td>
+                    <td class="px-3 py-2 text-slate-600 text-[11px]">${c.Remarks}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
 
-        if (storageAccessGranted) {
-          returnUrl.searchParams.set('__storage_access_granted', '1');
-        }
+    function openNewCalloutModal() {
+      openModal(`
+        <div class="px-4 py-3 bg-[#5b7fa6] text-white flex justify-between items-center">
+          <h3 class="font-bold text-sm">Create New Rig Callout</h3>
+          <button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button>
+        </div>
+        <form onsubmit="handleCreateCallout(event)" class="p-4 space-y-3 text-xs">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Client Operator *</label>
+              <select id="co-client" class="w-full border rounded px-2.5 py-1.5 font-bold">
+                <option value="ADNOC Offshore">ADNOC Offshore</option>
+                <option value="ADNOC Onshore">ADNOC Onshore</option>
+                <option value="OXY Oman">OXY Oman</option>
+                <option value="Saudi Aramco">Saudi Aramco</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Rig Name *</label>
+              <input type="text" id="co-rig" required placeholder="Al Yasat (Jackup)" class="w-full border rounded px-2.5 py-1.5 font-bold" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Well Name / Number</label>
+              <input type="text" id="co-well" value="AY-403 Lateral" class="w-full border rounded px-2.5 py-1.5" />
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Required Rig Site Date</label>
+              <input type="date" id="co-date" value="${new Date().toISOString().split('T')[0]}" class="w-full border rounded px-2.5 py-1.5 font-mono" />
+            </div>
+          </div>
+          <div>
+            <label class="block font-bold mb-1">Mobilization Scope & Tool Requirements</label>
+            <textarea id="co-remarks" rows="2" class="w-full border rounded px-2.5 py-1.5" placeholder="8.00 mud motor + hydraulic drilling jar + crossover subs..."></textarea>
+          </div>
+          <div class="pt-3 border-t flex justify-end space-x-2">
+            <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold">Cancel</button>
+            <button type="submit" class="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold">Log Callout</button>
+          </div>
+        </form>
+      `);
+    }
 
-        if (autoClose) {
-          returnUrl.searchParams.set('__auto_close', '1');
-          const url = new URL(window.location.href);
-          url.searchParams.set('return_url', returnUrl.toString());
-          // Land on the cookie check page first, so the user can interact with it before proceeding
-          // to the return url where cookies can be set.
-          window.open(url.toString(), '_blank');
-          const hasAccess = await document.hasStorageAccess();
-          document.querySelector('#stepOne').classList.add('hidden');
-          if (!hasAccess) {
-            document.querySelector('#stepThree').classList.remove('hidden');
-          } else {
-            window.location.reload();
-          }
-        } else {
-          window.location.href = returnUrl.toString();
-        }
+    function handleCreateCallout(e) {
+      e.preventDefault();
+      const count = appState.data.callouts.length + 91;
+      const newCallout = {
+        CalloutID: `CAL-2026-0${count}`,
+        Client: document.getElementById('co-client').value,
+        Rig: document.getElementById('co-rig').value,
+        Well: document.getElementById('co-well').value,
+        RequiredDate: document.getElementById('co-date').value,
+        Status: "Pending",
+        CreatedBy: "Operations Coordinator",
+        Remarks: document.getElementById('co-remarks').value
+      };
+      appState.data.callouts.unshift(newCallout);
+      saveState();
+      closeModal();
+      showToast(`✓ Logged Callout ${newCallout.CalloutID}`);
+      renderCurrentView();
+    }
+
+    // 4. JOBS VIEW
+    function renderJobsView(data, role) {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium">Operations Management</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Drilling Job Tracking & ERP Legal Invoice Locks</h1>
+            </div>
+          </div>
+
+          <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
+                <tr>
+                  <th class="px-3 py-2">JOB ID</th>
+                  <th class="px-3 py-2">CLIENT</th>
+                  <th class="px-3 py-2">RIG & WELL</th>
+                  <th class="px-3 py-2">CONTRACT REF</th>
+                  <th class="px-3 py-2">INVOICE STATUS</th>
+                  <th class="px-3 py-2 text-right">BILLED REVENUE</th>
+                  <th class="px-3 py-2 text-center">LEGAL ACTION</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#e2e8f0]">
+                ${data.jobs.map(j => `
+                  <tr class="hover:bg-[#e4eef8]">
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${j.JobID}</td>
+                    <td class="px-3 py-2 font-bold text-[#1a3055]">${j.Client}</td>
+                    <td class="px-3 py-2 font-medium">${j.Rig} <span class="text-slate-400">|</span> ${j.Well}</td>
+                    <td class="px-3 py-2 font-mono text-slate-600">${j.ContractID}</td>
+                    <td class="px-3 py-2">
+                      ${j.IsInvoiceLocked ? `
+                        <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono font-bold text-[10.5px]">
+                          <span>🔒 ${j.ERPInvoiceNo}</span>
+                        </span>
+                      ` : `
+                        <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-mono font-bold text-[10.5px]">
+                          <span>🔓 UNLOCKED (Editable)</span>
+                        </span>
+                      `}
+                    </td>
+                    <td class="px-3 py-2 text-right font-mono font-bold text-emerald-800">$${(j.InvoicedAmountUSD || 0).toLocaleString()}</td>
+                    <td class="px-3 py-2 text-center">
+                      <button onclick="openToggleInvoiceLockModal('${j.JobID}')" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 border text-[11px] font-bold text-slate-700">
+                        ${j.IsInvoiceLocked ? 'SOX Unlock Request' : 'Lock Invoice'}
+                      </button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function openToggleInvoiceLockModal(jobId) {
+      const job = appState.data.jobs.find(j => j.JobID === jobId);
+      if (!job) return;
+
+      if (job.IsInvoiceLocked) {
+        // Must provide SOX justification
+        openModal(`
+          <div class="px-4 py-3 bg-rose-800 text-white flex justify-between items-center">
+            <h3 class="font-bold text-sm">SOX Legal Invoice Unlock Authorization: ${jobId}</h3>
+            <button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button>
+          </div>
+          <form onsubmit="handleUnlockInvoice(event, '${jobId}')" class="p-4 space-y-3 text-xs">
+            <div class="bg-rose-50 border border-rose-200 rounded p-2.5 text-rose-800">
+              <strong>Audit Warning:</strong> This invoice was legally locked under ${job.ERPInvoiceNo}. Any retroactive modification requires a formal business reason logged into the permanent SOX audit trail.
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Audited Justification Reason *</label>
+              <textarea id="unlock-reason" required rows="3" class="w-full border rounded px-2.5 py-1.5" placeholder="e.g. ADNOC Dispute Resolution Committee approved 12 hrs weather standby credit..."></textarea>
+            </div>
+            <div class="pt-3 border-t flex justify-end space-x-2">
+              <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold">Cancel</button>
+              <button type="submit" class="px-4 py-1.5 rounded bg-rose-700 text-white font-bold">Authorize SOX Unlock</button>
+            </div>
+          </form>
+        `);
+      } else {
+        // Lock invoice
+        job.IsInvoiceLocked = true;
+        job.ERPInvoiceNo = `INV-DXB-${Math.floor(10000 + Math.random() * 90000)}`;
+        appState.data.unlockAudits.push({
+          AuditID: `AUD-00${appState.data.unlockAudits.length + 1}`,
+          JobID: jobId,
+          InvoiceNo: job.ERPInvoiceNo,
+          Action: "LOCKED",
+          User: appState.currentRole,
+          Reason: "Invoice closed and submitted to client ERP.",
+          Timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
+        });
+        saveState();
+        showToast(`🔒 Job ${jobId} invoice locked as ${job.ERPInvoiceNo}`);
+        renderCurrentView();
       }
+    }
 
-      /**
-       * Grants the browser permission to set cookies. If successful, then it redirects to the
-       * return url.
-       */
-      async function grantStorageAccess() {
-        try {
-          await document.requestStorageAccess();
-          // Recent Safari/iOS versions block document.cookie entirely in
-          // cross-site iframes, even after requestStorageAccess(). Only
-          // server-side Set-Cookie headers work. Signal to the Lua auth script
-          // via query param so it can set the test cookie server-side.
-          redirectToReturnUrl(false, /* storageAccessGranted= */ true);
-        } catch (err) {
-          console.log('error after button click: ', err);
-        }
+    function handleUnlockInvoice(e, jobId) {
+      e.preventDefault();
+      const job = appState.data.jobs.find(j => j.JobID === jobId);
+      const reason = document.getElementById('unlock-reason').value;
+      if (job) {
+        job.IsInvoiceLocked = false;
+        appState.data.unlockAudits.push({
+          AuditID: `AUD-00${appState.data.unlockAudits.length + 1}`,
+          JobID: jobId,
+          InvoiceNo: job.ERPInvoiceNo || "OPEN",
+          Action: "UNLOCKED",
+          User: appState.currentRole,
+          Reason: reason,
+          Timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
+        });
+        saveState();
+        closeModal();
+        showToast(`🔓 Authorized invoice unlock for Job ${jobId}`);
+        renderCurrentView();
       }
+    }
 
-      /**
-       * Verifies that the browser can set cookies. If it can, then it redirects to the return url.
-       * If it can't, then it shows the error UI.
-       */
-      function verifyCanSetCookies() {
-        setAuthFlowTestCookie();
-        if (authFlowTestCookieIsSet()) {
-          // Check if we are on the auto-close flow, and if so show the interact button.
-          const returnUrl = new URLSearchParams(window.location.search).get('return_url');
-          const autoClose = new URL(returnUrl).searchParams.has('__auto_close');
-          if (autoClose) {
-            document.querySelector('#stepOne').classList.add('hidden');
-            document.querySelector('#stepTwo').classList.remove('hidden');
-          } else {
-            redirectToReturnUrl(false);
-            return;
-          }
-        }
-        // The cookie could not be set, so initiate the recovery flow.
-        document.querySelector('.logo').classList.add('hidden');
-        document.querySelector('.spinner').classList.add('hidden');
-        document.querySelector('#error-ui').classList.remove('hidden');
-      }
+    // 5. DELIVERY TICKETS (DT) VIEW
+    function renderDTView(data, role) {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium">Logistics & Dispatch</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Delivery Tickets (DT Outbound Batches)</h1>
+            </div>
+            ${role !== 'Viewer' ? `
+              <button onclick="openNewDTModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">
+                + Generate Outbound DT Dispatch
+              </button>
+            ` : ''}
+          </div>
 
-      // Start the cookie verification process.
-      verifyCanSetCookies();
-    </script>
-  </body>
+          <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
+                <tr>
+                  <th class="px-3 py-2">DT TICKET #</th>
+                  <th class="px-3 py-2">JOB ID</th>
+                  <th class="px-3 py-2">DISPATCH DATE</th>
+                  <th class="px-3 py-2">DESTINATION RIG</th>
+                  <th class="px-3 py-2">TRANSPORTER & DRIVER</th>
+                  <th class="px-3 py-2">TRUCK #</th>
+                  <th class="px-3 py-2">STATUS</th>
+                  <th class="px-3 py-2 text-center">PRINT SLIP</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#e2e8f0]">
+                ${data.dtBatches.map(dt => `
+                  <tr class="hover:bg-[#e4eef8]">
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${dt.DTNo}</td>
+                    <td class="px-3 py-2 font-mono font-bold text-[#1a3055]">${dt.JobID}</td>
+                    <td class="px-3 py-2 font-mono text-slate-600">${dt.DispatchDate}</td>
+                    <td class="px-3 py-2 font-bold text-slate-800">${dt.Rig}</td>
+                    <td class="px-3 py-2 font-medium">${dt.Transporter} (${dt.DriverName})</td>
+                    <td class="px-3 py-2 font-mono">${dt.TruckNo}</td>
+                    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">${dt.Status}</span></td>
+                    <td class="px-3 py-2 text-center">
+                      <button onclick="printDTSlip('${dt.DTNo}')" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 border text-blue-700 font-bold text-[11px]">
+                        🖨️ Print Slip
+                      </button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function printDTSlip(dtNo) {
+      const dt = appState.data.dtBatches.find(d => d.DTNo === dtNo);
+      if (!dt) return;
+
+      openModal(`
+        <div class="p-6 bg-white space-y-4">
+          <div class="flex justify-between items-center border-b pb-3">
+            <div>
+              <h2 class="text-base font-extrabold text-[#1a3055]">EMDAD SERVICES LLC</h2>
+              <div class="text-xs text-slate-500">Official Outbound Equipment Delivery Ticket</div>
+            </div>
+            <div class="text-right">
+              <div class="font-mono font-bold text-base text-amber-700">${dt.DTNo}</div>
+              <div class="text-xs text-slate-500">${dt.DispatchDate}</div>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-3 rounded border">
+            <div><strong>Rig Destination:</strong> ${dt.Rig}</div>
+            <div><strong>Job ID Ref:</strong> ${dt.JobID}</div>
+            <div><strong>Transporter:</strong> ${dt.Transporter}</div>
+            <div><strong>Driver / Truck:</strong> ${dt.DriverName} (${dt.TruckNo})</div>
+          </div>
+          <div class="border rounded overflow-hidden text-xs">
+            <table class="w-full text-left">
+              <thead class="bg-slate-100 font-bold border-b">
+                <tr><th class="p-2">Item #</th><th class="p-2">Serial #</th><th class="p-2">Tool Description</th><th class="p-2">Condition</th></tr>
+              </thead>
+              <tbody class="divide-y">
+                <tr><td class="p-2">1</td><td class="p-2 font-mono font-bold">MD-8001-A</td><td class="p-2">8.00\" Motor Assembly (Sperry/Halliburton)</td><td class="p-2 text-emerald-700 font-bold">Ready / Inspected</td></tr>
+                <tr><td class="p-2">2</td><td class="p-2 font-mono font-bold">JAR-800-09</td><td class="p-2">8.00\" Hydraulic Drilling Jar</td><td class="p-2 text-emerald-700 font-bold">Ready / Inspected</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="grid grid-cols-2 gap-8 pt-6 text-xs text-slate-600">
+            <div class="border-t pt-1">Dispatched By (Yard Master Signature): _______________</div>
+            <div class="border-t pt-1">Received at Rig Site (Company Man): _______________</div>
+          </div>
+          <div class="flex justify-end space-x-2 pt-4 no-print">
+            <button onclick="closeModal()" class="px-3 py-1 rounded bg-slate-100 font-bold text-xs">Close</button>
+            <button onclick="window.print()" class="px-4 py-1 rounded bg-[#1a3055] text-white font-bold text-xs">Print Delivery Slip</button>
+          </div>
+        </div>
+      `);
+    }
+
+    // 6. RECEIVING TICKETS (RT) VIEW
+    function renderRTView(data, role) {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium">Logistics & Receiving</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Receiving Tickets (RT Inbound Rig Backloads)</h1>
+            </div>
+          </div>
+
+          <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
+                <tr>
+                  <th class="px-3 py-2">RT TICKET #</th>
+                  <th class="px-3 py-2">JOB ID</th>
+                  <th class="px-3 py-2">RECEIVE DATE</th>
+                  <th class="px-3 py-2">ORIGIN RIG</th>
+                  <th class="px-3 py-2">RECEIVED BY</th>
+                  <th class="px-3 py-2">STATUS</th>
+                  <th class="px-3 py-2">INTAKE REMARKS</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#e2e8f0]">
+                ${data.rtBatches.map(rt => `
+                  <tr class="hover:bg-[#e4eef8]">
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${rt.RTNo}</td>
+                    <td class="px-3 py-2 font-mono font-bold text-[#1a3055]">${rt.JobID}</td>
+                    <td class="px-3 py-2 font-mono text-slate-600">${rt.ReceiveDate}</td>
+                    <td class="px-3 py-2 font-bold text-slate-800">${rt.Rig}</td>
+                    <td class="px-3 py-2 text-slate-800">${rt.ReceivedBy}</td>
+                    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">${rt.Status}</span></td>
+                    <td class="px-3 py-2 text-slate-600 text-[11px]">${rt.Notes}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    // 7. SECURITY GATE PASSES
+    function renderGatePassView(data, role) {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium">Yard Security & Perimeter Control</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Security Gate Passes (Inward / Outward Vehicle Manifests)</h1>
+            </div>
+            ${role !== 'Viewer' ? `
+              <button onclick="openNewGatePassModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">
+                + Issue Security Gate Pass
+              </button>
+            ` : ''}
+          </div>
+
+          <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
+                <tr>
+                  <th class="px-3 py-2">PASS #</th>
+                  <th class="px-3 py-2">TYPE</th>
+                  <th class="px-3 py-2">VEHICLE & DRIVER</th>
+                  <th class="px-3 py-2">DESTINATION / ORIGIN</th>
+                  <th class="px-3 py-2">PURPOSE</th>
+                  <th class="px-3 py-2">ISSUED BY & TIME</th>
+                  <th class="px-3 py-2 text-center">PRINT</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#e2e8f0]">
+                ${data.gatePasses.map(gp => `
+                  <tr class="hover:bg-[#e4eef8]">
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${gp.PassID}</td>
+                    <td class="px-3 py-2">
+                      <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        gp.PassType === 'Outward' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                      }">${gp.PassType}</span>
+                    </td>
+                    <td class="px-3 py-2 font-medium">${gp.VehicleNo} <span class="text-slate-400">|</span> ${gp.DriverName}</td>
+                    <td class="px-3 py-2 text-slate-800">${gp.Destination}</td>
+                    <td class="px-3 py-2 text-slate-600 text-[11px]">${gp.Purpose}</td>
+                    <td class="px-3 py-2 font-mono text-[11px]">${gp.IssuedBy} (${gp.IssuedAt})</td>
+                    <td class="px-3 py-2 text-center">
+                      <button onclick="printGatePassSlip('${gp.PassID}')" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 border text-blue-700 font-bold text-[11px]">
+                        🖨️ Print Pass
+                      </button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function printGatePassSlip(passId) {
+      const gp = appState.data.gatePasses.find(g => g.PassID === passId);
+      if (!gp) return;
+
+      openModal(`
+        <div class="p-6 bg-white space-y-4">
+          <div class="flex justify-between items-center border-b pb-3">
+            <div>
+              <h2 class="text-base font-extrabold text-[#1a3055]">EMDAD SECURITY COMMAND</h2>
+              <div class="text-xs text-slate-500">Official Facility Gate Authorization Pass</div>
+            </div>
+            <div class="text-right">
+              <div class="font-mono font-bold text-base text-amber-700">${gp.PassID}</div>
+              <div class="text-xs text-slate-500">${gp.IssuedAt}</div>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-3 rounded border">
+            <div><strong>Pass Movement:</strong> ${gp.PassType} Pass</div>
+            <div><strong>Vehicle Plate No:</strong> ${gp.VehicleNo}</div>
+            <div><strong>Driver Name:</strong> ${gp.DriverName}</div>
+            <div><strong>Destination / Location:</strong> ${gp.Destination}</div>
+          </div>
+          <div class="text-xs p-3 bg-white border rounded">
+            <strong>Manifest Purpose:</strong> ${gp.Purpose}
+          </div>
+          <div class="grid grid-cols-2 gap-8 pt-6 text-xs text-slate-600">
+            <div class="border-t pt-1">Security Officer Signature: _______________</div>
+            <div class="border-t pt-1">Driver Acceptance Signature: _______________</div>
+          </div>
+          <div class="flex justify-end space-x-2 pt-4 no-print">
+            <button onclick="closeModal()" class="px-3 py-1 rounded bg-slate-100 font-bold text-xs">Close</button>
+            <button onclick="window.print()" class="px-4 py-1 rounded bg-[#1a3055] text-white font-bold text-xs">Print Pass</button>
+          </div>
+        </div>
+      `);
+    }
+
+    // 8. QC INSPECTION BAY
+    function renderInspectionView(data, role) {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium">Quality Assurance & Certification</div>
+              <h1 class="text-base font-bold text-[#1a3055]">QC Inspection Bay & API NDT Work Orders</h1>
+            </div>
+          </div>
+
+          <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
+                <tr>
+                  <th class="px-3 py-2">INSPECTION ID</th>
+                  <th class="px-3 py-2">TOOL SERIAL #</th>
+                  <th class="px-3 py-2">METHOD & STANDARD</th>
+                  <th class="px-3 py-2">INSPECTION DATE</th>
+                  <th class="px-3 py-2">INSPECTOR</th>
+                  <th class="px-3 py-2">RESULT</th>
+                  <th class="px-3 py-2">REMARKS</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#e2e8f0]">
+                ${data.inspections.map(i => `
+                  <tr class="hover:bg-[#e4eef8]">
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${i.InspectionID}</td>
+                    <td class="px-3 py-2 font-mono font-bold text-[#1a3055]">${i.SerialNo}</td>
+                    <td class="px-3 py-2 font-medium">${i.InspectionType}</td>
+                    <td class="px-3 py-2 font-mono text-slate-600">${i.InspectionDate}</td>
+                    <td class="px-3 py-2 text-slate-800">${i.Inspector}</td>
+                    <td class="px-3 py-2">
+                      <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        i.Result === 'Pass' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                      }">${i.Result}</span>
+                    </td>
+                    <td class="px-3 py-2 text-slate-600 text-[11px]">${i.Comments}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    // 9. WORKSHOP & REDRESS
+    function renderMaintenanceView(data, role) {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium">Workshop Operations</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Tool Maintenance, Redress & Overhaul Orders</h1>
+            </div>
+          </div>
+
+          <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
+                <tr>
+                  <th class="px-3 py-2">WO #</th>
+                  <th class="px-3 py-2">SERIAL #</th>
+                  <th class="px-3 py-2">REDRESS SCOPE</th>
+                  <th class="px-3 py-2">WORKSHOP FACILITY</th>
+                  <th class="px-3 py-2">STATUS</th>
+                  <th class="px-3 py-2">TECHNICIAN</th>
+                  <th class="px-3 py-2 text-right">COST (USD)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#e2e8f0]">
+                ${data.maintenance.map(m => `
+                  <tr class="hover:bg-[#e4eef8]">
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${m.MaintenanceID}</td>
+                    <td class="px-3 py-2 font-mono font-bold text-[#1a3055]">${m.SerialNo}</td>
+                    <td class="px-3 py-2 font-medium">${m.MaintenanceType}</td>
+                    <td class="px-3 py-2 text-slate-800">${m.Workshop}</td>
+                    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">${m.Status}</span></td>
+                    <td class="px-3 py-2 text-slate-700">${m.Technician}</td>
+                    <td class="px-3 py-2 text-right font-mono font-bold text-rose-800">$${m.CostUSD.toLocaleString()}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    // 10. MASTER CONTRACTS & PBG
+    function renderContractsView(data, role) {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium">Commercial & Contractual Compliance</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Master Client Contracts & Performance Bank Guarantees (PBG)</h1>
+            </div>
+          </div>
+
+          <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
+                <tr>
+                  <th class="px-3 py-2">CONTRACT REF</th>
+                  <th class="px-3 py-2">CLIENT</th>
+                  <th class="px-3 py-2">AGREEMENT TITLE</th>
+                  <th class="px-3 py-2">VALIDITY PERIOD</th>
+                  <th class="px-3 py-2">PBG AMOUNT (USD)</th>
+                  <th class="px-3 py-2">PBG EXPIRY DATE</th>
+                  <th class="px-3 py-2">ISSUING BANK</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#e2e8f0]">
+                ${data.contracts.map(cnt => `
+                  <tr class="hover:bg-[#e4eef8]">
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${cnt.ContractID}</td>
+                    <td class="px-3 py-2 font-bold text-[#1a3055]">${cnt.Client}</td>
+                    <td class="px-3 py-2 font-medium">${cnt.Title}</td>
+                    <td class="px-3 py-2 font-mono text-slate-600">${cnt.StartDate} to ${cnt.EndDate}</td>
+                    <td class="px-3 py-2 font-mono font-bold text-emerald-800">$${cnt.PBGAmountUSD.toLocaleString()}</td>
+                    <td class="px-3 py-2 font-mono font-bold text-amber-800">${cnt.PBGExpiryDate}</td>
+                    <td class="px-3 py-2 text-slate-800">${cnt.PBGIssuingBank}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    // 11. UTILIZATION & BILLING MATRIX
+    function renderUtilizationView(data, role) {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium">Commercial Revenue Engine</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Tool Utilization Matrix & Tiered Operating/Standby Billing</h1>
+            </div>
+          </div>
+
+          <div class="bg-white border border-[#b8c9db] rounded p-4 shadow-sm space-y-3">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div class="p-3 bg-slate-50 rounded border">
+                <div class="text-xs text-slate-500 font-medium">Standard Operating Day Rate</div>
+                <div class="text-lg font-bold text-emerald-800">100% Contract Rate</div>
+                <div class="text-[10px] text-slate-500">Applied when circulating downhole</div>
+              </div>
+              <div class="p-3 bg-slate-50 rounded border">
+                <div class="text-xs text-slate-500 font-medium">Standby at Rig Floor Rate</div>
+                <div class="text-lg font-bold text-blue-800">50% Contract Rate</div>
+                <div class="text-[10px] text-slate-500">Applied when held on standby at rig</div>
+              </div>
+              <div class="p-3 bg-slate-50 rounded border">
+                <div class="text-xs text-slate-500 font-medium">Lost-in-Hole (LIH) Replacement</div>
+                <div class="text-lg font-bold text-rose-800">100% Asset Replacement Cost</div>
+                <div class="text-[10px] text-slate-500">Contractual indemnification</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // 12. JOB P&L & COSTING HUB
+    function renderJobHubView(data, role) {
+      const totalRev = data.jobs.reduce((s, j) => s + (j.InvoicedAmountUSD || 0), 0);
+      const totalCosts = data.jobCosts.reduce((s, c) => s + (c.AmountUSD || 0), 0);
+      const grossMargin = totalRev - totalCosts;
+      const marginPct = totalRev > 0 ? (grossMargin / totalRev) * 100 : 0;
+
+      return `
+        <div class="space-y-4">
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium">Financial Controller & Audits</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Job Costing, P&L Margins & SOX Legal Unlock Audits</h1>
+            </div>
+            ${role !== 'Viewer' ? `
+              <button onclick="openAddJobCostModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">
+                + Log Direct Job Cost
+              </button>
+            ` : ''}
+          </div>
+
+          <!-- Financial KPIs -->
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm">
+              <div class="text-[11px] text-slate-500">Billed Revenue</div>
+              <div class="mt-1 text-2xl font-extrabold font-mono text-emerald-700">$${totalRev.toLocaleString()}</div>
+            </div>
+            <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm">
+              <div class="text-[11px] text-slate-500">Direct Operating Costs</div>
+              <div class="mt-1 text-2xl font-extrabold font-mono text-rose-700">$${totalCosts.toLocaleString()}</div>
+            </div>
+            <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm">
+              <div class="text-[11px] text-slate-500">Gross Margin ($)</div>
+              <div class="mt-1 text-2xl font-extrabold font-mono text-[#1a3055]">$${grossMargin.toLocaleString()}</div>
+            </div>
+            <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm">
+              <div class="text-[11px] text-slate-500">Gross Margin (%)</div>
+              <div class="mt-1 text-2xl font-extrabold font-mono text-emerald-700">${marginPct.toFixed(1)}%</div>
+            </div>
+          </div>
+
+          <!-- Job Costs Table -->
+          <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+            <div class="px-4 py-2.5 bg-[#dbe6f1] border-b border-[#b8c9db] font-bold text-xs text-[#1a3055] uppercase">
+              Direct Cost Vouchers & Expenditures
+            </div>
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
+                <tr>
+                  <th class="px-3 py-2">JOB ID</th>
+                  <th class="px-3 py-2">CATEGORY</th>
+                  <th class="px-3 py-2">DESCRIPTION</th>
+                  <th class="px-3 py-2">SUPPLIER & PO #</th>
+                  <th class="px-3 py-2">DATE</th>
+                  <th class="px-3 py-2 text-right">AMOUNT (USD)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#e2e8f0]">
+                ${data.jobCosts.map(c => `
+                  <tr class="hover:bg-[#e4eef8]">
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${c.JobID}</td>
+                    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded bg-slate-100 border text-slate-800 text-[10px] font-bold">${c.CostCategory}</span></td>
+                    <td class="px-3 py-2 font-bold text-[#1a3055]">${c.Description}</td>
+                    <td class="px-3 py-2 text-slate-800">${c.Supplier} <span class="font-mono text-slate-500">(${c.PONumber})</span></td>
+                    <td class="px-3 py-2 font-mono text-slate-600">${c.CostDate}</td>
+                    <td class="px-3 py-2 font-mono font-bold text-rose-800 text-right">$${c.AmountUSD.toLocaleString()}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function openAddJobCostModal() {
+      openModal(`
+        <div class="px-4 py-3 bg-[#5b7fa6] text-white flex justify-between items-center">
+          <h3 class="font-bold text-sm">Record Direct Job Cost Voucher</h3>
+          <button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button>
+        </div>
+        <form onsubmit="handleSaveJobCost(event)" class="p-4 space-y-3 text-xs">
+          <div>
+            <label class="block font-bold mb-1">Target Drilling Job *</label>
+            <select id="jc-job" class="w-full border rounded px-2.5 py-1.5 font-bold">
+              ${appState.data.jobs.map(j => `<option value="${j.JobID}">${j.JobID} — ${j.Rig} (${j.Client})</option>`).join('')}
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Cost Category</label>
+              <select id="jc-cat" class="w-full border rounded px-2.5 py-1.5 font-bold">
+                <option value="SubCon">Sub-Contractor Tools</option>
+                <option value="Transport">Transport & Logistics</option>
+                <option value="Workshop">Workshop Redress & Parts</option>
+                <option value="Personnel">Field Personnel Day Rate</option>
+                <option value="Other">Other Direct Charges</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Amount (USD) *</label>
+              <input type="number" id="jc-amt" required value="3500" class="w-full border rounded px-2.5 py-1.5 font-mono font-bold" />
+            </div>
+          </div>
+          <div>
+            <label class="block font-bold mb-1">Cost Description *</label>
+            <input type="text" id="jc-desc" required value="Mobilization heavy crane handling at base" class="w-full border rounded px-2.5 py-1.5" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Supplier / Vendor</label>
+              <input type="text" id="jc-sup" value="Al Masaood Transport" class="w-full border rounded px-2.5 py-1.5" />
+            </div>
+            <div>
+              <label class="block font-bold mb-1">PO / Voucher #</label>
+              <input type="text" id="jc-po" value="PO-EXP-9921" class="w-full border rounded px-2.5 py-1.5 font-mono" />
+            </div>
+          </div>
+          <div class="pt-3 border-t flex justify-end space-x-2">
+            <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold">Cancel</button>
+            <button type="submit" class="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold">Save Cost</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function handleSaveJobCost(e) {
+      e.preventDefault();
+      const newCost = {
+        CostID: `CST-0${appState.data.jobCosts.length + 1}`,
+        JobID: document.getElementById('jc-job').value,
+        CostCategory: document.getElementById('jc-cat').value,
+        Description: document.getElementById('jc-desc').value,
+        Supplier: document.getElementById('jc-sup').value,
+        PONumber: document.getElementById('jc-po').value,
+        AmountUSD: parseFloat(document.getElementById('jc-amt').value) || 0,
+        CostDate: new Date().toISOString().split('T')[0]
+      };
+      appState.data.jobCosts.unshift(newCost);
+      saveState();
+      closeModal();
+      showToast(`✓ Logged cost of $${newCost.AmountUSD.toLocaleString()}`);
+      renderCurrentView();
+    }
+
+    // Initialize application on load
+    window.addEventListener('DOMContentLoaded', () => {
+      renderCurrentView();
+    });
+  </script>
+</body>
 </html>
