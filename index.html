@@ -509,29 +509,40 @@
       let rawJobs = null;
       let rawCallouts = null;
 
+      // Unpack nested response structures like { success: true, data: { ... } } or { data: [ ... ] }
+      let target = result;
+      if (target && typeof target === 'object' && !Array.isArray(target) && target.data && typeof target.data === 'object' && !Array.isArray(target.data)) {
+        target = target.data;
+      } else if (target && typeof target === 'object' && !Array.isArray(target) && target.result && typeof target.result === 'object' && !Array.isArray(target.result)) {
+        target = target.result;
+      }
+
       // 1. Direct Array -> It is an array of tools
       if (Array.isArray(result)) {
         rawTools = result;
+      } else if (Array.isArray(result.data)) {
+        rawTools = result.data;
       }
       // 2. Object with array properties
-      else if (typeof result === 'object') {
-        if (Array.isArray(result.inventory)) rawTools = result.inventory;
-        else if (Array.isArray(result.tools)) rawTools = result.tools;
-        else if (Array.isArray(result.Tools)) rawTools = result.Tools;
-        else if (Array.isArray(result.recordset)) rawTools = result.recordset;
-        else if (Array.isArray(result.value)) rawTools = result.value;
-        else if (Array.isArray(result.data)) rawTools = result.data;
-        else if (Array.isArray(result.rows)) rawTools = result.rows;
-        else if (Array.isArray(result.items)) rawTools = result.items;
-        else if (Array.isArray(result.recordsets) && result.recordsets[0]) rawTools = result.recordsets[0];
+      else if (typeof target === 'object' && target !== null) {
+        if (Array.isArray(target.inventory)) rawTools = target.inventory;
+        else if (Array.isArray(target.tools)) rawTools = target.tools;
+        else if (Array.isArray(target.Tools)) rawTools = target.Tools;
+        else if (Array.isArray(target.recordset)) rawTools = target.recordset;
+        else if (Array.isArray(target.recordsets) && target.recordsets[0]) rawTools = target.recordsets[0];
+        else if (Array.isArray(target.value)) rawTools = target.value;
+        else if (Array.isArray(target.rows)) rawTools = target.rows;
+        else if (Array.isArray(target.items)) rawTools = target.items;
+        else if (Array.isArray(target.toolList)) rawTools = target.toolList;
+        else if (Array.isArray(target.fleet)) rawTools = target.fleet;
 
-        if (Array.isArray(result.jobs)) rawJobs = result.jobs;
-        else if (Array.isArray(result.Jobs)) rawJobs = result.Jobs;
-        else if (Array.isArray(result.drillingJobs)) rawJobs = result.drillingJobs;
+        if (Array.isArray(target.jobs)) rawJobs = target.jobs;
+        else if (Array.isArray(target.Jobs)) rawJobs = target.Jobs;
+        else if (Array.isArray(target.drillingJobs)) rawJobs = target.drillingJobs;
         
-        if (Array.isArray(result.callouts)) rawCallouts = result.callouts;
-        else if (Array.isArray(result.Callouts)) rawCallouts = result.Callouts;
-        else if (Array.isArray(result.rigCallouts)) rawCallouts = result.rigCallouts;
+        if (Array.isArray(target.callouts)) rawCallouts = target.callouts;
+        else if (Array.isArray(target.Callouts)) rawCallouts = target.Callouts;
+        else if (Array.isArray(target.rigCallouts)) rawCallouts = target.rigCallouts;
       }
 
       if (!rawTools && !rawJobs && !rawCallouts) {
