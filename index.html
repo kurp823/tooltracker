@@ -796,6 +796,11 @@
           }
         });
 
+        let responseBodyText = '';
+        try {
+          responseBodyText = await res.text();
+        } catch (e) {}
+
         if (res.ok) {
           appState.azureConfig.enabled = true;
           const enableCheckbox = document.getElementById('az-enable');
@@ -805,7 +810,7 @@
 
           let dataInfo = "Endpoint responded with HTTP 200 OK.";
           try {
-            const json = await res.json();
+            const json = JSON.parse(responseBodyText);
             const extracted = extractDataFromAzureResponse(json);
             if (extracted && extracted.inventory && extracted.inventory.length > 0) {
               dataInfo = `Found ${extracted.inventory.length.toLocaleString()} tool assets in response payload!`;
@@ -828,6 +833,14 @@
             diagDetails.innerText = `[1] Endpoint: ${endpoint}\n[2] HTTP Status: ${res.status} ${res.statusText}\n[3] Azure API is ONLINE & reachable!\n[4] Data Payload: ${dataInfo}\n[5] Live Cloud Sync is ACTIVE.`;
           }
           showToast("Connected to Azure SQL successfully!", "🟢");
+        } else if (res.status === 400) {
+          if (diagBox) {
+            diagTitle.innerText = "⚠️ HTTP 400 Bad Request from Azure";
+            diagStatus.className = "px-1.5 py-0.5 rounded text-[10px] bg-amber-600 text-white font-bold";
+            diagStatus.innerText = "HTTP 400";
+            diagDetails.innerText = `[1] Request URL: ${endpoint}\n[2] Status: HTTP 400 Bad Request\n[3] Azure Function Error Output:\n${responseBodyText || '(No error details returned)'}\n\n💡 DIAGNOSIS: Your Azure Function is alive and reachable, but rejected the request parameters or body. Check if your function requires specific query parameters (like ?name=... or ?action=...) or a POST body.`;
+          }
+          showToast(`Azure Function returned HTTP 400`, "⚠️");
         } else if (res.status === 404) {
           // If returned 404, check if user forgot /api/sync or if probing common routes helps
           let suggestion = '';
@@ -922,20 +935,54 @@
       const diagStatus = document.getElementById('az-diag-status');
       const diagDetails = document.getElementById('az-diag-details');
 
-      const queryUrl = endpoint.includes('?') ? `${endpoint}&action=GET_ALL` : `${endpoint}?action=GET_ALL`;
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      if (appState.azureConfig.apiKey) {
+        headers['Authorization'] = `Bearer ${appState.azureConfig.apiKey}`;
+      }
+
       showToast("Pulling fresh dataset from Azure SQL...", "⏳");
       
       try {
-        const res = await fetch(queryUrl, {
+        // Step 1: Try clean GET directly on the endpoint
+        let res = await fetch(endpoint, {
           method: 'GET',
-          headers: {
-            'Authorization': appState.azureConfig.apiKey ? `Bearer ${appState.azureConfig.apiKey}` : '',
-            'Content-Type': 'application/json'
-          }
+          headers
         });
 
+        // If direct GET returned 400, retry with query param or POST
+        if (!res.ok && (res.status === 400 || res.status === 405)) {
+          // Try with query parameter ?action=GET_ALL
+          const queryUrl = endpoint.includes('?') ? `${endpoint}&action=GET_ALL` : `${endpoint}?action=GET_ALL`;
+          const queryRes = await fetch(queryUrl, { method: 'GET', headers });
+          if (queryRes.ok) {
+            res = queryRes;
+          } else {
+            // Try POST with action payload
+            const postRes = await fetch(endpoint, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ action: 'GET_ALL', method: 'GET' })
+            });
+            if (postRes.ok) {
+              res = postRes;
+            }
+          }
+        }
+
+        let responseBodyText = '';
+        try {
+          responseBodyText = await res.text();
+        } catch (e) {}
+
         if (res.ok) {
-          const rawResult = await res.json();
+          let rawResult = null;
+          try {
+            rawResult = JSON.parse(responseBodyText);
+          } catch (e) {
+            rawResult = responseBodyText;
+          }
           const extracted = extractDataFromAzureResponse(rawResult);
           
           if (extracted && extracted.inventory && extracted.inventory.length > 0) {
@@ -975,7 +1022,7 @@
             diagTitle.innerText = `❌ Pull Failed: HTTP ${res.status}`;
             diagStatus.className = "px-1.5 py-0.5 rounded text-[10px] bg-rose-600 text-white font-bold";
             diagStatus.innerText = `HTTP ${res.status}`;
-            diagDetails.innerText = `[1] Request URL: ${queryUrl}\n[2] Response: HTTP ${res.status} ${res.statusText}`;
+            diagDetails.innerText = `[1] Request URL: ${endpoint}\n[2] Response: HTTP ${res.status} ${res.statusText}\n[3] Message from Azure: ${responseBodyText || '(Empty Response)'}`;
           }
           showToast(`Pull failed: HTTP ${res.status}`, "⚠️");
         }
