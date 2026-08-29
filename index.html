@@ -331,12 +331,12 @@
 
     // Azure SQL Config State
     const DEFAULT_AZURE_CONFIG = {
-      enabled: false,
-      serverName: "emdad-sqlserver.database.windows.net",
-      databaseName: "EMDAD_Operations_DB",
-      apiEndpoint: "", // e.g. https://your-azure-func.azurewebsites.net/api or DAB
+      enabled: true,
+      serverName: "tooltracking-sqlserver.database.windows.net",
+      databaseName: "ToolTrackingDB",
+      apiEndpoint: "https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker",
       apiKey: "",
-      autoSync: false,
+      autoSync: true,
       lastSyncTime: null
     };
 
@@ -447,6 +447,149 @@
     // AZURE SQL CLOUD SYNC & T-SQL GENERATOR
     // =========================================================================
 
+    // =========================================================================
+    // UNIVERSAL AZURE SQL DATA NORMALIZER & PARSER (Handles all SQL/API Schemas)
+    // =========================================================================
+
+    function normalizeToolItem(raw, idx) {
+      if (!raw || typeof raw !== 'object') return null;
+      return {
+        SerialNo: String(raw.SerialNo || raw.serialNo || raw.SerialNumber || raw.serial_number || raw.Serial_Number || raw.SERIAL_NO || raw.SERIAL_NUMBER || raw.ToolID || raw.tool_id || raw.ToolId || raw.ID || raw.id || `TOOL-${idx + 1}`),
+        AssetName: String(raw.AssetName || raw.assetName || raw.ToolName || raw.toolName || raw.tool_name || raw.Tool_Name || raw.Name || raw.name || raw.Description || raw.description || "Downhole Tool Asset"),
+        Category: String(raw.Category || raw.category || raw.ToolType || raw.tool_type || raw.Tool_Type || raw.Type || raw.type || "Other"),
+        Size: String(raw.Size || raw.size || raw.ToolSize || raw.tool_size || "-"),
+        ThreadConnection: String(raw.ThreadConnection || raw.threadConnection || raw.thread_connection || raw.Connection || raw.connection || "-"),
+        TotalHours: Number(raw.TotalHours ?? raw.totalHours ?? raw.total_hours ?? raw.Hours ?? raw.hours ?? raw.RunHours ?? raw.run_hours ?? 0),
+        MaxHoursLimit: Number(raw.MaxHoursLimit ?? raw.maxHoursLimit ?? raw.max_hours_limit ?? raw.HourLimit ?? raw.limit ?? 250),
+        HoursSinceInspection: Number(raw.HoursSinceInspection ?? raw.hoursSinceInspection ?? raw.hours_since_inspection ?? raw.HoursSinceLastInspection ?? 0),
+        CurrentLocation: String(raw.CurrentLocation || raw.currentLocation || raw.current_location || raw.Location || raw.location || raw.Yard || raw.yard || "Mina Zayed Yard"),
+        CurrentJob: String(raw.CurrentJob || raw.currentJob || raw.current_job || raw.JobID || raw.jobId || raw.Job || raw.job || ""),
+        Status: String(raw.Status || raw.status || raw.ToolStatus || raw.tool_status || "Available"),
+        CriticalAlert: String(raw.CriticalAlert || raw.criticalAlert || raw.critical_alert || raw.Alert || raw.alert || "Normal"),
+        DailyRentalRate: Number(raw.DailyRentalRate ?? raw.dailyRentalRate ?? raw.daily_rental_rate ?? raw.DayRateUSD ?? raw.dayRateUSD ?? raw.DayRate ?? raw.dayRate ?? raw.Rate ?? raw.rate ?? 0)
+      };
+    }
+
+    function normalizeJobItem(raw, idx) {
+      if (!raw || typeof raw !== 'object') return null;
+      return {
+        JobID: String(raw.JobID || raw.jobId || raw.job_id || raw.ID || raw.id || `JOB-${idx + 1}`),
+        Client: String(raw.Client || raw.client || raw.Operator || raw.operator || "Operator"),
+        Rig: String(raw.Rig || raw.rig || raw.RigName || raw.rig_name || "-"),
+        Well: String(raw.Well || raw.well || raw.WellName || raw.well_name || "-"),
+        HoleSection: String(raw.HoleSection || raw.holeSection || raw.hole_section || "-"),
+        StartDate: String(raw.StartDate || raw.startDate || raw.start_date || new Date().toISOString().split('T')[0]),
+        EndDate: String(raw.EndDate || raw.endDate || raw.end_date || ""),
+        Status: String(raw.Status || raw.status || "Active"),
+        ContractID: String(raw.ContractID || raw.contractId || raw.contract_id || ""),
+        InvoicedAmountUSD: Number(raw.InvoicedAmountUSD ?? raw.invoicedAmountUSD ?? raw.invoiced_amount_usd ?? raw.Revenue ?? raw.revenue ?? raw.Amount ?? raw.amount ?? 0),
+        IsInvoiceLocked: Boolean(raw.IsInvoiceLocked ?? raw.isInvoiceLocked ?? raw.is_invoice_locked ?? false),
+        ERPInvoiceNo: String(raw.ERPInvoiceNo || raw.erpInvoiceNo || raw.erp_invoice_no || "")
+      };
+    }
+
+    function normalizeCalloutItem(raw, idx) {
+      if (!raw || typeof raw !== 'object') return null;
+      return {
+        CalloutID: String(raw.CalloutID || raw.calloutId || raw.callout_id || raw.ID || raw.id || `CAL-${idx + 1}`),
+        Client: String(raw.Client || raw.client || raw.Operator || raw.operator || "Operator"),
+        Rig: String(raw.Rig || raw.rig || raw.RigName || raw.rig_name || "-"),
+        Well: String(raw.Well || raw.well || raw.WellName || raw.well_name || "-"),
+        RequiredDate: String(raw.RequiredDate || raw.requiredDate || raw.required_date || new Date().toISOString().split('T')[0]),
+        Status: String(raw.Status || raw.status || "Pending"),
+        CreatedBy: String(raw.CreatedBy || raw.createdBy || raw.created_by || "System"),
+        Remarks: String(raw.Remarks || raw.remarks || raw.Notes || raw.notes || "")
+      };
+    }
+
+    function extractDataFromAzureResponse(result) {
+      if (!result) return null;
+      
+      let rawTools = null;
+      let rawJobs = null;
+      let rawCallouts = null;
+
+      // 1. Direct Array -> It is an array of tools
+      if (Array.isArray(result)) {
+        rawTools = result;
+      }
+      // 2. Object with array properties
+      else if (typeof result === 'object') {
+        if (Array.isArray(result.inventory)) rawTools = result.inventory;
+        else if (Array.isArray(result.tools)) rawTools = result.tools;
+        else if (Array.isArray(result.Tools)) rawTools = result.Tools;
+        else if (Array.isArray(result.recordset)) rawTools = result.recordset;
+        else if (Array.isArray(result.value)) rawTools = result.value;
+        else if (Array.isArray(result.data)) rawTools = result.data;
+        else if (Array.isArray(result.rows)) rawTools = result.rows;
+        else if (Array.isArray(result.items)) rawTools = result.items;
+        else if (Array.isArray(result.recordsets) && result.recordsets[0]) rawTools = result.recordsets[0];
+
+        if (Array.isArray(result.jobs)) rawJobs = result.jobs;
+        else if (Array.isArray(result.Jobs)) rawJobs = result.Jobs;
+        else if (Array.isArray(result.drillingJobs)) rawJobs = result.drillingJobs;
+        
+        if (Array.isArray(result.callouts)) rawCallouts = result.callouts;
+        else if (Array.isArray(result.Callouts)) rawCallouts = result.Callouts;
+        else if (Array.isArray(result.rigCallouts)) rawCallouts = result.rigCallouts;
+      }
+
+      if (!rawTools && !rawJobs && !rawCallouts) {
+        return null;
+      }
+
+      const normalizedInventory = rawTools ? rawTools.map(normalizeToolItem).filter(Boolean) : (appState.data.inventory || []);
+      const normalizedJobs = rawJobs ? rawJobs.map(normalizeJobItem).filter(Boolean) : (appState.data.jobs || []);
+      const normalizedCallouts = rawCallouts ? rawCallouts.map(normalizeCalloutItem).filter(Boolean) : (appState.data.callouts || []);
+
+      return {
+        inventory: normalizedInventory,
+        jobs: normalizedJobs,
+        callouts: normalizedCallouts,
+        dtBatches: appState.data.dtBatches || [],
+        rtBatches: appState.data.rtBatches || [],
+        gatePasses: appState.data.gatePasses || [],
+        inspections: appState.data.inspections || [],
+        maintenanceLogs: appState.data.maintenanceLogs || [],
+        contracts: appState.data.contracts || [],
+        jobCosts: appState.data.jobCosts || [],
+        auditLogs: appState.data.auditLogs || []
+      };
+    }
+
+    // Inventory View State for Fast Pagination & Filtering
+    let invViewState = {
+      search: "",
+      category: "ALL",
+      status: "ALL",
+      page: 1,
+      pageSize: 50
+    };
+
+    function normalizeUrl(url) {
+      if (!url) return '';
+      let clean = url.trim();
+      if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+        clean = 'https://' + clean;
+      }
+      return clean;
+    }
+
+    function appendRouteToEndpoint(route) {
+      const input = document.getElementById('az-endpoint');
+      if (!input) return;
+      let val = normalizeUrl(input.value);
+      try {
+        const u = new URL(val);
+        val = u.origin + (route.startsWith('/') ? route : '/' + route);
+      } catch (e) {
+        val = val.replace(/\/+$/, '') + (route.startsWith('/') ? route : '/' + route);
+      }
+      input.value = val;
+      handleSaveAzureConfig();
+      showToast(`Updated endpoint to: ${val}`, "✓");
+    }
+
     function openAzureSqlModal() {
       const { azureConfig, data } = appState;
       openModal(`
@@ -455,13 +598,13 @@
             <div class="p-1 rounded bg-amber-400 text-[#1a3055] font-black text-xs">SQL</div>
             <div>
               <h3 class="font-bold text-sm">Azure SQL Database Hub & Cloud Sync</h3>
-              <p class="text-[10px] text-slate-300">Connect GitHub Pages directly to Microsoft Azure SQL</p>
+              <p class="text-[10px] text-slate-300">Connect GitHub Pages / Azure Static Apps directly to Microsoft Azure SQL</p>
             </div>
           </div>
           <button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button>
         </div>
 
-        <div class="p-5 space-y-4 text-xs">
+        <div class="p-5 space-y-4 text-xs max-h-[80vh] overflow-y-auto">
           
           <!-- Sync Settings Form -->
           <div class="bg-slate-50 border border-[#b8c9db] rounded p-3.5 space-y-3">
@@ -476,24 +619,43 @@
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="block font-bold text-slate-600 mb-1">Azure SQL Server Name</label>
-                <input type="text" id="az-server" value="${azureConfig.serverName}" placeholder="my-server.database.windows.net" class="w-full border rounded px-2.5 py-1.5 font-mono text-xs" />
+                <input type="text" id="az-server" value="${azureConfig.serverName || 'tooltracking-sqlserver.database.windows.net'}" placeholder="tooltracking-sqlserver.database.windows.net" class="w-full border rounded px-2.5 py-1.5 font-mono text-xs" />
               </div>
               <div>
                 <label class="block font-bold text-slate-600 mb-1">Database Name</label>
-                <input type="text" id="az-db" value="${azureConfig.databaseName}" placeholder="EMDAD_Operations_DB" class="w-full border rounded px-2.5 py-1.5 font-mono text-xs" />
+                <input type="text" id="az-db" value="${azureConfig.databaseName || 'ToolTrackingDB'}" placeholder="ToolTrackingDB" class="w-full border rounded px-2.5 py-1.5 font-mono text-xs" />
               </div>
             </div>
 
             <div>
-              <label class="block font-bold text-slate-600 mb-1">Azure REST API / Azure Function / DAB Endpoint URL</label>
-              <input type="url" id="az-endpoint" value="${azureConfig.apiEndpoint}" placeholder="https://my-azure-func.azurewebsites.net/api/sync" class="w-full border rounded px-2.5 py-1.5 font-mono text-xs" />
-              <p class="text-[10px] text-slate-500 mt-1">Browser webapps communicate with Azure SQL via an Azure Function, Data API Builder (DAB), or REST Gateway.</p>
+              <div class="flex justify-between items-center mb-1">
+                <label class="block font-bold text-slate-600">Azure REST API / Azure Function / DAB Endpoint URL</label>
+                <span class="text-[10px] text-blue-700 font-medium">Quick Route Helpers:</span>
+              </div>
+              <input type="text" id="az-endpoint" value="${azureConfig.apiEndpoint || ''}" placeholder="https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/sync" class="w-full border rounded px-2.5 py-1.5 font-mono text-xs" />
+              
+              <!-- Quick Suffix Buttons -->
+              <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
+                <span class="text-[10px] text-slate-500">Your Function in Azure:</span>
+                <button type="button" onclick="appendRouteToEndpoint('/api/ToolTracker')" class="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded font-mono text-[10px] font-bold border border-amber-300">
+                  + /api/ToolTracker (Match your Azure Function)
+                </button>
+                <button type="button" onclick="appendRouteToEndpoint('/api/sync')" class="px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded font-mono text-[10px] border border-blue-300">
+                  + /api/sync
+                </button>
+                <button type="button" onclick="appendRouteToEndpoint('/api/tools')" class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded font-mono text-[10px] border border-slate-300">
+                  + /api/tools
+                </button>
+              </div>
+              <p class="text-[10px] text-slate-500 mt-1">
+                Must be: <code>https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker</code>
+              </p>
             </div>
 
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block font-bold text-slate-600 mb-1">API Key / Azure AD Bearer Secret</label>
-                <input type="password" id="az-key" value="${azureConfig.apiKey}" placeholder="••••••••••••••••" class="w-full border rounded px-2.5 py-1.5 font-mono text-xs" />
+                <label class="block font-bold text-slate-600 mb-1">API Key / Azure AD Bearer Secret (Optional)</label>
+                <input type="password" id="az-key" value="${azureConfig.apiKey || ''}" placeholder="••••••••••••••••" class="w-full border rounded px-2.5 py-1.5 font-mono text-xs" />
               </div>
               <div class="flex items-center pt-5">
                 <label class="flex items-center space-x-1.5 cursor-pointer">
@@ -503,12 +665,12 @@
               </div>
             </div>
 
-            <div class="flex space-x-2 pt-2 border-t">
+            <div class="flex flex-wrap gap-2 pt-2 border-t">
               <button onclick="handleSaveAzureConfig()" class="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold hover:bg-[#24426d]">
                 Save Configuration
               </button>
-              <button onclick="handleTestAzureConnection()" class="px-3 py-1.5 rounded bg-emerald-600 text-white font-bold hover:bg-emerald-700">
-                Test Connection
+              <button onclick="handleTestAzureConnection()" class="px-3 py-1.5 rounded bg-emerald-600 text-white font-bold hover:bg-emerald-700 flex items-center space-x-1">
+                <span>⚡ Test Connection & Diagnostics</span>
               </button>
               <button onclick="handlePushToAzure()" class="px-3 py-1.5 rounded bg-amber-500 text-slate-900 font-bold hover:bg-amber-400">
                 Push All Data to Azure
@@ -517,6 +679,27 @@
                 Pull from Azure
               </button>
             </div>
+
+            <!-- Diagnostics Box -->
+            <div id="az-diagnostics-box" class="hidden rounded border p-3 font-mono text-[11px] space-y-1.5 bg-slate-900 text-slate-200">
+              <div class="flex items-center justify-between text-xs font-bold pb-1 border-b border-slate-700">
+                <span id="az-diag-title" class="text-amber-400">Diagnostic Inspection</span>
+                <span id="az-diag-status" class="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300">Pending</span>
+              </div>
+              <div id="az-diag-details" class="text-[10px] leading-relaxed text-slate-300 whitespace-pre-wrap"></div>
+            </div>
+          </div>
+
+          <!-- Azure Troubleshooting & CORS Guide -->
+          <div class="bg-amber-50 border border-amber-200 rounded p-3 text-[11px] space-y-1.5 text-amber-900">
+            <div class="font-bold flex items-center space-x-1.5 text-amber-900 text-xs">
+              <span>⚠️ Resolving "HTTP 404" & "CORS" on Azure Functions:</span>
+            </div>
+            <ol class="list-decimal list-inside space-y-1 text-[11px] text-amber-800 pl-1">
+              <li><strong>Missing Protocol or Path (Causes 404):</strong> Ensure your URL starts with <code>https://</code> and ends with your function route name, e.g. <code>https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/sync</code>.</li>
+              <li><strong>Azure Portal CORS Configuration:</strong> In Azure Portal, navigate to your Function App &rarr; <strong>API</strong> &rarr; <strong>CORS</strong> &rarr; Add <code>*</code> (or <code>${window.location.origin}</code>) &rarr; Click <strong>Save</strong>.</li>
+              <li><strong>Authorization Level:</strong> If using Anonymous authorization, no key is required. If using Function Key, append <code>?code=YOUR_KEY</code> or provide the key in the API Key box.</li>
+            </ol>
           </div>
 
           <!-- T-SQL Schema Generator Box -->
@@ -528,7 +711,7 @@
               </button>
             </div>
             <p class="text-[11px] text-slate-600">
-              Paste this Transact-SQL script into the <strong>Azure Portal Query Editor</strong> or <strong>SSMS</strong> to automatically generate all relational tables, primary keys, and seed records in your Azure SQL database.
+              Paste this Transact-SQL script into the <strong>Azure Portal Query Editor</strong> or <strong>SSMS</strong> to automatically generate all relational tables, primary keys, and seed records in your Azure SQL database (<code>ToolTrackingDB</code>).
             </p>
             <textarea id="az-sql-script" readonly class="w-full h-32 font-mono text-[10px] p-2 bg-slate-900 text-emerald-300 rounded border resize-none"></textarea>
           </div>
@@ -536,15 +719,15 @@
           <!-- Azure Function Quick Template -->
           <div class="border border-[#b8c9db] rounded p-3.5 bg-white space-y-2">
             <div class="flex justify-between items-center">
-              <div class="font-bold text-[#1a3055]">3. 2-Minute Azure Function Connector Code</div>
+              <div class="font-bold text-[#1a3055]">3. 2-Minute Azure Function Connector Code (sync)</div>
               <button onclick="copyAzureFunctionCode()" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[#1a3055] font-bold border border-slate-300 text-[11px]">
                 Copy Function Code
               </button>
             </div>
             <p class="text-[11px] text-slate-600">
-              Deploy this simple Node.js / C# Azure Function or Data API Builder container to bridge GitHub Pages with Azure SQL.
+              Deploy this simple Node.js / TypeScript Azure Function (named <strong><code>sync</code></strong>) to bridge the web application with Azure SQL.
             </p>
-            <textarea id="az-func-code" readonly class="w-full h-24 font-mono text-[10px] p-2 bg-slate-900 text-amber-200 rounded border resize-none"></textarea>
+            <textarea id="az-func-code" readonly class="w-full h-32 font-mono text-[10px] p-2 bg-slate-900 text-amber-200 rounded border resize-none"></textarea>
           </div>
 
         </div>
@@ -556,11 +739,17 @@
     }
 
     function handleSaveAzureConfig() {
+      let rawEndpoint = document.getElementById('az-endpoint').value.trim();
+      if (rawEndpoint) {
+        rawEndpoint = normalizeUrl(rawEndpoint);
+        document.getElementById('az-endpoint').value = rawEndpoint;
+      }
+
       appState.azureConfig = {
         enabled: document.getElementById('az-enable').checked,
         serverName: document.getElementById('az-server').value.trim(),
         databaseName: document.getElementById('az-db').value.trim(),
-        apiEndpoint: document.getElementById('az-endpoint').value.trim(),
+        apiEndpoint: rawEndpoint,
         apiKey: document.getElementById('az-key').value.trim(),
         autoSync: document.getElementById('az-autosync').checked,
         lastSyncTime: appState.azureConfig.lastSyncTime
@@ -570,15 +759,34 @@
     }
 
     async function handleTestAzureConnection() {
-      const endpoint = document.getElementById('az-endpoint').value.trim();
+      handleSaveAzureConfig();
+      let endpoint = normalizeUrl(document.getElementById('az-endpoint').value.trim());
       const apiKey = document.getElementById('az-key').value.trim();
+      const diagBox = document.getElementById('az-diagnostics-box');
+      const diagTitle = document.getElementById('az-diag-title');
+      const diagStatus = document.getElementById('az-diag-status');
+      const diagDetails = document.getElementById('az-diag-details');
 
       if (!endpoint) {
         alert("Please enter your Azure REST API or Azure Function endpoint URL first.");
         return;
       }
 
+      // Update input to reflect normalized URL
+      document.getElementById('az-endpoint').value = endpoint;
+      appState.azureConfig.apiEndpoint = endpoint;
+      saveAzureConfig();
+
+      if (diagBox) {
+        diagBox.classList.remove('hidden');
+        diagTitle.innerText = "⚡ Testing Azure Endpoint...";
+        diagStatus.className = "px-1.5 py-0.5 rounded text-[10px] bg-amber-600 text-white font-bold";
+        diagStatus.innerText = "CONNECTING";
+        diagDetails.innerText = `[1] Request URL: ${endpoint}\n[2] Client Origin: ${window.location.origin}\n[3] Sending HTTP probe...`;
+      }
+
       showToast("Pinging Azure SQL API...", "⏳");
+      
       try {
         const res = await fetch(endpoint, {
           method: 'GET',
@@ -589,25 +797,94 @@
         });
 
         if (res.ok) {
+          appState.azureConfig.enabled = true;
+          const enableCheckbox = document.getElementById('az-enable');
+          if (enableCheckbox) enableCheckbox.checked = true;
+          saveAzureConfig();
+          updateHeaderStatus();
+
+          let dataInfo = "Endpoint responded with HTTP 200 OK.";
+          try {
+            const json = await res.json();
+            const extracted = extractDataFromAzureResponse(json);
+            if (extracted && extracted.inventory && extracted.inventory.length > 0) {
+              dataInfo = `Found ${extracted.inventory.length.toLocaleString()} tool assets in response payload!`;
+              // Automatically update state if items were retrieved
+              appState.data = extracted;
+              saveState();
+              renderCurrentView();
+            } else {
+              const keys = typeof json === 'object' && json ? Object.keys(json).join(', ') : typeof json;
+              dataInfo = `Connected! Response keys: [ ${keys} ]. (Click 'Pull from Azure' or 'Push All Data' to sync).`;
+            }
+          } catch (e) {
+            // Not JSON or empty body
+          }
+
+          if (diagBox) {
+            diagTitle.innerText = "✓ Connected Successfully to Azure SQL API";
+            diagStatus.className = "px-1.5 py-0.5 rounded text-[10px] bg-emerald-600 text-white font-bold";
+            diagStatus.innerText = `HTTP ${res.status} OK`;
+            diagDetails.innerText = `[1] Endpoint: ${endpoint}\n[2] HTTP Status: ${res.status} ${res.statusText}\n[3] Azure API is ONLINE & reachable!\n[4] Data Payload: ${dataInfo}\n[5] Live Cloud Sync is ACTIVE.`;
+          }
           showToast("Connected to Azure SQL successfully!", "🟢");
+        } else if (res.status === 404) {
+          // If returned 404, check if user forgot /api/sync or if probing common routes helps
+          let suggestion = '';
+          const hasApiRoute = endpoint.includes('/api/');
+          if (!hasApiRoute) {
+            const candidateUrl = endpoint.replace(/\/+$/, '') + '/api/ToolTracker';
+            suggestion = `\n\n💡 DIAGNOSIS: You entered the base Azure Function domain without the route path.\nTry clicking '+ /api/ToolTracker' above to change your URL to:\n${candidateUrl}`;
+          } else {
+            suggestion = `\n\n💡 DIAGNOSIS: The function route '${endpoint}' does not exist on your Azure Function App. Check your function name in Azure Portal (e.g. 'ToolTracker', 'sync', or 'tools').`;
+          }
+
+          if (diagBox) {
+            diagTitle.innerText = "⚠️ HTTP 404 - Route Not Found on Azure";
+            diagStatus.className = "px-1.5 py-0.5 rounded text-[10px] bg-amber-600 text-white font-bold";
+            diagStatus.innerText = "HTTP 404";
+            diagDetails.innerText = `[1] Request URL: ${endpoint}\n[2] Response: HTTP 404 (Not Found)\n[3] Azure reached successfully, but the specific URL route was not found.${suggestion}`;
+          }
+          showToast(`Azure returned HTTP 404: Path Not Found`, "⚠️");
+        } else if (res.status === 401 || res.status === 403) {
+          if (diagBox) {
+            diagTitle.innerText = "🔒 HTTP 401/403 - Authentication Required";
+            diagStatus.className = "px-1.5 py-0.5 rounded text-[10px] bg-rose-600 text-white font-bold";
+            diagStatus.innerText = `HTTP ${res.status}`;
+            diagDetails.innerText = `[1] Request URL: ${endpoint}\n[2] Response: HTTP ${res.status} (Unauthorized)\n[3] Fix: Enter your Azure Function Key in the API Key box or append ?code=<your-function-key> to the URL.`;
+          }
+          showToast(`HTTP ${res.status}: Check Azure Function Key`, "⚠️");
         } else {
+          if (diagBox) {
+            diagTitle.innerText = `⚠️ HTTP ${res.status} Received`;
+            diagStatus.className = "px-1.5 py-0.5 rounded text-[10px] bg-amber-600 text-white font-bold";
+            diagStatus.innerText = `HTTP ${res.status}`;
+            diagDetails.innerText = `[1] Request URL: ${endpoint}\n[2] Response: HTTP ${res.status} (${res.statusText})`;
+          }
           showToast(`Azure SQL ping returned HTTP ${res.status}`, "⚠️");
         }
       } catch (err) {
-        showToast("Connection failed: verify Azure CORS and endpoint URL", "❌");
+        if (diagBox) {
+          diagTitle.innerText = "❌ Network / CORS Connection Error";
+          diagStatus.className = "px-1.5 py-0.5 rounded text-[10px] bg-rose-600 text-white font-bold";
+          diagStatus.innerText = "CORS BLOCKED";
+          diagDetails.innerText = `[1] Request URL: ${endpoint}\n[2] Error: ${err.message}\n[3] Root Cause: Browser blocked request due to CORS policy or network unreachability.\n\n🛠️ FIX IN AZURE PORTAL (30 Seconds):\n  a. Open Azure Portal -> Your Function App ('tooltracker-api-dyath8gehaavcdah')\n  b. Under 'API' in the left menu, select 'CORS'\n  c. In Allowed Origins, add '*' (or '${window.location.origin}')\n  d. Click 'Save' and click Test Connection again!`;
+        }
+        showToast("Connection failed: check Azure CORS settings", "❌");
       }
     }
 
     async function handlePushToAzure() {
       handleSaveAzureConfig();
-      if (!appState.azureConfig.apiEndpoint) {
+      const endpoint = normalizeUrl(appState.azureConfig.apiEndpoint);
+      if (!endpoint) {
         alert("Please specify your Azure REST API endpoint URL.");
         return;
       }
 
       showToast("Pushing dataset to Azure SQL...", "⏳");
       try {
-        const res = await fetch(appState.azureConfig.apiEndpoint, {
+        const res = await fetch(endpoint, {
           method: 'POST',
           headers: {
             'Authorization': appState.azureConfig.apiKey ? `Bearer ${appState.azureConfig.apiKey}` : '',
@@ -623,7 +900,7 @@
         if (res.ok) {
           appState.azureConfig.lastSyncTime = new Date().toISOString();
           saveAzureConfig();
-          showToast("Data pushed to Azure SQL successfully", "✓");
+          showToast(`Successfully pushed ${appState.data.inventory.length.toLocaleString()} assets to Azure SQL`, "✓");
         } else {
           showToast(`Push failed: HTTP ${res.status}`, "⚠️");
         }
@@ -634,14 +911,22 @@
 
     async function handlePullFromAzure() {
       handleSaveAzureConfig();
-      if (!appState.azureConfig.apiEndpoint) {
+      const endpoint = normalizeUrl(appState.azureConfig.apiEndpoint);
+      if (!endpoint) {
         alert("Please specify your Azure REST API endpoint URL.");
         return;
       }
 
+      const diagBox = document.getElementById('az-diagnostics-box');
+      const diagTitle = document.getElementById('az-diag-title');
+      const diagStatus = document.getElementById('az-diag-status');
+      const diagDetails = document.getElementById('az-diag-details');
+
+      const queryUrl = endpoint.includes('?') ? `${endpoint}&action=GET_ALL` : `${endpoint}?action=GET_ALL`;
       showToast("Pulling fresh dataset from Azure SQL...", "⏳");
+      
       try {
-        const res = await fetch(appState.azureConfig.apiEndpoint + '?action=GET_ALL', {
+        const res = await fetch(queryUrl, {
           method: 'GET',
           headers: {
             'Authorization': appState.azureConfig.apiKey ? `Bearer ${appState.azureConfig.apiKey}` : '',
@@ -650,24 +935,67 @@
         });
 
         if (res.ok) {
-          const result = await res.json();
-          if (result && result.inventory) {
-            appState.data = result;
+          const rawResult = await res.json();
+          const extracted = extractDataFromAzureResponse(rawResult);
+          
+          if (extracted && extracted.inventory && extracted.inventory.length > 0) {
+            appState.data = extracted;
+            appState.azureConfig.lastSyncTime = new Date().toISOString();
+            appState.azureConfig.enabled = true;
             saveState();
+            saveAzureConfig();
+            updateHeaderStatus();
             renderCurrentView();
-            showToast("Local data updated from Azure SQL", "✓");
+
+            if (diagBox) {
+              diagBox.classList.remove('hidden');
+              diagTitle.innerText = "✓ Azure SQL Data Pull Successful";
+              diagStatus.className = "px-1.5 py-0.5 rounded text-[10px] bg-emerald-600 text-white font-bold";
+              diagStatus.innerText = `${extracted.inventory.length.toLocaleString()} Assets Loaded`;
+              diagDetails.innerText = `[1] Status: HTTP ${res.status} OK\n[2] Loaded: ${extracted.inventory.length.toLocaleString()} tools, ${extracted.jobs.length} jobs, ${extracted.callouts.length} callouts\n[3] Master inventory successfully synced from Azure SQL!`;
+            }
+            showToast(`Loaded ${extracted.inventory.length.toLocaleString()} tools from Azure SQL!`, "🟢");
+          } else {
+            // Response was 200 OK, but 0 items or unexpected structure
+            const keys = typeof rawResult === 'object' && rawResult ? Object.keys(rawResult).join(', ') : typeof rawResult;
+            const sampleJson = JSON.stringify(rawResult).slice(0, 180);
+            
+            if (diagBox) {
+              diagBox.classList.remove('hidden');
+              diagTitle.innerText = "⚠️ Azure Function responded, but 0 tools parsed";
+              diagStatus.className = "px-1.5 py-0.5 rounded text-[10px] bg-amber-600 text-white font-bold";
+              diagStatus.innerText = "0 Items";
+              diagDetails.innerText = `[1] Status: HTTP ${res.status} OK\n[2] Returned JSON structure keys: [ ${keys} ]\n[3] Sample Payload: ${sampleJson}...\n\n💡 DIAGNOSIS: Your Azure Function did not return rows or your dbo.Tools table is currently empty in Azure SQL.\nIf you want to push your initial inventory to populate Azure SQL, click 'Push All Data to Azure' below, or verify your function's SQL query.`;
+            }
+            showToast(`Connected, but received 0 records (Keys: ${keys})`, "⚠️");
           }
         } else {
+          if (diagBox) {
+            diagBox.classList.remove('hidden');
+            diagTitle.innerText = `❌ Pull Failed: HTTP ${res.status}`;
+            diagStatus.className = "px-1.5 py-0.5 rounded text-[10px] bg-rose-600 text-white font-bold";
+            diagStatus.innerText = `HTTP ${res.status}`;
+            diagDetails.innerText = `[1] Request URL: ${queryUrl}\n[2] Response: HTTP ${res.status} ${res.statusText}`;
+          }
           showToast(`Pull failed: HTTP ${res.status}`, "⚠️");
         }
       } catch (err) {
+        if (diagBox) {
+          diagBox.classList.remove('hidden');
+          diagTitle.innerText = `❌ Pull Network Error`;
+          diagStatus.className = "px-1.5 py-0.5 rounded text-[10px] bg-rose-600 text-white font-bold";
+          diagStatus.innerText = `ERROR`;
+          diagDetails.innerText = `[1] Error: ${err.message}\n[2] Check Azure CORS settings and endpoint availability.`;
+        }
         showToast("Pull failed: check network and CORS config", "❌");
       }
     }
 
     async function syncToAzureSqlSilent() {
+      const endpoint = normalizeUrl(appState.azureConfig.apiEndpoint);
+      if (!endpoint) return;
       try {
-        fetch(appState.azureConfig.apiEndpoint, {
+        fetch(endpoint, {
           method: 'POST',
           headers: {
             'Authorization': appState.azureConfig.apiKey ? `Bearer ${appState.azureConfig.apiKey}` : '',
@@ -1044,26 +1372,96 @@ module.exports = async function (context, req) {
 
     // 2. INVENTORY VIEW
     function renderInventoryView(data, role) {
+      const search = (invViewState.search || '').toLowerCase().trim();
+      const cat = invViewState.category || 'ALL';
+      const stat = invViewState.status || 'ALL';
+
+      // Filter fleet
+      const filtered = data.inventory.filter(item => {
+        if (cat !== 'ALL' && item.Category !== cat) return false;
+        if (stat !== 'ALL' && item.Status !== stat) return false;
+        if (search) {
+          const match = (item.SerialNo || '').toLowerCase().includes(search) ||
+                        (item.AssetName || '').toLowerCase().includes(search) ||
+                        (item.Category || '').toLowerCase().includes(search) ||
+                        (item.CurrentLocation || '').toLowerCase().includes(search) ||
+                        (item.CurrentJob || '').toLowerCase().includes(search);
+          if (!match) return false;
+        }
+        return true;
+      });
+
+      const totalItems = filtered.length;
+      const pageSize = invViewState.pageSize === 'ALL' ? totalItems : Number(invViewState.pageSize || 50);
+      const totalPages = Math.max(1, Math.ceil(totalItems / (pageSize || 1)));
+      if (invViewState.page > totalPages) invViewState.page = totalPages;
+      if (invViewState.page < 1) invViewState.page = 1;
+
+      const startIndex = (invViewState.page - 1) * pageSize;
+      const paginatedItems = pageSize === totalItems ? filtered : filtered.slice(startIndex, startIndex + pageSize);
+
+      // Unique categories
+      const categories = Array.from(new Set(data.inventory.map(i => i.Category).filter(Boolean)));
+
       return `
         <div class="space-y-4">
-          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
             <div>
               <div class="text-[11px] text-slate-500 font-medium">Fleet & Asset Management</div>
               <h1 class="text-base font-bold text-[#1a3055]">Master Tool Inventory & Downhole Hours Tracking</h1>
             </div>
-            ${role !== 'Viewer' ? `
-              <button onclick="openAddToolModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">
-                + Register New Tool Asset
+            <div class="flex items-center space-x-2">
+              <button onclick="handlePullFromAzure()" class="px-3 py-1.5 rounded bg-blue-50 text-blue-900 font-bold text-xs border border-blue-300 hover:bg-blue-100 shadow-sm flex items-center space-x-1.5">
+                <span>🔄 Pull from Azure</span>
               </button>
-            ` : ''}
+              ${role !== 'Viewer' ? `
+                <button onclick="openAddToolModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">
+                  + Register New Asset
+                </button>
+              ` : ''}
+            </div>
           </div>
 
           <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
-            <div class="p-3 bg-[#dbe6f1] border-b border-[#b8c9db] flex items-center justify-between">
-              <input type="text" id="inv-search" onkeyup="filterInventoryTable()" placeholder="Search serial #, asset name, or category..." class="bg-white border border-[#b8c9db] rounded px-3 py-1 text-xs w-72 outline-none font-medium" />
-              <div class="text-xs font-bold text-slate-700">${data.inventory.length} Registered Assets</div>
+            <!-- Filter Ribbon -->
+            <div class="p-3 bg-[#dbe6f1] border-b border-[#b8c9db] flex flex-wrap items-center justify-between gap-2.5">
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="relative">
+                  <input type="text" id="inv-search" value="${invViewState.search}" oninput="onInventorySearchChange(this.value)" placeholder="Search serial #, asset name, yard..." class="bg-white border border-[#b8c9db] rounded px-3 py-1 text-xs w-64 outline-none font-medium" />
+                  ${invViewState.search ? `<button onclick="onInventorySearchChange(''); document.getElementById('inv-search').value='';" class="absolute right-2 top-1 text-slate-400 hover:text-slate-700 text-xs font-bold">&times;</button>` : ''}
+                </div>
+
+                <select onchange="onInventoryCategoryChange(this.value)" class="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-medium">
+                  <option value="ALL" ${cat === 'ALL' ? 'selected' : ''}>All Categories (${data.inventory.length})</option>
+                  ${categories.map(c => `<option value="${c}" ${cat === c ? 'selected' : ''}>${c}</option>`).join('')}
+                </select>
+
+                <select onchange="onInventoryStatusChange(this.value)" class="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-medium">
+                  <option value="ALL" ${stat === 'ALL' ? 'selected' : ''}>All Statuses</option>
+                  <option value="Available" ${stat === 'Available' ? 'selected' : ''}>🟢 Available</option>
+                  <option value="Dispatched" ${stat === 'Dispatched' ? 'selected' : ''}>🔵 Dispatched</option>
+                  <option value="Inspection" ${stat === 'Inspection' ? 'selected' : ''}>🟡 Inspection</option>
+                  <option value="Repair" ${stat === 'Repair' ? 'selected' : ''}>🔴 Repair</option>
+                </select>
+              </div>
+
+              <div class="flex items-center space-x-3 text-xs font-bold text-slate-700">
+                <span>Showing ${totalItems === 0 ? 0 : startIndex + 1} - ${Math.min(startIndex + paginatedItems.length, totalItems)} of <span class="text-blue-900 font-extrabold font-mono text-sm">${totalItems.toLocaleString()}</span> assets</span>
+                
+                <div class="flex items-center space-x-1 border-l border-slate-300 pl-3">
+                  <span class="text-[10px] text-slate-500">Page Size:</span>
+                  <select onchange="onInventoryPageSizeChange(this.value)" class="bg-white border border-[#b8c9db] rounded px-1.5 py-0.5 text-xs">
+                    <option value="50" ${invViewState.pageSize == 50 ? 'selected' : ''}>50</option>
+                    <option value="100" ${invViewState.pageSize == 100 ? 'selected' : ''}>100</option>
+                    <option value="250" ${invViewState.pageSize == 250 ? 'selected' : ''}>250</option>
+                    <option value="500" ${invViewState.pageSize == 500 ? 'selected' : ''}>500</option>
+                    <option value="ALL" ${invViewState.pageSize === 'ALL' ? 'selected' : ''}>All</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
+            <!-- Table -->
             <div class="overflow-x-auto">
               <table id="inv-table" class="w-full text-left text-xs border-collapse">
                 <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
@@ -1073,14 +1471,20 @@ module.exports = async function (context, req) {
                     <th class="px-3 py-2">CATEGORY</th>
                     <th class="px-3 py-2">SIZE & THREAD</th>
                     <th class="px-3 py-2">HOURS (RUN / LIMIT)</th>
-                    <th class="px-3 py-2">LOCATION</th>
+                    <th class="px-3 py-2">CURRENT LOCATION</th>
                     <th class="px-3 py-2">STATUS</th>
                     <th class="px-3 py-2 text-right">DAY RATE (USD)</th>
                     <th class="px-3 py-2 text-center">ACTION</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-[#e2e8f0]">
-                  ${data.inventory.map(item => `
+                  ${paginatedItems.length === 0 ? `
+                    <tr>
+                      <td colspan="9" class="p-8 text-center text-slate-500 font-medium">
+                        No assets found matching current criteria.
+                      </td>
+                    </tr>
+                  ` : paginatedItems.map(item => `
                     <tr class="hover:bg-[#e4eef8]">
                       <td class="px-3 py-2 font-mono font-bold text-amber-900">${item.SerialNo}</td>
                       <td class="px-3 py-2 font-bold text-[#1a3055]">${item.AssetName}</td>
@@ -1095,7 +1499,7 @@ module.exports = async function (context, req) {
                           item.Status === 'Inspection' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
                         }">${item.Status}</span>
                       </td>
-                      <td class="px-3 py-2 text-right font-mono font-bold text-emerald-800">$${item.DailyRentalRate.toLocaleString()}</td>
+                      <td class="px-3 py-2 text-right font-mono font-bold text-emerald-800">$${(item.DailyRentalRate || 0).toLocaleString()}</td>
                       <td class="px-3 py-2 text-center">
                         <button onclick="openEditToolModal('${item.SerialNo}')" class="text-blue-700 hover:underline font-bold text-[11px]">Edit</button>
                       </td>
@@ -1104,17 +1508,64 @@ module.exports = async function (context, req) {
                 </tbody>
               </table>
             </div>
+
+            <!-- Pagination Bottom Controls -->
+            ${totalPages > 1 ? `
+              <div class="px-4 py-2.5 bg-slate-50 border-t border-[#b8c9db] flex items-center justify-between text-xs">
+                <div class="text-slate-500">
+                  Page <span class="font-bold text-slate-900">${invViewState.page}</span> of <span class="font-bold text-slate-900">${totalPages}</span>
+                </div>
+                <div class="flex items-center space-x-1.5">
+                  <button onclick="changeInventoryPage(1)" ${invViewState.page <= 1 ? 'disabled class="opacity-40 cursor-not-allowed"' : 'class="hover:bg-slate-200"'} class="px-2 py-1 bg-white border border-slate-300 rounded text-xs font-bold">
+                    &laquo; First
+                  </button>
+                  <button onclick="changeInventoryPage(${invViewState.page - 1})" ${invViewState.page <= 1 ? 'disabled class="opacity-40 cursor-not-allowed"' : 'class="hover:bg-slate-200"'} class="px-2.5 py-1 bg-white border border-slate-300 rounded text-xs font-bold">
+                    &lsaquo; Prev
+                  </button>
+                  
+                  <span class="px-2 font-mono font-bold text-blue-900">${invViewState.page} / ${totalPages}</span>
+
+                  <button onclick="changeInventoryPage(${invViewState.page + 1})" ${invViewState.page >= totalPages ? 'disabled class="opacity-40 cursor-not-allowed"' : 'class="hover:bg-slate-200"'} class="px-2.5 py-1 bg-white border border-slate-300 rounded text-xs font-bold">
+                    Next &rsaquo;
+                  </button>
+                  <button onclick="changeInventoryPage(${totalPages})" ${invViewState.page >= totalPages ? 'disabled class="opacity-40 cursor-not-allowed"' : 'class="hover:bg-slate-200"'} class="px-2 py-1 bg-white border border-slate-300 rounded text-xs font-bold">
+                    Last &raquo;
+                  </button>
+                </div>
+              </div>
+            ` : ''}
           </div>
         </div>
       `;
     }
 
-    function filterInventoryTable() {
-      const val = document.getElementById('inv-search').value.toLowerCase();
-      const rows = document.querySelectorAll('#inv-table tbody tr');
-      rows.forEach(r => {
-        r.style.display = r.innerText.toLowerCase().includes(val) ? '' : 'none';
-      });
+    function onInventorySearchChange(val) {
+      invViewState.search = val;
+      invViewState.page = 1;
+      renderCurrentView();
+    }
+
+    function onInventoryCategoryChange(val) {
+      invViewState.category = val;
+      invViewState.page = 1;
+      renderCurrentView();
+    }
+
+    function onInventoryStatusChange(val) {
+      invViewState.status = val;
+      invViewState.page = 1;
+      renderCurrentView();
+    }
+
+    function onInventoryPageSizeChange(val) {
+      invViewState.pageSize = val;
+      invViewState.page = 1;
+      renderCurrentView();
+    }
+
+    function changeInventoryPage(page) {
+      invViewState.page = page;
+      renderCurrentView();
     }
 
     // Modal: Add Tool Asset
@@ -1892,6 +2343,11 @@ module.exports = async function (context, req) {
     window.addEventListener('DOMContentLoaded', () => {
       updateAzureBadge();
       renderCurrentView();
+
+      // Automatically pull latest data from Azure SQL on application launch if configured
+      if (appState.azureConfig.enabled && appState.azureConfig.apiEndpoint) {
+        handlePullFromAzure();
+      }
     });
   </script>
 </body>
