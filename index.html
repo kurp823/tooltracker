@@ -801,7 +801,7 @@
           const enableCheckbox = document.getElementById('az-enable');
           if (enableCheckbox) enableCheckbox.checked = true;
           saveAzureConfig();
-          updateHeaderStatus();
+          updateAzureBadge();
 
           let dataInfo = "Endpoint responded with HTTP 200 OK.";
           try {
@@ -944,7 +944,7 @@
             appState.azureConfig.enabled = true;
             saveState();
             saveAzureConfig();
-            updateHeaderStatus();
+            updateAzureBadge();
             renderCurrentView();
 
             if (diagBox) {
