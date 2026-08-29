@@ -1,981 +1,976 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>EMDAD Operations Platform</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <style>
-    body { font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; background:#eef3f8; color:#1e293b; }
-    .font-mono { font-family: 'IBM Plex Mono', monospace; }
-    ::-webkit-scrollbar { width:6px; height:6px; }
-    ::-webkit-scrollbar-track { background:#f1f5f9; }
-    ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
-    .nav-item.active { background:rgba(255,255,255,0.15); color:white; }
-    .tab-btn.active { background:#1a3055; color:white; }
-    @keyframes spin { to { transform:rotate(360deg); } }
-    .spin { animation:spin 1s linear infinite; }
-    @media print { .no-print{display:none!important;} body{background:white!important;} }
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>EMDAD Operations Platform</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Plus Jakarta Sans',-apple-system,sans-serif;background:#eef3f8;color:#1e293b;}
+  .font-mono{font-family:'IBM Plex Mono',monospace;}
+  ::-webkit-scrollbar{width:6px;height:6px;}
+  ::-webkit-scrollbar-track{background:#f1f5f9;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px;}
+  ::-webkit-scrollbar-thumb:hover{background:#94a3b8;}
+  @media print{.no-print{display:none!important;}body{background:white!important;}}
+</style>
 </head>
 <body class="min-h-screen flex flex-col antialiased">
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- LOGIN PAGE                                                  -->
-<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- LOGIN -->
 <div id="login-page" class="min-h-screen flex items-center justify-center bg-[#0f1f38]">
   <div class="w-full max-w-sm">
     <div class="text-center mb-8">
-      <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-[#1a3055] text-2xl shadow-lg mx-auto mb-4">E</div>
-      <div class="font-extrabold text-xl text-white tracking-wide">EMDAD Operations</div>
-      <div class="text-slate-400 text-xs mt-1">Downhole Tool Tracking Platform</div>
+      <div class="w-14 h-14 rounded bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-[#1a3055] text-2xl shadow-lg mx-auto mb-4">E</div>
+      <div class="font-extrabold text-xl text-white tracking-wide">EMDAD SERVICES LLC</div>
+      <div class="text-slate-400 text-[11px] mt-1">Oilfield Tool Tracking, Rental Operations &amp; Azure SQL Sync</div>
     </div>
-    <div class="bg-white rounded-2xl shadow-2xl p-8">
+    <div class="bg-white rounded p-6 shadow-2xl border border-[#b8c9db]">
+      <div class="mb-4">
+        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Username</label>
+        <input id="lu" type="text" class="w-full border border-[#b8c9db] rounded px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-amber-400" onkeydown="if(event.key==='Enter')document.getElementById('lp').focus()">
+      </div>
       <div class="mb-5">
-        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Username</label>
-        <input id="lu" type="text" placeholder="Enter username" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent" onkeydown="if(event.key==='Enter')document.getElementById('lp').focus()">
+        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Password</label>
+        <input id="lp" type="password" class="w-full border border-[#b8c9db] rounded px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-amber-400" onkeydown="if(event.key==='Enter')doLogin()">
       </div>
-      <div class="mb-6">
-        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Password</label>
-        <input id="lp" type="password" placeholder="Enter password" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent" onkeydown="if(event.key==='Enter')doLogin()">
-      </div>
-      <div id="lerr" class="hidden mb-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
-      <button onclick="doLogin()" class="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-[#1a3055] font-bold py-2.5 rounded-lg text-sm transition shadow">
-        Sign In →
-      </button>
-      <div class="mt-5 pt-4 border-t border-slate-100">
-        <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Demo Credentials</div>
-        <div class="text-xs text-slate-500 space-y-0.5">
-          <div><span class="font-mono font-bold text-slate-700">ravi</span> / <span class="font-mono">Ravi@2026</span> — Admin</div>
-          <div><span class="font-mono font-bold text-slate-700">azim</span> / <span class="font-mono">Azim@2026</span> — Handler</div>
-          <div><span class="font-mono font-bold text-slate-700">nihas</span> / <span class="font-mono">Nihas@2026</span> — QC</div>
-        </div>
+      <div id="lerr" class="hidden mb-3 text-[11px] text-rose-700 bg-rose-50 border border-rose-300 rounded px-2.5 py-2"></div>
+      <button onclick="doLogin()" class="w-full bg-[#ffd875] hover:brightness-105 text-[#4a2e00] font-bold py-2 rounded text-xs border border-[#c8860d] shadow-sm transition">Sign In &rarr;</button>
+      <div class="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-500 space-y-0.5">
+        <div class="font-bold text-slate-400 uppercase tracking-wider mb-1">Demo Credentials</div>
+        <div><span class="font-mono font-bold text-slate-700">ravi</span>/<span class="font-mono">Ravi@2026</span> Admin &nbsp; <span class="font-mono font-bold text-slate-700">azim</span>/<span class="font-mono">Azim@2026</span> Handler</div>
+        <div><span class="font-mono font-bold text-slate-700">nihas</span>/<span class="font-mono">Nihas@2026</span> QC &nbsp; <span class="font-mono font-bold text-slate-700">viewer</span>/<span class="font-mono">View@2026</span></div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- MAIN APP                                                    -->
-<!-- ═══════════════════════════════════════════════════════════ -->
-<div id="app" class="hidden flex-col min-h-screen">
-
-  <!-- TOP BAR -->
-  <header class="bg-[#1a3055] text-white px-5 py-2.5 flex items-center justify-between shadow-md border-b border-[#0f1f38] sticky top-0 z-40 no-print">
+<!-- APP -->
+<div id="app" class="hidden min-h-screen flex-col">
+  <header class="bg-[#1a3055] text-white px-5 py-2.5 flex items-center justify-between shadow-md border-b border-[#0f1f38] no-print sticky top-0 z-40">
     <div class="flex items-center space-x-3">
       <div class="w-8 h-8 rounded bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-[#1a3055] text-sm shadow">E</div>
       <div>
         <div class="flex items-center space-x-2">
-          <span class="font-extrabold text-sm tracking-wide">EMDAD Operations</span>
+          <span class="font-extrabold text-sm tracking-wide text-white">EMDAD SERVICES LLC</span>
           <span id="env-badge" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/40">LIVE</span>
         </div>
-        <div class="text-[10px] text-slate-400">Downhole Tool Tracking & Rental Operations</div>
+        <div class="text-[10px] text-slate-300">Oilfield Tool Tracking, Rental Operations &amp; Azure SQL Sync</div>
       </div>
     </div>
     <div class="flex items-center space-x-3 text-xs">
-      <div id="sync-status" class="hidden flex items-center space-x-1.5 bg-[#142848] px-2.5 py-1 rounded border border-[#2d5084] text-[11px] text-slate-300">
-        <svg class="w-3 h-3 spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-        <span>Syncing...</span>
+      <div id="sync-badge" class="hidden items-center space-x-1.5 bg-[#142848] px-2.5 py-1 rounded border border-[#2d5084]">
+        <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+        <span class="text-[11px] font-bold text-slate-200">Syncing…</span>
       </div>
-      <div class="flex items-center space-x-2 bg-[#24426d] px-3 py-1.5 rounded border border-[#3b5d8f]">
-        <div id="user-avatar" class="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center text-[10px] font-black text-[#1a3055]">R</div>
-        <span id="user-name" class="text-[11px] font-bold">Ravi Parapu</span>
-        <span id="user-role" class="text-[10px] text-amber-300 font-bold">Admin</span>
+      <div class="flex items-center space-x-1.5 bg-[#24426d] px-2.5 py-1 rounded border border-[#3b5d8f]">
+        <span class="text-slate-300 text-[11px]">Role:</span>
+        <span id="user-role" class="text-white font-bold text-xs"></span>
       </div>
-      <button onclick="doLogout()" class="text-slate-400 hover:text-white px-2 py-1 rounded hover:bg-white/10 transition text-[11px]">Sign Out</button>
+      <span id="user-name" class="text-[11px] font-bold text-slate-300"></span>
+      <button onclick="doLogout()" class="text-slate-300 hover:text-white px-2 py-1 rounded hover:bg-white/10 transition text-[11px]">Sign Out</button>
     </div>
   </header>
 
-  <!-- BODY: SIDEBAR + MAIN -->
-  <div class="flex flex-1 overflow-hidden">
-
-    <!-- SIDEBAR -->
-    <aside class="w-60 bg-[#1e3a61] text-white flex flex-col border-r border-[#152945] flex-shrink-0 no-print overflow-y-auto">
-      <div class="p-3 space-y-4">
+  <div class="flex-1 flex flex-row overflow-hidden">
+    <aside class="w-64 bg-[#1e3a61] text-white flex flex-col border-r border-[#152945] flex-shrink-0 no-print">
+      <div class="flex-1 overflow-y-auto p-3 space-y-4">
 
         <div>
-          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Overview</div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Executive &amp; Overview</div>
           <div class="space-y-0.5">
-            <button onclick="nav('dashboard')" id="nav-dashboard" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white transition">
-              <svg class="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-              <span>Dashboard</span>
+            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>Operations Dashboard</span></span>
             </button>
           </div>
         </div>
 
         <div>
-          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Operations</div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Fleet &amp; Rig Operations</div>
           <div class="space-y-0.5">
-            <button onclick="nav('inventory')" id="nav-inventory" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white transition">
-              <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg><span>Inventory</span></span>
-              <span id="badge-inventory" class="font-mono text-[10px] bg-slate-800 px-1.5 py-0.5 rounded">—</span>
+            <button onclick="switchTab('inventory')" id="nav-inventory" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg><span>Tool Inventory</span></span>
+              <span id="badge-inventory" class="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] font-mono font-bold">—</span>
             </button>
-            <button onclick="nav('callouts')" id="nav-callouts" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white transition">
-              <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg><span>Callout Management</span></span>
-              <span id="badge-callouts" class="font-mono text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded">—</span>
+            <button onclick="switchTab('callouts')" id="nav-callouts" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg><span>Rig Callouts</span></span>
+              <span id="badge-callouts" class="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold">—</span>
             </button>
-            <button onclick="nav('jobs')" id="nav-jobs" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white transition">
-              <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg><span>Job Management</span></span>
-              <span id="badge-jobs" class="font-mono text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded">—</span>
+            <button onclick="switchTab('jobs')" id="nav-jobs" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg><span>Drilling Jobs</span></span>
+              <span id="badge-jobs" class="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">—</span>
             </button>
-            <button onclick="nav('delivery')" id="nav-delivery" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white transition">
-              <svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg><span>Delivery Tickets</span>
+            <button onclick="switchTab('dt')" id="nav-dt" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg><span>Delivery Tickets (DT)</span>
             </button>
-            <button onclick="nav('returns')" id="nav-returns" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white transition">
-              <svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg><span>Receiving Tickets</span>
+            <button onclick="switchTab('rt')" id="nav-rt" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg><span>Receiving Tickets (RT)</span>
             </button>
-            <button onclick="nav('gatepass')" id="nav-gatepass" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white transition">
-              <svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Gate Passes</span>
+            <button onclick="switchTab('gatepass')" id="nav-gatepass" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Security Gate Passes</span>
             </button>
           </div>
         </div>
 
         <div>
-          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Workshop & QC</div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Quality &amp; Workshop</div>
           <div class="space-y-0.5">
-            <button onclick="nav('inspection')" id="nav-inspection" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white transition">
-              <svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>Inspection Queue</span>
+            <button onclick="switchTab('inspection')" id="nav-inspection" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>QC Inspection Bay</span>
             </button>
-            <button onclick="nav('maintenance')" id="nav-maintenance" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white transition">
-              <svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Maintenance Queue</span>
+            <button onclick="switchTab('maintenance')" id="nav-maintenance" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Workshop &amp; Redress</span>
             </button>
           </div>
         </div>
 
         <div>
-          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Finance</div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Commercial &amp; Finance</div>
           <div class="space-y-0.5">
-            <button onclick="nav('contracts')" id="nav-contracts" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white transition">
-              <svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg><span>Contracts</span>
+            <button onclick="switchTab('utilization')" id="nav-utilization" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>Utilization &amp; Billing</span>
+            </button>
+            <button onclick="switchTab('contracts')" id="nav-contracts" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg><span>Master Contracts &amp; PBG</span>
             </button>
           </div>
         </div>
 
-      </div>
-
-      <!-- Sidebar footer -->
-      <div class="mt-auto p-3 border-t border-[#152945]">
-        <div class="text-[10px] text-slate-500 text-center">v2.23 · EMDAD LLC</div>
       </div>
     </aside>
 
-    <!-- MAIN CONTENT -->
-    <main class="flex-1 overflow-auto bg-[#eef3f8]">
-      <div id="main-content" class="p-6">
-        <!-- Content rendered here -->
-      </div>
+    <main class="flex-1 overflow-auto p-4">
+      <div id="main-content"></div>
     </main>
-
   </div>
 </div>
 
-<!-- TOAST -->
-<div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none"></div>
+<div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none no-print"></div>
 
-<!-- MODAL -->
-<div id="modal-overlay" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-  <div id="modal-box" class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"></div>
+<div id="modal-backdrop" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 no-print" onclick="if(event.target===this)closeModal()">
+  <div id="modal-content" class="bg-white rounded shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"></div>
 </div>
 
 <script>
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 // CONFIG
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 const API_URL = 'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
-
 const USERS = [
-  {id:1, username:'ravi',  pass:'Ravi@2026',  role:'Admin',   name:'Ravi Parapu'},
-  {id:2, username:'azim',  pass:'Azim@2026',  role:'Handler', name:'Azim'},
-  {id:3, username:'nihas', pass:'Nihas@2026', role:'QC',      name:'Nihas'},
-  {id:4, username:'viewer',pass:'View@2026',  role:'Viewer',  name:'Viewer'},
+  {id:1,username:'ravi',pass:'Ravi@2026',role:'Admin',name:'Ravi Parapu'},
+  {id:2,username:'azim',pass:'Azim@2026',role:'Handler',name:'Azim'},
+  {id:3,username:'nihas',pass:'Nihas@2026',role:'QC',name:'Nihas'},
+  {id:4,username:'viewer',pass:'View@2026',role:'Viewer',name:'Viewer'},
 ];
-
 const ACCESS = {
-  Admin:   ['dashboard','inventory','callouts','jobs','delivery','returns','gatepass','inspection','maintenance','contracts'],
-  Handler: ['dashboard','inventory','callouts','jobs','delivery','returns','gatepass','inspection','maintenance','contracts'],
-  QC:      ['dashboard','inventory','inspection','maintenance'],
-  Viewer:  ['dashboard','inventory','jobs','delivery','returns','contracts'],
+  Admin:['dashboard','inventory','callouts','jobs','dt','rt','gatepass','inspection','maintenance','utilization','contracts'],
+  Handler:['dashboard','inventory','callouts','jobs','dt','rt','gatepass','inspection','maintenance','utilization','contracts'],
+  QC:['dashboard','inventory','inspection','maintenance'],
+  Viewer:['dashboard','inventory','jobs','dt','rt','utilization','contracts'],
 };
 
-// ═══════════════════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════════════════
-let CU = null; // current user
-let ACTIVE_TAB = 'dashboard';
-let STATE = {
-  inventory:[], callouts:[], jobs:[], dtBatches:[], rtBatches:[],
-  inspections:[], maintenance:[], gatePasses:[], contracts:[], assetCategoryMap:{}
-};
+let CU=null, ACTIVE_TAB='dashboard';
+let STATE={inventory:[],callouts:[],jobs:[],dtBatches:[],rtBatches:[],inspections:[],maintenance:[],gatePasses:[],contracts:[]};
 
-// ═══════════════════════════════════════════════════════════════
+// per-view filter/pagination state — persists across re-renders
+let invViewState={search:'',category:'ALL',status:'ALL',page:1,pageSize:50};
+let jobViewState={tab:'active',search:''};
+let dtViewState={tab:'onrig',search:''};
+let rtViewState={tab:'pending'};
+let mntViewState={tab:'active'};
+let insViewState={tab:'pending'};
+
+// ═══════════════════════════════════════════════════════════
 // API
-// ═══════════════════════════════════════════════════════════════
-async function api(action, body={}) {
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({action, ...body})
-  });
-  const json = await res.json();
-  if (!json.success) throw new Error(json.error || 'API error');
+// ═══════════════════════════════════════════════════════════
+async function api(action,body={}){
+  const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...body})});
+  const json=await res.json();
+  if(!json.success) throw new Error(json.error||'API error');
   return json.data;
 }
-
-async function loadAll() {
-  showSync(true);
-  const endpoints = [
-    ['inventory','getinventory'],['callouts','getcallouts'],['jobs','getjobs'],
-    ['dtBatches','getdtbatches'],['rtBatches','getrtbatches'],['inspections','getinspections'],
-    ['maintenance','getmaintenance'],['gatePasses','getgatepasses'],['contracts','getcontracts'],
-  ];
-  const results = await Promise.allSettled(endpoints.map(([,a])=>api(a)));
-  endpoints.forEach(([key],i)=>{
-    if(results[i].status==='fulfilled') STATE[key] = results[i].value || [];
-  });
-  // asset category map
-  try {
-    const acm = await api('getassetcategorymap');
-    STATE.assetCategoryMap = Object.fromEntries((acm||[]).map(r=>[r.SerialNo||r.serialNo, r.Category||r.category]));
-  } catch(e){}
-  showSync(false);
-  render();
+async function loadAll(){
+  const badge=document.getElementById('sync-badge');
+  if(badge){badge.classList.remove('hidden');badge.classList.add('flex');}
+  const endpoints=[['inventory','getinventory'],['callouts','getcallouts'],['jobs','getjobs'],['dtBatches','getdtbatches'],['rtBatches','getrtbatches'],['inspections','getinspections'],['maintenance','getmaintenance'],['gatePasses','getgatepasses'],['contracts','getcontracts']];
+  const results=await Promise.allSettled(endpoints.map(([,a])=>api(a)));
+  endpoints.forEach(([key],i)=>{ if(results[i].status==='fulfilled') STATE[key]=results[i].value||[]; });
+  if(badge){badge.classList.add('hidden');badge.classList.remove('flex');}
   updateBadges();
+  renderCurrentView();
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 // AUTH
-// ═══════════════════════════════════════════════════════════════
-function doLogin() {
-  const u = (document.getElementById('lu').value||'').trim().toLowerCase();
-  const p = document.getElementById('lp').value||'';
-  const errEl = document.getElementById('lerr');
+// ═══════════════════════════════════════════════════════════
+function doLogin(){
+  const u=(document.getElementById('lu').value||'').trim().toLowerCase();
+  const p=document.getElementById('lp').value||'';
+  const errEl=document.getElementById('lerr');
   errEl.classList.add('hidden');
-  if(!u||!p){ errEl.textContent='Please enter username and password.'; errEl.classList.remove('hidden'); return; }
-  const user = USERS.find(x=>x.username.toLowerCase()===u && x.pass===p);
-  if(!user){ errEl.textContent='Invalid username or password.'; errEl.classList.remove('hidden'); return; }
-  CU = user;
-  sessionStorage.setItem('emd_usr', JSON.stringify(user));
+  if(!u||!p){errEl.textContent='Please enter username and password.';errEl.classList.remove('hidden');return;}
+  const user=USERS.find(x=>x.username.toLowerCase()===u&&x.pass===p);
+  if(!user){errEl.textContent='Invalid username or password.';errEl.classList.remove('hidden');return;}
+  CU=user;
+  sessionStorage.setItem('emd_usr',JSON.stringify(user));
   startApp();
 }
-
-function doLogout() {
-  CU = null;
-  sessionStorage.removeItem('emd_usr');
+function doLogout(){
+  CU=null; sessionStorage.removeItem('emd_usr');
   document.getElementById('app').classList.add('hidden');
   document.getElementById('app').classList.remove('flex');
   document.getElementById('login-page').classList.remove('hidden');
-  document.getElementById('lu').value='';
-  document.getElementById('lp').value='';
+  document.getElementById('lu').value=''; document.getElementById('lp').value='';
 }
-
-function checkSession() {
-  try {
-    const s = sessionStorage.getItem('emd_usr');
-    if(s){ const u=JSON.parse(s); const found=USERS.find(x=>x.id===u.id&&x.username===u.username); if(found){CU=found;return true;} }
-  } catch(e){}
+function checkSession(){
+  try{ const s=sessionStorage.getItem('emd_usr'); if(s){const u=JSON.parse(s); const f=USERS.find(x=>x.id===u.id&&x.username===u.username); if(f){CU=f;return true;}} }catch(e){}
   return false;
 }
-
-function startApp() {
+function startApp(){
   document.getElementById('login-page').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   document.getElementById('app').classList.add('flex');
-  document.getElementById('user-name').textContent = CU.name;
-  document.getElementById('user-role').textContent = CU.role;
-  document.getElementById('user-avatar').textContent = CU.name[0].toUpperCase();
-  loadAll().then(()=>nav('dashboard'));
+  document.getElementById('user-name').textContent=CU.name;
+  document.getElementById('user-role').textContent=CU.role;
+  loadAll().then(()=>switchTab('dashboard'));
 }
 
-// ═══════════════════════════════════════════════════════════════
-// NAVIGATION
-// ═══════════════════════════════════════════════════════════════
-function nav(tab) {
-  if(!ACCESS[CU.role]||!ACCESS[CU.role].includes(tab)){ toast('Access denied','err'); return; }
-  ACTIVE_TAB = tab;
-  document.querySelectorAll('.nav-item').forEach(b=>{
-    b.classList.toggle('active', b.id==='nav-'+tab);
-    b.classList.toggle('bg-white/15', b.id==='nav-'+tab);
-    b.classList.toggle('text-white', b.id==='nav-'+tab);
+// ═══════════════════════════════════════════════════════════
+// NAV
+// ═══════════════════════════════════════════════════════════
+function switchTab(tab){
+  if(!ACCESS[CU.role]||!ACCESS[CU.role].includes(tab)){toast('Access denied for your role','err');return;}
+  ACTIVE_TAB=tab;
+  document.querySelectorAll('.nav-item').forEach(el=>{
+    el.className='nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white';
   });
-  render();
+  const activeEl=document.getElementById('nav-'+tab);
+  if(activeEl) activeEl.className='nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold bg-white/15 text-white shadow-sm';
+  renderCurrentView();
 }
-
-function render() {
-  const el = document.getElementById('main-content');
-  if(!el) return;
-  const pages = {
-    dashboard, inventory, callouts, jobs, delivery, returns,
-    gatepass, inspection, maintenance, contracts
-  };
-  if(pages[ACTIVE_TAB]) el.innerHTML = pages[ACTIVE_TAB]();
-  else el.innerHTML = `<div class="text-slate-400 text-sm">Module coming soon.</div>`;
+function renderCurrentView(){
+  const el=document.getElementById('main-content'); if(!el) return;
+  const map={dashboard:renderDashboardView,inventory:renderInventoryView,callouts:renderCalloutsView,jobs:renderJobsView,dt:renderDTView,rt:renderRTView,gatepass:renderGatePassView,inspection:renderInspectionView,maintenance:renderMaintenanceView,utilization:renderUtilizationView,contracts:renderContractsView};
+  const fn=map[ACTIVE_TAB];
+  el.innerHTML = fn ? fn(STATE,CU.role) : '<div class="text-slate-400 text-sm">Module not found.</div>';
 }
-
-// ═══════════════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════════════
-function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function fd(d){ if(!d)return '—'; try{return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'});}catch(e){return d;} }
-function showSync(on){ document.getElementById('sync-status').classList.toggle('hidden',!on); }
-
-function statusBadge(s) {
-  const map = {
-    'Good':'bg-emerald-100 text-emerald-800','Available':'bg-emerald-100 text-emerald-800',
-    'Repair':'bg-red-100 text-red-800','Redress':'bg-red-100 text-red-800',
-    'Inspection':'bg-amber-100 text-amber-800','Pending':'bg-amber-100 text-amber-800',
-    'OnRig':'bg-blue-100 text-blue-800','On Rig':'bg-blue-100 text-blue-800','Dispatched':'bg-blue-100 text-blue-800',
-    'Ongoing':'bg-blue-100 text-blue-800','Open':'bg-emerald-100 text-emerald-800',
-    'Closed':'bg-slate-100 text-slate-600','Completed':'bg-slate-100 text-slate-600',
-    'In Progress':'bg-orange-100 text-orange-800','Awaiting Parts':'bg-amber-100 text-amber-800',
-    'Complete - Ready':'bg-emerald-100 text-emerald-800','Active':'bg-emerald-100 text-emerald-800',
-    'Pass':'bg-emerald-100 text-emerald-800','Fail':'bg-red-100 text-red-800',
-  };
-  const cls = map[s] || 'bg-slate-100 text-slate-600';
-  return `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${cls}">${esc(s||'—')}</span>`;
-}
-
-function contractBadge(c) {
-  const map = {
-    'ADNOC Onshore':'bg-green-600','ADNOC Offshore':'bg-purple-600',
-    'ADNOC Drilling':'bg-blue-600','Turnwell':'bg-orange-600',
-  };
-  const bg = Object.entries(map).find(([k])=>c&&c.includes(k));
-  return bg ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold text-white ${bg[1]}">${esc(c)}</span>` : `<span class="text-xs text-slate-500">${esc(c||'—')}</span>`;
-}
-
-function statCard(icon, val, label, color='text-[#1a3055]') {
-  return `<div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-    <div class="text-2xl mb-1">${icon}</div>
-    <div class="text-2xl font-black ${color} font-mono">${val}</div>
-    <div class="text-xs text-slate-500 font-medium mt-0.5">${label}</div>
-  </div>`;
-}
-
-function tableHeader(cols) {
-  return `<thead class="bg-[#dbe6f1] border-b border-[#b8c9db]"><tr>${cols.map(c=>`<th class="px-3 py-2.5 text-left text-[10px] font-bold text-[#24476b] uppercase tracking-wider">${c}</th>`).join('')}</tr></thead>`;
-}
-
-function tableRow(cells, idx=0) {
-  const bg = idx%2===0?'bg-white':'bg-[#f2f6fa]';
-  return `<tr class="${bg} hover:bg-blue-50 transition">${cells.map(c=>`<td class="px-3 py-2 text-xs border-b border-slate-100">${c}</td>`).join('')}</tr>`;
-}
-
-function emptyState(icon, title, sub='') {
-  return `<div class="flex flex-col items-center justify-center py-20 text-center">
-    <div class="text-5xl mb-4">${icon}</div>
-    <div class="font-bold text-slate-600 text-sm">${title}</div>
-    ${sub?`<div class="text-xs text-slate-400 mt-1">${sub}</div>`:''}
-  </div>`;
-}
-
-function updateBadges() {
-  const b = (id,val)=>{ const el=document.getElementById(id); if(el)el.textContent=val; };
+function updateBadges(){
+  const b=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
   b('badge-inventory', STATE.inventory.length.toLocaleString());
-  b('badge-callouts', STATE.callouts.filter(c=>c.status!=='Closed').length);
-  b('badge-jobs', STATE.jobs.filter(j=>['Open','Ongoing'].includes(j.status||j.Status)).length);
+  b('badge-callouts', STATE.callouts.filter(c=>(c.status||c.Status)!=='Closed').length);
+  b('badge-jobs', STATE.jobs.filter(j=>['Open','Ongoing','Active'].includes(j.status||j.Status)).length);
 }
 
-function toast(msg, type='ok') {
-  const el = document.createElement('div');
-  const bg = type==='err'?'bg-red-600':type==='wrn'?'bg-amber-500':'bg-emerald-600';
-  el.className = `${bg} text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow-lg pointer-events-auto`;
-  el.textContent = msg;
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fd(d){if(!d)return '—';try{return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'});}catch(e){return d;}}
+function fnum(n){return Number(n||0).toLocaleString();}
+function g(row,...keys){for(const k of keys){if(row[k]!==undefined&&row[k]!==null)return row[k];}return '';}
+
+function openModal(html){document.getElementById('modal-content').innerHTML=html;document.getElementById('modal-backdrop').classList.remove('hidden');}
+function closeModal(){document.getElementById('modal-backdrop').classList.add('hidden');document.getElementById('modal-content').innerHTML='';}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
+
+function toast(msg,type='ok'){
+  const el=document.createElement('div');
+  const bg=type==='err'?'bg-rose-700':type==='wrn'?'bg-amber-500':'bg-emerald-700';
+  el.className=`${bg} text-white text-xs font-bold px-4 py-2.5 rounded shadow-lg pointer-events-auto border border-black/10`;
+  el.textContent=msg;
   document.getElementById('toast-container').appendChild(el);
-  setTimeout(()=>el.remove(), 3500);
+  setTimeout(()=>el.remove(),3200);
 }
 
-function openModal(html) {
-  document.getElementById('modal-box').innerHTML = html;
-  document.getElementById('modal-overlay').classList.remove('hidden');
+function statusPill(s){
+  const map={
+    Good:'bg-emerald-100 text-emerald-800',Available:'bg-emerald-100 text-emerald-800',Active:'bg-emerald-100 text-emerald-800',Open:'bg-emerald-100 text-emerald-800',Pass:'bg-emerald-100 text-emerald-800','Complete - Ready':'bg-emerald-100 text-emerald-800',Complete:'bg-emerald-100 text-emerald-800',
+    Dispatched:'bg-blue-100 text-blue-800',OnRig:'bg-blue-100 text-blue-800','On Rig':'bg-blue-100 text-blue-800',Ongoing:'bg-blue-100 text-blue-800',
+    Inspection:'bg-amber-100 text-amber-800',Pending:'bg-amber-100 text-amber-800','Awaiting Parts':'bg-amber-100 text-amber-800',Assigned:'bg-amber-100 text-amber-800',
+    Repair:'bg-rose-100 text-rose-800',Redress:'bg-rose-100 text-rose-800',Fail:'bg-rose-100 text-rose-800',
+    Closed:'bg-slate-200 text-slate-600',Returned:'bg-slate-200 text-slate-600',
+    'In Progress':'bg-blue-100 text-blue-800',
+  };
+  return `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${map[s]||'bg-slate-100 text-slate-600'}">${esc(s||'—')}</span>`;
 }
-function closeModal() {
-  document.getElementById('modal-overlay').classList.add('hidden');
-  document.getElementById('modal-box').innerHTML = '';
+function ribbon(kicker,title,actions=''){
+  return `<div class="bg-white border border-[#b8c9db] rounded p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm mb-4">
+    <div><div class="text-[11px] text-slate-500 font-medium">${esc(kicker)}</div><h1 class="text-base font-bold text-[#1a3055]">${esc(title)}</h1></div>
+    <div class="flex flex-wrap items-center gap-2">${actions}</div>
+  </div>`;
 }
-document.addEventListener('keydown', e=>{ if(e.key==='Escape')closeModal(); });
+function kpi(label,val,valColor,sub,borderColor){
+  return `<div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm border-t-[3px]" style="border-top-color:${borderColor}">
+    <div class="text-[11px] text-slate-500 font-medium">${esc(label)}</div>
+    <div class="mt-1 text-2xl font-extrabold font-mono" style="color:${valColor}">${val}</div>
+    <div class="text-[10px] text-slate-500 mt-0.5">${sub||''}</div>
+  </div>`;
+}
+function tblHead(cols){
+  return `<thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold"><tr>${cols.map(c=>`<th class="px-3 py-2 ${c.r?'text-right':c.c?'text-center':'text-left'}">${c.t||c}</th>`).join('')}</tr></thead>`;
+}
+function empty(colspan,msg){return `<tr><td colspan="${colspan}" class="p-8 text-center text-slate-500 font-medium">${msg}</td></tr>`;}
 
-// ═══════════════════════════════════════════════════════════════
-// DASHBOARD
-// ═══════════════════════════════════════════════════════════════
-function dashboard() {
-  const inv = STATE.inventory;
-  const jobs = STATE.jobs;
-  const dts = STATE.dtBatches;
-  const onRig = inv.filter(t=>(t.location||t.Location||'').toLowerCase().includes('rig')).length;
-  const atBase = inv.filter(t=>(t.status||t.Status)==='Good').length;
-  const activeJobs = jobs.filter(j=>['Open','Ongoing'].includes(j.status||j.Status)).length;
-  const openCals = STATE.callouts.filter(c=>(c.status||c.Status)!=='Closed').length;
-  const pendingInsp = STATE.inspections.filter(i=>(i.status||i.Status)==='Pending').length;
-  const activeMnt = STATE.maintenance.filter(m=>['In Progress','Awaiting Parts'].includes(m.status||m.Status)).length;
-
-  // Ownership breakdown
-  const ownerMap = {};
-  inv.forEach(t=>{ const o=t.ownership||t.Ownership||'Unknown'; ownerMap[o]=(ownerMap[o]||0)+1; });
-  const ownerRows = Object.entries(ownerMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
-
-  // Recent jobs
-  const recentJobs = jobs.slice(0,6);
+// ═══════════════════════════════════════════════════════════
+// 1. DASHBOARD
+// ═══════════════════════════════════════════════════════════
+function renderDashboardView(data,role){
+  const inv=data.inventory;
+  const onRig=inv.filter(t=>String(g(t,'location','Location')).toLowerCase().includes('rig')).length;
+  const good=inv.filter(t=>g(t,'status','Status')==='Good').length;
+  const insp=inv.filter(t=>['Inspection','Repair','Redress'].includes(g(t,'status','Status'))).length;
+  const jobs=data.jobs;
+  const activeJobs=jobs.filter(j=>['Open','Ongoing','Active'].includes(g(j,'status','Status')));
 
   return `
-  <div class="mb-6">
-    <h1 class="text-xl font-extrabold text-[#1a3055]">Operations Dashboard</h1>
-    <div class="text-xs text-slate-500 mt-0.5">Welcome back, ${esc(CU.name)} — ${new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
+  ${ribbon('Executive Overview','Integrated Fleet Operations & Drilling Dispatch Control',
+    role!=='Viewer' ? `
+    <button onclick="openAddToolModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">+ New Asset</button>
+    <button onclick="openNewCalloutModal()" class="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-sm">+ Rig Callout</button>
+    ` : '')}
+
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+    ${kpi('Total Fleet Tools',fnum(inv.length),'#1a3055',`${fnum(good)} Ready for Rig Deployment`,'#5b7fa6')}
+    ${kpi('Tools Operating on Rigs',fnum(onRig),'#047857',`Across ${activeJobs.length} Active Drilling Operations`,'#059669')}
+    ${kpi('QC Bay & Workshop',fnum(insp),'#b45309',`${insp} In Inspection/Redress`,'#f59e0b')}
+    ${kpi('Total Jobs',fnum(jobs.length),'#1a3055',`${data.dtBatches.length} DT Batches Issued`,'#1a3055')}
   </div>
 
-  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-    ${statCard('📦', inv.length.toLocaleString(), 'Total Assets')}
-    ${statCard('✅', atBase.toLocaleString(), 'At Base (Good)', 'text-emerald-600')}
-    ${statCard('🛢', onRig, 'On Rig', 'text-blue-600')}
-    ${statCard('💼', activeJobs, 'Active Jobs', 'text-amber-600')}
-    ${statCard('📋', openCals, 'Open Callouts', 'text-purple-600')}
-    ${statCard('🔧', activeMnt, 'In Maintenance', 'text-red-600')}
-  </div>
-
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-    <!-- Inventory by Owner -->
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-        <div class="font-bold text-sm text-[#1a3055]">Inventory by Supplier</div>
-        <div class="text-[10px] text-slate-400">${inv.length} total assets</div>
-      </div>
-      <div class="p-4 grid grid-cols-2 gap-2">
-        ${ownerRows.map(([owner,count])=>`
-          <div class="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
-            <div class="text-xs font-semibold text-slate-700 ${owner==='EMDAD'?'text-amber-700':''}">${esc(owner)}</div>
-            <div class="font-mono text-xs font-bold ${owner==='EMDAD'?'text-amber-600':'text-slate-600'}">${count.toLocaleString()}</div>
-          </div>
-        `).join('')}
-      </div>
+  <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+    <div class="px-4 py-2.5 bg-[#dbe6f1] border-b border-[#b8c9db] flex justify-between items-center">
+      <h3 class="text-xs font-bold text-[#1a3055] uppercase tracking-wide">Active Drilling Operations & Rig Status</h3>
+      <button onclick="switchTab('jobs')" class="text-xs text-blue-700 font-bold hover:underline">View All Jobs &rarr;</button>
     </div>
-
-    <!-- Recent Jobs -->
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-        <div class="font-bold text-sm text-[#1a3055]">Recent Jobs</div>
-        <button onclick="nav('jobs')" class="text-[10px] text-amber-600 hover:underline font-bold">View All →</button>
-      </div>
-      <div class="divide-y divide-slate-100">
-        ${recentJobs.length ? recentJobs.map(j=>`
-          <div class="px-4 py-2.5 flex items-center justify-between hover:bg-slate-50 transition">
-            <div>
-              <div class="font-mono text-xs font-bold text-amber-600">${esc(j.JobID||j.jobNumber||j.id||'')}</div>
-              <div class="text-[10px] text-slate-500">${esc(j.Rig||j.rig||'')} / ${esc(j.Well||j.well||'')} — ${esc(j.Client||j.client||'')}</div>
-            </div>
-            ${statusBadge(j.Status||j.status||'')}
-          </div>
-        `).join('') : emptyState('💼','No jobs yet')}
-      </div>
-    </div>
-
+    <table class="w-full text-left text-xs border-collapse">
+      ${tblHead(['JOB ID','CLIENT','RIG & WELL','PO NUMBER','MOB DATE','STATUS'])}
+      <tbody class="divide-y divide-[#e2e8f0]">
+        ${activeJobs.length===0?empty(6,'No active jobs.'):activeJobs.slice(0,10).map(j=>`
+          <tr class="hover:bg-[#e4eef8]">
+            <td class="px-3 py-2 font-mono font-bold text-amber-900">${esc(g(j,'JobID','jobNumber','id'))}</td>
+            <td class="px-3 py-2 font-bold text-[#1a3055]">${esc(g(j,'Client','client'))}</td>
+            <td class="px-3 py-2 font-medium">${esc(g(j,'Rig','rig'))} <span class="text-slate-400">|</span> ${esc(g(j,'Well','well'))}</td>
+            <td class="px-3 py-2 font-mono text-slate-600">${esc(g(j,'PONumber','poNumber')||'—')}</td>
+            <td class="px-3 py-2 font-mono">${fd(g(j,'MobDate','mobDate'))}</td>
+            <td class="px-3 py-2">${statusPill(g(j,'Status','status'))}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
   </div>`;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// INVENTORY
-// ═══════════════════════════════════════════════════════════════
-let invFilter = {q:'', status:'', owner:''};
-
-function inventory() {
-  const owners = [...new Set(STATE.inventory.map(t=>t.ownership||t.Ownership||'').filter(Boolean))].sort();
-  const statuses = [...new Set(STATE.inventory.map(t=>t.status||t.Status||'').filter(Boolean))].sort();
-
-  let inv = STATE.inventory;
-  if(invFilter.q){ const q=invFilter.q.toLowerCase(); inv=inv.filter(t=>[t.id||t.SystemID,t.assetNo||t.AssetNo,t.shortDesc||t.ShortDesc,t.size||t.Size,t.desc||t.Description,t.supplier||t.Supplier].join(' ').toLowerCase().includes(q)); }
-  if(invFilter.status) inv=inv.filter(t=>(t.status||t.Status)===invFilter.status);
-  if(invFilter.owner) inv=inv.filter(t=>(t.ownership||t.Ownership)===invFilter.owner);
-
-  const good=STATE.inventory.filter(t=>(t.status||t.Status)==='Good').length;
-  const onRig=STATE.inventory.filter(t=>(t.location||t.Location||'').toLowerCase().includes('rig')).length;
-  const repair=STATE.inventory.filter(t=>['Repair','Redress','Inspection'].includes(t.status||t.Status)).length;
-
+// ═══════════════════════════════════════════════════════════
+// 2. INVENTORY (fixed: only table body re-renders on search, not the whole view)
+// ═══════════════════════════════════════════════════════════
+function renderInventoryView(data,role){
+  const cats=[...new Set(data.inventory.map(t=>g(t,'shortDesc','ShortDesc')).filter(Boolean))].sort();
   return `
-  <div class="flex items-center justify-between mb-5">
-    <div>
-      <h1 class="text-xl font-extrabold text-[#1a3055]">Inventory</h1>
-      <div class="text-xs text-slate-500 mt-0.5">All Assets & Tools</div>
-    </div>
-  </div>
+  ${ribbon('Fleet & Asset Management','Master Tool Inventory & Downhole Tracking',
+    role!=='Viewer' ? `<button onclick="openAddToolModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">+ New Asset</button>` : '')}
 
-  <div class="grid grid-cols-4 gap-3 mb-5">
-    ${statCard('📦', STATE.inventory.length.toLocaleString(), 'Total')}
-    ${statCard('✅', good.toLocaleString(), 'Good / At Base', 'text-emerald-600')}
-    ${statCard('🛢', onRig, 'On Rig', 'text-blue-600')}
-    ${statCard('🔧', repair, 'Repair / Inspection', 'text-red-600')}
-  </div>
-
-  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2">
-      <input type="text" placeholder="🔍  Search serial, asset no, type, size..." value="${esc(invFilter.q)}"
-        oninput="invFilter.q=this.value;render()"
-        class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs w-72 focus:outline-none focus:ring-2 focus:ring-amber-400">
-      <select oninput="invFilter.status=this.value;render()" class="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400">
-        <option value="">All Status</option>
-        ${statuses.map(s=>`<option value="${esc(s)}" ${invFilter.status===s?'selected':''}>${esc(s)}</option>`).join('')}
-      </select>
-      <select oninput="invFilter.owner=this.value;render()" class="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400">
-        <option value="">All Owners</option>
-        ${owners.map(o=>`<option value="${esc(o)}" ${invFilter.owner===o?'selected':''}>${esc(o)}</option>`).join('')}
-      </select>
-      <span class="text-[10px] text-slate-400 ml-auto">${inv.length.toLocaleString()} of ${STATE.inventory.length.toLocaleString()} tools</span>
+  <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+    <div class="p-3 bg-[#dbe6f1] border-b border-[#b8c9db] flex flex-wrap items-center justify-between gap-2.5">
+      <div class="flex flex-wrap items-center gap-2">
+        <input type="text" id="inv-search" value="${esc(invViewState.search)}" oninput="onInvSearch(this.value)" placeholder="Search serial #, asset name, description..." class="bg-white border border-[#b8c9db] rounded px-3 py-1 text-xs w-72 outline-none font-medium">
+        <select onchange="onInvCat(this.value)" class="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-medium">
+          <option value="ALL">All Categories (${data.inventory.length})</option>
+          ${cats.map(c=>`<option value="${esc(c)}" ${invViewState.category===c?'selected':''}>${esc(c)}</option>`).join('')}
+        </select>
+        <select onchange="onInvStatus(this.value)" class="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-medium">
+          <option value="ALL">All Statuses</option>
+          <option value="Good" ${invViewState.status==='Good'?'selected':''}>🟢 Good</option>
+          <option value="Repair" ${invViewState.status==='Repair'?'selected':''}>🔴 Repair</option>
+          <option value="Inspection" ${invViewState.status==='Inspection'?'selected':''}>🟡 Inspection</option>
+          <option value="Redress" ${invViewState.status==='Redress'?'selected':''}>🟠 Redress</option>
+        </select>
+      </div>
+      <div id="inv-count" class="text-xs font-bold text-slate-700"></div>
     </div>
     <div class="overflow-x-auto">
-      <table class="w-full text-xs">
-        ${tableHeader(['#','Serial / ID','Asset No','Size','Tool Type','Description','Owner','Location','Status'])}
-        <tbody>
-          ${inv.length===0 ? `<tr><td colspan="9" class="px-4 py-12 text-center text-slate-400">No tools match your filters</td></tr>` :
-            inv.slice(0,200).map((t,i)=>tableRow([
-              `<span class="text-slate-400 font-mono">${i+1}</span>`,
-              `<span class="font-mono font-bold text-amber-600">${esc(t.id||t.SystemID||t.serial||'')}</span>`,
-              `<span class="font-mono text-slate-500 text-[10px]">${esc(t.assetNo||t.AssetNo||'')}</span>`,
-              `<span class="font-mono font-semibold">${esc(t.size||t.Size||'')}</span>`,
-              `<span class="font-semibold">${esc(t.shortDesc||t.ShortDesc||'')}</span>`,
-              `<span class="text-slate-500 text-[10px]">${esc((t.desc||t.Description||'').slice(0,60))}${(t.desc||t.Description||'').length>60?'…':''}</span>`,
-              `<span class="font-bold ${(t.ownership||t.Ownership)==='EMDAD'?'text-amber-600':'text-slate-500'}">${esc(t.ownership||t.Ownership||'')}</span>`,
-              `<span class="text-slate-500">${esc(t.location||t.Location||'')}</span>`,
-              statusBadge(t.status||t.Status||''),
-            ],i)).join('')
-          }
-        </tbody>
-      </table>
-      ${inv.length>200?`<div class="px-4 py-2 text-[10px] text-slate-400 border-t">Showing first 200 of ${inv.length.toLocaleString()} results. Use filters to narrow down.</div>`:''}
-    </div>
-  </div>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// CALLOUTS
-// ═══════════════════════════════════════════════════════════════
-function callouts() {
-  const cals = STATE.callouts;
-  const active = cals.filter(c=>c.status!=='Closed');
-  const closed = cals.filter(c=>c.status==='Closed');
-
-  return `
-  <div class="flex items-center justify-between mb-5">
-    <div><h1 class="text-xl font-extrabold text-[#1a3055]">Callout Management</h1><div class="text-xs text-slate-500 mt-0.5">Client tool requests</div></div>
-  </div>
-  <div class="grid grid-cols-4 gap-3 mb-5">
-    ${statCard('📋', cals.length, 'Total')}
-    ${statCard('🟢', active.length, 'Active', 'text-emerald-600')}
-    ${statCard('✅', closed.length, 'Closed', 'text-slate-500')}
-    ${statCard('🔧', cals.filter(c=>c.status==='Forecast').length, 'Forecast', 'text-purple-600')}
-  </div>
-  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="px-4 py-3 border-b border-slate-100 font-bold text-sm text-[#1a3055]">All Callouts</div>
-    <div class="overflow-x-auto">
-      <table class="w-full text-xs">
-        ${tableHeader(['Callout #','Rig','Well','Client / Contract','PO Ref','Date','Items','Status'])}
-        <tbody>
-          ${cals.length===0 ? `<tr><td colspan="8" class="px-4 py-12 text-center text-slate-400">No callouts yet</td></tr>` :
-            cals.map((c,i)=>tableRow([
-              `<span class="font-mono font-bold text-amber-600">${esc(c.id||c.CalloutID||'')}</span>`,
-              `<span class="font-semibold">${esc(c.rig||c.Rig||'')}</span>`,
-              `<span class="text-slate-500">${esc(c.well||c.Well||'')}</span>`,
-              contractBadge(c.contract||c.Contract||c.client||c.Client||''),
-              `<span class="font-mono text-slate-400 text-[10px]">${esc(c.poRef||c.PORef||'—')}</span>`,
-              fd(c.createdDate||c.CreatedDate),
-              `<span class="font-mono font-bold">${(c.items||[]).length}</span>`,
-              statusBadge(c.status||c.Status||''),
-            ],i)).join('')
-          }
-        </tbody>
+      <table class="w-full text-left text-xs border-collapse">
+        ${tblHead(['SERIAL #','ASSET NO','SIZE','TOOL TYPE','DESCRIPTION','OWNER','LOCATION','STATUS',{t:'ACTION',c:1}])}
+        <tbody id="inv-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
       </table>
     </div>
-  </div>`;
+  </div>
+  <script>renderInvTable();</script>`;
 }
-
-// ═══════════════════════════════════════════════════════════════
-// JOBS
-// ═══════════════════════════════════════════════════════════════
-let jobFilter = {q:'', tab:'active'};
-
-function jobs() {
-  let jbs = STATE.jobs;
-  const active = jbs.filter(j=>['Open','Ongoing'].includes(j.Status||j.status||''));
-  const closed = jbs.filter(j=>(j.Status||j.status)==='Closed');
-  const shown = jobFilter.tab==='active' ? active : closed;
-  let filtered = shown;
-  if(jobFilter.q){ const q=jobFilter.q.toLowerCase(); filtered=filtered.filter(j=>[j.JobID||j.jobNumber,j.Rig||j.rig,j.Well||j.well,j.Client||j.client,j.PONumber||j.poNumber].join(' ').toLowerCase().includes(q)); }
-
-  return `
-  <div class="flex items-center justify-between mb-5">
-    <div><h1 class="text-xl font-extrabold text-[#1a3055]">Job Management</h1><div class="text-xs text-slate-500 mt-0.5">All drilling jobs</div></div>
-  </div>
-  <div class="grid grid-cols-4 gap-3 mb-5">
-    ${statCard('💼', jbs.length, 'Total')}
-    ${statCard('🟢', jbs.filter(j=>(j.Status||j.status)==='Open').length, 'Open', 'text-emerald-600')}
-    ${statCard('⚡', jbs.filter(j=>(j.Status||j.status)==='Ongoing').length, 'Ongoing', 'text-amber-600')}
-    ${statCard('✅', closed.length, 'Closed', 'text-slate-500')}
-  </div>
-  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
-      <div class="flex bg-slate-100 rounded-lg p-0.5 gap-0.5">
-        <button onclick="jobFilter.tab='active';render()" class="px-3 py-1.5 rounded-md text-xs font-bold transition ${jobFilter.tab==='active'?'bg-[#1a3055] text-white':'text-slate-500 hover:text-slate-700'}">⚡ Open / Ongoing (${active.length})</button>
-        <button onclick="jobFilter.tab='closed';render()" class="px-3 py-1.5 rounded-md text-xs font-bold transition ${jobFilter.tab==='closed'?'bg-[#1a3055] text-white':'text-slate-500 hover:text-slate-700'}">✅ Closed (${closed.length})</button>
-      </div>
-      <input type="text" placeholder="🔍  Search job#, rig, well, client..." value="${esc(jobFilter.q)}"
-        oninput="jobFilter.q=this.value;render()"
-        class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs w-64 focus:outline-none focus:ring-2 focus:ring-amber-400 ml-auto">
-    </div>
-    <div class="overflow-x-auto">
-      <table class="w-full text-xs">
-        ${tableHeader(['Job #','Callout','Contract','Rig / Well','PO Number','Mob Date','DTs','Dispatched','Returned','On Rig','Status'])}
-        <tbody>
-          ${filtered.length===0 ? `<tr><td colspan="11" class="px-4 py-12 text-center text-slate-400">No jobs in this view</td></tr>` :
-            filtered.map((j,i)=>{
-              const jid = j.JobID||j.jobNumber||j.id||'';
-              const bts = STATE.dtBatches.filter(b=>(b.JobID||b.jobId)===jid);
-              const dispatched = bts.reduce((s,b)=>s+(b.toolLines||[]).length,0);
-              const returned = bts.reduce((s,b)=>s+(b.toolLines||[]).filter(t=>(t.Status||t.status)==='Returned').length,0);
-              const onRig = dispatched-returned;
-              return tableRow([
-                `<span class="font-mono font-bold text-amber-600">${esc(jid)}</span>`,
-                `<span class="font-mono text-[10px] text-slate-400">${esc(j.CalloutID||j.calloutId||'—')}</span>`,
-                contractBadge(j.Contract||j.contract||j.Client||j.client||''),
-                `<div><div class="font-semibold">${esc(j.Rig||j.rig||'')}</div><div class="text-[10px] text-slate-400">${esc(j.Well||j.well||'')}</div></div>`,
-                `<span class="font-mono text-slate-400 text-[10px]">${esc(j.PONumber||j.poNumber||'—')}</span>`,
-                fd(j.MobDate||j.mobDate),
-                `<span class="font-mono font-bold text-blue-600">${bts.length}</span>`,
-                `<span class="font-mono">${dispatched}</span>`,
-                `<span class="font-mono ${returned>0?'text-emerald-600':''}">${returned}</span>`,
-                `<span class="font-mono font-bold ${onRig>0?'text-amber-600':'text-slate-400'}">${onRig}</span>`,
-                statusBadge(j.Status||j.status||''),
-              ],i);
-            }).join('')
-          }
-        </tbody>
-      </table>
-    </div>
-  </div>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// DELIVERY TICKETS
-// ═══════════════════════════════════════════════════════════════
-let dtFilter = {tab:'onrig', q:''};
-
-function delivery() {
-  const dts = STATE.dtBatches;
-  const onRigDTs = dts.filter(b=>(b.toolLines||[]).some(t=>(t.Status||t.status)==='OnRig'));
-  const shown = dtFilter.tab==='onrig' ? onRigDTs : dts;
-  const filtered = dtFilter.q ? shown.filter(b=>[b.DTNumber||b.dtNumber,b.JobID||b.jobId,b.Rig||b.rig,b.Well||b.well,b.RMRef||b.rmRef].join(' ').toLowerCase().includes(dtFilter.q.toLowerCase())) : shown;
-
-  return `
-  <div class="flex items-center justify-between mb-5">
-    <div><h1 class="text-xl font-extrabold text-[#1a3055]">Delivery Tickets</h1><div class="text-xs text-slate-500 mt-0.5">Tool dispatch records</div></div>
-  </div>
-  <div class="grid grid-cols-4 gap-3 mb-5">
-    ${statCard('🚚', dts.length, 'DT Batches')}
-    ${statCard('🛢', dts.reduce((s,b)=>s+(b.toolLines||[]).filter(t=>(t.Status||t.status)==='OnRig').length,0), 'Tools On Rig', 'text-blue-600')}
-    ${statCard('✅', dts.reduce((s,b)=>s+(b.toolLines||[]).filter(t=>(t.Status||t.status)==='Returned').length,0), 'Returned', 'text-emerald-600')}
-    ${statCard('📦', dts.reduce((s,b)=>s+(b.toolLines||[]).length,0), 'Total Lines')}
-  </div>
-  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
-      <div class="flex bg-slate-100 rounded-lg p-0.5 gap-0.5">
-        <button onclick="dtFilter.tab='onrig';render()" class="px-3 py-1.5 rounded-md text-xs font-bold transition ${dtFilter.tab==='onrig'?'bg-[#1a3055] text-white':'text-slate-500 hover:text-slate-700'}">🛢 Tools On Rig (${onRigDTs.length})</button>
-        <button onclick="dtFilter.tab='all';render()" class="px-3 py-1.5 rounded-md text-xs font-bold transition ${dtFilter.tab==='all'?'bg-[#1a3055] text-white':'text-slate-500 hover:text-slate-700'}">📋 All Tickets (${dts.length})</button>
-      </div>
-      <input type="text" placeholder="🔍  Search DT#, job, rig, RM ref..." value="${esc(dtFilter.q)}"
-        oninput="dtFilter.q=this.value;render()"
-        class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs w-64 focus:outline-none focus:ring-2 focus:ring-amber-400 ml-auto">
-    </div>
-    <div class="overflow-x-auto">
-      <table class="w-full text-xs">
-        ${tableHeader(['DT Number','Job','Rig / Well','Contract','RM Ref','Date','Tools','On Rig','Returned'])}
-        <tbody>
-          ${filtered.length===0 ? `<tr><td colspan="9" class="px-4 py-12 text-center text-slate-400">No delivery tickets in this view</td></tr>` :
-            filtered.map((b,i)=>{
-              const lines = b.toolLines||[];
-              const onRig = lines.filter(t=>(t.Status||t.status)==='OnRig').length;
-              const ret = lines.filter(t=>(t.Status||t.status)==='Returned').length;
-              return tableRow([
-                `<span class="font-mono font-bold text-amber-600">${esc(b.DTNumber||b.dtNumber||'')}</span>`,
-                `<span class="font-mono text-[10px] text-blue-600">${esc(b.JobID||b.jobId||'')}</span>`,
-                `<div><div class="font-semibold">${esc(b.Rig||b.rig||'')}</div><div class="text-[10px] text-slate-400">${esc(b.Well||b.well||'')}</div></div>`,
-                contractBadge(b.Contract||b.contract||''),
-                `<span class="font-mono text-slate-500 text-[10px]">${esc(b.RMRef||b.rmRef||'—')}</span>`,
-                fd(b.DispatchDate||b.dispatchDate||b.RMDate||b.rmDate),
-                `<span class="font-mono font-bold">${lines.length}</span>`,
-                `<span class="font-mono font-bold ${onRig>0?'text-amber-600':'text-slate-400'}">${onRig}</span>`,
-                `<span class="font-mono ${ret>0?'text-emerald-600':''}">${ret}</span>`,
-              ],i);
-            }).join('')
-          }
-        </tbody>
-      </table>
-    </div>
-  </div>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// RECEIVING TICKETS
-// ═══════════════════════════════════════════════════════════════
-let rtFilter = {tab:'pending', q:''};
-
-function returns() {
-  const rts = STATE.rtBatches;
-  // Build pending return groups from DT batches
-  const onRigTools = [];
-  STATE.dtBatches.forEach(b=>{
-    (b.toolLines||[]).filter(t=>(t.Status||t.status)==='OnRig').forEach(t=>{
-      onRigTools.push({...t, dtNumber:b.DTNumber||b.dtNumber, jobId:b.JobID||b.jobId, rig:b.Rig||b.rig, well:b.Well||b.well, contract:b.Contract||b.contract, dispatchDate:b.DispatchDate||b.dispatchDate});
-    });
-  });
-
-  // Group by rig
-  const rigMap = {};
-  onRigTools.forEach(t=>{ const k=t.rig||'Unknown'; (rigMap[k]=rigMap[k]||[]).push(t); });
-
-  return `
-  <div class="flex items-center justify-between mb-5">
-    <div><h1 class="text-xl font-extrabold text-[#1a3055]">Receiving Tickets</h1><div class="text-xs text-slate-500 mt-0.5">Tool returns & backloads</div></div>
-  </div>
-  <div class="grid grid-cols-3 gap-3 mb-5">
-    ${statCard('🛢', onRigTools.length, 'Tools On Rig', 'text-blue-600')}
-    ${statCard('📄', rts.length, 'RT Batches Issued')}
-    ${statCard('🏭', Object.keys(rigMap).length, 'Active Rigs', 'text-amber-600')}
-  </div>
-  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-4">
-    <div class="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
-      <div class="flex bg-slate-100 rounded-lg p-0.5 gap-0.5">
-        <button onclick="rtFilter.tab='pending';render()" class="px-3 py-1.5 rounded-md text-xs font-bold transition ${rtFilter.tab==='pending'?'bg-[#1a3055] text-white':'text-slate-500 hover:text-slate-700'}">🛢 Pending Return</button>
-        <button onclick="rtFilter.tab='history';render()" class="px-3 py-1.5 rounded-md text-xs font-bold transition ${rtFilter.tab==='history'?'bg-[#1a3055] text-white':'text-slate-500 hover:text-slate-700'}">📄 RT History (${rts.length})</button>
-      </div>
-    </div>
-    ${rtFilter.tab==='pending' ? `
-      ${Object.keys(rigMap).length===0 ? `<div class="px-4 py-12 text-center text-slate-400 text-sm">No tools currently on rig</div>` :
-        Object.entries(rigMap).map(([rig,tools])=>`
-          <div class="border-b border-slate-100 last:border-0">
-            <div class="px-4 py-3 bg-[#dbe6f1] flex items-center justify-between">
-              <div class="flex items-center space-x-3">
-                <span class="font-bold text-sm text-[#1a3055]">${esc(rig)}</span>
-                <span class="text-xs text-slate-500">${esc(tools[0]?.well||'')}</span>
-                <span class="px-2 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded-full">${tools.length} On Rig</span>
-              </div>
-            </div>
-            <table class="w-full text-xs">
-              ${tableHeader(['Serial','Size','Tool Type','Job','DT#','Dispatched','Ownership'])}
-              <tbody>
-                ${tools.map((t,i)=>tableRow([
-                  `<span class="font-mono font-bold text-amber-600">${esc(t.Serial||t.serial||'')}</span>`,
-                  `<span class="font-mono">${esc(t.Size||t.size||'')}</span>`,
-                  esc(t.ShortDesc||t.shortDesc||''),
-                  `<span class="font-mono text-[10px] text-blue-600">${esc(t.jobId||'')}</span>`,
-                  `<span class="font-mono text-[10px] text-slate-500">${esc(t.dtNumber||'')}</span>`,
-                  fd(t.dispatchDate),
-                  `<span class="font-bold text-[10px] ${(t.Ownership||t.ownership)==='EMDAD'?'text-amber-600':'text-slate-500'}">${esc(t.Ownership||t.ownership||'')}</span>`,
-                ],i)).join('')}
-              </tbody>
-            </table>
-          </div>
-        `).join('')
-      }
-    ` : `
-      <div class="overflow-x-auto">
-        <table class="w-full text-xs">
-          ${tableHeader(['RT Number','Job','Rig / Well','Contract','Date','Tools','By'])}
-          <tbody>
-            ${rts.length===0 ? `<tr><td colspan="7" class="px-4 py-12 text-center text-slate-400">No receiving tickets yet</td></tr>` :
-              rts.map((r,i)=>tableRow([
-                `<span class="font-mono font-bold text-amber-600">${esc(r.RTNumber||r.rtNumber||'')}</span>`,
-                `<span class="font-mono text-[10px] text-blue-600">${esc(r.JobID||r.jobId||'')}</span>`,
-                `<div><div class="font-semibold">${esc(r.Rig||r.rig||'')}</div><div class="text-[10px] text-slate-400">${esc(r.Well||r.well||'')}</div></div>`,
-                contractBadge(r.Contract||r.contract||''),
-                fd(r.RTDate||r.rtDate),
-                `<span class="font-mono font-bold">${(r.toolLines||[]).length}</span>`,
-                esc(r.ReceivedBy||r.receivedBy||''),
-              ],i)).join('')
-            }
-          </tbody>
-        </table>
-      </div>
-    `}
-  </div>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// GATE PASSES
-// ═══════════════════════════════════════════════════════════════
-function gatepass() {
-  const gps = STATE.gatePasses;
-  return `
-  <div class="mb-5"><h1 class="text-xl font-extrabold text-[#1a3055]">Gate Passes</h1><div class="text-xs text-slate-500 mt-0.5">Sub-contractor tool movements</div></div>
-  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="px-4 py-3 border-b border-slate-100 font-bold text-sm text-[#1a3055]">${gps.length} Gate Pass Records</div>
-    <div class="overflow-x-auto">
-      <table class="w-full text-xs">
-        ${tableHeader(['GP Number','Supplier','Date','Tools','Prepared By','Authorized By'])}
-        <tbody>
-          ${gps.length===0 ? `<tr><td colspan="6" class="px-4 py-12 text-center text-slate-400">No gate passes yet</td></tr>` :
-            gps.map((g,i)=>tableRow([
-              `<span class="font-mono font-bold text-amber-600">${esc(g.GPNumber||g.gpNumber||'')}</span>`,
-              `<span class="font-bold">${esc(g.Supplier||g.supplier||'')}</span>`,
-              fd(g.GPDate||g.gpDate),
-              `<span class="font-mono font-bold">${(g.toolLines||[]).length}</span>`,
-              esc(g.PreparedBy||g.preparedBy||''),
-              esc(g.AuthorizedBy||g.authorizedBy||''),
-            ],i)).join('')
-          }
-        </tbody>
-      </table>
-    </div>
-  </div>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// INSPECTION
-// ═══════════════════════════════════════════════════════════════
-let insFilter = {tab:'pending'};
-
-function inspection() {
-  const ins = STATE.inspections;
-  const pending = ins.filter(i=>(i.Status||i.status)==='Pending');
-  const done = ins.filter(i=>(i.Status||i.status)==='Complete');
-  const shown = insFilter.tab==='pending' ? pending : done;
-
-  return `
-  <div class="mb-5"><h1 class="text-xl font-extrabold text-[#1a3055]">Inspection Queue</h1><div class="text-xs text-slate-500 mt-0.5">QC inspection records</div></div>
-  <div class="grid grid-cols-3 gap-3 mb-5">
-    ${statCard('🔍', ins.length, 'Total')}
-    ${statCard('⏳', pending.length, 'Pending', 'text-amber-600')}
-    ${statCard('✅', done.length, 'Complete', 'text-emerald-600')}
-  </div>
-  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-      <div class="flex bg-slate-100 rounded-lg p-0.5 gap-0.5">
-        <button onclick="insFilter.tab='pending';render()" class="px-3 py-1.5 rounded-md text-xs font-bold transition ${insFilter.tab==='pending'?'bg-[#1a3055] text-white':'text-slate-500 hover:text-slate-700'}">⏳ Pending (${pending.length})</button>
-        <button onclick="insFilter.tab='done';render()" class="px-3 py-1.5 rounded-md text-xs font-bold transition ${insFilter.tab==='done'?'bg-[#1a3055] text-white':'text-slate-500 hover:text-slate-700'}">✅ Complete (${done.length})</button>
-      </div>
-    </div>
-    <div class="overflow-x-auto">
-      <table class="w-full text-xs">
-        ${tableHeader(['WO Number','Serial','Size','Tool Type','Received','Inspected By','Result','Disposition','Status'])}
-        <tbody>
-          ${shown.length===0 ? `<tr><td colspan="9" class="px-4 py-12 text-center text-slate-400">No records in this view</td></tr>` :
-            shown.map((r,i)=>tableRow([
-              `<span class="font-mono font-bold text-amber-600">${esc(r.WONumber||r.woNumber||'')}</span>`,
-              `<span class="font-mono font-bold text-blue-600">${esc(r.Serial||r.serial||'')}</span>`,
-              `<span class="font-mono">${esc(r.Size||r.size||'')}</span>`,
-              esc(r.ShortDesc||r.shortDesc||''),
-              fd(r.ReceivedDate||r.receivedDate),
-              esc(r.InspectedBy||r.inspectedBy||'—'),
-              statusBadge(r.Result||r.result||'Pending'),
-              esc(r.Disposition||r.disposition||'—'),
-              statusBadge(r.Status||r.status||''),
-            ],i)).join('')
-          }
-        </tbody>
-      </table>
-    </div>
-  </div>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// MAINTENANCE
-// ═══════════════════════════════════════════════════════════════
-let mntFilter = {tab:'active'};
-
-function maintenance() {
-  const mnt = STATE.maintenance;
-  const active = mnt.filter(m=>['In Progress','Awaiting Parts'].includes(m.Status||m.status||''));
-  const complete = mnt.filter(m=>['Complete - Ready','Closed'].includes(m.Status||m.status||''));
-  const shown = mntFilter.tab==='active' ? active : mntFilter.tab==='complete' ? complete : mnt;
-
-  return `
-  <div class="mb-5"><h1 class="text-xl font-extrabold text-[#1a3055]">Maintenance Queue</h1><div class="text-xs text-slate-500 mt-0.5">Workshop work orders</div></div>
-  <div class="grid grid-cols-4 gap-3 mb-5">
-    ${statCard('🔧', mnt.length, 'Total WOs')}
-    ${statCard('⚡', mnt.filter(m=>(m.Status||m.status)==='In Progress').length, 'In Progress', 'text-blue-600')}
-    ${statCard('⏳', mnt.filter(m=>(m.Status||m.status)==='Awaiting Parts').length, 'Awaiting Parts', 'text-amber-600')}
-    ${statCard('✅', complete.length, 'Complete', 'text-emerald-600')}
-  </div>
-  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-      <div class="flex bg-slate-100 rounded-lg p-0.5 gap-0.5">
-        <button onclick="mntFilter.tab='active';render()" class="px-3 py-1.5 rounded-md text-xs font-bold transition ${mntFilter.tab==='active'?'bg-[#1a3055] text-white':'text-slate-500 hover:text-slate-700'}">⚡ Active (${active.length})</button>
-        <button onclick="mntFilter.tab='complete';render()" class="px-3 py-1.5 rounded-md text-xs font-bold transition ${mntFilter.tab==='complete'?'bg-[#1a3055] text-white':'text-slate-500 hover:text-slate-700'}">✅ Complete (${complete.length})</button>
-        <button onclick="mntFilter.tab='all';render()" class="px-3 py-1.5 rounded-md text-xs font-bold transition ${mntFilter.tab==='all'?'bg-[#1a3055] text-white':'text-slate-500 hover:text-slate-700'}">📋 All (${mnt.length})</button>
-      </div>
-    </div>
-    <div class="overflow-x-auto">
-      <table class="w-full text-xs">
-        ${tableHeader(['WO Number','Serial','Size','Tool','Issue','Type','Start','Est. Complete','Status'])}
-        <tbody>
-          ${shown.length===0 ? `<tr><td colspan="9" class="px-4 py-12 text-center text-slate-400">No records in this view</td></tr>` :
-            shown.map((m,i)=>tableRow([
-              `<span class="font-mono font-bold text-amber-600">${esc(m.WONumber||m.woNumber||'')}</span>`,
-              `<span class="font-mono font-bold text-blue-600">${esc(m.Serial||m.serial||'')}</span>`,
-              `<span class="font-mono">${esc(m.Size||m.size||'')}</span>`,
-              esc(m.ShortDesc||m.shortDesc||''),
-              `<span class="text-slate-500 text-[10px]">${esc((m.Issue||m.issue||'').slice(0,50))}</span>`,
-              `<span class="px-2 py-0.5 rounded text-[10px] font-bold ${(m.Type||m.type)==='InHouse'?'bg-blue-100 text-blue-800':'bg-orange-100 text-orange-800'}">${esc(m.Type||m.type||'')}</span>`,
-              fd(m.StartDate||m.startDate),
-              fd(m.EstCompleteDate||m.estCompleteDate),
-              statusBadge(m.Status||m.status||''),
-            ],i)).join('')
-          }
-        </tbody>
-      </table>
-    </div>
-  </div>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// CONTRACTS
-// ═══════════════════════════════════════════════════════════════
-function contracts() {
-  const cons = STATE.contracts;
-  const active = cons.filter(c=>(c.Status||c.status||c.status)==='Active'||(c.status||c.Status)==='Active');
-
-  return `
-  <div class="mb-5"><h1 class="text-xl font-extrabold text-[#1a3055]">Contracts</h1><div class="text-xs text-slate-500 mt-0.5">Client contracts & PBG tracking</div></div>
-  <div class="grid grid-cols-4 gap-3 mb-5">
-    ${statCard('📄', cons.length, 'Total')}
-    ${statCard('🟢', active.length, 'Active', 'text-emerald-600')}
-    ${statCard('⚠️', cons.filter(c=>{ try{ const d=new Date(c.PBGExpiryDate||c.pbgExpiryDate); return (d-new Date())<60*86400000; }catch(e){return false;} }).length, 'PBG Expiring ≤60d', 'text-red-600')}
-    ${statCard('💰', cons.filter(c=>(c.Currency||c.currency)==='AED').length, 'AED Contracts', 'text-blue-600')}
-  </div>
-  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="px-4 py-3 border-b border-slate-100 font-bold text-sm text-[#1a3055]">All Contracts</div>
-    <div class="overflow-x-auto">
-      <table class="w-full text-xs">
-        ${tableHeader(['Contract Ref','Client','Currency','Status','PBG Number','PBG Expiry','Contract Value'])}
-        <tbody>
-          ${cons.length===0 ? `<tr><td colspan="7" class="px-4 py-12 text-center text-slate-400">No contracts loaded</td></tr>` :
-            cons.map((c,i)=>{
-              const expiry = c.PBGExpiryDate||c.pbgExpiryDate;
-              const daysLeft = expiry ? Math.floor((new Date(expiry)-new Date())/86400000) : null;
-              const expiryText = daysLeft!==null ? (daysLeft<0?`<span class="text-red-600 font-bold">EXPIRED</span>`:daysLeft<30?`<span class="text-red-600 font-bold">${daysLeft}d</span>`:daysLeft<60?`<span class="text-amber-600 font-bold">${daysLeft}d</span>`:fd(expiry)) : '—';
-              return tableRow([
-                `<span class="font-mono font-bold text-amber-600">${esc(c.contractRef||c.ContractRef||c.id||'')}</span>`,
-                contractBadge(c.client||c.Client||''),
-                `<span class="font-mono font-bold">${esc(c.currency||c.Currency||'USD')}</span>`,
-                statusBadge(c.status||c.Status||'Active'),
-                `<span class="font-mono text-[10px] text-slate-500">${esc(c.PBGNumber||c.pbgNumber||'—')}</span>`,
-                expiryText,
-                `<span class="font-mono font-bold">${c.ContractValue||c.contractValue ? Number(c.ContractValue||c.contractValue).toLocaleString() : '—'}</span>`,
-              ],i);
-            }).join('')
-          }
-        </tbody>
-      </table>
-    </div>
-  </div>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// BOOT
-// ═══════════════════════════════════════════════════════════════
-window.addEventListener('DOMContentLoaded', ()=>{
-  if(checkSession()) {
-    startApp();
+function invFiltered(){
+  let inv=STATE.inventory;
+  if(invViewState.category!=='ALL') inv=inv.filter(t=>g(t,'shortDesc','ShortDesc')===invViewState.category);
+  if(invViewState.status!=='ALL') inv=inv.filter(t=>g(t,'status','Status')===invViewState.status);
+  if(invViewState.search){
+    const q=invViewState.search.toLowerCase();
+    inv=inv.filter(t=>[g(t,'id','SystemID','serial'),g(t,'assetNo','AssetNo'),g(t,'shortDesc','ShortDesc'),g(t,'desc','Description'),g(t,'supplier','Supplier')].join(' ').toLowerCase().includes(q));
   }
-});
+  return inv;
+}
+function renderInvTable(){
+  const tbody=document.getElementById('inv-tbody'); if(!tbody) return;
+  const filtered=invFiltered();
+  const start=(invViewState.page-1)*invViewState.pageSize;
+  const page=filtered.slice(start,start+invViewState.pageSize);
+  const countEl=document.getElementById('inv-count');
+  if(countEl) countEl.textContent=`Showing ${filtered.length===0?0:start+1}-${Math.min(start+page.length,filtered.length)} of ${filtered.length.toLocaleString()} assets`;
+  tbody.innerHTML = page.length===0 ? empty(9,'No assets found matching current criteria.') : page.map(t=>`
+    <tr class="hover:bg-[#e4eef8]">
+      <td class="px-3 py-2 font-mono font-bold text-amber-900">${esc(g(t,'id','SystemID','serial'))}</td>
+      <td class="px-3 py-2 font-mono text-slate-500 text-[10px]">${esc(g(t,'assetNo','AssetNo'))}</td>
+      <td class="px-3 py-2 font-mono font-semibold">${esc(g(t,'size','Size'))}</td>
+      <td class="px-3 py-2 font-bold text-[#1a3055]">${esc(g(t,'shortDesc','ShortDesc'))}</td>
+      <td class="px-3 py-2 text-slate-500 text-[10px]">${esc(String(g(t,'desc','Description')).slice(0,50))}</td>
+      <td class="px-3 py-2 font-bold ${g(t,'ownership','Ownership')==='EMDAD'?'text-amber-700':'text-slate-500'}">${esc(g(t,'ownership','Ownership'))}</td>
+      <td class="px-3 py-2 text-slate-700">${esc(g(t,'location','Location'))}</td>
+      <td class="px-3 py-2">${statusPill(g(t,'status','Status'))}</td>
+      <td class="px-3 py-2 text-center"><button onclick="openEditToolModal('${esc(g(t,'id','SystemID','serial'))}')" class="text-blue-700 hover:underline font-bold text-[11px]">Edit</button></td>
+    </tr>`).join('');
+}
+function onInvSearch(v){invViewState.search=v;invViewState.page=1;renderInvTable();}
+function onInvCat(v){invViewState.category=v;invViewState.page=1;renderInvTable();}
+function onInvStatus(v){invViewState.status=v;invViewState.page=1;renderInvTable();}
+
+function openAddToolModal(){
+  openModal(`
+  <div class="px-4 py-3 bg-[#5b7fa6] text-white flex justify-between items-center"><h3 class="font-bold text-sm">Register New Tool Asset</h3><button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button></div>
+  <form onsubmit="handleAddTool(event)" class="p-4 space-y-3 text-xs">
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block font-bold mb-1">Serial / ID *</label><input type="text" id="m-serial" required class="w-full border rounded px-2.5 py-1.5 font-mono"></div>
+      <div><label class="block font-bold mb-1">Asset No</label><input type="text" id="m-assetno" class="w-full border rounded px-2.5 py-1.5 font-mono"></div>
+    </div>
+    <div><label class="block font-bold mb-1">Tool Type *</label><input type="text" id="m-type" required placeholder="e.g. STRING STAB" class="w-full border rounded px-2.5 py-1.5"></div>
+    <div><label class="block font-bold mb-1">Description</label><input type="text" id="m-desc" class="w-full border rounded px-2.5 py-1.5"></div>
+    <div class="grid grid-cols-3 gap-3">
+      <div><label class="block font-bold mb-1">Size</label><input type="text" id="m-size" class="w-full border rounded px-2.5 py-1.5 font-mono"></div>
+      <div><label class="block font-bold mb-1">Ownership</label><input type="text" id="m-owner" value="EMDAD" class="w-full border rounded px-2.5 py-1.5"></div>
+      <div><label class="block font-bold mb-1">Location</label><input type="text" id="m-loc" value="Emdad Base" class="w-full border rounded px-2.5 py-1.5"></div>
+    </div>
+    <div class="pt-3 border-t flex justify-end space-x-2">
+      <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold">Cancel</button>
+      <button type="submit" class="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold">Save Asset</button>
+    </div>
+  </form>`);
+}
+async function handleAddTool(e){
+  e.preventDefault();
+  const tool={id:document.getElementById('m-serial').value,assetNo:document.getElementById('m-assetno').value,shortDesc:document.getElementById('m-type').value,desc:document.getElementById('m-desc').value,size:document.getElementById('m-size').value,ownership:document.getElementById('m-owner').value,location:document.getElementById('m-loc').value,status:'Good',isEmdad:document.getElementById('m-owner').value==='EMDAD'};
+  try{
+    await api('addtool',{tool});
+    STATE.inventory.unshift(tool);
+    closeModal(); toast(`✓ Registered asset ${tool.id}`); updateBadges();
+    if(ACTIVE_TAB==='inventory') renderInvTable(); else if(ACTIVE_TAB==='dashboard') renderCurrentView();
+  }catch(err){ toast('Error: '+err.message,'err'); }
+}
+function openEditToolModal(id){
+  const t=STATE.inventory.find(x=>g(x,'id','SystemID','serial')===id); if(!t) return;
+  openModal(`
+  <div class="px-4 py-3 bg-[#5b7fa6] text-white flex justify-between items-center"><h3 class="font-bold text-sm">Update Asset: ${esc(id)}</h3><button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button></div>
+  <form onsubmit="handleUpdateTool(event,'${esc(id)}')" class="p-4 space-y-3 text-xs">
+    <div><label class="block font-bold mb-1">Status</label>
+      <select id="u-status" class="w-full border rounded px-2.5 py-1.5 font-bold">
+        ${['Good','Repair','Inspection','Redress','Removed'].map(s=>`<option value="${s}" ${g(t,'status','Status')===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    <div><label class="block font-bold mb-1">Location</label><input type="text" id="u-loc" value="${esc(g(t,'location','Location'))}" class="w-full border rounded px-2.5 py-1.5"></div>
+    <div class="pt-3 border-t flex justify-end space-x-2">
+      <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold">Cancel</button>
+      <button type="submit" class="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold">Save Changes</button>
+    </div>
+  </form>`);
+}
+async function handleUpdateTool(e,id){
+  e.preventDefault();
+  const status=document.getElementById('u-status').value, location=document.getElementById('u-loc').value;
+  try{
+    await api('updatetool',{tool:{id,status,location}});
+    const t=STATE.inventory.find(x=>g(x,'id','SystemID','serial')===id);
+    if(t){t.status=status;t.Status=status;t.location=location;t.Location=location;}
+    closeModal(); toast(`✓ Updated ${id}`);
+    if(ACTIVE_TAB==='inventory') renderInvTable();
+  }catch(err){ toast('Error: '+err.message,'err'); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// 3. CALLOUTS
+// ═══════════════════════════════════════════════════════════
+function renderCalloutsView(data,role){
+  const cals=data.callouts;
+  return `
+  ${ribbon('Inbound Dispatch Requests','Rig Callouts & Mobilization Demands',
+    role!=='Viewer'?`<button onclick="openNewCalloutModal()" class="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-sm">+ New Rig Callout</button>`:'')}
+  <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+    <table class="w-full text-left text-xs border-collapse">
+      ${tblHead(['CALLOUT ID','RIG','WELL','CLIENT / CONTRACT','PO REF','DATE','STATUS'])}
+      <tbody class="divide-y divide-[#e2e8f0]">
+        ${cals.length===0?empty(7,'No callouts yet.'):cals.map(c=>`
+          <tr class="hover:bg-[#e4eef8]">
+            <td class="px-3 py-2 font-mono font-bold text-amber-900">${esc(g(c,'id','CalloutID'))}</td>
+            <td class="px-3 py-2 font-bold text-[#1a3055]">${esc(g(c,'rig','Rig'))}</td>
+            <td class="px-3 py-2 font-medium">${esc(g(c,'well','Well'))}</td>
+            <td class="px-3 py-2">${esc(g(c,'contract','Contract')||g(c,'client','Client'))}</td>
+            <td class="px-3 py-2 font-mono text-slate-500 text-[10px]">${esc(g(c,'poRef','PORef')||'—')}</td>
+            <td class="px-3 py-2 font-mono">${fd(g(c,'createdDate','CreatedDate'))}</td>
+            <td class="px-3 py-2">${statusPill(g(c,'status','Status'))}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+function openNewCalloutModal(){
+  openModal(`
+  <div class="px-4 py-3 bg-[#1a3055] text-white flex justify-between items-center"><h3 class="font-bold text-sm">Create New Rig Callout</h3><button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button></div>
+  <form onsubmit="handleAddCallout(event)" class="p-4 space-y-3 text-xs">
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block font-bold mb-1">Client *</label><input type="text" id="c-client" required class="w-full border rounded px-2.5 py-1.5"></div>
+      <div><label class="block font-bold mb-1">Rig *</label><input type="text" id="c-rig" required class="w-full border rounded px-2.5 py-1.5"></div>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block font-bold mb-1">Well *</label><input type="text" id="c-well" required class="w-full border rounded px-2.5 py-1.5"></div>
+      <div><label class="block font-bold mb-1">PO Ref</label><input type="text" id="c-po" class="w-full border rounded px-2.5 py-1.5"></div>
+    </div>
+    <div class="pt-3 border-t flex justify-end space-x-2">
+      <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold">Cancel</button>
+      <button type="submit" class="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold">Submit Callout</button>
+    </div>
+  </form>`);
+}
+async function handleAddCallout(e){
+  e.preventDefault();
+  const cal={id:'CAL-'+Date.now(),client:document.getElementById('c-client').value,rig:document.getElementById('c-rig').value,well:document.getElementById('c-well').value,poRef:document.getElementById('c-po').value,status:'Active',createdDate:new Date().toISOString()};
+  try{ await api('savecallout',{callout:cal}); STATE.callouts.unshift(cal); closeModal(); toast(`✓ Callout ${cal.id} created`); updateBadges(); renderCurrentView(); }
+  catch(err){ toast('Error: '+err.message,'err'); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// 4. JOBS (tabs + search, table-only refresh)
+// ═══════════════════════════════════════════════════════════
+function renderJobsView(data,role){
+  const active=data.jobs.filter(j=>['Open','Ongoing','Active'].includes(g(j,'status','Status')));
+  const closed=data.jobs.filter(j=>g(j,'status','Status')==='Closed');
+  return `
+  ${ribbon('Active Drilling Contracts','Drilling Jobs Management',
+    role!=='Viewer'?`<button onclick="openNewJobModal()" class="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-sm">+ New Job</button>`:'')}
+  <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+    <div class="p-3 bg-[#dbe6f1] border-b border-[#b8c9db] flex items-center gap-2.5">
+      <div class="flex bg-white rounded border border-[#b8c9db] p-0.5 gap-0.5">
+        <button onclick="onJobTab('active')" class="px-3 py-1 rounded text-[11px] font-bold ${jobViewState.tab==='active'?'bg-[#1a3055] text-white':'text-slate-600'}">⚡ Open/Ongoing (${active.length})</button>
+        <button onclick="onJobTab('closed')" class="px-3 py-1 rounded text-[11px] font-bold ${jobViewState.tab==='closed'?'bg-[#1a3055] text-white':'text-slate-600'}">✅ Closed (${closed.length})</button>
+      </div>
+      <input type="text" id="job-search" value="${esc(jobViewState.search)}" oninput="onJobSearch(this.value)" placeholder="Search job#, rig, well, client..." class="bg-white border border-[#b8c9db] rounded px-3 py-1 text-xs w-64 outline-none font-medium ml-auto">
+    </div>
+    <table class="w-full text-left text-xs border-collapse">
+      ${tblHead(['JOB #','CALLOUT','CONTRACT','RIG / WELL','PO NUMBER','MOB DATE','DTS','ON RIG','STATUS',{t:'ACTION',c:1}])}
+      <tbody id="job-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
+    </table>
+  </div>
+  <script>renderJobTable();</script>`;
+}
+function jobFiltered(){
+  let jobs=jobViewState.tab==='active' ? STATE.jobs.filter(j=>['Open','Ongoing','Active'].includes(g(j,'status','Status'))) : STATE.jobs.filter(j=>g(j,'status','Status')==='Closed');
+  if(jobViewState.search){
+    const q=jobViewState.search.toLowerCase();
+    jobs=jobs.filter(j=>[g(j,'JobID','jobNumber','id'),g(j,'Rig','rig'),g(j,'Well','well'),g(j,'Client','client')].join(' ').toLowerCase().includes(q));
+  }
+  return jobs;
+}
+function renderJobTable(){
+  const tbody=document.getElementById('job-tbody'); if(!tbody) return;
+  const jobs=jobFiltered();
+  tbody.innerHTML = jobs.length===0?empty(10,'No jobs in this view.'):jobs.map(j=>{
+    const jid=g(j,'JobID','jobNumber','id');
+    const bts=STATE.dtBatches.filter(b=>g(b,'JobID','jobId')===jid);
+    const dispatched=bts.reduce((s,b)=>s+(b.toolLines||[]).length,0);
+    const returned=bts.reduce((s,b)=>s+(b.toolLines||[]).filter(t=>g(t,'Status','status')==='Returned').length,0);
+    const onRig=dispatched-returned;
+    return `<tr class="hover:bg-[#e4eef8]">
+      <td class="px-3 py-2 font-mono font-bold text-amber-900">${esc(jid)}</td>
+      <td class="px-3 py-2 font-mono text-[10px] text-slate-400">${esc(g(j,'CalloutID','calloutId')||'—')}</td>
+      <td class="px-3 py-2 font-bold text-[#1a3055]">${esc(g(j,'Contract','contract')||g(j,'Client','client'))}</td>
+      <td class="px-3 py-2 font-medium">${esc(g(j,'Rig','rig'))} <span class="text-slate-400">|</span> ${esc(g(j,'Well','well'))}</td>
+      <td class="px-3 py-2 font-mono text-slate-500 text-[10px]">${esc(g(j,'PONumber','poNumber')||'—')}</td>
+      <td class="px-3 py-2 font-mono">${fd(g(j,'MobDate','mobDate'))}</td>
+      <td class="px-3 py-2 font-mono font-bold text-blue-700">${bts.length}</td>
+      <td class="px-3 py-2 font-mono font-bold ${onRig>0?'text-amber-700':'text-slate-400'}">${onRig}</td>
+      <td class="px-3 py-2">${statusPill(g(j,'Status','status'))}</td>
+      <td class="px-3 py-2 text-center"><button onclick="openJobDetail('${esc(jid)}')" class="text-blue-700 hover:underline font-bold text-[11px]">View</button></td>
+    </tr>`;
+  }).join('');
+}
+function onJobTab(t){jobViewState.tab=t;renderCurrentView();}
+function onJobSearch(v){jobViewState.search=v;renderJobTable();}
+function openNewJobModal(){
+  const cals=STATE.callouts.filter(c=>g(c,'status','Status')!=='Closed');
+  openModal(`
+  <div class="px-4 py-3 bg-[#1a3055] text-white flex justify-between items-center"><h3 class="font-bold text-sm">Create New Job</h3><button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button></div>
+  <form onsubmit="handleAddJob(event)" class="p-4 space-y-3 text-xs">
+    <div><label class="block font-bold mb-1">From Callout</label>
+      <select id="j-callout" class="w-full border rounded px-2.5 py-1.5">
+        <option value="">— No callout —</option>
+        ${cals.map(c=>`<option value="${esc(g(c,'id','CalloutID'))}">${esc(g(c,'id','CalloutID'))} — ${esc(g(c,'rig','Rig'))}/${esc(g(c,'well','Well'))}</option>`).join('')}
+      </select>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block font-bold mb-1">Rig *</label><input type="text" id="j-rig" required class="w-full border rounded px-2.5 py-1.5"></div>
+      <div><label class="block font-bold mb-1">Well *</label><input type="text" id="j-well" required class="w-full border rounded px-2.5 py-1.5"></div>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block font-bold mb-1">Client *</label><input type="text" id="j-client" required class="w-full border rounded px-2.5 py-1.5"></div>
+      <div><label class="block font-bold mb-1">Contract</label><input type="text" id="j-contract" class="w-full border rounded px-2.5 py-1.5"></div>
+    </div>
+    <div class="pt-3 border-t flex justify-end space-x-2">
+      <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold">Cancel</button>
+      <button type="submit" class="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold">Create Job</button>
+    </div>
+  </form>`);
+}
+async function handleAddJob(e){
+  e.preventDefault();
+  const job={id:'JOB-'+new Date().getFullYear().toString().slice(-2)+'-'+String(Date.now()).slice(-5),calloutId:document.getElementById('j-callout').value,rig:document.getElementById('j-rig').value,well:document.getElementById('j-well').value,client:document.getElementById('j-client').value,contract:document.getElementById('j-contract').value,status:'Open'};
+  try{ await api('savejob',{job}); STATE.jobs.unshift(job); closeModal(); toast(`✓ Job ${job.id} created`); updateBadges(); renderCurrentView(); }
+  catch(err){ toast('Error: '+err.message,'err'); }
+}
+function openJobDetail(jid){
+  const j=STATE.jobs.find(x=>g(x,'JobID','jobNumber','id')===jid); if(!j) return;
+  const bts=STATE.dtBatches.filter(b=>g(b,'JobID','jobId')===jid);
+  openModal(`
+  <div class="px-4 py-3 bg-[#1a3055] text-white flex justify-between items-center"><h3 class="font-bold text-sm">Job Detail: ${esc(jid)}</h3><button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button></div>
+  <div class="p-4 text-xs space-y-3">
+    <div class="grid grid-cols-2 gap-2">
+      <div><span class="font-bold text-slate-500">Client:</span> ${esc(g(j,'Client','client'))}</div>
+      <div><span class="font-bold text-slate-500">Contract:</span> ${esc(g(j,'Contract','contract')||'—')}</div>
+      <div><span class="font-bold text-slate-500">Rig/Well:</span> ${esc(g(j,'Rig','rig'))} / ${esc(g(j,'Well','well'))}</div>
+      <div><span class="font-bold text-slate-500">Status:</span> ${statusPill(g(j,'Status','status'))}</div>
+    </div>
+    <div class="border-t pt-3">
+      <div class="font-bold text-slate-600 mb-1">Delivery Tickets (${bts.length})</div>
+      ${bts.length===0?'<div class="text-slate-400">No DTs yet.</div>':bts.map(b=>`<div class="font-mono text-[11px] py-0.5">${esc(g(b,'DTNumber','dtNumber'))} — ${(b.toolLines||[]).length} tools</div>`).join('')}
+    </div>
+  </div>`);
+}
+
+// ═══════════════════════════════════════════════════════════
+// 5. DELIVERY TICKETS
+// ═══════════════════════════════════════════════════════════
+function renderDTView(data){
+  const dts=data.dtBatches;
+  const onRigDTs=dts.filter(b=>(b.toolLines||[]).some(t=>g(t,'Status','status')==='OnRig'));
+  return `
+  ${ribbon('Logistics & Dispatch','Delivery Tickets (DT) Manifests')}
+  <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+    <div class="p-3 bg-[#dbe6f1] border-b border-[#b8c9db] flex items-center gap-2.5">
+      <div class="flex bg-white rounded border border-[#b8c9db] p-0.5 gap-0.5">
+        <button onclick="onDtTab('onrig')" class="px-3 py-1 rounded text-[11px] font-bold ${dtViewState.tab==='onrig'?'bg-[#1a3055] text-white':'text-slate-600'}">🛢 On Rig (${onRigDTs.length})</button>
+        <button onclick="onDtTab('all')" class="px-3 py-1 rounded text-[11px] font-bold ${dtViewState.tab==='all'?'bg-[#1a3055] text-white':'text-slate-600'}">📋 All (${dts.length})</button>
+      </div>
+    </div>
+    <table class="w-full text-left text-xs border-collapse">
+      ${tblHead(['DT NUMBER','JOB','RIG / WELL','CONTRACT','RM REF','DATE','TOOLS','ON RIG','RETURNED'])}
+      <tbody id="dt-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
+    </table>
+  </div>
+  <script>renderDtTable();</script>`;
+}
+function renderDtTable(){
+  const tbody=document.getElementById('dt-tbody'); if(!tbody) return;
+  const dts=dtViewState.tab==='onrig' ? STATE.dtBatches.filter(b=>(b.toolLines||[]).some(t=>g(t,'Status','status')==='OnRig')) : STATE.dtBatches;
+  tbody.innerHTML = dts.length===0?empty(9,'No delivery tickets.'):dts.map(b=>{
+    const lines=b.toolLines||[];
+    const onRig=lines.filter(t=>g(t,'Status','status')==='OnRig').length;
+    const ret=lines.filter(t=>g(t,'Status','status')==='Returned').length;
+    return `<tr class="hover:bg-[#e4eef8]">
+      <td class="px-3 py-2 font-mono font-bold text-amber-900">${esc(g(b,'DTNumber','dtNumber'))}</td>
+      <td class="px-3 py-2 font-mono text-[10px] text-blue-700">${esc(g(b,'JobID','jobId'))}</td>
+      <td class="px-3 py-2 font-medium">${esc(g(b,'Rig','rig'))} <span class="text-slate-400">|</span> ${esc(g(b,'Well','well'))}</td>
+      <td class="px-3 py-2">${esc(g(b,'Contract','contract')||'—')}</td>
+      <td class="px-3 py-2 font-mono text-slate-500 text-[10px]">${esc(g(b,'RMRef','rmRef')||'—')}</td>
+      <td class="px-3 py-2 font-mono">${fd(g(b,'DispatchDate','dispatchDate','RMDate','rmDate'))}</td>
+      <td class="px-3 py-2 font-mono font-bold">${lines.length}</td>
+      <td class="px-3 py-2 font-mono font-bold ${onRig>0?'text-amber-700':'text-slate-400'}">${onRig}</td>
+      <td class="px-3 py-2 font-mono ${ret>0?'text-emerald-700':''}">${ret}</td>
+    </tr>`;
+  }).join('');
+}
+function onDtTab(t){dtViewState.tab=t;renderCurrentView();}
+
+// ═══════════════════════════════════════════════════════════
+// 6. RECEIVING TICKETS
+// ═══════════════════════════════════════════════════════════
+function renderRTView(data){
+  const rts=data.rtBatches;
+  const onRigTools=[];
+  data.dtBatches.forEach(b=>{(b.toolLines||[]).filter(t=>g(t,'Status','status')==='OnRig').forEach(t=>onRigTools.push({...t,rig:g(b,'Rig','rig'),well:g(b,'Well','well'),jobId:g(b,'JobID','jobId'),dtNumber:g(b,'DTNumber','dtNumber')}));});
+  const rigMap={}; onRigTools.forEach(t=>{const k=t.rig||'Unknown';(rigMap[k]=rigMap[k]||[]).push(t);});
+
+  return `
+  ${ribbon('Backload & Receiving','Receiving Tickets (RT) Manifests')}
+  <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+    <div class="p-3 bg-[#dbe6f1] border-b border-[#b8c9db] flex items-center gap-2.5">
+      <div class="flex bg-white rounded border border-[#b8c9db] p-0.5 gap-0.5">
+        <button onclick="onRtTab('pending')" class="px-3 py-1 rounded text-[11px] font-bold ${rtViewState.tab==='pending'?'bg-[#1a3055] text-white':'text-slate-600'}">🛢 Pending Return</button>
+        <button onclick="onRtTab('history')" class="px-3 py-1 rounded text-[11px] font-bold ${rtViewState.tab==='history'?'bg-[#1a3055] text-white':'text-slate-600'}">📄 History (${rts.length})</button>
+      </div>
+    </div>
+    ${rtViewState.tab==='pending' ? (
+      Object.keys(rigMap).length===0 ? `<div class="p-8 text-center text-slate-400 text-sm">No tools currently on rig.</div>` :
+      Object.entries(rigMap).map(([rig,tools])=>`
+        <div class="border-b border-slate-100 last:border-0">
+          <div class="px-4 py-2.5 bg-[#dbe6f1] flex items-center gap-3">
+            <span class="font-bold text-sm text-[#1a3055]">${esc(rig)}</span>
+            <span class="px-2 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded">${tools.length} On Rig</span>
+          </div>
+          <table class="w-full text-left text-xs border-collapse">
+            ${tblHead(['SERIAL','SIZE','TOOL TYPE','JOB','DT#','OWNERSHIP'])}
+            <tbody class="divide-y divide-[#e2e8f0]">
+              ${tools.map(t=>`<tr class="hover:bg-[#e4eef8]">
+                <td class="px-3 py-2 font-mono font-bold text-amber-900">${esc(g(t,'Serial','serial'))}</td>
+                <td class="px-3 py-2 font-mono">${esc(g(t,'Size','size'))}</td>
+                <td class="px-3 py-2">${esc(g(t,'ShortDesc','shortDesc'))}</td>
+                <td class="px-3 py-2 font-mono text-[10px] text-blue-700">${esc(t.jobId)}</td>
+                <td class="px-3 py-2 font-mono text-[10px] text-slate-500">${esc(t.dtNumber)}</td>
+                <td class="px-3 py-2 font-bold text-[10px] ${g(t,'Ownership','ownership')==='EMDAD'?'text-amber-700':'text-slate-500'}">${esc(g(t,'Ownership','ownership'))}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`).join('')
+    ) : `
+      <table class="w-full text-left text-xs border-collapse">
+        ${tblHead(['RT NUMBER','JOB','RIG / WELL','CONTRACT','DATE','TOOLS','RECEIVED BY'])}
+        <tbody class="divide-y divide-[#e2e8f0]">
+          ${rts.length===0?empty(7,'No receiving tickets yet.'):rts.map(r=>`<tr class="hover:bg-[#e4eef8]">
+            <td class="px-3 py-2 font-mono font-bold text-amber-900">${esc(g(r,'RTNumber','rtNumber'))}</td>
+            <td class="px-3 py-2 font-mono text-[10px] text-blue-700">${esc(g(r,'JobID','jobId'))}</td>
+            <td class="px-3 py-2 font-medium">${esc(g(r,'Rig','rig'))} <span class="text-slate-400">|</span> ${esc(g(r,'Well','well'))}</td>
+            <td class="px-3 py-2">${esc(g(r,'Contract','contract')||'—')}</td>
+            <td class="px-3 py-2 font-mono">${fd(g(r,'RTDate','rtDate'))}</td>
+            <td class="px-3 py-2 font-mono font-bold">${(r.toolLines||[]).length}</td>
+            <td class="px-3 py-2">${esc(g(r,'ReceivedBy','receivedBy'))}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`}
+  </div>`;
+}
+function onRtTab(t){rtViewState.tab=t;renderCurrentView();}
+
+// ═══════════════════════════════════════════════════════════
+// 7. GATE PASSES
+// ═══════════════════════════════════════════════════════════
+function renderGatePassView(data){
+  const gps=data.gatePasses;
+  return `
+  ${ribbon('Yard Security & Perimeter','Security Gate Pass Verification')}
+  <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+    <table class="w-full text-left text-xs border-collapse">
+      ${tblHead(['GP NUMBER','SUPPLIER','DATE','TOOLS','PREPARED BY','AUTHORIZED BY'])}
+      <tbody class="divide-y divide-[#e2e8f0]">
+        ${gps.length===0?empty(6,'No gate passes yet.'):gps.map(gp=>`<tr class="hover:bg-[#e4eef8]">
+          <td class="px-3 py-2 font-mono font-bold text-amber-900">${esc(g(gp,'GPNumber','gpNumber'))}</td>
+          <td class="px-3 py-2 font-bold text-[#1a3055]">${esc(g(gp,'Supplier','supplier'))}</td>
+          <td class="px-3 py-2 font-mono">${fd(g(gp,'GPDate','gpDate'))}</td>
+          <td class="px-3 py-2 font-mono font-bold">${(gp.toolLines||[]).length}</td>
+          <td class="px-3 py-2">${esc(g(gp,'PreparedBy','preparedBy'))}</td>
+          <td class="px-3 py-2">${esc(g(gp,'AuthorizedBy','authorizedBy'))}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 8. INSPECTION
+// ═══════════════════════════════════════════════════════════
+function renderInspectionView(data){
+  const ins=data.inspections;
+  const pending=ins.filter(i=>g(i,'Status','status')==='Pending');
+  const done=ins.filter(i=>g(i,'Status','status')==='Complete');
+  return `
+  ${ribbon('Quality Assurance','QC Inspection Bay')}
+  <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+    <div class="p-3 bg-[#dbe6f1] border-b border-[#b8c9db] flex items-center gap-2.5">
+      <div class="flex bg-white rounded border border-[#b8c9db] p-0.5 gap-0.5">
+        <button onclick="onInsTab('pending')" class="px-3 py-1 rounded text-[11px] font-bold ${insViewState.tab==='pending'?'bg-[#1a3055] text-white':'text-slate-600'}">⏳ Pending (${pending.length})</button>
+        <button onclick="onInsTab('done')" class="px-3 py-1 rounded text-[11px] font-bold ${insViewState.tab==='done'?'bg-[#1a3055] text-white':'text-slate-600'}">✅ Complete (${done.length})</button>
+      </div>
+    </div>
+    <table class="w-full text-left text-xs border-collapse">
+      ${tblHead(['WO NUMBER','SERIAL','TOOL TYPE','RECEIVED','INSPECTED BY','RESULT','STATUS'])}
+      <tbody id="ins-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
+    </table>
+  </div>
+  <script>renderInsTable();</script>`;
+}
+function renderInsTable(){
+  const tbody=document.getElementById('ins-tbody'); if(!tbody) return;
+  const ins=insViewState.tab==='pending' ? STATE.inspections.filter(i=>g(i,'Status','status')==='Pending') : STATE.inspections.filter(i=>g(i,'Status','status')==='Complete');
+  tbody.innerHTML = ins.length===0?empty(7,'No records in this view.'):ins.map(r=>`<tr class="hover:bg-[#e4eef8]">
+    <td class="px-3 py-2 font-mono font-bold text-amber-900">${esc(g(r,'WONumber','woNumber'))}</td>
+    <td class="px-3 py-2 font-mono font-bold text-blue-700">${esc(g(r,'Serial','serial'))}</td>
+    <td class="px-3 py-2">${esc(g(r,'ShortDesc','shortDesc'))}</td>
+    <td class="px-3 py-2 font-mono">${fd(g(r,'ReceivedDate','receivedDate'))}</td>
+    <td class="px-3 py-2">${esc(g(r,'InspectedBy','inspectedBy')||'—')}</td>
+    <td class="px-3 py-2">${statusPill(g(r,'Result','result')||'Pending')}</td>
+    <td class="px-3 py-2">${statusPill(g(r,'Status','status'))}</td>
+  </tr>`).join('');
+}
+function onInsTab(t){insViewState.tab=t;renderCurrentView();}
+
+// ═══════════════════════════════════════════════════════════
+// 9. MAINTENANCE
+// ═══════════════════════════════════════════════════════════
+function renderMaintenanceView(data){
+  const mnt=data.maintenance;
+  const active=mnt.filter(m=>['In Progress','Awaiting Parts'].includes(g(m,'Status','status')));
+  const complete=mnt.filter(m=>['Complete - Ready','Closed'].includes(g(m,'Status','status')));
+  return `
+  ${ribbon('Workshop Operations','Workshop Work Orders & Redress Overhauls')}
+  <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+    <div class="p-3 bg-[#dbe6f1] border-b border-[#b8c9db] flex items-center gap-2.5">
+      <div class="flex bg-white rounded border border-[#b8c9db] p-0.5 gap-0.5">
+        <button onclick="onMntTab('active')" class="px-3 py-1 rounded text-[11px] font-bold ${mntViewState.tab==='active'?'bg-[#1a3055] text-white':'text-slate-600'}">⚡ Active (${active.length})</button>
+        <button onclick="onMntTab('complete')" class="px-3 py-1 rounded text-[11px] font-bold ${mntViewState.tab==='complete'?'bg-[#1a3055] text-white':'text-slate-600'}">✅ Complete (${complete.length})</button>
+        <button onclick="onMntTab('all')" class="px-3 py-1 rounded text-[11px] font-bold ${mntViewState.tab==='all'?'bg-[#1a3055] text-white':'text-slate-600'}">📋 All (${mnt.length})</button>
+      </div>
+    </div>
+    <table class="w-full text-left text-xs border-collapse">
+      ${tblHead(['WO NUMBER','SERIAL','TOOL','ISSUE','TYPE','START',{t:'EST. COMPLETE'},'STATUS'])}
+      <tbody id="mnt-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
+    </table>
+  </div>
+  <script>renderMntTable();</script>`;
+}
+function renderMntTable(){
+  const tbody=document.getElementById('mnt-tbody'); if(!tbody) return;
+  let mnt=mntViewState.tab==='active'?STATE.maintenance.filter(m=>['In Progress','Awaiting Parts'].includes(g(m,'Status','status'))):mntViewState.tab==='complete'?STATE.maintenance.filter(m=>['Complete - Ready','Closed'].includes(g(m,'Status','status'))):STATE.maintenance;
+  tbody.innerHTML = mnt.length===0?empty(8,'No records in this view.'):mnt.map(m=>`<tr class="hover:bg-[#e4eef8]">
+    <td class="px-3 py-2 font-mono font-bold text-amber-900">${esc(g(m,'WONumber','woNumber'))}</td>
+    <td class="px-3 py-2 font-mono font-bold text-blue-700">${esc(g(m,'Serial','serial'))}</td>
+    <td class="px-3 py-2">${esc(g(m,'ShortDesc','shortDesc'))}</td>
+    <td class="px-3 py-2 text-slate-500 text-[10px]">${esc(String(g(m,'Issue','issue')).slice(0,40))}</td>
+    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${g(m,'Type','type')==='InHouse'?'bg-blue-100 text-blue-800':'bg-orange-100 text-orange-800'}">${esc(g(m,'Type','type'))}</span></td>
+    <td class="px-3 py-2 font-mono">${fd(g(m,'StartDate','startDate'))}</td>
+    <td class="px-3 py-2 font-mono">${fd(g(m,'EstCompleteDate','estCompleteDate'))}</td>
+    <td class="px-3 py-2">${statusPill(g(m,'Status','status'))}</td>
+  </tr>`).join('');
+}
+function onMntTab(t){mntViewState.tab=t;renderCurrentView();}
+
+// ═══════════════════════════════════════════════════════════
+// 10. UTILIZATION — same S/1 daily grid logic as previous design
+// ═══════════════════════════════════════════════════════════
+let utJobId='';
+function renderUtilizationView(data){
+  const jobs=data.jobs.filter(j=>['Open','Ongoing','Active'].includes(g(j,'Status','status')));
+  return `
+  ${ribbon('Asset Economics','Fleet Rental Utilization & Daily Billing')}
+  <div class="bg-white border border-[#b8c9db] rounded p-3 shadow-sm mb-4 flex items-center gap-3">
+    <label class="text-xs font-bold text-slate-600">Select Job:</label>
+    <select id="ut-job-select" onchange="onUtJobChange(this.value)" class="border border-[#b8c9db] rounded px-2.5 py-1.5 text-xs font-mono w-72">
+      <option value="">— Choose a job —</option>
+      ${jobs.map(j=>`<option value="${esc(g(j,'JobID','jobNumber','id'))}" ${utJobId===g(j,'JobID','jobNumber','id')?'selected':''}>${esc(g(j,'JobID','jobNumber','id'))} — ${esc(g(j,'Rig','rig'))}/${esc(g(j,'Well','well'))}</option>`).join('')}
+    </select>
+  </div>
+  <div id="ut-grid-wrap">${utJobId?renderUtGrid(utJobId):'<div class="bg-white border border-[#b8c9db] rounded p-8 text-center text-slate-400 text-sm">Select a job above to view its Utilization sheet.</div>'}</div>`;
+}
+function onUtJobChange(jid){utJobId=jid;document.getElementById('ut-grid-wrap').innerHTML=jid?renderUtGrid(jid):'<div class="bg-white border border-[#b8c9db] rounded p-8 text-center text-slate-400 text-sm">Select a job above to view its Utilization sheet.</div>';}
+function renderUtGrid(jid){
+  const job=STATE.jobs.find(j=>g(j,'JobID','jobNumber','id')===jid);
+  const bts=STATE.dtBatches.filter(b=>g(b,'JobID','jobId')===jid);
+  const lines=[];
+  bts.forEach(b=>{(b.toolLines||[]).forEach(t=>lines.push({...t,dtNumber:g(b,'DTNumber','dtNumber'),dispatchDate:g(b,'DispatchDate','dispatchDate','RMDate','rmDate')}));});
+
+  const today=new Date();
+  const daysInMonth=new Date(today.getFullYear(),today.getMonth()+1,0).getDate();
+  const dayCols=Array.from({length:daysInMonth},(_,i)=>i+1);
+
+  if(lines.length===0) return `<div class="bg-white border border-[#b8c9db] rounded p-8 text-center text-slate-400 text-sm">No tools dispatched for this job yet.</div>`;
+
+  return `
+  <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+    <div class="px-4 py-2.5 bg-[#dbe6f1] border-b border-[#b8c9db] flex justify-between items-center">
+      <div><span class="font-bold text-sm text-[#1a3055]">${esc(jid)}</span> <span class="text-xs text-slate-500 ml-2">${esc(g(job,'Rig','rig'))} / ${esc(g(job,'Well','well'))} — ${today.toLocaleString('en-GB',{month:'long',year:'numeric'})}</span></div>
+      <div class="text-[10px] text-slate-500 font-bold">S = Standby &nbsp; 1 = Operational</div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="text-[10px] border-collapse w-full">
+        <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
+          <tr>
+            <th class="px-2 py-1.5 text-left sticky left-0 bg-slate-50">SERIAL</th>
+            <th class="px-2 py-1.5 text-left">TOOL</th>
+            ${dayCols.map(d=>`<th class="px-1 py-1.5 text-center font-mono w-6">${String(d).padStart(2,'0')}</th>`).join('')}
+            <th class="px-2 py-1.5 text-center bg-blue-50">OPS</th>
+            <th class="px-2 py-1.5 text-center bg-amber-50">STANDBY</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[#e2e8f0]">
+          ${lines.map((t,li)=>{
+            const serial=g(t,'Serial','serial');
+            return `<tr class="hover:bg-[#e4eef8]">
+              <td class="px-2 py-1 font-mono font-bold text-amber-900 sticky left-0 bg-white">${esc(serial)}</td>
+              <td class="px-2 py-1 font-semibold text-[#1a3055]">${esc(g(t,'ShortDesc','shortDesc'))}</td>
+              ${dayCols.map(d=>`<td class="px-0.5 py-1 text-center"><input type="text" maxlength="1" data-serial="${esc(serial)}" data-day="${d}" value="" oninput="onUtCellInput(this)" class="w-5 h-5 text-center border border-slate-200 rounded text-[10px] font-mono font-bold outline-none focus:ring-1 focus:ring-amber-400 uppercase"></td>`).join('')}
+              <td class="px-2 py-1 text-center font-mono font-bold text-blue-700" id="ut-ops-${li}">0</td>
+              <td class="px-2 py-1 text-center font-mono font-bold text-amber-700" id="ut-sb-${li}">0</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="px-4 py-2.5 bg-slate-50 border-t border-[#b8c9db] text-[10px] text-slate-500">
+      Enter <span class="font-mono font-bold">S</span> for Standby or <span class="font-mono font-bold">1</span> for Operational in each day cell. Totals calculate automatically.
+    </div>
+  </div>`;
+}
+function onUtCellInput(el){
+  let v=el.value.toUpperCase();
+  if(v!=='S'&&v!=='1'){el.value='';return;}
+  el.value=v;
+  const row=el.closest('tr');
+  const cells=[...row.querySelectorAll('input[data-serial]')];
+  const ops=cells.filter(c=>c.value==='1').length;
+  const sb=cells.filter(c=>c.value==='S').length;
+  const idx=[...row.parentElement.children].indexOf(row);
+  const opsEl=document.getElementById('ut-ops-'+idx), sbEl=document.getElementById('ut-sb-'+idx);
+  if(opsEl)opsEl.textContent=ops; if(sbEl)sbEl.textContent=sb;
+  // auto-advance to next day cell
+  const day=parseInt(el.dataset.day);
+  const next=row.querySelector(`input[data-day="${day+1}"]`);
+  if(next) next.focus();
+}
+
+// ═══════════════════════════════════════════════════════════
+// 11. CONTRACTS
+// ═══════════════════════════════════════════════════════════
+function renderContractsView(data){
+  const cons=data.contracts;
+  return `
+  ${ribbon('Commercial Governance','Master Agreements & Performance Bank Guarantees (PBG)')}
+  <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+    <table class="w-full text-left text-xs border-collapse">
+      ${tblHead(['CONTRACT REF','CLIENT','CURRENCY','STATUS','PBG NUMBER',{t:'PBG EXPIRY'},{t:'CONTRACT VALUE',r:1}])}
+      <tbody class="divide-y divide-[#e2e8f0]">
+        ${cons.length===0?empty(7,'No contracts loaded.'):cons.map(c=>{
+          const expiry=g(c,'PBGExpiryDate','pbgExpiryDate');
+          const daysLeft=expiry?Math.floor((new Date(expiry)-new Date())/86400000):null;
+          const expText=daysLeft===null?'—':daysLeft<0?'<span class="text-rose-700 font-bold">EXPIRED</span>':daysLeft<60?`<span class="text-rose-700 font-bold">${daysLeft}d</span>`:fd(expiry);
+          return `<tr class="hover:bg-[#e4eef8]">
+            <td class="px-3 py-2 font-mono font-bold text-amber-900">${esc(g(c,'contractRef','ContractRef','id'))}</td>
+            <td class="px-3 py-2 font-bold text-[#1a3055]">${esc(g(c,'client','Client'))}</td>
+            <td class="px-3 py-2 font-mono font-bold">${esc(g(c,'currency','Currency')||'USD')}</td>
+            <td class="px-3 py-2">${statusPill(g(c,'status','Status')||'Active')}</td>
+            <td class="px-3 py-2 font-mono text-slate-500 text-[10px]">${esc(g(c,'PBGNumber','pbgNumber')||'—')}</td>
+            <td class="px-3 py-2 font-mono">${expText}</td>
+            <td class="px-3 py-2 text-right font-mono font-bold text-emerald-800">${g(c,'ContractValue','contractValue')?fnum(g(c,'ContractValue','contractValue')):'—'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded',()=>{ if(checkSession()) startApp(); });
 </script>
 </body>
 </html>
