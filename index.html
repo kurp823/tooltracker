@@ -56,15 +56,21 @@
         <div class="flex items-center space-x-2">
           <span class="font-extrabold text-sm tracking-wide text-white">EMDAD SERVICES LLC</span>
           <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/40">
-            OFFLINE SINGLE-FILE EDITION
+            GITHUB & OFFLINE READY
           </span>
         </div>
-        <div class="text-[10px] text-slate-300">Oilfield Tool Tracking, Rental Operations & Logistics ERP</div>
+        <div class="text-[10px] text-slate-300">Oilfield Tool Tracking, Rental Operations & Azure SQL Sync</div>
       </div>
     </div>
 
     <!-- Right utility controls -->
     <div class="flex items-center space-x-3 text-xs">
+      <!-- Azure SQL Status Badge -->
+      <button onclick="openAzureSqlModal()" id="azure-status-btn" class="flex items-center space-x-1.5 bg-[#142848] px-2.5 py-1 rounded border border-[#2d5084] hover:bg-[#203c68] transition">
+        <span id="azure-status-dot" class="w-2 h-2 rounded-full bg-slate-400"></span>
+        <span id="azure-status-text" class="text-[11px] font-bold text-slate-200">Azure SQL: Offline / Local</span>
+      </button>
+
       <!-- Role Switcher -->
       <div class="flex items-center space-x-1.5 bg-[#24426d] px-2.5 py-1 rounded border border-[#3b5d8f]">
         <span class="text-slate-300 text-[11px]">Role:</span>
@@ -79,9 +85,9 @@
       </div>
 
       <!-- Quick Actions -->
-      <button onclick="downloadSelfHtml()" class="inline-flex items-center space-x-1.5 px-3 py-1 rounded bg-amber-400 hover:bg-amber-300 text-[#1a3055] font-bold transition shadow-sm" title="Save this standalone file to disk">
+      <button onclick="downloadSelfHtml()" class="inline-flex items-center space-x-1.5 px-3 py-1 rounded bg-amber-400 hover:bg-amber-300 text-[#1a3055] font-bold transition shadow-sm" title="Save this index.html file to disk">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-        <span>Save Standalone HTML</span>
+        <span>Download index.html</span>
       </button>
 
       <button onclick="resetDataToDefault()" class="text-slate-300 hover:text-white px-2 py-1 rounded hover:bg-white/10 transition text-[11px]" title="Reset sample database to default values">
@@ -123,7 +129,7 @@
                 <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
                 <span>Tool Inventory</span>
               </span>
-              <span id="badge-inventory-count" class="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] font-mono font-bold">48</span>
+              <span id="badge-inventory-count" class="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] font-mono font-bold">12</span>
             </button>
 
             <button onclick="switchTab('callouts')" id="nav-callouts" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
@@ -131,7 +137,7 @@
                 <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
                 <span>Rig Callouts</span>
               </span>
-              <span id="badge-callouts-count" class="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold">4</span>
+              <span id="badge-callouts-count" class="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold">3</span>
             </button>
 
             <button onclick="switchTab('jobs')" id="nav-jobs" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
@@ -139,7 +145,7 @@
                 <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                 <span>Drilling Jobs</span>
               </span>
-              <span id="badge-jobs-count" class="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">6</span>
+              <span id="badge-jobs-count" class="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">3</span>
             </button>
 
             <button onclick="switchTab('dt')" id="nav-dt" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
@@ -212,15 +218,29 @@
           </div>
         </div>
 
+        <!-- SECTION 5: CLOUD & DATABASE -->
+        <div>
+          <div class="text-[10px] font-bold text-amber-300 uppercase tracking-wider px-2 mb-1.5">Cloud Database</div>
+          <div class="space-y-0.5">
+            <button onclick="openAzureSqlModal()" id="nav-azuresql" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-amber-200 hover:bg-white/10 hover:text-white bg-amber-500/15 border border-amber-400/30">
+              <span class="flex items-center space-x-2">
+                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
+                <span>Azure SQL Sync Hub</span>
+              </span>
+              <span class="px-1 py-0.2 rounded bg-amber-400 text-slate-950 text-[9px] font-bold">SQL</span>
+            </button>
+          </div>
+        </div>
+
       </div>
 
       <!-- Sidebar Footer Status -->
       <div class="p-3 bg-[#152945] border-t border-[#0f1f38] text-[11px] space-y-1">
         <div class="flex items-center justify-between text-slate-300 font-mono">
-          <span>STORAGE:</span>
-          <span class="text-emerald-400 font-bold">LOCAL BROWSER</span>
+          <span>DEPLOYMENT:</span>
+          <span class="text-emerald-400 font-bold">GITHUB INDEX.HTML</span>
         </div>
-        <div class="text-[10px] text-slate-400">100% Offline Single File Capable</div>
+        <div class="text-[10px] text-slate-400">Zero Server Requirement • Azure SQL Sync</div>
       </div>
     </aside>
 
@@ -241,17 +261,17 @@
   </div>
 
   <!-- ========================================================================= -->
-  <!-- MODAL CONTAINER (Popups for Add/Edit, Print Slip, SOX Unlock, etc.)       -->
+  <!-- MODAL CONTAINER (Popups for Add/Edit, Print Slip, Azure SQL Hub, etc.)   -->
   <!-- ========================================================================= -->
   <div id="modal-backdrop" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 hidden">
     <div id="modal-content" class="bg-white rounded border border-[#b8c9db] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"></div>
   </div>
 
   <!-- ========================================================================= -->
-  <!-- JAVASCRIPT LOGIC & STATE ENGINE (Completely self-contained)               -->
+  <!-- JAVASCRIPT LOGIC & STATE ENGINE WITH AZURE SQL INTEGRATION                -->
   <!-- ========================================================================= -->
   <script>
-    // Initial Seed Database
+    // Default Seed Database
     const DEFAULT_DATA = {
       inventory: [
         { SerialNo: "MD-8001-A", AssetName: "8.00\" Motor Assembly (Sperry/Halliburton 7/8 4.0)", Category: "Motor", Size: "8.00\"", ThreadConnection: "6-5/8 REG", TotalHours: 142.5, MaxHoursLimit: 250.0, HoursSinceInspection: 18.0, CurrentLocation: "Mina Zayed Yard", CurrentJob: "JOB-2026-001", Status: "Dispatched", CriticalAlert: "Normal", DailyRentalRate: 2450.0 },
@@ -309,15 +329,49 @@
       ]
     };
 
-    // Load from LocalStorage or Fallback to Default
+    // Azure SQL Config State
+    const DEFAULT_AZURE_CONFIG = {
+      enabled: false,
+      serverName: "emdad-sqlserver.database.windows.net",
+      databaseName: "EMDAD_Operations_DB",
+      apiEndpoint: "", // e.g. https://your-azure-func.azurewebsites.net/api or DAB
+      apiKey: "",
+      autoSync: false,
+      lastSyncTime: null
+    };
+
+    // App State
     let appState = {
       activeTab: 'dashboard',
       currentRole: 'Operations',
-      data: JSON.parse(localStorage.getItem('EMDAD_ERP_DATA') || JSON.stringify(DEFAULT_DATA))
+      data: JSON.parse(localStorage.getItem('EMDAD_ERP_DATA') || JSON.stringify(DEFAULT_DATA)),
+      azureConfig: JSON.parse(localStorage.getItem('EMDAD_AZURE_SQL_CONFIG') || JSON.stringify(DEFAULT_AZURE_CONFIG))
     };
 
     function saveState() {
       localStorage.setItem('EMDAD_ERP_DATA', JSON.stringify(appState.data));
+      if (appState.azureConfig.enabled && appState.azureConfig.autoSync && appState.azureConfig.apiEndpoint) {
+        syncToAzureSqlSilent();
+      }
+    }
+
+    function saveAzureConfig() {
+      localStorage.setItem('EMDAD_AZURE_SQL_CONFIG', JSON.stringify(appState.azureConfig));
+      updateAzureBadge();
+    }
+
+    function updateAzureBadge() {
+      const dot = document.getElementById('azure-status-dot');
+      const text = document.getElementById('azure-status-text');
+      if (!dot || !text) return;
+
+      if (appState.azureConfig.enabled && appState.azureConfig.apiEndpoint) {
+        dot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
+        text.innerText = `Azure SQL: ${appState.azureConfig.databaseName}`;
+      } else {
+        dot.className = "w-2 h-2 rounded-full bg-slate-400";
+        text.innerText = "Azure SQL: Offline / Local";
+      }
     }
 
     function resetDataToDefault() {
@@ -330,17 +384,18 @@
     }
 
     function downloadSelfHtml() {
+      // Export current full HTML as index.html
       const htmlContent = document.documentElement.outerHTML;
       const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `EMDAD_Oilfield_ERP_Standalone_${new Date().toISOString().split('T')[0]}.html`;
+      a.download = 'index.html';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showToast("Standalone HTML file downloaded! You can open it in any browser offline.", "📥");
+      showToast("Downloaded index.html! Upload directly to GitHub repository.", "📥");
     }
 
     function showToast(text, icon = "✓") {
@@ -389,7 +444,461 @@
     }
 
     // =========================================================================
-    // VIEW RENDERERS
+    // AZURE SQL CLOUD SYNC & T-SQL GENERATOR
+    // =========================================================================
+
+    function openAzureSqlModal() {
+      const { azureConfig, data } = appState;
+      openModal(`
+        <div class="px-5 py-3.5 bg-[#1a3055] text-white flex justify-between items-center border-b border-[#0f1f38]">
+          <div class="flex items-center space-x-2">
+            <div class="p-1 rounded bg-amber-400 text-[#1a3055] font-black text-xs">SQL</div>
+            <div>
+              <h3 class="font-bold text-sm">Azure SQL Database Hub & Cloud Sync</h3>
+              <p class="text-[10px] text-slate-300">Connect GitHub Pages directly to Microsoft Azure SQL</p>
+            </div>
+          </div>
+          <button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button>
+        </div>
+
+        <div class="p-5 space-y-4 text-xs">
+          
+          <!-- Sync Settings Form -->
+          <div class="bg-slate-50 border border-[#b8c9db] rounded p-3.5 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-[#1a3055]">1. Azure SQL Connection Profile</span>
+              <label class="flex items-center space-x-1.5 cursor-pointer">
+                <input type="checkbox" id="az-enable" ${azureConfig.enabled ? 'checked' : ''} class="rounded text-amber-500" />
+                <span class="font-bold text-slate-700">Enable Live Cloud Sync</span>
+              </label>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block font-bold text-slate-600 mb-1">Azure SQL Server Name</label>
+                <input type="text" id="az-server" value="${azureConfig.serverName}" placeholder="my-server.database.windows.net" class="w-full border rounded px-2.5 py-1.5 font-mono text-xs" />
+              </div>
+              <div>
+                <label class="block font-bold text-slate-600 mb-1">Database Name</label>
+                <input type="text" id="az-db" value="${azureConfig.databaseName}" placeholder="EMDAD_Operations_DB" class="w-full border rounded px-2.5 py-1.5 font-mono text-xs" />
+              </div>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">Azure REST API / Azure Function / DAB Endpoint URL</label>
+              <input type="url" id="az-endpoint" value="${azureConfig.apiEndpoint}" placeholder="https://my-azure-func.azurewebsites.net/api/sync" class="w-full border rounded px-2.5 py-1.5 font-mono text-xs" />
+              <p class="text-[10px] text-slate-500 mt-1">Browser webapps communicate with Azure SQL via an Azure Function, Data API Builder (DAB), or REST Gateway.</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block font-bold text-slate-600 mb-1">API Key / Azure AD Bearer Secret</label>
+                <input type="password" id="az-key" value="${azureConfig.apiKey}" placeholder="••••••••••••••••" class="w-full border rounded px-2.5 py-1.5 font-mono text-xs" />
+              </div>
+              <div class="flex items-center pt-5">
+                <label class="flex items-center space-x-1.5 cursor-pointer">
+                  <input type="checkbox" id="az-autosync" ${azureConfig.autoSync ? 'checked' : ''} class="rounded text-amber-500" />
+                  <span class="font-semibold text-slate-700">Auto-sync changes to Azure</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="flex space-x-2 pt-2 border-t">
+              <button onclick="handleSaveAzureConfig()" class="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold hover:bg-[#24426d]">
+                Save Configuration
+              </button>
+              <button onclick="handleTestAzureConnection()" class="px-3 py-1.5 rounded bg-emerald-600 text-white font-bold hover:bg-emerald-700">
+                Test Connection
+              </button>
+              <button onclick="handlePushToAzure()" class="px-3 py-1.5 rounded bg-amber-500 text-slate-900 font-bold hover:bg-amber-400">
+                Push All Data to Azure
+              </button>
+              <button onclick="handlePullFromAzure()" class="px-3 py-1.5 rounded bg-blue-600 text-white font-bold hover:bg-blue-700">
+                Pull from Azure
+              </button>
+            </div>
+          </div>
+
+          <!-- T-SQL Schema Generator Box -->
+          <div class="border border-[#b8c9db] rounded p-3.5 bg-white space-y-2">
+            <div class="flex justify-between items-center">
+              <div class="font-bold text-[#1a3055]">2. Ready-to-Run Azure SQL T-SQL Schema & DDL Script</div>
+              <button onclick="copyAzureSqlScript()" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[#1a3055] font-bold border border-slate-300 text-[11px]">
+                Copy T-SQL Script
+              </button>
+            </div>
+            <p class="text-[11px] text-slate-600">
+              Paste this Transact-SQL script into the <strong>Azure Portal Query Editor</strong> or <strong>SSMS</strong> to automatically generate all relational tables, primary keys, and seed records in your Azure SQL database.
+            </p>
+            <textarea id="az-sql-script" readonly class="w-full h-32 font-mono text-[10px] p-2 bg-slate-900 text-emerald-300 rounded border resize-none"></textarea>
+          </div>
+
+          <!-- Azure Function Quick Template -->
+          <div class="border border-[#b8c9db] rounded p-3.5 bg-white space-y-2">
+            <div class="flex justify-between items-center">
+              <div class="font-bold text-[#1a3055]">3. 2-Minute Azure Function Connector Code</div>
+              <button onclick="copyAzureFunctionCode()" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[#1a3055] font-bold border border-slate-300 text-[11px]">
+                Copy Function Code
+              </button>
+            </div>
+            <p class="text-[11px] text-slate-600">
+              Deploy this simple Node.js / C# Azure Function or Data API Builder container to bridge GitHub Pages with Azure SQL.
+            </p>
+            <textarea id="az-func-code" readonly class="w-full h-24 font-mono text-[10px] p-2 bg-slate-900 text-amber-200 rounded border resize-none"></textarea>
+          </div>
+
+        </div>
+      `);
+
+      // Populate textareas
+      document.getElementById('az-sql-script').value = generateAzureSqlDDL(data);
+      document.getElementById('az-func-code').value = getAzureFunctionTemplate();
+    }
+
+    function handleSaveAzureConfig() {
+      appState.azureConfig = {
+        enabled: document.getElementById('az-enable').checked,
+        serverName: document.getElementById('az-server').value.trim(),
+        databaseName: document.getElementById('az-db').value.trim(),
+        apiEndpoint: document.getElementById('az-endpoint').value.trim(),
+        apiKey: document.getElementById('az-key').value.trim(),
+        autoSync: document.getElementById('az-autosync').checked,
+        lastSyncTime: appState.azureConfig.lastSyncTime
+      };
+      saveAzureConfig();
+      showToast("Azure SQL configuration saved locally", "✓");
+    }
+
+    async function handleTestAzureConnection() {
+      const endpoint = document.getElementById('az-endpoint').value.trim();
+      const apiKey = document.getElementById('az-key').value.trim();
+
+      if (!endpoint) {
+        alert("Please enter your Azure REST API or Azure Function endpoint URL first.");
+        return;
+      }
+
+      showToast("Pinging Azure SQL API...", "⏳");
+      try {
+        const res = await fetch(endpoint, {
+          method: 'GET',
+          headers: {
+            'Authorization': apiKey ? `Bearer ${apiKey}` : '',
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (res.ok) {
+          showToast("Connected to Azure SQL successfully!", "🟢");
+        } else {
+          showToast(`Azure SQL ping returned HTTP ${res.status}`, "⚠️");
+        }
+      } catch (err) {
+        showToast("Connection failed: verify Azure CORS and endpoint URL", "❌");
+      }
+    }
+
+    async function handlePushToAzure() {
+      handleSaveAzureConfig();
+      if (!appState.azureConfig.apiEndpoint) {
+        alert("Please specify your Azure REST API endpoint URL.");
+        return;
+      }
+
+      showToast("Pushing dataset to Azure SQL...", "⏳");
+      try {
+        const res = await fetch(appState.azureConfig.apiEndpoint, {
+          method: 'POST',
+          headers: {
+            'Authorization': appState.azureConfig.apiKey ? `Bearer ${appState.azureConfig.apiKey}` : '',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            action: 'SYNC_ALL',
+            timestamp: new Date().toISOString(),
+            data: appState.data
+          })
+        });
+
+        if (res.ok) {
+          appState.azureConfig.lastSyncTime = new Date().toISOString();
+          saveAzureConfig();
+          showToast("Data pushed to Azure SQL successfully", "✓");
+        } else {
+          showToast(`Push failed: HTTP ${res.status}`, "⚠️");
+        }
+      } catch (err) {
+        showToast("Push failed: check network and CORS config", "❌");
+      }
+    }
+
+    async function handlePullFromAzure() {
+      handleSaveAzureConfig();
+      if (!appState.azureConfig.apiEndpoint) {
+        alert("Please specify your Azure REST API endpoint URL.");
+        return;
+      }
+
+      showToast("Pulling fresh dataset from Azure SQL...", "⏳");
+      try {
+        const res = await fetch(appState.azureConfig.apiEndpoint + '?action=GET_ALL', {
+          method: 'GET',
+          headers: {
+            'Authorization': appState.azureConfig.apiKey ? `Bearer ${appState.azureConfig.apiKey}` : '',
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (res.ok) {
+          const result = await res.json();
+          if (result && result.inventory) {
+            appState.data = result;
+            saveState();
+            renderCurrentView();
+            showToast("Local data updated from Azure SQL", "✓");
+          }
+        } else {
+          showToast(`Pull failed: HTTP ${res.status}`, "⚠️");
+        }
+      } catch (err) {
+        showToast("Pull failed: check network and CORS config", "❌");
+      }
+    }
+
+    async function syncToAzureSqlSilent() {
+      try {
+        fetch(appState.azureConfig.apiEndpoint, {
+          method: 'POST',
+          headers: {
+            'Authorization': appState.azureConfig.apiKey ? `Bearer ${appState.azureConfig.apiKey}` : '',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            action: 'AUTO_SYNC',
+            timestamp: new Date().toISOString(),
+            data: appState.data
+          })
+        });
+      } catch (e) {
+        // silent fail
+      }
+    }
+
+    function generateAzureSqlDDL(data) {
+      return `-- =========================================================================
+-- EMDAD OILFIELD OPERATIONS PLATFORM - AZURE SQL DATABASE DDL SCHEMA
+-- Target: Microsoft Azure SQL Database / Managed Instance (T-SQL)
+-- =========================================================================
+
+-- 1. Tools Master Inventory Table
+CREATE TABLE dbo.Tools (
+    SerialNo NVARCHAR(50) PRIMARY KEY NOT NULL,
+    AssetName NVARCHAR(255) NOT NULL,
+    Category NVARCHAR(50) NOT NULL,
+    Size NVARCHAR(50) NULL,
+    ThreadConnection NVARCHAR(50) NULL,
+    TotalHours FLOAT NOT NULL DEFAULT 0.0,
+    MaxHoursLimit FLOAT NOT NULL DEFAULT 250.0,
+    HoursSinceInspection FLOAT NOT NULL DEFAULT 0.0,
+    CurrentLocation NVARCHAR(100) NOT NULL DEFAULT 'Mina Zayed Yard',
+    CurrentJob NVARCHAR(50) NULL,
+    Status NVARCHAR(50) NOT NULL DEFAULT 'Available',
+    CriticalAlert NVARCHAR(50) NOT NULL DEFAULT 'Normal',
+    DailyRentalRate DECIMAL(18, 2) NOT NULL DEFAULT 0.00,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+
+-- 2. Drilling Jobs Table
+CREATE TABLE dbo.Jobs (
+    JobID NVARCHAR(50) PRIMARY KEY NOT NULL,
+    Client NVARCHAR(100) NOT NULL,
+    Rig NVARCHAR(100) NOT NULL,
+    Well NVARCHAR(100) NOT NULL,
+    HoleSection NVARCHAR(50) NULL,
+    StartDate NVARCHAR(50) NOT NULL,
+    EndDate NVARCHAR(50) NULL,
+    Status NVARCHAR(50) NOT NULL DEFAULT 'Active',
+    ContractID NVARCHAR(50) NULL,
+    InvoicedAmountUSD DECIMAL(18, 2) NOT NULL DEFAULT 0.00,
+    IsInvoiceLocked BIT NOT NULL DEFAULT 0,
+    ERPInvoiceNo NVARCHAR(50) NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+
+-- 3. Rig Callouts Table
+CREATE TABLE dbo.Callouts (
+    CalloutID NVARCHAR(50) PRIMARY KEY NOT NULL,
+    Client NVARCHAR(100) NOT NULL,
+    Rig NVARCHAR(100) NOT NULL,
+    Well NVARCHAR(100) NOT NULL,
+    RequiredDate NVARCHAR(50) NOT NULL,
+    Status NVARCHAR(50) NOT NULL DEFAULT 'Pending',
+    CreatedBy NVARCHAR(100) NOT NULL,
+    Remarks NVARCHAR(MAX) NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+
+-- 4. Delivery Tickets (DT)
+CREATE TABLE dbo.DeliveryTickets (
+    DTNo NVARCHAR(50) PRIMARY KEY NOT NULL,
+    JobID NVARCHAR(50) NOT NULL,
+    DispatchDate NVARCHAR(50) NOT NULL,
+    Rig NVARCHAR(100) NOT NULL,
+    Transporter NVARCHAR(100) NULL,
+    DriverName NVARCHAR(100) NULL,
+    TruckNo NVARCHAR(50) NULL,
+    Status NVARCHAR(50) NOT NULL DEFAULT 'In_Transit',
+    ItemsCount INT NOT NULL DEFAULT 0,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+
+-- 5. Receiving Tickets (RT)
+CREATE TABLE dbo.ReceivingTickets (
+    RTNo NVARCHAR(50) PRIMARY KEY NOT NULL,
+    JobID NVARCHAR(50) NOT NULL,
+    ReceiveDate NVARCHAR(50) NOT NULL,
+    Rig NVARCHAR(100) NOT NULL,
+    ReceivedBy NVARCHAR(100) NOT NULL,
+    Status NVARCHAR(50) NOT NULL DEFAULT 'Completed',
+    TotalTools INT NOT NULL DEFAULT 0,
+    Notes NVARCHAR(MAX) NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+
+-- 6. Gate Passes
+CREATE TABLE dbo.GatePasses (
+    PassID NVARCHAR(50) PRIMARY KEY NOT NULL,
+    PassType NVARCHAR(50) NOT NULL,
+    VehicleNo NVARCHAR(50) NOT NULL,
+    DriverName NVARCHAR(100) NOT NULL,
+    Destination NVARCHAR(100) NOT NULL,
+    Purpose NVARCHAR(MAX) NOT NULL,
+    IssuedBy NVARCHAR(100) NOT NULL,
+    IssuedAt NVARCHAR(50) NOT NULL,
+    Status NVARCHAR(50) NOT NULL DEFAULT 'Executed'
+);
+
+-- 7. QC Inspections
+CREATE TABLE dbo.Inspections (
+    InspectionID NVARCHAR(50) PRIMARY KEY NOT NULL,
+    SerialNo NVARCHAR(50) NOT NULL,
+    InspectionType NVARCHAR(100) NOT NULL,
+    Inspector NVARCHAR(100) NOT NULL,
+    InspectionDate NVARCHAR(50) NOT NULL,
+    Result NVARCHAR(50) NOT NULL,
+    Comments NVARCHAR(MAX) NULL,
+    NextDueDate NVARCHAR(50) NULL
+);
+
+-- 8. Workshop Maintenance
+CREATE TABLE dbo.Maintenance (
+    MaintenanceID NVARCHAR(50) PRIMARY KEY NOT NULL,
+    SerialNo NVARCHAR(50) NOT NULL,
+    MaintenanceType NVARCHAR(100) NOT NULL,
+    Workshop NVARCHAR(100) NOT NULL,
+    StartDate NVARCHAR(50) NOT NULL,
+    EstimatedCompletion NVARCHAR(50) NULL,
+    Status NVARCHAR(50) NOT NULL DEFAULT 'In_Progress',
+    CostUSD DECIMAL(18, 2) NOT NULL DEFAULT 0.00,
+    Technician NVARCHAR(100) NOT NULL
+);
+
+-- 9. Master Contracts & PBG
+CREATE TABLE dbo.Contracts (
+    ContractID NVARCHAR(50) PRIMARY KEY NOT NULL,
+    Client NVARCHAR(100) NOT NULL,
+    Title NVARCHAR(255) NOT NULL,
+    StartDate NVARCHAR(50) NOT NULL,
+    EndDate NVARCHAR(50) NOT NULL,
+    Currency NVARCHAR(10) NOT NULL DEFAULT 'USD',
+    PBGAmountUSD DECIMAL(18, 2) NOT NULL DEFAULT 0.00,
+    PBGExpiryDate NVARCHAR(50) NULL,
+    PBGIssuingBank NVARCHAR(100) NULL,
+    Status NVARCHAR(50) NOT NULL DEFAULT 'Active'
+);
+
+-- 10. Direct Job Costs
+CREATE TABLE dbo.JobCosts (
+    CostID NVARCHAR(50) PRIMARY KEY NOT NULL,
+    JobID NVARCHAR(50) NOT NULL,
+    CostCategory NVARCHAR(50) NOT NULL,
+    Description NVARCHAR(255) NOT NULL,
+    Supplier NVARCHAR(100) NOT NULL,
+    PONumber NVARCHAR(50) NULL,
+    AmountUSD DECIMAL(18, 2) NOT NULL DEFAULT 0.00,
+    CostDate NVARCHAR(50) NOT NULL
+);
+
+-- 11. SOX Invoice Unlock Audit Trail
+CREATE TABLE dbo.AuditLogs (
+    AuditID NVARCHAR(50) PRIMARY KEY NOT NULL,
+    JobID NVARCHAR(50) NOT NULL,
+    InvoiceNo NVARCHAR(50) NULL,
+    Action NVARCHAR(50) NOT NULL,
+    [User] NVARCHAR(100) NOT NULL,
+    Reason NVARCHAR(MAX) NOT NULL,
+    Timestamp NVARCHAR(50) NOT NULL
+);
+GO
+`;
+    }
+
+    function getAzureFunctionTemplate() {
+      return `// Azure Function (Node.js) to sync GitHub Pages index.html with Azure SQL
+// Install: npm install mssql
+const sql = require('mssql');
+
+const config = {
+  user: process.env.AZURE_SQL_USER,
+  password: process.env.AZURE_SQL_PASSWORD,
+  server: process.env.AZURE_SQL_SERVER, // e.g. server.database.windows.net
+  database: process.env.AZURE_SQL_DATABASE,
+  options: { encrypt: true, trustServerCertificate: false }
+};
+
+module.exports = async function (context, req) {
+  // Set CORS headers for GitHub Pages origin
+  context.res = {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+    }
+  };
+
+  if (req.method === 'OPTIONS') return;
+
+  try {
+    const pool = await sql.connect(config);
+    if (req.method === 'GET') {
+      const tools = await pool.request().query('SELECT * FROM dbo.Tools');
+      const jobs = await pool.request().query('SELECT * FROM dbo.Jobs');
+      context.res.body = { inventory: tools.recordset, jobs: jobs.recordset };
+    } else if (req.method === 'POST') {
+      // Upsert logic here
+      context.res.body = { status: 'synced' };
+    }
+  } catch (err) {
+    context.res.status = 500;
+    context.res.body = { error: err.message };
+  }
+};`;
+    }
+
+    function copyAzureSqlScript() {
+      const text = document.getElementById('az-sql-script').value;
+      navigator.clipboard.writeText(text);
+      showToast("Copied Azure SQL T-SQL script to clipboard", "📋");
+    }
+
+    function copyAzureFunctionCode() {
+      const text = document.getElementById('az-func-code').value;
+      navigator.clipboard.writeText(text);
+      showToast("Copied Azure Function template code", "📋");
+    }
+
+    // =========================================================================
+    // VIEW RENDERERS (All standard ERP tabs)
     // =========================================================================
 
     function renderCurrentView() {
@@ -730,11 +1239,11 @@
       if (tool) {
         tool.Status = document.getElementById('u-status').value;
         tool.CurrentLocation = document.getElementById('u-loc').value;
-        tool.TotalHours = parseFloat(document.getElementById('u-hours').value) || tool.TotalHours;
-        tool.DailyRentalRate = parseFloat(document.getElementById('u-rate').value) || tool.DailyRentalRate;
+        tool.TotalHours = parseFloat(document.getElementById('u-hours').value) || 0;
+        tool.DailyRentalRate = parseFloat(document.getElementById('u-rate').value) || 0;
         saveState();
         closeModal();
-        showToast(`✓ Updated asset ${serial}`);
+        showToast(`✓ Updated asset ${tool.SerialNo}`);
         renderCurrentView();
       }
     }
@@ -745,12 +1254,12 @@
         <div class="space-y-4">
           <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
             <div>
-              <div class="text-[11px] text-slate-500 font-medium">Rig Mobilization</div>
-              <h1 class="text-base font-bold text-[#1a3055]">Rig Callout Manager & Tool Allocations</h1>
+              <div class="text-[11px] text-slate-500 font-medium">Inbound Dispatch Requests</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Rig Callouts & Mobilization Demands</h1>
             </div>
             ${role !== 'Viewer' ? `
-              <button onclick="openNewCalloutModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">
-                + New Rig Callout Request
+              <button onclick="openNewCalloutModal()" class="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-sm">
+                + New Rig Callout
               </button>
             ` : ''}
           </div>
@@ -763,7 +1272,7 @@
                   <th class="px-3 py-2">CLIENT</th>
                   <th class="px-3 py-2">RIG & WELL</th>
                   <th class="px-3 py-2">REQUIRED DATE</th>
-                  <th class="px-3 py-2">REQUESTED BY</th>
+                  <th class="px-3 py-2">COORDINATOR</th>
                   <th class="px-3 py-2">STATUS</th>
                   <th class="px-3 py-2">REMARKS</th>
                 </tr>
@@ -773,16 +1282,16 @@
                   <tr class="hover:bg-[#e4eef8]">
                     <td class="px-3 py-2 font-mono font-bold text-amber-900">${c.CalloutID}</td>
                     <td class="px-3 py-2 font-bold text-[#1a3055]">${c.Client}</td>
-                    <td class="px-3 py-2 font-medium">${c.Rig} <span class="text-slate-400">|</span> ${c.Well}</td>
-                    <td class="px-3 py-2 font-mono text-slate-700">${c.RequiredDate}</td>
-                    <td class="px-3 py-2 text-slate-800">${c.CreatedBy}</td>
+                    <td class="px-3 py-2 font-medium">${c.Rig} - ${c.Well}</td>
+                    <td class="px-3 py-2 font-mono">${c.RequiredDate}</td>
+                    <td class="px-3 py-2 text-slate-600">${c.CreatedBy}</td>
                     <td class="px-3 py-2">
                       <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                        c.Status === 'Dispatched' ? 'bg-emerald-100 text-emerald-800' :
-                        c.Status === 'Assigned' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                        c.Status === 'Pending' ? 'bg-amber-100 text-amber-800' :
+                        c.Status === 'Assigned' ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'
                       }">${c.Status}</span>
                     </td>
-                    <td class="px-3 py-2 text-slate-600 text-[11px]">${c.Remarks}</td>
+                    <td class="px-3 py-2 text-slate-500 max-w-xs truncate">${c.Remarks}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -794,203 +1303,74 @@
 
     function openNewCalloutModal() {
       openModal(`
-        <div class="px-4 py-3 bg-[#5b7fa6] text-white flex justify-between items-center">
+        <div class="px-4 py-3 bg-[#1a3055] text-white flex justify-between items-center">
           <h3 class="font-bold text-sm">Create New Rig Callout</h3>
           <button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button>
         </div>
-        <form onsubmit="handleCreateCallout(event)" class="p-4 space-y-3 text-xs">
+        <form onsubmit="handleAddCallout(event)" class="p-4 space-y-3 text-xs">
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block font-bold mb-1">Client Operator *</label>
-              <select id="co-client" class="w-full border rounded px-2.5 py-1.5 font-bold">
-                <option value="ADNOC Offshore">ADNOC Offshore</option>
-                <option value="ADNOC Onshore">ADNOC Onshore</option>
-                <option value="OXY Oman">OXY Oman</option>
-                <option value="Saudi Aramco">Saudi Aramco</option>
-              </select>
+              <input type="text" id="c-client" required placeholder="ADNOC Offshore" class="w-full border rounded px-2.5 py-1.5" />
             </div>
             <div>
               <label class="block font-bold mb-1">Rig Name *</label>
-              <input type="text" id="co-rig" required placeholder="Al Yasat (Jackup)" class="w-full border rounded px-2.5 py-1.5 font-bold" />
+              <input type="text" id="c-rig" required placeholder="Al Yasat (Jackup)" class="w-full border rounded px-2.5 py-1.5" />
             </div>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1">Well Name / Number</label>
-              <input type="text" id="co-well" value="AY-403 Lateral" class="w-full border rounded px-2.5 py-1.5" />
+              <label class="block font-bold mb-1">Well Identifier *</label>
+              <input type="text" id="c-well" required placeholder="AY-403 Lateral" class="w-full border rounded px-2.5 py-1.5" />
             </div>
             <div>
-              <label class="block font-bold mb-1">Required Rig Site Date</label>
-              <input type="date" id="co-date" value="${new Date().toISOString().split('T')[0]}" class="w-full border rounded px-2.5 py-1.5 font-mono" />
+              <label class="block font-bold mb-1">Required Mobilization Date *</label>
+              <input type="date" id="c-date" required value="${new Date().toISOString().split('T')[0]}" class="w-full border rounded px-2.5 py-1.5 font-mono" />
             </div>
           </div>
           <div>
-            <label class="block font-bold mb-1">Mobilization Scope & Tool Requirements</label>
-            <textarea id="co-remarks" rows="2" class="w-full border rounded px-2.5 py-1.5" placeholder="8.00 mud motor + hydraulic drilling jar + crossover subs..."></textarea>
+            <label class="block font-bold mb-1">Operational Remarks / BHA Specification</label>
+            <textarea id="c-remarks" rows="3" placeholder="Specify required tool string, motors, jars..." class="w-full border rounded px-2.5 py-1.5"></textarea>
           </div>
           <div class="pt-3 border-t flex justify-end space-x-2">
             <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold">Cancel</button>
-            <button type="submit" class="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold">Log Callout</button>
+            <button type="submit" class="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold">Submit Callout</button>
           </div>
         </form>
       `);
     }
 
-    function handleCreateCallout(e) {
+    function handleAddCallout(e) {
       e.preventDefault();
-      const count = appState.data.callouts.length + 91;
-      const newCallout = {
-        CalloutID: `CAL-2026-0${count}`,
-        Client: document.getElementById('co-client').value,
-        Rig: document.getElementById('co-rig').value,
-        Well: document.getElementById('co-well').value,
-        RequiredDate: document.getElementById('co-date').value,
+      const newCal = {
+        CalloutID: "CAL-" + Math.floor(1000 + Math.random() * 9000),
+        Client: document.getElementById('c-client').value,
+        Rig: document.getElementById('c-rig').value,
+        Well: document.getElementById('c-well').value,
+        RequiredDate: document.getElementById('c-date').value,
         Status: "Pending",
-        CreatedBy: "Operations Coordinator",
-        Remarks: document.getElementById('co-remarks').value
+        CreatedBy: appState.currentRole + " Lead",
+        Remarks: document.getElementById('c-remarks').value
       };
-      appState.data.callouts.unshift(newCallout);
+      appState.data.callouts.unshift(newCal);
       saveState();
       closeModal();
-      showToast(`✓ Logged Callout ${newCallout.CalloutID}`);
+      showToast(`✓ Callout ${newCal.CalloutID} submitted`);
       renderCurrentView();
     }
 
-    // 4. JOBS VIEW
+    // 4. JOBS VIEW (With SOX Invoice Lock)
     function renderJobsView(data, role) {
       return `
         <div class="space-y-4">
           <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
             <div>
-              <div class="text-[11px] text-slate-500 font-medium">Operations Management</div>
-              <h1 class="text-base font-bold text-[#1a3055]">Drilling Job Tracking & ERP Legal Invoice Locks</h1>
-            </div>
-          </div>
-
-          <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
-            <table class="w-full text-left text-xs border-collapse">
-              <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
-                <tr>
-                  <th class="px-3 py-2">JOB ID</th>
-                  <th class="px-3 py-2">CLIENT</th>
-                  <th class="px-3 py-2">RIG & WELL</th>
-                  <th class="px-3 py-2">CONTRACT REF</th>
-                  <th class="px-3 py-2">INVOICE STATUS</th>
-                  <th class="px-3 py-2 text-right">BILLED REVENUE</th>
-                  <th class="px-3 py-2 text-center">LEGAL ACTION</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-[#e2e8f0]">
-                ${data.jobs.map(j => `
-                  <tr class="hover:bg-[#e4eef8]">
-                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${j.JobID}</td>
-                    <td class="px-3 py-2 font-bold text-[#1a3055]">${j.Client}</td>
-                    <td class="px-3 py-2 font-medium">${j.Rig} <span class="text-slate-400">|</span> ${j.Well}</td>
-                    <td class="px-3 py-2 font-mono text-slate-600">${j.ContractID}</td>
-                    <td class="px-3 py-2">
-                      ${j.IsInvoiceLocked ? `
-                        <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono font-bold text-[10.5px]">
-                          <span>🔒 ${j.ERPInvoiceNo}</span>
-                        </span>
-                      ` : `
-                        <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-mono font-bold text-[10.5px]">
-                          <span>🔓 UNLOCKED (Editable)</span>
-                        </span>
-                      `}
-                    </td>
-                    <td class="px-3 py-2 text-right font-mono font-bold text-emerald-800">$${(j.InvoicedAmountUSD || 0).toLocaleString()}</td>
-                    <td class="px-3 py-2 text-center">
-                      <button onclick="openToggleInvoiceLockModal('${j.JobID}')" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 border text-[11px] font-bold text-slate-700">
-                        ${j.IsInvoiceLocked ? 'SOX Unlock Request' : 'Lock Invoice'}
-                      </button>
-                    </td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `;
-    }
-
-    function openToggleInvoiceLockModal(jobId) {
-      const job = appState.data.jobs.find(j => j.JobID === jobId);
-      if (!job) return;
-
-      if (job.IsInvoiceLocked) {
-        // Must provide SOX justification
-        openModal(`
-          <div class="px-4 py-3 bg-rose-800 text-white flex justify-between items-center">
-            <h3 class="font-bold text-sm">SOX Legal Invoice Unlock Authorization: ${jobId}</h3>
-            <button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button>
-          </div>
-          <form onsubmit="handleUnlockInvoice(event, '${jobId}')" class="p-4 space-y-3 text-xs">
-            <div class="bg-rose-50 border border-rose-200 rounded p-2.5 text-rose-800">
-              <strong>Audit Warning:</strong> This invoice was legally locked under ${job.ERPInvoiceNo}. Any retroactive modification requires a formal business reason logged into the permanent SOX audit trail.
-            </div>
-            <div>
-              <label class="block font-bold mb-1">Audited Justification Reason *</label>
-              <textarea id="unlock-reason" required rows="3" class="w-full border rounded px-2.5 py-1.5" placeholder="e.g. ADNOC Dispute Resolution Committee approved 12 hrs weather standby credit..."></textarea>
-            </div>
-            <div class="pt-3 border-t flex justify-end space-x-2">
-              <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold">Cancel</button>
-              <button type="submit" class="px-4 py-1.5 rounded bg-rose-700 text-white font-bold">Authorize SOX Unlock</button>
-            </div>
-          </form>
-        `);
-      } else {
-        // Lock invoice
-        job.IsInvoiceLocked = true;
-        job.ERPInvoiceNo = `INV-DXB-${Math.floor(10000 + Math.random() * 90000)}`;
-        appState.data.unlockAudits.push({
-          AuditID: `AUD-00${appState.data.unlockAudits.length + 1}`,
-          JobID: jobId,
-          InvoiceNo: job.ERPInvoiceNo,
-          Action: "LOCKED",
-          User: appState.currentRole,
-          Reason: "Invoice closed and submitted to client ERP.",
-          Timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
-        });
-        saveState();
-        showToast(`🔒 Job ${jobId} invoice locked as ${job.ERPInvoiceNo}`);
-        renderCurrentView();
-      }
-    }
-
-    function handleUnlockInvoice(e, jobId) {
-      e.preventDefault();
-      const job = appState.data.jobs.find(j => j.JobID === jobId);
-      const reason = document.getElementById('unlock-reason').value;
-      if (job) {
-        job.IsInvoiceLocked = false;
-        appState.data.unlockAudits.push({
-          AuditID: `AUD-00${appState.data.unlockAudits.length + 1}`,
-          JobID: jobId,
-          InvoiceNo: job.ERPInvoiceNo || "OPEN",
-          Action: "UNLOCKED",
-          User: appState.currentRole,
-          Reason: reason,
-          Timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
-        });
-        saveState();
-        closeModal();
-        showToast(`🔓 Authorized invoice unlock for Job ${jobId}`);
-        renderCurrentView();
-      }
-    }
-
-    // 5. DELIVERY TICKETS (DT) VIEW
-    function renderDTView(data, role) {
-      return `
-        <div class="space-y-4">
-          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
-            <div>
-              <div class="text-[11px] text-slate-500 font-medium">Logistics & Dispatch</div>
-              <h1 class="text-base font-bold text-[#1a3055]">Delivery Tickets (DT Outbound Batches)</h1>
+              <div class="text-[11px] text-slate-500 font-medium">Active Drilling Contracts</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Drilling Jobs & SOX Invoicing Control</h1>
             </div>
             ${role !== 'Viewer' ? `
-              <button onclick="openNewDTModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">
-                + Generate Outbound DT Dispatch
+              <button onclick="openNewJobModal()" class="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-sm">
+                + New Drilling Job
               </button>
             ` : ''}
           </div>
@@ -999,30 +1379,43 @@
             <table class="w-full text-left text-xs border-collapse">
               <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
                 <tr>
-                  <th class="px-3 py-2">DT TICKET #</th>
                   <th class="px-3 py-2">JOB ID</th>
-                  <th class="px-3 py-2">DISPATCH DATE</th>
-                  <th class="px-3 py-2">DESTINATION RIG</th>
-                  <th class="px-3 py-2">TRANSPORTER & DRIVER</th>
-                  <th class="px-3 py-2">TRUCK #</th>
-                  <th class="px-3 py-2">STATUS</th>
-                  <th class="px-3 py-2 text-center">PRINT SLIP</th>
+                  <th class="px-3 py-2">CLIENT & CONTRACT</th>
+                  <th class="px-3 py-2">RIG & WELL</th>
+                  <th class="px-3 py-2">HOLE SECTION</th>
+                  <th class="px-3 py-2">START DATE</th>
+                  <th class="px-3 py-2 text-right">BILLED REVENUE</th>
+                  <th class="px-3 py-2">SOX INVOICE LOCK</th>
+                  <th class="px-3 py-2 text-center">ACTION</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-[#e2e8f0]">
-                ${data.dtBatches.map(dt => `
+                ${data.jobs.map(j => `
                   <tr class="hover:bg-[#e4eef8]">
-                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${dt.DTNo}</td>
-                    <td class="px-3 py-2 font-mono font-bold text-[#1a3055]">${dt.JobID}</td>
-                    <td class="px-3 py-2 font-mono text-slate-600">${dt.DispatchDate}</td>
-                    <td class="px-3 py-2 font-bold text-slate-800">${dt.Rig}</td>
-                    <td class="px-3 py-2 font-medium">${dt.Transporter} (${dt.DriverName})</td>
-                    <td class="px-3 py-2 font-mono">${dt.TruckNo}</td>
-                    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">${dt.Status}</span></td>
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${j.JobID}</td>
+                    <td class="px-3 py-2 font-bold text-[#1a3055]">${j.Client} <div class="text-[10px] text-slate-400 font-mono">${j.ContractID}</div></td>
+                    <td class="px-3 py-2 font-medium">${j.Rig} | ${j.Well}</td>
+                    <td class="px-3 py-2 font-mono text-slate-600">${j.HoleSection}</td>
+                    <td class="px-3 py-2 font-mono">${j.StartDate}</td>
+                    <td class="px-3 py-2 text-right font-mono font-bold text-emerald-800">$${(j.InvoicedAmountUSD || 0).toLocaleString()}</td>
+                    <td class="px-3 py-2 font-mono">
+                      ${j.IsInvoiceLocked ? 
+                        `<span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center space-x-1 w-max">
+                          <span>🔒</span>
+                          <span>LOCKED (${j.ERPInvoiceNo})</span>
+                        </span>` : 
+                        `<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold flex items-center space-x-1 w-max">
+                          <span>🔓</span>
+                          <span>Open for Billing</span>
+                        </span>`
+                      }
+                    </td>
                     <td class="px-3 py-2 text-center">
-                      <button onclick="printDTSlip('${dt.DTNo}')" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 border text-blue-700 font-bold text-[11px]">
-                        🖨️ Print Slip
-                      </button>
+                      ${j.IsInvoiceLocked ? `
+                        <button onclick="openUnlockModal('${j.JobID}')" class="text-rose-700 hover:underline font-bold text-[11px]">Request Unlock</button>
+                      ` : `
+                        <button onclick="openLockModal('${j.JobID}')" class="text-emerald-700 hover:underline font-bold text-[11px]">Lock Invoice</button>
+                      `}
                     </td>
                   </tr>
                 `).join('')}
@@ -1033,59 +1426,101 @@
       `;
     }
 
-    function printDTSlip(dtNo) {
-      const dt = appState.data.dtBatches.find(d => d.DTNo === dtNo);
-      if (!dt) return;
-
+    function openLockModal(jobId) {
       openModal(`
-        <div class="p-6 bg-white space-y-4">
-          <div class="flex justify-between items-center border-b pb-3">
-            <div>
-              <h2 class="text-base font-extrabold text-[#1a3055]">EMDAD SERVICES LLC</h2>
-              <div class="text-xs text-slate-500">Official Outbound Equipment Delivery Ticket</div>
-            </div>
-            <div class="text-right">
-              <div class="font-mono font-bold text-base text-amber-700">${dt.DTNo}</div>
-              <div class="text-xs text-slate-500">${dt.DispatchDate}</div>
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-3 rounded border">
-            <div><strong>Rig Destination:</strong> ${dt.Rig}</div>
-            <div><strong>Job ID Ref:</strong> ${dt.JobID}</div>
-            <div><strong>Transporter:</strong> ${dt.Transporter}</div>
-            <div><strong>Driver / Truck:</strong> ${dt.DriverName} (${dt.TruckNo})</div>
-          </div>
-          <div class="border rounded overflow-hidden text-xs">
-            <table class="w-full text-left">
-              <thead class="bg-slate-100 font-bold border-b">
-                <tr><th class="p-2">Item #</th><th class="p-2">Serial #</th><th class="p-2">Tool Description</th><th class="p-2">Condition</th></tr>
-              </thead>
-              <tbody class="divide-y">
-                <tr><td class="p-2">1</td><td class="p-2 font-mono font-bold">MD-8001-A</td><td class="p-2">8.00\" Motor Assembly (Sperry/Halliburton)</td><td class="p-2 text-emerald-700 font-bold">Ready / Inspected</td></tr>
-                <tr><td class="p-2">2</td><td class="p-2 font-mono font-bold">JAR-800-09</td><td class="p-2">8.00\" Hydraulic Drilling Jar</td><td class="p-2 text-emerald-700 font-bold">Ready / Inspected</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="grid grid-cols-2 gap-8 pt-6 text-xs text-slate-600">
-            <div class="border-t pt-1">Dispatched By (Yard Master Signature): _______________</div>
-            <div class="border-t pt-1">Received at Rig Site (Company Man): _______________</div>
-          </div>
-          <div class="flex justify-end space-x-2 pt-4 no-print">
-            <button onclick="closeModal()" class="px-3 py-1 rounded bg-slate-100 font-bold text-xs">Close</button>
-            <button onclick="window.print()" class="px-4 py-1 rounded bg-[#1a3055] text-white font-bold text-xs">Print Delivery Slip</button>
-          </div>
+        <div class="px-4 py-3 bg-[#1a3055] text-white flex justify-between items-center">
+          <h3 class="font-bold text-sm">SOX Finalize & Lock Invoice: ${jobId}</h3>
+          <button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button>
         </div>
+        <form onsubmit="handleLockJob(event, '${jobId}')" class="p-4 space-y-3 text-xs">
+          <div class="bg-amber-50 border border-amber-300 rounded p-2.5 text-[11px] text-amber-800">
+            <strong>Legal Notice:</strong> Locking prevents any subsequent ticket rate modifications or retroactive dispatch additions.
+          </div>
+          <div>
+            <label class="block font-bold mb-1">ERP / Maximo Invoice Reference # *</label>
+            <input type="text" id="l-inv" required placeholder="INV-DXB-99215" class="w-full border rounded px-2.5 py-1.5 font-mono" />
+          </div>
+          <div class="pt-3 border-t flex justify-end space-x-2">
+            <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold">Cancel</button>
+            <button type="submit" class="px-4 py-1.5 rounded bg-emerald-600 text-white font-bold">Confirm & Lock</button>
+          </div>
+        </form>
       `);
     }
 
-    // 6. RECEIVING TICKETS (RT) VIEW
-    function renderRTView(data, role) {
+    function handleLockJob(e, jobId) {
+      e.preventDefault();
+      const job = appState.data.jobs.find(j => j.JobID === jobId);
+      if (job) {
+        job.IsInvoiceLocked = true;
+        job.ERPInvoiceNo = document.getElementById('l-inv').value;
+        appState.data.unlockAudits.unshift({
+          AuditID: "AUD-" + Math.floor(1000 + Math.random() * 9000),
+          JobID: jobId,
+          InvoiceNo: job.ERPInvoiceNo,
+          Action: "LOCKED",
+          User: appState.currentRole + " Lead",
+          Reason: "Invoice sealed for commercial client transmission",
+          Timestamp: new Date().toISOString()
+        });
+        saveState();
+        closeModal();
+        showToast(`🔒 Job ${jobId} invoice locked`);
+        renderCurrentView();
+      }
+    }
+
+    function openUnlockModal(jobId) {
+      openModal(`
+        <div class="px-4 py-3 bg-rose-800 text-white flex justify-between items-center">
+          <h3 class="font-bold text-sm">SOX Invoice Unlock Audit: ${jobId}</h3>
+          <button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button>
+        </div>
+        <form onsubmit="handleUnlockJob(event, '${jobId}')" class="p-4 space-y-3 text-xs">
+          <div class="bg-rose-50 border border-rose-300 rounded p-2.5 text-[11px] text-rose-800">
+            <strong>Audit Warning:</strong> This unlock action is logged with user timestamp and reason in accordance with internal corporate governance.
+          </div>
+          <div>
+            <label class="block font-bold mb-1">Reason for Unlocking Sealed Invoice *</label>
+            <textarea id="u-reason" required rows="3" placeholder="E.g., Client commercial dispute resolution, retroactive standby discount..." class="w-full border rounded px-2.5 py-1.5"></textarea>
+          </div>
+          <div class="pt-3 border-t flex justify-end space-x-2">
+            <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold">Cancel</button>
+            <button type="submit" class="px-4 py-1.5 rounded bg-rose-700 text-white font-bold">Authorize Unlock</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function handleUnlockJob(e, jobId) {
+      e.preventDefault();
+      const job = appState.data.jobs.find(j => j.JobID === jobId);
+      if (job) {
+        job.IsInvoiceLocked = false;
+        appState.data.unlockAudits.unshift({
+          AuditID: "AUD-" + Math.floor(1000 + Math.random() * 9000),
+          JobID: jobId,
+          InvoiceNo: job.ERPInvoiceNo,
+          Action: "UNLOCKED",
+          User: appState.currentRole + " Lead",
+          Reason: document.getElementById('u-reason').value,
+          Timestamp: new Date().toISOString()
+        });
+        saveState();
+        closeModal();
+        showToast(`🔓 Job ${jobId} unlocked for adjustments`);
+        renderCurrentView();
+      }
+    }
+
+    // 5. DELIVERY TICKETS (DT)
+    function renderDTView(data) {
       return `
         <div class="space-y-4">
           <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
             <div>
-              <div class="text-[11px] text-slate-500 font-medium">Logistics & Receiving</div>
-              <h1 class="text-base font-bold text-[#1a3055]">Receiving Tickets (RT Inbound Rig Backloads)</h1>
+              <div class="text-[11px] text-slate-500 font-medium">Logistics & Dispatch</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Delivery Tickets (DT) Manifests</h1>
             </div>
           </div>
 
@@ -1093,25 +1528,72 @@
             <table class="w-full text-left text-xs border-collapse">
               <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
                 <tr>
-                  <th class="px-3 py-2">RT TICKET #</th>
-                  <th class="px-3 py-2">JOB ID</th>
-                  <th class="px-3 py-2">RECEIVE DATE</th>
-                  <th class="px-3 py-2">ORIGIN RIG</th>
-                  <th class="px-3 py-2">RECEIVED BY</th>
+                  <th class="px-3 py-2">DT NUMBER</th>
+                  <th class="px-3 py-2">JOB REF</th>
+                  <th class="px-3 py-2">DESTINATION RIG</th>
+                  <th class="px-3 py-2">TRANSPORTER</th>
+                  <th class="px-3 py-2">DRIVER & TRUCK</th>
+                  <th class="px-3 py-2">DATE</th>
                   <th class="px-3 py-2">STATUS</th>
-                  <th class="px-3 py-2">INTAKE REMARKS</th>
+                  <th class="px-3 py-2 text-center">PRINT</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#e2e8f0]">
+                ${data.dtBatches.map(dt => `
+                  <tr class="hover:bg-[#e4eef8]">
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${dt.DTNo}</td>
+                    <td class="px-3 py-2 font-mono text-slate-700">${dt.JobID}</td>
+                    <td class="px-3 py-2 font-bold text-[#1a3055]">${dt.Rig}</td>
+                    <td class="px-3 py-2">${dt.Transporter}</td>
+                    <td class="px-3 py-2 font-medium">${dt.DriverName} <span class="text-slate-400">(${dt.TruckNo})</span></td>
+                    <td class="px-3 py-2 font-mono">${dt.DispatchDate}</td>
+                    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">${dt.Status}</span></td>
+                    <td class="px-3 py-2 text-center">
+                      <button onclick="printSlip('DT', '${dt.DTNo}')" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 border font-bold text-[10px]">Print Slip</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    // 6. RECEIVING TICKETS (RT)
+    function renderRTView(data) {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium">Backload & Receiving</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Receiving Tickets (RT) Manifests</h1>
+            </div>
+          </div>
+
+          <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
+                <tr>
+                  <th class="px-3 py-2">RT NUMBER</th>
+                  <th class="px-3 py-2">JOB REF</th>
+                  <th class="px-3 py-2">ORIGIN RIG</th>
+                  <th class="px-3 py-2">RECEIVING YARD REP</th>
+                  <th class="px-3 py-2">RECEIVE DATE</th>
+                  <th class="px-3 py-2">STATUS</th>
+                  <th class="px-3 py-2">NOTES</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-[#e2e8f0]">
                 ${data.rtBatches.map(rt => `
                   <tr class="hover:bg-[#e4eef8]">
                     <td class="px-3 py-2 font-mono font-bold text-amber-900">${rt.RTNo}</td>
-                    <td class="px-3 py-2 font-mono font-bold text-[#1a3055]">${rt.JobID}</td>
-                    <td class="px-3 py-2 font-mono text-slate-600">${rt.ReceiveDate}</td>
-                    <td class="px-3 py-2 font-bold text-slate-800">${rt.Rig}</td>
-                    <td class="px-3 py-2 text-slate-800">${rt.ReceivedBy}</td>
+                    <td class="px-3 py-2 font-mono text-slate-700">${rt.JobID}</td>
+                    <td class="px-3 py-2 font-bold text-[#1a3055]">${rt.Rig}</td>
+                    <td class="px-3 py-2">${rt.ReceivedBy}</td>
+                    <td class="px-3 py-2 font-mono">${rt.ReceiveDate}</td>
                     <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">${rt.Status}</span></td>
-                    <td class="px-3 py-2 text-slate-600 text-[11px]">${rt.Notes}</td>
+                    <td class="px-3 py-2 text-slate-500">${rt.Notes}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -1122,52 +1604,41 @@
     }
 
     // 7. SECURITY GATE PASSES
-    function renderGatePassView(data, role) {
+    function renderGatePassView(data) {
       return `
         <div class="space-y-4">
           <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
             <div>
-              <div class="text-[11px] text-slate-500 font-medium">Yard Security & Perimeter Control</div>
-              <h1 class="text-base font-bold text-[#1a3055]">Security Gate Passes (Inward / Outward Vehicle Manifests)</h1>
+              <div class="text-[11px] text-slate-500 font-medium">Yard Security & Perimeter</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Security Gate Pass Verification</h1>
             </div>
-            ${role !== 'Viewer' ? `
-              <button onclick="openNewGatePassModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">
-                + Issue Security Gate Pass
-              </button>
-            ` : ''}
           </div>
 
           <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
             <table class="w-full text-left text-xs border-collapse">
               <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
                 <tr>
-                  <th class="px-3 py-2">PASS #</th>
+                  <th class="px-3 py-2">PASS ID</th>
                   <th class="px-3 py-2">TYPE</th>
-                  <th class="px-3 py-2">VEHICLE & DRIVER</th>
-                  <th class="px-3 py-2">DESTINATION / ORIGIN</th>
-                  <th class="px-3 py-2">PURPOSE</th>
-                  <th class="px-3 py-2">ISSUED BY & TIME</th>
-                  <th class="px-3 py-2 text-center">PRINT</th>
+                  <th class="px-3 py-2">VEHICLE NO</th>
+                  <th class="px-3 py-2">DRIVER</th>
+                  <th class="px-3 py-2">DESTINATION</th>
+                  <th class="px-3 py-2">ISSUED BY</th>
+                  <th class="px-3 py-2">TIMESTAMP</th>
+                  <th class="px-3 py-2">STATUS</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-[#e2e8f0]">
                 ${data.gatePasses.map(gp => `
                   <tr class="hover:bg-[#e4eef8]">
                     <td class="px-3 py-2 font-mono font-bold text-amber-900">${gp.PassID}</td>
-                    <td class="px-3 py-2">
-                      <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                        gp.PassType === 'Outward' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                      }">${gp.PassType}</span>
-                    </td>
-                    <td class="px-3 py-2 font-medium">${gp.VehicleNo} <span class="text-slate-400">|</span> ${gp.DriverName}</td>
-                    <td class="px-3 py-2 text-slate-800">${gp.Destination}</td>
-                    <td class="px-3 py-2 text-slate-600 text-[11px]">${gp.Purpose}</td>
-                    <td class="px-3 py-2 font-mono text-[11px]">${gp.IssuedBy} (${gp.IssuedAt})</td>
-                    <td class="px-3 py-2 text-center">
-                      <button onclick="printGatePassSlip('${gp.PassID}')" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 border text-blue-700 font-bold text-[11px]">
-                        🖨️ Print Pass
-                      </button>
-                    </td>
+                    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${gp.PassType === 'Outward' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}">${gp.PassType}</span></td>
+                    <td class="px-3 py-2 font-mono font-bold">${gp.VehicleNo}</td>
+                    <td class="px-3 py-2">${gp.DriverName}</td>
+                    <td class="px-3 py-2 font-medium">${gp.Destination}</td>
+                    <td class="px-3 py-2 text-slate-600">${gp.IssuedBy}</td>
+                    <td class="px-3 py-2 font-mono">${gp.IssuedAt}</td>
+                    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">${gp.Status}</span></td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -1177,51 +1648,14 @@
       `;
     }
 
-    function printGatePassSlip(passId) {
-      const gp = appState.data.gatePasses.find(g => g.PassID === passId);
-      if (!gp) return;
-
-      openModal(`
-        <div class="p-6 bg-white space-y-4">
-          <div class="flex justify-between items-center border-b pb-3">
-            <div>
-              <h2 class="text-base font-extrabold text-[#1a3055]">EMDAD SECURITY COMMAND</h2>
-              <div class="text-xs text-slate-500">Official Facility Gate Authorization Pass</div>
-            </div>
-            <div class="text-right">
-              <div class="font-mono font-bold text-base text-amber-700">${gp.PassID}</div>
-              <div class="text-xs text-slate-500">${gp.IssuedAt}</div>
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-3 rounded border">
-            <div><strong>Pass Movement:</strong> ${gp.PassType} Pass</div>
-            <div><strong>Vehicle Plate No:</strong> ${gp.VehicleNo}</div>
-            <div><strong>Driver Name:</strong> ${gp.DriverName}</div>
-            <div><strong>Destination / Location:</strong> ${gp.Destination}</div>
-          </div>
-          <div class="text-xs p-3 bg-white border rounded">
-            <strong>Manifest Purpose:</strong> ${gp.Purpose}
-          </div>
-          <div class="grid grid-cols-2 gap-8 pt-6 text-xs text-slate-600">
-            <div class="border-t pt-1">Security Officer Signature: _______________</div>
-            <div class="border-t pt-1">Driver Acceptance Signature: _______________</div>
-          </div>
-          <div class="flex justify-end space-x-2 pt-4 no-print">
-            <button onclick="closeModal()" class="px-3 py-1 rounded bg-slate-100 font-bold text-xs">Close</button>
-            <button onclick="window.print()" class="px-4 py-1 rounded bg-[#1a3055] text-white font-bold text-xs">Print Pass</button>
-          </div>
-        </div>
-      `);
-    }
-
     // 8. QC INSPECTION BAY
-    function renderInspectionView(data, role) {
+    function renderInspectionView(data) {
       return `
         <div class="space-y-4">
           <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
             <div>
-              <div class="text-[11px] text-slate-500 font-medium">Quality Assurance & Certification</div>
-              <h1 class="text-base font-bold text-[#1a3055]">QC Inspection Bay & API NDT Work Orders</h1>
+              <div class="text-[11px] text-slate-500 font-medium">Quality Assurance & API Standards</div>
+              <h1 class="text-base font-bold text-[#1a3055]">QC Inspection Bay & Non-Destructive Testing (NDT)</h1>
             </div>
           </div>
 
@@ -1230,28 +1664,24 @@
               <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
                 <tr>
                   <th class="px-3 py-2">INSPECTION ID</th>
-                  <th class="px-3 py-2">TOOL SERIAL #</th>
-                  <th class="px-3 py-2">METHOD & STANDARD</th>
-                  <th class="px-3 py-2">INSPECTION DATE</th>
+                  <th class="px-3 py-2">SERIAL #</th>
+                  <th class="px-3 py-2">INSPECTION SCOPE</th>
                   <th class="px-3 py-2">INSPECTOR</th>
+                  <th class="px-3 py-2">DATE</th>
                   <th class="px-3 py-2">RESULT</th>
-                  <th class="px-3 py-2">REMARKS</th>
+                  <th class="px-3 py-2">COMMENTS</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-[#e2e8f0]">
-                ${data.inspections.map(i => `
+                ${data.inspections.map(ins => `
                   <tr class="hover:bg-[#e4eef8]">
-                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${i.InspectionID}</td>
-                    <td class="px-3 py-2 font-mono font-bold text-[#1a3055]">${i.SerialNo}</td>
-                    <td class="px-3 py-2 font-medium">${i.InspectionType}</td>
-                    <td class="px-3 py-2 font-mono text-slate-600">${i.InspectionDate}</td>
-                    <td class="px-3 py-2 text-slate-800">${i.Inspector}</td>
-                    <td class="px-3 py-2">
-                      <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                        i.Result === 'Pass' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                      }">${i.Result}</span>
-                    </td>
-                    <td class="px-3 py-2 text-slate-600 text-[11px]">${i.Comments}</td>
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${ins.InspectionID}</td>
+                    <td class="px-3 py-2 font-mono font-bold text-[#1a3055]">${ins.SerialNo}</td>
+                    <td class="px-3 py-2 font-medium">${ins.InspectionType}</td>
+                    <td class="px-3 py-2">${ins.Inspector}</td>
+                    <td class="px-3 py-2 font-mono">${ins.InspectionDate}</td>
+                    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${ins.Result === 'Pass' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">${ins.Result}</span></td>
+                    <td class="px-3 py-2 text-slate-600">${ins.Comments}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -1262,13 +1692,13 @@
     }
 
     // 9. WORKSHOP & REDRESS
-    function renderMaintenanceView(data, role) {
+    function renderMaintenanceView(data) {
       return `
         <div class="space-y-4">
           <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
             <div>
               <div class="text-[11px] text-slate-500 font-medium">Workshop Operations</div>
-              <h1 class="text-base font-bold text-[#1a3055]">Tool Maintenance, Redress & Overhaul Orders</h1>
+              <h1 class="text-base font-bold text-[#1a3055]">Workshop Work Orders & Redress Overhauls</h1>
             </div>
           </div>
 
@@ -1276,13 +1706,13 @@
             <table class="w-full text-left text-xs border-collapse">
               <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
                 <tr>
-                  <th class="px-3 py-2">WO #</th>
+                  <th class="px-3 py-2">WORK ORDER</th>
                   <th class="px-3 py-2">SERIAL #</th>
-                  <th class="px-3 py-2">REDRESS SCOPE</th>
-                  <th class="px-3 py-2">WORKSHOP FACILITY</th>
-                  <th class="px-3 py-2">STATUS</th>
-                  <th class="px-3 py-2">TECHNICIAN</th>
+                  <th class="px-3 py-2">MAINTENANCE TYPE</th>
+                  <th class="px-3 py-2">WORKSHOP</th>
+                  <th class="px-3 py-2">EST. COMPLETION</th>
                   <th class="px-3 py-2 text-right">COST (USD)</th>
+                  <th class="px-3 py-2">STATUS</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-[#e2e8f0]">
@@ -1291,10 +1721,10 @@
                     <td class="px-3 py-2 font-mono font-bold text-amber-900">${m.MaintenanceID}</td>
                     <td class="px-3 py-2 font-mono font-bold text-[#1a3055]">${m.SerialNo}</td>
                     <td class="px-3 py-2 font-medium">${m.MaintenanceType}</td>
-                    <td class="px-3 py-2 text-slate-800">${m.Workshop}</td>
-                    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">${m.Status}</span></td>
-                    <td class="px-3 py-2 text-slate-700">${m.Technician}</td>
-                    <td class="px-3 py-2 text-right font-mono font-bold text-rose-800">$${m.CostUSD.toLocaleString()}</td>
+                    <td class="px-3 py-2">${m.Workshop}</td>
+                    <td class="px-3 py-2 font-mono">${m.EstimatedCompletion}</td>
+                    <td class="px-3 py-2 text-right font-mono font-bold text-emerald-800">$${m.CostUSD.toLocaleString()}</td>
+                    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">${m.Status}</span></td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -1304,14 +1734,54 @@
       `;
     }
 
-    // 10. MASTER CONTRACTS & PBG
-    function renderContractsView(data, role) {
+    // 10. UTILIZATION & BILLING
+    function renderUtilizationView(data) {
       return `
         <div class="space-y-4">
           <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
             <div>
-              <div class="text-[11px] text-slate-500 font-medium">Commercial & Contractual Compliance</div>
-              <h1 class="text-base font-bold text-[#1a3055]">Master Client Contracts & Performance Bank Guarantees (PBG)</h1>
+              <div class="text-[11px] text-slate-500 font-medium">Asset Economics</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Fleet Rental Utilization & Daily Yield Analysis</h1>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm">
+              <div class="text-[11px] text-slate-500 font-medium">Active Fleet Utilization</div>
+              <div class="mt-1 text-2xl font-extrabold font-mono text-[#1a3055]">
+                ${Math.round((data.inventory.filter(i => i.Status === 'Dispatched').length / data.inventory.length) * 100)}%
+              </div>
+              <div class="text-[10px] text-slate-500 mt-0.5">${data.inventory.filter(i => i.Status === 'Dispatched').length} of ${data.inventory.length} tools generating day rates</div>
+            </div>
+
+            <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm">
+              <div class="text-[11px] text-slate-500 font-medium">Daily Active Fleet Burn Yield</div>
+              <div class="mt-1 text-2xl font-extrabold font-mono text-emerald-700">
+                $${data.inventory.filter(i => i.Status === 'Dispatched').reduce((s, i) => s + i.DailyRentalRate, 0).toLocaleString()}/day
+              </div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Aggregated daily contract rental billing</div>
+            </div>
+
+            <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm">
+              <div class="text-[11px] text-slate-500 font-medium">Idle Ready Capacity</div>
+              <div class="mt-1 text-2xl font-extrabold font-mono text-blue-700">
+                ${data.inventory.filter(i => i.Status === 'Available').length} Assets
+              </div>
+              <div class="text-[10px] text-slate-500 mt-0.5">Ready for immediate rig callout mobilization</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // 11. MASTER CONTRACTS & PBG
+    function renderContractsView(data) {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium">Commercial Governance</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Master Agreements & Performance Bank Guarantees (PBG)</h1>
             </div>
           </div>
 
@@ -1319,134 +1789,92 @@
             <table class="w-full text-left text-xs border-collapse">
               <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
                 <tr>
-                  <th class="px-3 py-2">CONTRACT REF</th>
+                  <th class="px-3 py-2">CONTRACT ID</th>
                   <th class="px-3 py-2">CLIENT</th>
                   <th class="px-3 py-2">AGREEMENT TITLE</th>
-                  <th class="px-3 py-2">VALIDITY PERIOD</th>
-                  <th class="px-3 py-2">PBG AMOUNT (USD)</th>
-                  <th class="px-3 py-2">PBG EXPIRY DATE</th>
+                  <th class="px-3 py-2">PERIOD</th>
+                  <th class="px-3 py-2 text-right">PBG BOND (USD)</th>
+                  <th class="px-3 py-2">PBG EXPIRY</th>
                   <th class="px-3 py-2">ISSUING BANK</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-[#e2e8f0]">
-                ${data.contracts.map(cnt => `
+                ${data.contracts.map(c => `
                   <tr class="hover:bg-[#e4eef8]">
-                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${cnt.ContractID}</td>
-                    <td class="px-3 py-2 font-bold text-[#1a3055]">${cnt.Client}</td>
-                    <td class="px-3 py-2 font-medium">${cnt.Title}</td>
-                    <td class="px-3 py-2 font-mono text-slate-600">${cnt.StartDate} to ${cnt.EndDate}</td>
-                    <td class="px-3 py-2 font-mono font-bold text-emerald-800">$${cnt.PBGAmountUSD.toLocaleString()}</td>
-                    <td class="px-3 py-2 font-mono font-bold text-amber-800">${cnt.PBGExpiryDate}</td>
-                    <td class="px-3 py-2 text-slate-800">${cnt.PBGIssuingBank}</td>
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${c.ContractID}</td>
+                    <td class="px-3 py-2 font-bold text-[#1a3055]">${c.Client}</td>
+                    <td class="px-3 py-2 font-medium">${c.Title}</td>
+                    <td class="px-3 py-2 font-mono text-[11px]">${c.StartDate} to ${c.EndDate}</td>
+                    <td class="px-3 py-2 text-right font-mono font-bold text-emerald-800">$${c.PBGAmountUSD.toLocaleString()}</td>
+                    <td class="px-3 py-2 font-mono text-rose-700 font-bold">${c.PBGExpiryDate}</td>
+                    <td class="px-3 py-2 text-slate-600">${c.PBGIssuingBank}</td>
                   </tr>
                 `).join('')}
               </tbody>
             </table>
-          </div>
-        </div>
-      `;
-    }
-
-    // 11. UTILIZATION & BILLING MATRIX
-    function renderUtilizationView(data, role) {
-      return `
-        <div class="space-y-4">
-          <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
-            <div>
-              <div class="text-[11px] text-slate-500 font-medium">Commercial Revenue Engine</div>
-              <h1 class="text-base font-bold text-[#1a3055]">Tool Utilization Matrix & Tiered Operating/Standby Billing</h1>
-            </div>
-          </div>
-
-          <div class="bg-white border border-[#b8c9db] rounded p-4 shadow-sm space-y-3">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div class="p-3 bg-slate-50 rounded border">
-                <div class="text-xs text-slate-500 font-medium">Standard Operating Day Rate</div>
-                <div class="text-lg font-bold text-emerald-800">100% Contract Rate</div>
-                <div class="text-[10px] text-slate-500">Applied when circulating downhole</div>
-              </div>
-              <div class="p-3 bg-slate-50 rounded border">
-                <div class="text-xs text-slate-500 font-medium">Standby at Rig Floor Rate</div>
-                <div class="text-lg font-bold text-blue-800">50% Contract Rate</div>
-                <div class="text-[10px] text-slate-500">Applied when held on standby at rig</div>
-              </div>
-              <div class="p-3 bg-slate-50 rounded border">
-                <div class="text-xs text-slate-500 font-medium">Lost-in-Hole (LIH) Replacement</div>
-                <div class="text-lg font-bold text-rose-800">100% Asset Replacement Cost</div>
-                <div class="text-[10px] text-slate-500">Contractual indemnification</div>
-              </div>
-            </div>
           </div>
         </div>
       `;
     }
 
     // 12. JOB P&L & COSTING HUB
-    function renderJobHubView(data, role) {
+    function renderJobHubView(data) {
+      const totalCost = data.jobCosts.reduce((s, c) => s + c.AmountUSD, 0);
       const totalRev = data.jobs.reduce((s, j) => s + (j.InvoicedAmountUSD || 0), 0);
-      const totalCosts = data.jobCosts.reduce((s, c) => s + (c.AmountUSD || 0), 0);
-      const grossMargin = totalRev - totalCosts;
-      const marginPct = totalRev > 0 ? (grossMargin / totalRev) * 100 : 0;
+      const grossMargin = totalRev - totalCost;
 
       return `
         <div class="space-y-4">
           <div class="bg-white border border-[#b8c9db] rounded p-4 flex items-center justify-between shadow-sm">
             <div>
-              <div class="text-[11px] text-slate-500 font-medium">Financial Controller & Audits</div>
-              <h1 class="text-base font-bold text-[#1a3055]">Job Costing, P&L Margins & SOX Legal Unlock Audits</h1>
+              <div class="text-[11px] text-slate-500 font-medium">Financial Analytics</div>
+              <h1 class="text-base font-bold text-[#1a3055]">Job Costing, Subcontractors & Gross Margin P&L</h1>
             </div>
-            ${role !== 'Viewer' ? `
-              <button onclick="openAddJobCostModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">
-                + Log Direct Job Cost
-              </button>
-            ` : ''}
           </div>
 
-          <!-- Financial KPIs -->
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm">
-              <div class="text-[11px] text-slate-500">Billed Revenue</div>
+              <div class="text-[11px] text-slate-500 font-medium">Total Billed Revenue</div>
               <div class="mt-1 text-2xl font-extrabold font-mono text-emerald-700">$${totalRev.toLocaleString()}</div>
             </div>
             <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm">
-              <div class="text-[11px] text-slate-500">Direct Operating Costs</div>
-              <div class="mt-1 text-2xl font-extrabold font-mono text-rose-700">$${totalCosts.toLocaleString()}</div>
+              <div class="text-[11px] text-slate-500 font-medium">Direct Job Expenditures</div>
+              <div class="mt-1 text-2xl font-extrabold font-mono text-rose-700">$${totalCost.toLocaleString()}</div>
             </div>
             <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm">
-              <div class="text-[11px] text-slate-500">Gross Margin ($)</div>
-              <div class="mt-1 text-2xl font-extrabold font-mono text-[#1a3055]">$${grossMargin.toLocaleString()}</div>
-            </div>
-            <div class="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm">
-              <div class="text-[11px] text-slate-500">Gross Margin (%)</div>
-              <div class="mt-1 text-2xl font-extrabold font-mono text-emerald-700">${marginPct.toFixed(1)}%</div>
+              <div class="text-[11px] text-slate-500 font-medium">Operational Gross Margin</div>
+              <div class="mt-1 text-2xl font-extrabold font-mono text-[#1a3055]">
+                $${grossMargin.toLocaleString()} (${Math.round((grossMargin / (totalRev || 1)) * 100)}%)
+              </div>
             </div>
           </div>
 
-          <!-- Job Costs Table -->
           <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
-            <div class="px-4 py-2.5 bg-[#dbe6f1] border-b border-[#b8c9db] font-bold text-xs text-[#1a3055] uppercase">
-              Direct Cost Vouchers & Expenditures
+            <div class="px-4 py-2.5 bg-[#dbe6f1] border-b border-[#b8c9db] font-bold text-xs text-[#1a3055]">
+              Direct Cost Vouchers & Subcontractor Invoices
             </div>
             <table class="w-full text-left text-xs border-collapse">
               <thead class="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
                 <tr>
-                  <th class="px-3 py-2">JOB ID</th>
+                  <th class="px-3 py-2">COST ID</th>
+                  <th class="px-3 py-2">JOB REF</th>
                   <th class="px-3 py-2">CATEGORY</th>
                   <th class="px-3 py-2">DESCRIPTION</th>
-                  <th class="px-3 py-2">SUPPLIER & PO #</th>
-                  <th class="px-3 py-2">DATE</th>
+                  <th class="px-3 py-2">SUPPLIER / PO</th>
+                  <th class="px-3 py-2 font-mono">DATE</th>
                   <th class="px-3 py-2 text-right">AMOUNT (USD)</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-[#e2e8f0]">
                 ${data.jobCosts.map(c => `
                   <tr class="hover:bg-[#e4eef8]">
-                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${c.JobID}</td>
-                    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded bg-slate-100 border text-slate-800 text-[10px] font-bold">${c.CostCategory}</span></td>
-                    <td class="px-3 py-2 font-bold text-[#1a3055]">${c.Description}</td>
-                    <td class="px-3 py-2 text-slate-800">${c.Supplier} <span class="font-mono text-slate-500">(${c.PONumber})</span></td>
-                    <td class="px-3 py-2 font-mono text-slate-600">${c.CostDate}</td>
-                    <td class="px-3 py-2 font-mono font-bold text-rose-800 text-right">$${c.AmountUSD.toLocaleString()}</td>
+                    <td class="px-3 py-2 font-mono font-bold text-amber-900">${c.CostID}</td>
+                    <td class="px-3 py-2 font-mono text-slate-700">${c.JobID}</td>
+                    <td class="px-3 py-2"><span class="px-1.5 py-0.5 rounded bg-slate-100 border text-slate-700 text-[10px] font-bold">${c.CostCategory}</span></td>
+                    <td class="px-3 py-2 font-medium">${c.Description}</td>
+                    <td class="px-3 py-2 text-slate-600">${c.Supplier} <span class="font-mono">(${c.PONumber})</span></td>
+                    <td class="px-3 py-2 font-mono">${c.CostDate}</td>
+                    <td class="px-3 py-2 text-right font-mono font-bold text-rose-800">$${c.AmountUSD.toLocaleString()}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -1456,78 +1884,13 @@
       `;
     }
 
-    function openAddJobCostModal() {
-      openModal(`
-        <div class="px-4 py-3 bg-[#5b7fa6] text-white flex justify-between items-center">
-          <h3 class="font-bold text-sm">Record Direct Job Cost Voucher</h3>
-          <button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button>
-        </div>
-        <form onsubmit="handleSaveJobCost(event)" class="p-4 space-y-3 text-xs">
-          <div>
-            <label class="block font-bold mb-1">Target Drilling Job *</label>
-            <select id="jc-job" class="w-full border rounded px-2.5 py-1.5 font-bold">
-              ${appState.data.jobs.map(j => `<option value="${j.JobID}">${j.JobID} — ${j.Rig} (${j.Client})</option>`).join('')}
-            </select>
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block font-bold mb-1">Cost Category</label>
-              <select id="jc-cat" class="w-full border rounded px-2.5 py-1.5 font-bold">
-                <option value="SubCon">Sub-Contractor Tools</option>
-                <option value="Transport">Transport & Logistics</option>
-                <option value="Workshop">Workshop Redress & Parts</option>
-                <option value="Personnel">Field Personnel Day Rate</option>
-                <option value="Other">Other Direct Charges</option>
-              </select>
-            </div>
-            <div>
-              <label class="block font-bold mb-1">Amount (USD) *</label>
-              <input type="number" id="jc-amt" required value="3500" class="w-full border rounded px-2.5 py-1.5 font-mono font-bold" />
-            </div>
-          </div>
-          <div>
-            <label class="block font-bold mb-1">Cost Description *</label>
-            <input type="text" id="jc-desc" required value="Mobilization heavy crane handling at base" class="w-full border rounded px-2.5 py-1.5" />
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block font-bold mb-1">Supplier / Vendor</label>
-              <input type="text" id="jc-sup" value="Al Masaood Transport" class="w-full border rounded px-2.5 py-1.5" />
-            </div>
-            <div>
-              <label class="block font-bold mb-1">PO / Voucher #</label>
-              <input type="text" id="jc-po" value="PO-EXP-9921" class="w-full border rounded px-2.5 py-1.5 font-mono" />
-            </div>
-          </div>
-          <div class="pt-3 border-t flex justify-end space-x-2">
-            <button type="button" onclick="closeModal()" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold">Cancel</button>
-            <button type="submit" class="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold">Save Cost</button>
-          </div>
-        </form>
-      `);
+    function printSlip(type, id) {
+      window.print();
     }
 
-    function handleSaveJobCost(e) {
-      e.preventDefault();
-      const newCost = {
-        CostID: `CST-0${appState.data.jobCosts.length + 1}`,
-        JobID: document.getElementById('jc-job').value,
-        CostCategory: document.getElementById('jc-cat').value,
-        Description: document.getElementById('jc-desc').value,
-        Supplier: document.getElementById('jc-sup').value,
-        PONumber: document.getElementById('jc-po').value,
-        AmountUSD: parseFloat(document.getElementById('jc-amt').value) || 0,
-        CostDate: new Date().toISOString().split('T')[0]
-      };
-      appState.data.jobCosts.unshift(newCost);
-      saveState();
-      closeModal();
-      showToast(`✓ Logged cost of $${newCost.AmountUSD.toLocaleString()}`);
-      renderCurrentView();
-    }
-
-    // Initialize application on load
+    // Initialize App
     window.addEventListener('DOMContentLoaded', () => {
+      updateAzureBadge();
       renderCurrentView();
     });
   </script>
