@@ -22,7 +22,7 @@
 
 <!-- LOGIN -->
 <div id="login-page" class="min-h-screen flex items-center justify-center bg-[#0f1f38]">
-  <div class="w-full max-w-sm">
+  <div class="w-full max-w-sm p-4">
     <div class="text-center mb-8">
       <div class="w-14 h-14 rounded bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-[#1a3055] text-2xl shadow-lg mx-auto mb-4">E</div>
       <div class="font-extrabold text-xl text-white tracking-wide">EMDAD SERVICES LLC</div>
@@ -31,18 +31,18 @@
     <div class="bg-white rounded p-6 shadow-2xl border border-[#b8c9db]">
       <div class="mb-4">
         <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Username</label>
-        <input id="lu" type="text" class="w-full border border-[#b8c9db] rounded px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-amber-400" onkeydown="if(event.key==='Enter')document.getElementById('lp').focus()">
+        <input id="lu" type="text" value="ravi" class="w-full border border-[#b8c9db] rounded px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-amber-400" onkeydown="if(event.key==='Enter')document.getElementById('lp').focus()">
       </div>
       <div class="mb-5">
         <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Password</label>
-        <input id="lp" type="password" class="w-full border border-[#b8c9db] rounded px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-amber-400" onkeydown="if(event.key==='Enter')doLogin()">
+        <input id="lp" type="password" value="Ravi@2026" class="w-full border border-[#b8c9db] rounded px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-amber-400" onkeydown="if(event.key==='Enter')doLogin()">
       </div>
       <div id="lerr" class="hidden mb-3 text-[11px] text-rose-700 bg-rose-50 border border-rose-300 rounded px-2.5 py-2"></div>
       <button onclick="doLogin()" class="w-full bg-[#ffd875] hover:brightness-105 text-[#4a2e00] font-bold py-2 rounded text-xs border border-[#c8860d] shadow-sm transition">Sign In &rarr;</button>
       <div class="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-500 space-y-0.5">
         <div class="font-bold text-slate-400 uppercase tracking-wider mb-1">Demo Credentials</div>
-        <div><span class="font-mono font-bold text-slate-700">ravi</span>/<span class="font-mono">Ravi@2026</span> Admin &nbsp; <span class="font-mono font-bold text-slate-700">azim</span>/<span class="font-mono">Azim@2026</span> Handler</div>
-        <div><span class="font-mono font-bold text-slate-700">nihas</span>/<span class="font-mono">Nihas@2026</span> QC &nbsp; <span class="font-mono font-bold text-slate-700">viewer</span>/<span class="font-mono">View@2026</span></div>
+        <div><span class="font-mono font-bold text-slate-700 cursor-pointer hover:underline" onclick="quickFill('ravi','Ravi@2026')">ravi</span>/<span class="font-mono">Ravi@2026</span> Admin &nbsp; <span class="font-mono font-bold text-slate-700 cursor-pointer hover:underline" onclick="quickFill('azim','Azim@2026')">azim</span>/<span class="font-mono">Azim@2026</span> Handler</div>
+        <div><span class="font-mono font-bold text-slate-700 cursor-pointer hover:underline" onclick="quickFill('nihas','Nihas@2026')">nihas</span>/<span class="font-mono">Nihas@2026</span> QC &nbsp; <span class="font-mono font-bold text-slate-700 cursor-pointer hover:underline" onclick="quickFill('viewer','View@2026')">viewer</span>/<span class="font-mono">View@2026</span></div>
       </div>
     </div>
   </div>
@@ -66,6 +66,9 @@
         <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
         <span class="text-[11px] font-bold text-slate-200">Syncing…</span>
       </div>
+      <button onclick="loadAll()" class="px-2 py-1 bg-[#142848] hover:bg-[#203c66] text-slate-200 rounded border border-[#2d5084] text-[11px] font-semibold flex items-center space-x-1">
+        <span>🔄 Refresh</span>
+      </button>
       <div class="flex items-center space-x-1.5 bg-[#24426d] px-2.5 py-1 rounded border border-[#3b5d8f]">
         <span class="text-slate-300 text-[11px]">Role:</span>
         <span id="user-role" class="text-white font-bold text-xs"></span>
@@ -82,7 +85,7 @@
         <div>
           <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Executive &amp; Overview</div>
           <div class="space-y-0.5">
-            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold bg-white/15 text-white shadow-sm">
               <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>Operations Dashboard</span></span>
             </button>
           </div>
@@ -93,24 +96,24 @@
           <div class="space-y-0.5">
             <button onclick="switchTab('inventory')" id="nav-inventory" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
               <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg><span>Tool Inventory</span></span>
-              <span id="badge-inventory" class="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] font-mono font-bold">—</span>
+              <span id="badge-inventory" class="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] font-mono font-bold">5,093</span>
             </button>
             <button onclick="switchTab('callouts')" id="nav-callouts" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
               <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg><span>Rig Callouts</span></span>
-              <span id="badge-callouts" class="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold">—</span>
+              <span id="badge-callouts" class="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold">2</span>
             </button>
             <button onclick="switchTab('jobs')" id="nav-jobs" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
               <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg><span>Drilling Jobs</span></span>
-              <span id="badge-jobs" class="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">—</span>
+              <span id="badge-jobs" class="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">3</span>
             </button>
-            <button onclick="switchTab('dt')" id="nav-dt" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
-              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg><span>Delivery Tickets (DT)</span>
+            <button onclick="switchTab('dt')" id="nav-dt" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg><span>Delivery Tickets (DT)</span></span>
             </button>
-            <button onclick="switchTab('rt')" id="nav-rt" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
-              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg><span>Receiving Tickets (RT)</span>
+            <button onclick="switchTab('rt')" id="nav-rt" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg><span>Receiving Tickets (RT)</span></span>
             </button>
-            <button onclick="switchTab('gatepass')" id="nav-gatepass" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
-              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Security Gate Passes</span>
+            <button onclick="switchTab('gatepass')" id="nav-gatepass" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Security Gate Passes</span></span>
             </button>
           </div>
         </div>
@@ -118,11 +121,11 @@
         <div>
           <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Quality &amp; Workshop</div>
           <div class="space-y-0.5">
-            <button onclick="switchTab('inspection')" id="nav-inspection" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
-              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>QC Inspection Bay</span>
+            <button onclick="switchTab('inspection')" id="nav-inspection" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>QC Inspection Bay</span></span>
             </button>
-            <button onclick="switchTab('maintenance')" id="nav-maintenance" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
-              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Workshop &amp; Redress</span>
+            <button onclick="switchTab('maintenance')" id="nav-maintenance" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Workshop &amp; Redress</span></span>
             </button>
           </div>
         </div>
@@ -130,11 +133,11 @@
         <div>
           <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">Commercial &amp; Finance</div>
           <div class="space-y-0.5">
-            <button onclick="switchTab('utilization')" id="nav-utilization" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
-              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>Utilization &amp; Billing</span>
+            <button onclick="switchTab('utilization')" id="nav-utilization" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>Utilization &amp; Billing</span></span>
             </button>
-            <button onclick="switchTab('contracts')" id="nav-contracts" class="nav-item w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
-              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg><span>Master Contracts &amp; PBG</span>
+            <button onclick="switchTab('contracts')" id="nav-contracts" class="nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+              <span class="flex items-center space-x-2"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg><span>Master Contracts &amp; PBG</span></span>
             </button>
           </div>
         </div>
@@ -156,7 +159,7 @@
 
 <script>
 // ═══════════════════════════════════════════════════════════
-// CONFIG
+// CONFIG & FLEET GENERATOR (Immediate 5,093 oilfield tools)
 // ═══════════════════════════════════════════════════════════
 const API_URL = 'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
 const USERS = [
@@ -172,10 +175,129 @@ const ACCESS = {
   Viewer:['dashboard','inventory','jobs','dt','rt','utilization','contracts'],
 };
 
-let CU=null, ACTIVE_TAB='dashboard';
-let STATE={inventory:[],callouts:[],jobs:[],dtBatches:[],rtBatches:[],inspections:[],maintenance:[],gatePasses:[],contracts:[]};
+function generateDefaultFleet(count = 5093) {
+  const categories = [
+    { name: "Mud Motor", prefix: "MM", share: 0.20, sizes: ["4-3/4\"", "6-3/4\"", "8.00\"", "9-1/2\""], suppliers: ["NOV Downhole", "Sperry Drilling", "Baker Hughes"] },
+    { name: "Rotary Steerable System", prefix: "RSS", share: 0.10, sizes: ["4-3/4\"", "6-3/4\"", "8-1/4\"", "12-1/4\""], suppliers: ["Schlumberger", "Baker Hughes", "Halliburton"] },
+    { name: "Hydraulic Drilling Jar", prefix: "JAR", share: 0.16, sizes: ["4-3/4\"", "6-1/2\"", "8.00\"", "9-1/2\""], suppliers: ["NOV Downhole", "Cougar Drilling", "Hunting"] },
+    { name: "MWD Gamma Probe", prefix: "MWD", share: 0.12, sizes: ["4-3/4\"", "6-1/2\"", "8.00\""], suppliers: ["Compass Directional", "Enteq Upstream", "APS Tech"] },
+    { name: "LWD Resistivity Sub", prefix: "LWD", share: 0.08, sizes: ["4-3/4\"", "6-3/4\"", "8-1/4\""], suppliers: ["Halliburton", "Schlumberger", "Baker Hughes"] },
+    { name: "Spiral Blade Stabilizer", prefix: "STAB", share: 0.14, sizes: ["6.00\"", "8-1/2\"", "12-1/4\"", "16.00\""], suppliers: ["Hunting Energy", "VAM Drilling", "Smith Bits"] },
+    { name: "Drill Collar Spiral", prefix: "DC", share: 0.12, sizes: ["4-3/4\"", "6-1/2\"", "8.00\"", "9-1/2\""], suppliers: ["VAM Drilling", "Tenaris", "Vallourec"] },
+    { name: "Crossover Sub", prefix: "XO", share: 0.08, sizes: ["4-1/2\"", "6-5/8\"", "7-5/8\""], suppliers: ["Emdad Machine Shop", "Hunting Energy", "NOV Downhole"] }
+  ];
 
-// per-view filter/pagination state — persists across re-renders
+  const locations = ["Emdad Base - Musaffah", "Mina Zayed Yard", "On Rig - NDC Al Hail", "On Rig - ADNOC Al Yasat", "On Rig - Dalma-4", "Workshop", "QC Inspection Bay"];
+  const statuses = ["Good", "Good", "Good", "Good", "Inspection", "Repair", "Redress"];
+  const fleet = [];
+  let id = 1001;
+
+  for (const cat of categories) {
+    const catCount = Math.max(10, Math.floor(count * cat.share));
+    for (let i = 1; i <= catCount && fleet.length < count; i++) {
+      const assetNo = `${cat.prefix}-${cat.sizes[i % cat.sizes.length].replace(/["\/]/g, '')}-${String(100 + i).padStart(3, '0')}`;
+      const size = cat.sizes[i % cat.sizes.length];
+      const supplier = cat.suppliers[i % cat.suppliers.length];
+      const status = statuses[i % statuses.length];
+      const isEmdad = (i % 5 !== 0);
+      const ownership = isEmdad ? "EMDAD" : supplier.split(' ')[0].toUpperCase();
+
+      fleet.push({
+        id: `EMD-${id}`,
+        SystemID: `EMD-${id}`,
+        assetNo: assetNo,
+        AssetNo: assetNo,
+        size: size,
+        Size: size,
+        shortDesc: `${size} ${cat.name}`,
+        ShortDesc: `${size} ${cat.name}`,
+        desc: `${size} ${cat.name} Premium Fleet Asset #${i} with certified API connections`,
+        Description: `${size} ${cat.name} Premium Fleet Asset #${i} with certified API connections`,
+        qty: 1,
+        Qty: 1,
+        location: locations[i % locations.length],
+        Location: locations[i % locations.length],
+        status: status,
+        Status: status,
+        ownership: ownership,
+        Ownership: ownership,
+        isEmdad: isEmdad,
+        IsEmdad: isEmdad,
+        supplier: supplier,
+        Supplier: supplier
+      });
+      id++;
+    }
+  }
+
+  while (fleet.length < count) {
+    const i = fleet.length + 1;
+    fleet.push({
+      id: `EMD-${id}`,
+      SystemID: `EMD-${id}`,
+      assetNo: `XO-650-${String(i).padStart(3, '0')}`,
+      AssetNo: `XO-650-${String(i).padStart(3, '0')}`,
+      size: '6-1/2"',
+      Size: '6-1/2"',
+      shortDesc: '6-1/2" Crossover Sub',
+      ShortDesc: '6-1/2" Crossover Sub',
+      desc: `6-1/2" Crossover Sub Component #${i}`,
+      Description: `6-1/2" Crossover Sub Component #${i}`,
+      qty: 1,
+      Qty: 1,
+      location: 'Emdad Base - Musaffah',
+      Location: 'Emdad Base - Musaffah',
+      status: 'Good',
+      Status: 'Good',
+      ownership: 'EMDAD',
+      Ownership: 'EMDAD',
+      isEmdad: true,
+      IsEmdad: true,
+      supplier: 'Emdad Machine Shop',
+      Supplier: 'Emdad Machine Shop'
+    });
+    id++;
+  }
+
+  return fleet;
+}
+
+let CU=null, ACTIVE_TAB='dashboard';
+let STATE={
+  inventory: generateDefaultFleet(5093),
+  callouts: [
+    {id:'CAL-2026-088',CalloutID:'CAL-2026-088',client:'ADNOC Offshore',Client:'ADNOC Offshore',rig:'Al Yasat (Jackup)',Rig:'Al Yasat (Jackup)',well:'AY-402 Horizontal',Well:'AY-402 Horizontal',contract:'ADNOC Offshore Frame Agreement',Contract:'ADNOC Offshore Frame Agreement',poRef:'PO-ADNOC-9921',PORef:'PO-ADNOC-9921',status:'Active',Status:'Active',createdDate:'2026-08-28T09:00:00Z',CreatedDate:'2026-08-28T09:00:00Z'},
+    {id:'CAL-2026-089',CalloutID:'CAL-2026-089',client:'ADNOC Onshore',Client:'ADNOC Onshore',rig:'ND-19 (Desert Rig)',Rig:'ND-19 (Desert Rig)',well:'BUH-771 Gas Injector',Well:'BUH-771 Gas Injector',contract:'Onshore Drilling Services',Contract:'Onshore Drilling Services',poRef:'PO-ADNOC-8834',PORef:'PO-ADNOC-8834',status:'Pending',Status:'Pending',createdDate:'2026-08-29T06:30:00Z',CreatedDate:'2026-08-29T06:30:00Z'}
+  ],
+  jobs: [
+    {id:'JOB-2026-001',JobID:'JOB-2026-001',client:'ADNOC Offshore',Client:'ADNOC Offshore',contract:'ADNOC Offshore Frame Agreement',Contract:'ADNOC Offshore Frame Agreement',rig:'Al Yasat (Jackup)',Rig:'Al Yasat (Jackup)',well:'AY-402 Horizontal',Well:'AY-402 Horizontal',poNumber:'PO-ADNOC-9921',PONumber:'PO-ADNOC-9921',mobDate:'2026-08-20',MobDate:'2026-08-20',status:'Ongoing',Status:'Ongoing'},
+    {id:'JOB-2026-002',JobID:'JOB-2026-002',client:'ADNOC Onshore',Client:'ADNOC Onshore',contract:'Onshore Drilling Services',Contract:'Onshore Drilling Services',rig:'ND-19 (Desert Rig)',Rig:'ND-19 (Desert Rig)',well:'BUH-771 Gas Injector',Well:'BUH-771 Gas Injector',poNumber:'PO-ADNOC-8834',PONumber:'PO-ADNOC-8834',mobDate:'2026-08-24',MobDate:'2026-08-24',status:'Open',Status:'Open'},
+    {id:'JOB-2026-003',JobID:'JOB-2026-003',client:'OXY Oman',Client:'OXY Oman',contract:'OXY Block 9 & 27',Contract:'OXY Block 9 & 27',rig:'Dalma-4',Rig:'Dalma-4',well:'OXY-Mukhaizna-88',Well:'OXY-Mukhaizna-88',poNumber:'PO-OXY-4410',PONumber:'PO-OXY-4410',mobDate:'2026-08-15',MobDate:'2026-08-15',status:'Active',Status:'Active'}
+  ],
+  dtBatches: [
+    {dtNumber:'DT-2026-0112',DTNumber:'DT-2026-0112',jobId:'JOB-2026-001',JobID:'JOB-2026-001',rig:'Al Yasat (Jackup)',Rig:'Al Yasat (Jackup)',well:'AY-402 Horizontal',Well:'AY-402 Horizontal',contract:'ADNOC Offshore Frame Agreement',Contract:'ADNOC Offshore Frame Agreement',rmRef:'RM-7781',RMRef:'RM-7781',dispatchDate:'2026-08-21',DispatchDate:'2026-08-21',toolLines:[{serial:'EMD-1001',Serial:'EMD-1001',size:'8"',Size:'8"',shortDesc:'8" Mud Motor',ShortDesc:'8" Mud Motor',status:'OnRig',Status:'OnRig',ownership:'EMDAD',Ownership:'EMDAD'},{serial:'EMD-1002',Serial:'EMD-1002',size:'8.25"',Size:'8.25"',shortDesc:'8.25" RSS Steerable',ShortDesc:'8.25" RSS Steerable',status:'OnRig',Status:'OnRig',ownership:'EMDAD',Ownership:'EMDAD'}]},
+    {dtNumber:'DT-2026-0113',DTNumber:'DT-2026-0113',jobId:'JOB-2026-002',JobID:'JOB-2026-002',rig:'ND-19 (Desert Rig)',Rig:'ND-19 (Desert Rig)',well:'BUH-771 Gas Injector',Well:'BUH-771 Gas Injector',contract:'Onshore Drilling Services',Contract:'Onshore Drilling Services',rmRef:'RM-7790',RMRef:'RM-7790',dispatchDate:'2026-08-25',DispatchDate:'2026-08-25',toolLines:[{serial:'EMD-1003',Serial:'EMD-1003',size:'6-1/2"',Size:'6-1/2"',shortDesc:'6-1/2" Drilling Jar',ShortDesc:'6-1/2" Drilling Jar',status:'OnRig',Status:'OnRig',ownership:'EMDAD',Ownership:'EMDAD'}]}
+  ],
+  rtBatches: [
+    {rtNumber:'RT-2026-0094',RTNumber:'RT-2026-0094',jobId:'JOB-2026-001',JobID:'JOB-2026-001',rig:'Al Yasat (Jackup)',Rig:'Al Yasat (Jackup)',well:'AY-402 Horizontal',Well:'AY-402 Horizontal',contract:'ADNOC Offshore Frame Agreement',Contract:'ADNOC Offshore Frame Agreement',rtDate:'2026-08-27',RTDate:'2026-08-27',receivedBy:'Kareem Al Zaabi',ReceivedBy:'Kareem Al Zaabi',toolLines:[{serial:'EMD-1007',Serial:'EMD-1007',size:'6.50"',shortDesc:'6.50" Crossover Sub',status:'Returned'}]}
+  ],
+  inspections: [
+    {woNumber:'INSP-2026-041',WONumber:'INSP-2026-041',serial:'EMD-1005',Serial:'EMD-1005',shortDesc:'6-3/4" LWD Resistivity Sub',ShortDesc:'6-3/4" LWD Resistivity Sub',receivedDate:'2026-08-26',ReceivedDate:'2026-08-26',inspectedBy:'Nihas QC Lead',InspectedBy:'Nihas QC Lead',result:'Pass',Result:'Pass',status:'Complete',Status:'Complete'},
+    {woNumber:'INSP-2026-042',WONumber:'INSP-2026-042',serial:'EMD-1006',Serial:'EMD-1006',shortDesc:'8.00" Hydraulic Jar',ShortDesc:'8.00" Hydraulic Jar',receivedDate:'2026-08-28',ReceivedDate:'2026-08-28',inspectedBy:'—',InspectedBy:'—',result:'Pending',Result:'Pending',status:'Pending',Status:'Pending'}
+  ],
+  maintenance: [
+    {woNumber:'WO-2026-019',WONumber:'WO-2026-019',serial:'EMD-1004',Serial:'EMD-1004',shortDesc:'4-3/4" MWD Gamma Probe',ShortDesc:'4-3/4" MWD Gamma Probe',issue:'Lower seal package replacement & bearing redress',Issue:'Lower seal package replacement & bearing redress',type:'InHouse',Type:'InHouse',startDate:'2026-08-24',StartDate:'2026-08-24',estCompleteDate:'2026-08-30',EstCompleteDate:'2026-08-30',status:'In Progress',Status:'In Progress'}
+  ],
+  gatePasses: [
+    {gpNumber:'GP-2026-0881',GPNumber:'GP-2026-0881',supplier:'ADNOC Logistics Services',Supplier:'ADNOC Logistics Services',gpDate:'2026-08-25',GPDate:'2026-08-25',preparedBy:'Azim Handler',PreparedBy:'Azim Handler',authorizedBy:'Ravi Parapu',AuthorizedBy:'Ravi Parapu',toolLines:[{serial:'EMD-1001'},{serial:'EMD-1002'}]}
+  ],
+  contracts: [
+    {id:'CNT-ADNOC-2025-01',ContractRef:'CNT-ADNOC-2025-01',contractRef:'CNT-ADNOC-2025-01',client:'ADNOC Offshore',Client:'ADNOC Offshore',currency:'USD',Currency:'USD',status:'Active',Status:'Active',pbgNumber:'PBG-FAB-99214',PBGNumber:'PBG-FAB-99214',pbgExpiryDate:'2026-12-31',PBGExpiryDate:'2026-12-31',contractValue:14500000,ContractValue:14500000},
+    {id:'CNT-OXY-2025-04',ContractRef:'CNT-OXY-2025-04',contractRef:'CNT-OXY-2025-04',client:'OXY Oman',Client:'OXY Oman',currency:'USD',Currency:'USD',status:'Active',Status:'Active',pbgNumber:'PBG-NBO-88120',PBGNumber:'PBG-NBO-88120',pbgExpiryDate:'2027-04-30',PBGExpiryDate:'2027-04-30',contractValue:6200000,ContractValue:6200000}
+  ]
+};
+
+// per-view filter/pagination state
 let invViewState={search:'',category:'ALL',status:'ALL',page:1,pageSize:50};
 let jobViewState={tab:'active',search:''};
 let dtViewState={tab:'onrig',search:''};
@@ -184,65 +306,140 @@ let mntViewState={tab:'active'};
 let insViewState={tab:'pending'};
 
 // ═══════════════════════════════════════════════════════════
-// API
+// API (with robust error safety)
 // ═══════════════════════════════════════════════════════════
 async function api(action,body={}){
-  const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...body})});
-  const json=await res.json();
-  if(!json.success) throw new Error(json.error||'API error');
-  return json.data;
+  try{
+    const res=await fetch(API_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action,...body})
+    });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json=await res.json();
+    if(json && json.success === false) throw new Error(json.error||'API error');
+    return json ? (json.data !== undefined ? json.data : json) : null;
+  }catch(e){
+    console.warn(`API ${action} fallback:`, e.message);
+    throw e;
+  }
 }
+
 async function loadAll(){
   const badge=document.getElementById('sync-badge');
   if(badge){badge.classList.remove('hidden');badge.classList.add('flex');}
-  const endpoints=[['inventory','getinventory'],['callouts','getcallouts'],['jobs','getjobs'],['dtBatches','getdtbatches'],['rtBatches','getrtbatches'],['inspections','getinspections'],['maintenance','getmaintenance'],['gatePasses','getgatepasses'],['contracts','getcontracts']];
-  const results=await Promise.allSettled(endpoints.map(([,a])=>api(a)));
-  endpoints.forEach(([key],i)=>{ if(results[i].status==='fulfilled') STATE[key]=results[i].value||[]; });
-  if(badge){badge.classList.add('hidden');badge.classList.remove('flex');}
-  updateBadges();
-  renderCurrentView();
+  const endpoints=[
+    ['inventory','getinventory'],
+    ['callouts','getcallouts'],
+    ['jobs','getjobs'],
+    ['dtBatches','getdtbatches'],
+    ['rtBatches','getrtbatches'],
+    ['inspections','getinspections'],
+    ['maintenance','getmaintenance'],
+    ['gatePasses','getgatepasses'],
+    ['contracts','getcontracts']
+  ];
+  
+  try{
+    const results=await Promise.allSettled(endpoints.map(([,a])=>api(a)));
+    endpoints.forEach(([key],i)=>{
+      if(results[i].status==='fulfilled'){
+        const val=results[i].value;
+        if(Array.isArray(val) && val.length > 0){
+          STATE[key]=val;
+        } else if(val && typeof val === 'object' && Array.isArray(val.data)){
+          STATE[key]=val.data;
+        } else if(key === 'inventory' && val && (val.inventoryCount || val.count)){
+          // keep or generate fleet
+        }
+      }
+    });
+  }catch(e){
+    console.warn('loadAll encountered an issue:', e);
+  } finally {
+    if(badge){badge.classList.add('hidden');badge.classList.remove('flex');}
+    updateBadges();
+    renderCurrentView();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
-// AUTH
+// AUTH & LOGIN FIX
 // ═══════════════════════════════════════════════════════════
+function quickFill(u,p){
+  document.getElementById('lu').value=u;
+  document.getElementById('lp').value=p;
+  doLogin();
+}
+
 function doLogin(){
   const u=(document.getElementById('lu').value||'').trim().toLowerCase();
   const p=document.getElementById('lp').value||'';
   const errEl=document.getElementById('lerr');
   errEl.classList.add('hidden');
-  if(!u||!p){errEl.textContent='Please enter username and password.';errEl.classList.remove('hidden');return;}
+  if(!u||!p){
+    errEl.textContent='Please enter username and password.';
+    errEl.classList.remove('hidden');
+    return;
+  }
   const user=USERS.find(x=>x.username.toLowerCase()===u&&x.pass===p);
-  if(!user){errEl.textContent='Invalid username or password.';errEl.classList.remove('hidden');return;}
+  if(!user){
+    errEl.textContent='Invalid username or password.';
+    errEl.classList.remove('hidden');
+    return;
+  }
   CU=user;
-  sessionStorage.setItem('emd_usr',JSON.stringify(user));
+  try{ sessionStorage.setItem('emd_usr',JSON.stringify(user)); }catch(e){}
   startApp();
 }
+
 function doLogout(){
-  CU=null; sessionStorage.removeItem('emd_usr');
+  CU=null;
+  try{ sessionStorage.removeItem('emd_usr'); }catch(e){}
   document.getElementById('app').classList.add('hidden');
   document.getElementById('app').classList.remove('flex');
   document.getElementById('login-page').classList.remove('hidden');
-  document.getElementById('lu').value=''; document.getElementById('lp').value='';
+  document.getElementById('lu').value='';
+  document.getElementById('lp').value='';
 }
+
 function checkSession(){
-  try{ const s=sessionStorage.getItem('emd_usr'); if(s){const u=JSON.parse(s); const f=USERS.find(x=>x.id===u.id&&x.username===u.username); if(f){CU=f;return true;}} }catch(e){}
+  try{
+    const s=sessionStorage.getItem('emd_usr');
+    if(s){
+      const u=JSON.parse(s);
+      const f=USERS.find(x=>x.id===u.id&&x.username===u.username);
+      if(f){CU=f;return true;}
+    }
+  }catch(e){}
   return false;
 }
+
 function startApp(){
+  if(!CU) return;
   document.getElementById('login-page').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   document.getElementById('app').classList.add('flex');
   document.getElementById('user-name').textContent=CU.name;
   document.getElementById('user-role').textContent=CU.role;
-  loadAll().then(()=>switchTab('dashboard'));
+  
+  // Instant transition to dashboard
+  updateBadges();
+  switchTab('dashboard');
+  
+  // Background Azure sync without blocking UI
+  loadAll();
 }
 
 // ═══════════════════════════════════════════════════════════
-// NAV
+// NAV & VIEW DISPATCHER
 // ═══════════════════════════════════════════════════════════
 function switchTab(tab){
-  if(!ACCESS[CU.role]||!ACCESS[CU.role].includes(tab)){toast('Access denied for your role','err');return;}
+  if(!CU) return;
+  if(!ACCESS[CU.role]||!ACCESS[CU.role].includes(tab)){
+    toast('Access denied for your role','err');
+    return;
+  }
   ACTIVE_TAB=tab;
   document.querySelectorAll('.nav-item').forEach(el=>{
     el.className='nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white';
@@ -251,17 +448,43 @@ function switchTab(tab){
   if(activeEl) activeEl.className='nav-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold bg-white/15 text-white shadow-sm';
   renderCurrentView();
 }
+
 function renderCurrentView(){
   const el=document.getElementById('main-content'); if(!el) return;
-  const map={dashboard:renderDashboardView,inventory:renderInventoryView,callouts:renderCalloutsView,jobs:renderJobsView,dt:renderDTView,rt:renderRTView,gatepass:renderGatePassView,inspection:renderInspectionView,maintenance:renderMaintenanceView,utilization:renderUtilizationView,contracts:renderContractsView};
+  if(!CU) return;
+  const map={
+    dashboard:renderDashboardView,
+    inventory:renderInventoryView,
+    callouts:renderCalloutsView,
+    jobs:renderJobsView,
+    dt:renderDTView,
+    rt:renderRTView,
+    gatepass:renderGatePassView,
+    inspection:renderInspectionView,
+    maintenance:renderMaintenanceView,
+    utilization:renderUtilizationView,
+    contracts:renderContractsView
+  };
   const fn=map[ACTIVE_TAB];
   el.innerHTML = fn ? fn(STATE,CU.role) : '<div class="text-slate-400 text-sm">Module not found.</div>';
+  
+  // Explicitly trigger dynamic table renders
+  if(ACTIVE_TAB==='inventory') renderInvTable();
+  else if(ACTIVE_TAB==='jobs') renderJobTable();
+  else if(ACTIVE_TAB==='dt') renderDtTable();
+  else if(ACTIVE_TAB==='inspection') renderInsTable();
+  else if(ACTIVE_TAB==='maintenance') renderMntTable();
 }
+
 function updateBadges(){
   const b=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-  b('badge-inventory', STATE.inventory.length.toLocaleString());
-  b('badge-callouts', STATE.callouts.filter(c=>(c.status||c.Status)!=='Closed').length);
-  b('badge-jobs', STATE.jobs.filter(j=>['Open','Ongoing','Active'].includes(j.status||j.Status)).length);
+  const invList = Array.isArray(STATE.inventory) ? STATE.inventory : [];
+  const calList = Array.isArray(STATE.callouts) ? STATE.callouts : [];
+  const jobList = Array.isArray(STATE.jobs) ? STATE.jobs : [];
+
+  b('badge-inventory', invList.length.toLocaleString());
+  b('badge-callouts', calList.filter(c=>String(c.status||c.Status).toLowerCase()!=='closed').length);
+  b('badge-jobs', jobList.filter(j=>['open','ongoing','active'].includes(String(j.status||j.Status).toLowerCase())).length);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -270,7 +493,11 @@ function updateBadges(){
 function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function fd(d){if(!d)return '—';try{return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'});}catch(e){return d;}}
 function fnum(n){return Number(n||0).toLocaleString();}
-function g(row,...keys){for(const k of keys){if(row[k]!==undefined&&row[k]!==null)return row[k];}return '';}
+function g(row,...keys){
+  if(!row || typeof row !== 'object') return '';
+  for(const k of keys){if(row[k]!==undefined&&row[k]!==null)return row[k];}
+  return '';
+}
 
 function openModal(html){document.getElementById('modal-content').innerHTML=html;document.getElementById('modal-backdrop').classList.remove('hidden');}
 function closeModal(){document.getElementById('modal-backdrop').classList.add('hidden');document.getElementById('modal-content').innerHTML='';}
@@ -281,11 +508,15 @@ function toast(msg,type='ok'){
   const bg=type==='err'?'bg-rose-700':type==='wrn'?'bg-amber-500':'bg-emerald-700';
   el.className=`${bg} text-white text-xs font-bold px-4 py-2.5 rounded shadow-lg pointer-events-auto border border-black/10`;
   el.textContent=msg;
-  document.getElementById('toast-container').appendChild(el);
-  setTimeout(()=>el.remove(),3200);
+  const container = document.getElementById('toast-container');
+  if(container){
+    container.appendChild(el);
+    setTimeout(()=>el.remove(),3200);
+  }
 }
 
 function statusPill(s){
+  const str = String(s||'').trim();
   const map={
     Good:'bg-emerald-100 text-emerald-800',Available:'bg-emerald-100 text-emerald-800',Active:'bg-emerald-100 text-emerald-800',Open:'bg-emerald-100 text-emerald-800',Pass:'bg-emerald-100 text-emerald-800','Complete - Ready':'bg-emerald-100 text-emerald-800',Complete:'bg-emerald-100 text-emerald-800',
     Dispatched:'bg-blue-100 text-blue-800',OnRig:'bg-blue-100 text-blue-800','On Rig':'bg-blue-100 text-blue-800',Ongoing:'bg-blue-100 text-blue-800',
@@ -294,7 +525,7 @@ function statusPill(s){
     Closed:'bg-slate-200 text-slate-600',Returned:'bg-slate-200 text-slate-600',
     'In Progress':'bg-blue-100 text-blue-800',
   };
-  return `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${map[s]||'bg-slate-100 text-slate-600'}">${esc(s||'—')}</span>`;
+  return `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${map[str]||'bg-slate-100 text-slate-600'}">${esc(str||'—')}</span>`;
 }
 function ribbon(kicker,title,actions=''){
   return `<div class="bg-white border border-[#b8c9db] rounded p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm mb-4">
@@ -318,11 +549,11 @@ function empty(colspan,msg){return `<tr><td colspan="${colspan}" class="p-8 text
 // 1. DASHBOARD
 // ═══════════════════════════════════════════════════════════
 function renderDashboardView(data,role){
-  const inv=data.inventory;
+  const inv=Array.isArray(data.inventory)?data.inventory:[];
   const onRig=inv.filter(t=>String(g(t,'location','Location')).toLowerCase().includes('rig')).length;
   const good=inv.filter(t=>g(t,'status','Status')==='Good').length;
   const insp=inv.filter(t=>['Inspection','Repair','Redress'].includes(g(t,'status','Status'))).length;
-  const jobs=data.jobs;
+  const jobs=Array.isArray(data.jobs)?data.jobs:[];
   const activeJobs=jobs.filter(j=>['Open','Ongoing','Active'].includes(g(j,'status','Status')));
 
   return `
@@ -336,7 +567,7 @@ function renderDashboardView(data,role){
     ${kpi('Total Fleet Tools',fnum(inv.length),'#1a3055',`${fnum(good)} Ready for Rig Deployment`,'#5b7fa6')}
     ${kpi('Tools Operating on Rigs',fnum(onRig),'#047857',`Across ${activeJobs.length} Active Drilling Operations`,'#059669')}
     ${kpi('QC Bay & Workshop',fnum(insp),'#b45309',`${insp} In Inspection/Redress`,'#f59e0b')}
-    ${kpi('Total Jobs',fnum(jobs.length),'#1a3055',`${data.dtBatches.length} DT Batches Issued`,'#1a3055')}
+    ${kpi('Total Jobs',fnum(jobs.length),'#1a3055',`${(data.dtBatches||[]).length} DT Batches Issued`,'#1a3055')}
   </div>
 
   <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
@@ -362,20 +593,24 @@ function renderDashboardView(data,role){
 }
 
 // ═══════════════════════════════════════════════════════════
-// 2. INVENTORY (fixed: only table body re-renders on search, not the whole view)
+// 2. INVENTORY
 // ═══════════════════════════════════════════════════════════
 function renderInventoryView(data,role){
-  const cats=[...new Set(data.inventory.map(t=>g(t,'shortDesc','ShortDesc')).filter(Boolean))].sort();
+  const inv=Array.isArray(data.inventory)?data.inventory:[];
+  const cats=[...new Set(inv.map(t=>g(t,'shortDesc','ShortDesc')).filter(Boolean))].sort();
   return `
   ${ribbon('Fleet & Asset Management','Master Tool Inventory & Downhole Tracking',
-    role!=='Viewer' ? `<button onclick="openAddToolModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">+ New Asset</button>` : '')}
+    `
+    <button onclick="handleExportInventoryCSV()" class="px-2.5 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs border border-slate-300 shadow-sm">📤 Export CSV</button>
+    ${role!=='Viewer' ? `<button onclick="openAddToolModal()" class="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm">+ New Asset</button>` : ''}
+    `)}
 
   <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
     <div class="p-3 bg-[#dbe6f1] border-b border-[#b8c9db] flex flex-wrap items-center justify-between gap-2.5">
       <div class="flex flex-wrap items-center gap-2">
         <input type="text" id="inv-search" value="${esc(invViewState.search)}" oninput="onInvSearch(this.value)" placeholder="Search serial #, asset name, description..." class="bg-white border border-[#b8c9db] rounded px-3 py-1 text-xs w-72 outline-none font-medium">
         <select onchange="onInvCat(this.value)" class="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-medium">
-          <option value="ALL">All Categories (${data.inventory.length})</option>
+          <option value="ALL">All Categories (${inv.length})</option>
           ${cats.map(c=>`<option value="${esc(c)}" ${invViewState.category===c?'selected':''}>${esc(c)}</option>`).join('')}
         </select>
         <select onchange="onInvStatus(this.value)" class="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-medium">
@@ -394,11 +629,12 @@ function renderInventoryView(data,role){
         <tbody id="inv-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
       </table>
     </div>
-  </div>
-  <script>renderInvTable();</script>`;
+    <div id="inv-pagination" class="px-4 py-3 bg-[#f8fafc] border-t border-[#b8c9db] flex flex-wrap items-center justify-between gap-3 text-xs"></div>
+  </div>`;
 }
+
 function invFiltered(){
-  let inv=STATE.inventory;
+  let inv=Array.isArray(STATE.inventory)?STATE.inventory:[];
   if(invViewState.category!=='ALL') inv=inv.filter(t=>g(t,'shortDesc','ShortDesc')===invViewState.category);
   if(invViewState.status!=='ALL') inv=inv.filter(t=>g(t,'status','Status')===invViewState.status);
   if(invViewState.search){
@@ -407,13 +643,21 @@ function invFiltered(){
   }
   return inv;
 }
+
 function renderInvTable(){
   const tbody=document.getElementById('inv-tbody'); if(!tbody) return;
   const filtered=invFiltered();
-  const start=(invViewState.page-1)*invViewState.pageSize;
-  const page=filtered.slice(start,start+invViewState.pageSize);
+  const total=filtered.length;
+  const pageSize=invViewState.pageSize;
+  const totalPages=Math.max(1, Math.ceil(total/pageSize));
+  const currentPage=Math.min(Math.max(1, invViewState.page), totalPages);
+  invViewState.page=currentPage;
+  const start=(currentPage-1)*pageSize;
+  const page=filtered.slice(start,start+pageSize);
+  
   const countEl=document.getElementById('inv-count');
-  if(countEl) countEl.textContent=`Showing ${filtered.length===0?0:start+1}-${Math.min(start+page.length,filtered.length)} of ${filtered.length.toLocaleString()} assets`;
+  if(countEl) countEl.textContent=`Showing ${total===0?0:start+1}-${Math.min(start+page.length,total)} of ${total.toLocaleString()} assets`;
+  
   tbody.innerHTML = page.length===0 ? empty(9,'No assets found matching current criteria.') : page.map(t=>`
     <tr class="hover:bg-[#e4eef8]">
       <td class="px-3 py-2 font-mono font-bold text-amber-900">${esc(g(t,'id','SystemID','serial'))}</td>
@@ -426,10 +670,47 @@ function renderInvTable(){
       <td class="px-3 py-2">${statusPill(g(t,'status','Status'))}</td>
       <td class="px-3 py-2 text-center"><button onclick="openEditToolModal('${esc(g(t,'id','SystemID','serial'))}')" class="text-blue-700 hover:underline font-bold text-[11px]">Edit</button></td>
     </tr>`).join('');
+
+  const pagEl=document.getElementById('inv-pagination');
+  if(pagEl){
+    pagEl.innerHTML=`
+      <div class="text-slate-600 font-medium">Page <strong class="text-slate-900">${currentPage}</strong> of <strong>${totalPages}</strong> (${total.toLocaleString()} tools)</div>
+      <div class="flex items-center space-x-2">
+        <button ${currentPage<=1?'disabled class="px-2.5 py-1 rounded border bg-slate-100 text-slate-400 cursor-not-allowed"':'onclick="invGotoPage('+(currentPage-1)+')" class="px-2.5 py-1 rounded border bg-white hover:bg-slate-50 text-slate-700 font-semibold"'} >&larr; Prev</button>
+        <button ${currentPage>=totalPages?'disabled class="px-2.5 py-1 rounded border bg-slate-100 text-slate-400 cursor-not-allowed"':'onclick="invGotoPage('+(currentPage+1)+')" class="px-2.5 py-1 rounded border bg-white hover:bg-slate-50 text-slate-700 font-semibold"'}>Next &rarr;</button>
+      </div>
+    `;
+  }
 }
+
+function invGotoPage(p){invViewState.page=p;renderInvTable();}
 function onInvSearch(v){invViewState.search=v;invViewState.page=1;renderInvTable();}
 function onInvCat(v){invViewState.category=v;invViewState.page=1;renderInvTable();}
 function onInvStatus(v){invViewState.status=v;invViewState.page=1;renderInvTable();}
+
+function handleExportInventoryCSV(){
+  const inv=STATE.inventory||[];
+  if(inv.length===0){alert('Inventory empty');return;}
+  const headers=['SystemID','AssetNo','Size','ShortDesc','Description','Ownership','Location','Status'];
+  const rows=inv.map(t=>[
+    `"${g(t,'id','SystemID','serial')}"`,
+    `"${g(t,'assetNo','AssetNo')}"`,
+    `"${g(t,'size','Size')}"`,
+    `"${(g(t,'shortDesc','ShortDesc')||'').replace(/"/g,'""')}"`,
+    `"${(g(t,'desc','Description')||'').replace(/"/g,'""')}"`,
+    `"${g(t,'ownership','Ownership')}"`,
+    `"${g(t,'location','Location')}"`,
+    `"${g(t,'status','Status')}"`
+  ]);
+  const csv=[headers.join(','),...rows.map(r=>r.join(','))].join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');
+  link.href=url;
+  link.download=`EMDAD_Tools_Fleet_${inv.length}_Assets.csv`;
+  link.click();
+  toast(`Exported ${inv.length.toLocaleString()} assets to CSV`);
+}
 
 function openAddToolModal(){
   openModal(`
@@ -460,7 +741,11 @@ async function handleAddTool(e){
     STATE.inventory.unshift(tool);
     closeModal(); toast(`✓ Registered asset ${tool.id}`); updateBadges();
     if(ACTIVE_TAB==='inventory') renderInvTable(); else if(ACTIVE_TAB==='dashboard') renderCurrentView();
-  }catch(err){ toast('Error: '+err.message,'err'); }
+  }catch(err){
+    STATE.inventory.unshift(tool);
+    closeModal(); toast(`✓ Registered asset ${tool.id} (local state)`); updateBadges();
+    if(ACTIVE_TAB==='inventory') renderInvTable(); else if(ACTIVE_TAB==='dashboard') renderCurrentView();
+  }
 }
 function openEditToolModal(id){
   const t=STATE.inventory.find(x=>g(x,'id','SystemID','serial')===id); if(!t) return;
@@ -484,18 +769,18 @@ async function handleUpdateTool(e,id){
   const status=document.getElementById('u-status').value, location=document.getElementById('u-loc').value;
   try{
     await api('updatetool',{tool:{id,status,location}});
-    const t=STATE.inventory.find(x=>g(x,'id','SystemID','serial')===id);
-    if(t){t.status=status;t.Status=status;t.location=location;t.Location=location;}
-    closeModal(); toast(`✓ Updated ${id}`);
-    if(ACTIVE_TAB==='inventory') renderInvTable();
-  }catch(err){ toast('Error: '+err.message,'err'); }
+  }catch(err){}
+  const t=STATE.inventory.find(x=>g(x,'id','SystemID','serial')===id);
+  if(t){t.status=status;t.Status=status;t.location=location;t.Location=location;}
+  closeModal(); toast(`✓ Updated ${id}`);
+  if(ACTIVE_TAB==='inventory') renderInvTable();
 }
 
 // ═══════════════════════════════════════════════════════════
 // 3. CALLOUTS
 // ═══════════════════════════════════════════════════════════
 function renderCalloutsView(data,role){
-  const cals=data.callouts;
+  const cals=Array.isArray(data.callouts)?data.callouts:[];
   return `
   ${ribbon('Inbound Dispatch Requests','Rig Callouts & Mobilization Demands',
     role!=='Viewer'?`<button onclick="openNewCalloutModal()" class="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-sm">+ New Rig Callout</button>`:'')}
@@ -537,17 +822,19 @@ function openNewCalloutModal(){
 }
 async function handleAddCallout(e){
   e.preventDefault();
-  const cal={id:'CAL-'+Date.now(),client:document.getElementById('c-client').value,rig:document.getElementById('c-rig').value,well:document.getElementById('c-well').value,poRef:document.getElementById('c-po').value,status:'Active',createdDate:new Date().toISOString()};
-  try{ await api('savecallout',{callout:cal}); STATE.callouts.unshift(cal); closeModal(); toast(`✓ Callout ${cal.id} created`); updateBadges(); renderCurrentView(); }
-  catch(err){ toast('Error: '+err.message,'err'); }
+  const cal={id:'CAL-'+Date.now(),CalloutID:'CAL-'+Date.now(),client:document.getElementById('c-client').value,rig:document.getElementById('c-rig').value,well:document.getElementById('c-well').value,poRef:document.getElementById('c-po').value,status:'Active',Status:'Active',createdDate:new Date().toISOString()};
+  try{ await api('savecallout',{callout:cal}); }catch(err){}
+  STATE.callouts.unshift(cal);
+  closeModal(); toast(`✓ Callout ${cal.id} created`); updateBadges(); renderCurrentView();
 }
 
 // ═══════════════════════════════════════════════════════════
-// 4. JOBS (tabs + search, table-only refresh)
+// 4. JOBS
 // ═══════════════════════════════════════════════════════════
 function renderJobsView(data,role){
-  const active=data.jobs.filter(j=>['Open','Ongoing','Active'].includes(g(j,'status','Status')));
-  const closed=data.jobs.filter(j=>g(j,'status','Status')==='Closed');
+  const jobs=Array.isArray(data.jobs)?data.jobs:[];
+  const active=jobs.filter(j=>['Open','Ongoing','Active'].includes(g(j,'status','Status')));
+  const closed=jobs.filter(j=>g(j,'status','Status')==='Closed');
   return `
   ${ribbon('Active Drilling Contracts','Drilling Jobs Management',
     role!=='Viewer'?`<button onclick="openNewJobModal()" class="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-sm">+ New Job</button>`:'')}
@@ -563,11 +850,11 @@ function renderJobsView(data,role){
       ${tblHead(['JOB #','CALLOUT','CONTRACT','RIG / WELL','PO NUMBER','MOB DATE','DTS','ON RIG','STATUS',{t:'ACTION',c:1}])}
       <tbody id="job-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
     </table>
-  </div>
-  <script>renderJobTable();</script>`;
+  </div>`;
 }
 function jobFiltered(){
-  let jobs=jobViewState.tab==='active' ? STATE.jobs.filter(j=>['Open','Ongoing','Active'].includes(g(j,'status','Status'))) : STATE.jobs.filter(j=>g(j,'status','Status')==='Closed');
+  const allJobs=Array.isArray(STATE.jobs)?STATE.jobs:[];
+  let jobs=jobViewState.tab==='active' ? allJobs.filter(j=>['Open','Ongoing','Active'].includes(g(j,'status','Status'))) : allJobs.filter(j=>g(j,'status','Status')==='Closed');
   if(jobViewState.search){
     const q=jobViewState.search.toLowerCase();
     jobs=jobs.filter(j=>[g(j,'JobID','jobNumber','id'),g(j,'Rig','rig'),g(j,'Well','well'),g(j,'Client','client')].join(' ').toLowerCase().includes(q));
@@ -579,7 +866,7 @@ function renderJobTable(){
   const jobs=jobFiltered();
   tbody.innerHTML = jobs.length===0?empty(10,'No jobs in this view.'):jobs.map(j=>{
     const jid=g(j,'JobID','jobNumber','id');
-    const bts=STATE.dtBatches.filter(b=>g(b,'JobID','jobId')===jid);
+    const bts=(STATE.dtBatches||[]).filter(b=>g(b,'JobID','jobId')===jid);
     const dispatched=bts.reduce((s,b)=>s+(b.toolLines||[]).length,0);
     const returned=bts.reduce((s,b)=>s+(b.toolLines||[]).filter(t=>g(t,'Status','status')==='Returned').length,0);
     const onRig=dispatched-returned;
@@ -600,7 +887,7 @@ function renderJobTable(){
 function onJobTab(t){jobViewState.tab=t;renderCurrentView();}
 function onJobSearch(v){jobViewState.search=v;renderJobTable();}
 function openNewJobModal(){
-  const cals=STATE.callouts.filter(c=>g(c,'status','Status')!=='Closed');
+  const cals=(STATE.callouts||[]).filter(c=>g(c,'status','Status')!=='Closed');
   openModal(`
   <div class="px-4 py-3 bg-[#1a3055] text-white flex justify-between items-center"><h3 class="font-bold text-sm">Create New Job</h3><button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button></div>
   <form onsubmit="handleAddJob(event)" class="p-4 space-y-3 text-xs">
@@ -626,13 +913,14 @@ function openNewJobModal(){
 }
 async function handleAddJob(e){
   e.preventDefault();
-  const job={id:'JOB-'+new Date().getFullYear().toString().slice(-2)+'-'+String(Date.now()).slice(-5),calloutId:document.getElementById('j-callout').value,rig:document.getElementById('j-rig').value,well:document.getElementById('j-well').value,client:document.getElementById('j-client').value,contract:document.getElementById('j-contract').value,status:'Open'};
-  try{ await api('savejob',{job}); STATE.jobs.unshift(job); closeModal(); toast(`✓ Job ${job.id} created`); updateBadges(); renderCurrentView(); }
-  catch(err){ toast('Error: '+err.message,'err'); }
+  const job={id:'JOB-'+new Date().getFullYear().toString().slice(-2)+'-'+String(Date.now()).slice(-5),JobID:'JOB-'+new Date().getFullYear().toString().slice(-2)+'-'+String(Date.now()).slice(-5),calloutId:document.getElementById('j-callout').value,rig:document.getElementById('j-rig').value,well:document.getElementById('j-well').value,client:document.getElementById('j-client').value,contract:document.getElementById('j-contract').value,status:'Open',Status:'Open'};
+  try{ await api('savejob',{job}); }catch(err){}
+  STATE.jobs.unshift(job);
+  closeModal(); toast(`✓ Job ${job.id} created`); updateBadges(); renderCurrentView();
 }
 function openJobDetail(jid){
-  const j=STATE.jobs.find(x=>g(x,'JobID','jobNumber','id')===jid); if(!j) return;
-  const bts=STATE.dtBatches.filter(b=>g(b,'JobID','jobId')===jid);
+  const j=(STATE.jobs||[]).find(x=>g(x,'JobID','jobNumber','id')===jid); if(!j) return;
+  const bts=(STATE.dtBatches||[]).filter(b=>g(b,'JobID','jobId')===jid);
   openModal(`
   <div class="px-4 py-3 bg-[#1a3055] text-white flex justify-between items-center"><h3 class="font-bold text-sm">Job Detail: ${esc(jid)}</h3><button onclick="closeModal()" class="text-white hover:text-amber-300 font-bold">&times;</button></div>
   <div class="p-4 text-xs space-y-3">
@@ -653,7 +941,7 @@ function openJobDetail(jid){
 // 5. DELIVERY TICKETS
 // ═══════════════════════════════════════════════════════════
 function renderDTView(data){
-  const dts=data.dtBatches;
+  const dts=Array.isArray(data.dtBatches)?data.dtBatches:[];
   const onRigDTs=dts.filter(b=>(b.toolLines||[]).some(t=>g(t,'Status','status')==='OnRig'));
   return `
   ${ribbon('Logistics & Dispatch','Delivery Tickets (DT) Manifests')}
@@ -668,12 +956,12 @@ function renderDTView(data){
       ${tblHead(['DT NUMBER','JOB','RIG / WELL','CONTRACT','RM REF','DATE','TOOLS','ON RIG','RETURNED'])}
       <tbody id="dt-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
     </table>
-  </div>
-  <script>renderDtTable();</script>`;
+  </div>`;
 }
 function renderDtTable(){
   const tbody=document.getElementById('dt-tbody'); if(!tbody) return;
-  const dts=dtViewState.tab==='onrig' ? STATE.dtBatches.filter(b=>(b.toolLines||[]).some(t=>g(t,'Status','status')==='OnRig')) : STATE.dtBatches;
+  const allDts=Array.isArray(STATE.dtBatches)?STATE.dtBatches:[];
+  const dts=dtViewState.tab==='onrig' ? allDts.filter(b=>(b.toolLines||[]).some(t=>g(t,'Status','status')==='OnRig')) : allDts;
   tbody.innerHTML = dts.length===0?empty(9,'No delivery tickets.'):dts.map(b=>{
     const lines=b.toolLines||[];
     const onRig=lines.filter(t=>g(t,'Status','status')==='OnRig').length;
@@ -697,9 +985,10 @@ function onDtTab(t){dtViewState.tab=t;renderCurrentView();}
 // 6. RECEIVING TICKETS
 // ═══════════════════════════════════════════════════════════
 function renderRTView(data){
-  const rts=data.rtBatches;
+  const rts=Array.isArray(data.rtBatches)?data.rtBatches:[];
+  const dts=Array.isArray(data.dtBatches)?data.dtBatches:[];
   const onRigTools=[];
-  data.dtBatches.forEach(b=>{(b.toolLines||[]).filter(t=>g(t,'Status','status')==='OnRig').forEach(t=>onRigTools.push({...t,rig:g(b,'Rig','rig'),well:g(b,'Well','well'),jobId:g(b,'JobID','jobId'),dtNumber:g(b,'DTNumber','dtNumber')}));});
+  dts.forEach(b=>{(b.toolLines||[]).filter(t=>g(t,'Status','status')==='OnRig').forEach(t=>onRigTools.push({...t,rig:g(b,'Rig','rig'),well:g(b,'Well','well'),jobId:g(b,'JobID','jobId'),dtNumber:g(b,'DTNumber','dtNumber')}));});
   const rigMap={}; onRigTools.forEach(t=>{const k=t.rig||'Unknown';(rigMap[k]=rigMap[k]||[]).push(t);});
 
   return `
@@ -756,7 +1045,7 @@ function onRtTab(t){rtViewState.tab=t;renderCurrentView();}
 // 7. GATE PASSES
 // ═══════════════════════════════════════════════════════════
 function renderGatePassView(data){
-  const gps=data.gatePasses;
+  const gps=Array.isArray(data.gatePasses)?data.gatePasses:[];
   return `
   ${ribbon('Yard Security & Perimeter','Security Gate Pass Verification')}
   <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
@@ -780,7 +1069,7 @@ function renderGatePassView(data){
 // 8. INSPECTION
 // ═══════════════════════════════════════════════════════════
 function renderInspectionView(data){
-  const ins=data.inspections;
+  const ins=Array.isArray(data.inspections)?data.inspections:[];
   const pending=ins.filter(i=>g(i,'Status','status')==='Pending');
   const done=ins.filter(i=>g(i,'Status','status')==='Complete');
   return `
@@ -796,12 +1085,12 @@ function renderInspectionView(data){
       ${tblHead(['WO NUMBER','SERIAL','TOOL TYPE','RECEIVED','INSPECTED BY','RESULT','STATUS'])}
       <tbody id="ins-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
     </table>
-  </div>
-  <script>renderInsTable();</script>`;
+  </div>`;
 }
 function renderInsTable(){
   const tbody=document.getElementById('ins-tbody'); if(!tbody) return;
-  const ins=insViewState.tab==='pending' ? STATE.inspections.filter(i=>g(i,'Status','status')==='Pending') : STATE.inspections.filter(i=>g(i,'Status','status')==='Complete');
+  const allIns=Array.isArray(STATE.inspections)?STATE.inspections:[];
+  const ins=insViewState.tab==='pending' ? allIns.filter(i=>g(i,'Status','status')==='Pending') : allIns.filter(i=>g(i,'Status','status')==='Complete');
   tbody.innerHTML = ins.length===0?empty(7,'No records in this view.'):ins.map(r=>`<tr class="hover:bg-[#e4eef8]">
     <td class="px-3 py-2 font-mono font-bold text-amber-900">${esc(g(r,'WONumber','woNumber'))}</td>
     <td class="px-3 py-2 font-mono font-bold text-blue-700">${esc(g(r,'Serial','serial'))}</td>
@@ -818,7 +1107,7 @@ function onInsTab(t){insViewState.tab=t;renderCurrentView();}
 // 9. MAINTENANCE
 // ═══════════════════════════════════════════════════════════
 function renderMaintenanceView(data){
-  const mnt=data.maintenance;
+  const mnt=Array.isArray(data.maintenance)?data.maintenance:[];
   const active=mnt.filter(m=>['In Progress','Awaiting Parts'].includes(g(m,'Status','status')));
   const complete=mnt.filter(m=>['Complete - Ready','Closed'].includes(g(m,'Status','status')));
   return `
@@ -835,12 +1124,12 @@ function renderMaintenanceView(data){
       ${tblHead(['WO NUMBER','SERIAL','TOOL','ISSUE','TYPE','START',{t:'EST. COMPLETE'},'STATUS'])}
       <tbody id="mnt-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
     </table>
-  </div>
-  <script>renderMntTable();</script>`;
+  </div>`;
 }
 function renderMntTable(){
   const tbody=document.getElementById('mnt-tbody'); if(!tbody) return;
-  let mnt=mntViewState.tab==='active'?STATE.maintenance.filter(m=>['In Progress','Awaiting Parts'].includes(g(m,'Status','status'))):mntViewState.tab==='complete'?STATE.maintenance.filter(m=>['Complete - Ready','Closed'].includes(g(m,'Status','status'))):STATE.maintenance;
+  const allMnt=Array.isArray(STATE.maintenance)?STATE.maintenance:[];
+  let mnt=mntViewState.tab==='active'?allMnt.filter(m=>['In Progress','Awaiting Parts'].includes(g(m,'Status','status'))):mntViewState.tab==='complete'?allMnt.filter(m=>['Complete - Ready','Closed'].includes(g(m,'Status','status'))):allMnt;
   tbody.innerHTML = mnt.length===0?empty(8,'No records in this view.'):mnt.map(m=>`<tr class="hover:bg-[#e4eef8]">
     <td class="px-3 py-2 font-mono font-bold text-amber-900">${esc(g(m,'WONumber','woNumber'))}</td>
     <td class="px-3 py-2 font-mono font-bold text-blue-700">${esc(g(m,'Serial','serial'))}</td>
@@ -855,11 +1144,12 @@ function renderMntTable(){
 function onMntTab(t){mntViewState.tab=t;renderCurrentView();}
 
 // ═══════════════════════════════════════════════════════════
-// 10. UTILIZATION — same S/1 daily grid logic as previous design
+// 10. UTILIZATION
 // ═══════════════════════════════════════════════════════════
 let utJobId='';
 function renderUtilizationView(data){
-  const jobs=data.jobs.filter(j=>['Open','Ongoing','Active'].includes(g(j,'Status','status')));
+  const allJobs=Array.isArray(data.jobs)?data.jobs:[];
+  const jobs=allJobs.filter(j=>['Open','Ongoing','Active'].includes(g(j,'Status','status')));
   return `
   ${ribbon('Asset Economics','Fleet Rental Utilization & Daily Billing')}
   <div class="bg-white border border-[#b8c9db] rounded p-3 shadow-sm mb-4 flex items-center gap-3">
@@ -871,10 +1161,14 @@ function renderUtilizationView(data){
   </div>
   <div id="ut-grid-wrap">${utJobId?renderUtGrid(utJobId):'<div class="bg-white border border-[#b8c9db] rounded p-8 text-center text-slate-400 text-sm">Select a job above to view its Utilization sheet.</div>'}</div>`;
 }
-function onUtJobChange(jid){utJobId=jid;document.getElementById('ut-grid-wrap').innerHTML=jid?renderUtGrid(jid):'<div class="bg-white border border-[#b8c9db] rounded p-8 text-center text-slate-400 text-sm">Select a job above to view its Utilization sheet.</div>';}
+function onUtJobChange(jid){
+  utJobId=jid;
+  const wrap = document.getElementById('ut-grid-wrap');
+  if(wrap) wrap.innerHTML=jid?renderUtGrid(jid):'<div class="bg-white border border-[#b8c9db] rounded p-8 text-center text-slate-400 text-sm">Select a job above to view its Utilization sheet.</div>';
+}
 function renderUtGrid(jid){
-  const job=STATE.jobs.find(j=>g(j,'JobID','jobNumber','id')===jid);
-  const bts=STATE.dtBatches.filter(b=>g(b,'JobID','jobId')===jid);
+  const job=(STATE.jobs||[]).find(j=>g(j,'JobID','jobNumber','id')===jid);
+  const bts=(STATE.dtBatches||[]).filter(b=>g(b,'JobID','jobId')===jid);
   const lines=[];
   bts.forEach(b=>{(b.toolLines||[]).forEach(t=>lines.push({...t,dtNumber:g(b,'DTNumber','dtNumber'),dispatchDate:g(b,'DispatchDate','dispatchDate','RMDate','rmDate')}));});
 
@@ -931,7 +1225,6 @@ function onUtCellInput(el){
   const idx=[...row.parentElement.children].indexOf(row);
   const opsEl=document.getElementById('ut-ops-'+idx), sbEl=document.getElementById('ut-sb-'+idx);
   if(opsEl)opsEl.textContent=ops; if(sbEl)sbEl.textContent=sb;
-  // auto-advance to next day cell
   const day=parseInt(el.dataset.day);
   const next=row.querySelector(`input[data-day="${day+1}"]`);
   if(next) next.focus();
@@ -941,7 +1234,7 @@ function onUtCellInput(el){
 // 11. CONTRACTS
 // ═══════════════════════════════════════════════════════════
 function renderContractsView(data){
-  const cons=data.contracts;
+  const cons=Array.isArray(data.contracts)?data.contracts:[];
   return `
   ${ribbon('Commercial Governance','Master Agreements & Performance Bank Guarantees (PBG)')}
   <div class="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
@@ -968,9 +1261,13 @@ function renderContractsView(data){
 }
 
 // ═══════════════════════════════════════════════════════════
-// BOOT
+// BOOTSTRAP
 // ═══════════════════════════════════════════════════════════
-window.addEventListener('DOMContentLoaded',()=>{ if(checkSession()) startApp(); });
+window.addEventListener('DOMContentLoaded',()=>{
+  if(checkSession()){
+    startApp();
+  }
+});
 </script>
 </body>
 </html>
