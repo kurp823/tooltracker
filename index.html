@@ -256,6 +256,11 @@ function renderCurrentView(){
   const map={dashboard:renderDashboardView,inventory:renderInventoryView,callouts:renderCalloutsView,jobs:renderJobsView,dt:renderDTView,rt:renderRTView,gatepass:renderGatePassView,inspection:renderInspectionView,maintenance:renderMaintenanceView,utilization:renderUtilizationView,contracts:renderContractsView};
   const fn=map[ACTIVE_TAB];
   el.innerHTML = fn ? fn(STATE,CU.role) : '<div class="text-slate-400 text-sm">Module not found.</div>';
+  // Populate table bodies that render separately from the shell markup
+  // (kept as real function calls, never embedded script tags in HTML strings,
+  // since the HTML parser terminates on the first literal closing tag it sees)
+  const tableInit={inventory:renderInvTable,jobs:renderJobTable,dt:renderDtTable,inspection:renderInsTable,maintenance:renderMntTable};
+  if(tableInit[ACTIVE_TAB]) tableInit[ACTIVE_TAB]();
 }
 function updateBadges(){
   const b=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
@@ -394,8 +399,7 @@ function renderInventoryView(data,role){
         <tbody id="inv-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
       </table>
     </div>
-  </div>
-  <script>renderInvTable();</script>`;
+  </div>`;
 }
 function invFiltered(){
   let inv=STATE.inventory;
@@ -563,8 +567,7 @@ function renderJobsView(data,role){
       ${tblHead(['JOB #','CALLOUT','CONTRACT','RIG / WELL','PO NUMBER','MOB DATE','DTS','ON RIG','STATUS',{t:'ACTION',c:1}])}
       <tbody id="job-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
     </table>
-  </div>
-  <script>renderJobTable();</script>`;
+  </div>`;
 }
 function jobFiltered(){
   let jobs=jobViewState.tab==='active' ? STATE.jobs.filter(j=>['Open','Ongoing','Active'].includes(g(j,'status','Status'))) : STATE.jobs.filter(j=>g(j,'status','Status')==='Closed');
@@ -668,8 +671,7 @@ function renderDTView(data){
       ${tblHead(['DT NUMBER','JOB','RIG / WELL','CONTRACT','RM REF','DATE','TOOLS','ON RIG','RETURNED'])}
       <tbody id="dt-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
     </table>
-  </div>
-  <script>renderDtTable();</script>`;
+  </div>`;
 }
 function renderDtTable(){
   const tbody=document.getElementById('dt-tbody'); if(!tbody) return;
@@ -796,8 +798,7 @@ function renderInspectionView(data){
       ${tblHead(['WO NUMBER','SERIAL','TOOL TYPE','RECEIVED','INSPECTED BY','RESULT','STATUS'])}
       <tbody id="ins-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
     </table>
-  </div>
-  <script>renderInsTable();</script>`;
+  </div>`;
 }
 function renderInsTable(){
   const tbody=document.getElementById('ins-tbody'); if(!tbody) return;
@@ -835,8 +836,7 @@ function renderMaintenanceView(data){
       ${tblHead(['WO NUMBER','SERIAL','TOOL','ISSUE','TYPE','START',{t:'EST. COMPLETE'},'STATUS'])}
       <tbody id="mnt-tbody" class="divide-y divide-[#e2e8f0]"></tbody>
     </table>
-  </div>
-  <script>renderMntTable();</script>`;
+  </div>`;
 }
 function renderMntTable(){
   const tbody=document.getElementById('mnt-tbody'); if(!tbody) return;
