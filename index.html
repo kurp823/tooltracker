@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>EMDAD Operations — LIVE</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* ══════════════════════════════════════════════════
    EMDAD Operations v2 — Gemini-style Design System
@@ -58,7 +58,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:#eef3f8;color:var(-
 .sb-group-arrow.open{transform:rotate(180deg)}
 .sb-group-items{overflow:hidden;transition:max-height .2s ease}
 .sb-group-items.collapsed{max-height:0!important}
-.sb-item{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 34px;color:rgba(255,255,255,.52);font-size:12px;font-weight:500;cursor:pointer;border-radius:0;transition:all .12s;border:none;background:none;width:100%;text-align:left;position:relative;}
+.sb-item{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 34px;color:rgba(255,255,255,.85);font-size:12px;font-weight:500;cursor:pointer;border-radius:0;transition:all .12s;border:none;background:none;width:100%;text-align:left;position:relative;}
 .sb-item:hover{background:rgba(255,255,255,.06);color:rgba(255,255,255,.85)}
 .sb-item.active{background:rgba(74,111,165,.3);color:white;}
 .sb-item.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--amber);border-radius:0 2px 2px 0;}
@@ -111,7 +111,7 @@ a.sb-item,a.sb-item-top,a.btn{text-decoration:none;color:inherit}
   width:38px;height:38px;border-radius:var(--r-md);
   display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;
 }
-.stat-val{font-size:22px;font-weight:800;line-height:1;font-family:'JetBrains Mono',monospace}
+.stat-val{font-size:22px;font-weight:800;line-height:1;font-family:'IBM Plex Mono',monospace}
 .stat-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--s400);margin-top:2px}
 
 /* ── BUTTONS ─────────────────────────────────────────── */
@@ -204,7 +204,7 @@ textarea.inp{resize:vertical;min-height:70px}
 .bg-sub     {background:#f0f9ff;color:#0369a1;border-color:#bae6fd}
 
 /* ── SERIAL SPANS ─────────────────────────────────── */
-.sn{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px}
+.sn{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px}
 .sn-e{color:var(--amber-d);background:var(--amber-l)}
 .sn-s{color:var(--blue-d);background:var(--blue-l)}
 
@@ -1850,6 +1850,7 @@ function confirmEditTool(id){
 // ════════════════════════════════════════════════════
 // PAGE: CALLOUTS
 // ════════════════════════════════════════════════════
+let CALQ='', CALSTF='';
 function pageCallouts(){
   const cals=state.callouts;
   const active=cals.filter(c=>c.status!=='Closed');
@@ -1888,13 +1889,11 @@ function toggleRig(id){
   if(!b)return;b.classList.toggle('open');if(h)h.classList.toggle('is-open');if(c)c.classList.toggle('open');
 }
 
-function renderCalGroups(){
-  const q=(document.getElementById('cal-q')||{}).value||'';
-  const fs=(document.getElementById('cal-fs')||{}).value||'';
-  let cals=state.callouts;
-  if(fs)cals=cals.filter(c=>c.status===fs);
-  if(q){const ql=q.toLowerCase();cals=cals.filter(c=>(c.rig+c.well+c.client).toLowerCase().includes(ql));}
-  if(!cals.length)return`<div class="empty"><div class="empty-ico">📋</div><div class="empty-title">No callouts yet</div><div class="empty-sub">Create a new callout to begin</div></div>`;
+function renderCalGroups(shown){
+  let cals=shown||state.callouts;
+  if(CALSTF)cals=cals.filter(c=>c.status===CALSTF);
+  if(CALQ){const ql=CALQ.toLowerCase();cals=cals.filter(c=>(c.rig+c.well+c.client).toLowerCase().includes(ql));}
+  if(!cals.length)return`<div class="empty"><div class="empty-ico">📋</div><div class="empty-title">No callouts match</div><div class="empty-sub">Try a different search or filter</div></div>`;
 
   const groups={};
   cals.forEach(c=>{const k=c.rig+'||'+c.well;if(!groups[k])groups[k]={rig:c.rig,well:c.well,contract:c.contract,client:c.client,cals:[]};groups[k].cals.push(c);});
