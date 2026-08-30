@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>EMDAD Operations — LIVE</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ══════════════════════════════════════════════════
    EMDAD Operations v2 — Gemini-style Design System
@@ -31,12 +31,12 @@
   --s400:#94a3b8; --s500:#64748b; --s600:#475569; --s700:#334155;
   --s800:#1e293b; --s900:#0f172a;
   --sb-w:240px; --top-h:52px;
-  --r:4px; --r-md:6px; --r-lg:8px; --r-xl:10px;
+  --r:6px; --r-md:6px; --r-lg:8px; --r-xl:10px;
   --sh:0 1px 2px rgba(0,0,0,.06);
   --sh-md:0 2px 8px rgba(0,0,0,.08);
   --sh-lg:0 4px 16px rgba(0,0,0,.10);
 }
-body{font-family:'Inter',-apple-system,sans-serif;background:#eef3f8;color:var(--s800);font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+body{font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,sans-serif;background:#eef3f8;color:var(--s800);font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
 
 /* ── SIDEBAR ─────────────────────────────────────── */
 #sidebar{
@@ -168,17 +168,17 @@ textarea.inp{resize:vertical;min-height:70px}
 .tbl-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--sap-border)}
 .tbl{width:100%;border-collapse:collapse;font-size:12px}
 .tbl thead tr{background:var(--sap-blue-l);border-bottom:1px solid var(--sap-border)}
-.tbl th{padding:8px 10px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sap-text);white-space:nowrap}
-.tbl td{padding:7px 10px;border-bottom:1px solid #e8f0f7;vertical-align:middle}
-.tbl tbody tr:nth-child(even){background:var(--sap-stripe)}.tbl tbody tr:hover{background:#e4eef8}
+.tbl th{padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sap-text);white-space:nowrap}
+.tbl td{padding:8px 12px;border-bottom:1px solid #e8f0f7;vertical-align:middle}
+.tbl tbody tr:hover{background:#e4eef8}
 .tbl tbody tr:last-child td{border-bottom:none}
 .tbl-xs th,.tbl-xs td{padding:6px 10px}
 
 /* ── BADGES ──────────────────────────────────────── */
 .badge{
   display:inline-flex;align-items:center;
-  padding:2px 8px;border-radius:20px;
-  font-size:10px;font-weight:700;white-space:nowrap;border:1px solid;
+  padding:2px 6px;border-radius:4px;
+  font-size:10px;font-weight:700;white-space:nowrap;border:none;
 }
 .bg-good    {background:var(--grn-l);color:var(--grn-d);border-color:var(--grn-b)}
 .bg-repair  {background:var(--red-l);color:var(--red-d);border-color:var(--red-b)}
