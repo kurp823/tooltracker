@@ -1,0 +1,8 @@
+{
+  "name": "EMDAD Operations Platform",
+  "description": "Integrated downhole tool tracking, rental fleet management, rig dispatch, workshop QC, utilization billing, and Azure SQL synchronization for oil and gas operations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
