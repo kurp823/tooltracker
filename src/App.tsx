@@ -256,14 +256,14 @@ export const App: React.FC = () => {
   // Handler to clear demo data and reflect pure SQL state
   const handleClearDemoData = useCallback((includeInventory = false) => {
     localStorage.setItem('emdad_mode', 'production');
-    localStorage.removeItem('emdad_jobs');
-    localStorage.removeItem('emdad_dt_batches');
-    localStorage.removeItem('emdad_rt_batches');
-    localStorage.removeItem('emdad_callouts');
-    localStorage.removeItem('emdad_inspections');
-    localStorage.removeItem('emdad_maintenance');
-    localStorage.removeItem('emdad_gate_passes');
-    localStorage.removeItem('emdad_contracts');
+    localStorage.setItem('emdad_jobs', '[]');
+    localStorage.setItem('emdad_dt_batches', '[]');
+    localStorage.setItem('emdad_rt_batches', '[]');
+    localStorage.setItem('emdad_callouts', '[]');
+    localStorage.setItem('emdad_inspections', '[]');
+    localStorage.setItem('emdad_maintenance', '[]');
+    localStorage.setItem('emdad_gate_passes', '[]');
+    localStorage.setItem('emdad_contracts', '[]');
     setJobs([]);
     setDtBatches([]);
     setRtBatches([]);
@@ -273,10 +273,24 @@ export const App: React.FC = () => {
     setGatePasses([]);
     setContracts([]);
     if (includeInventory) {
-      localStorage.removeItem('emdad_inventory');
+      localStorage.setItem('emdad_inventory', '[]');
       setInventory([]);
+      showToast('All records and inventory wiped to 0. Ready for Azure SQL.', 'success');
+    } else {
+      // If keeping inventory catalog, recall all tools deployed to demo rigs back to Base/Ready
+      setInventory((prev) => {
+        const cleaned = prev.map((t) => ({
+          ...t,
+          status: (t.status === 'On Rig' ? 'Good' : t.status) as any,
+          location: (t.location === 'On Rig' ? 'Base / Workshop' : t.location) as any,
+          rig: undefined,
+          currentJobId: undefined,
+        }));
+        localStorage.setItem('emdad_inventory', JSON.stringify(cleaned));
+        return cleaned;
+      });
+      showToast('Demo operational records cleared. All tools returned to Base (0 active on rig).', 'success');
     }
-    showToast('Demo records cleared. Clean production SQL state active.', 'success');
   }, [showToast]);
 
   // Sync with Azure SQL
