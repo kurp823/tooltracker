@@ -76,11 +76,21 @@ export const Header: React.FC<HeaderProps> = ({
         {onClearDemoData && (
           <button
             onClick={() => {
-              const ok = window.confirm(
-                'Clear Demo Records / Activate Pure SQL State:\n\nThis will remove all demo/mock Jobs, DTs, RTs, and Callouts from your local browser so the application only reflects live records from Azure SQL.\n\nProceed?'
+              const choice = window.confirm(
+                'Clear Demo Operations:\n\n' +
+                '• Click [OK] to clear demo Jobs, Delivery Tickets, and Callouts (keeps the tool catalog, but returns all tools to Base with 0 on rig).\n\n' +
+                '• Click [Cancel] if you want to wipe EVERYTHING (including the 48 tools down to 0 for pure Azure SQL).'
               );
-              if (ok) {
+              if (choice) {
                 onClearDemoData(false);
+              } else {
+                const wipeAll = window.confirm(
+                  'Wipe Complete Inventory Catalog (0 Tools)?\n\n' +
+                  'Click [OK] to delete all 48 tools and set inventory to 0 for a completely clean Azure SQL state.'
+                );
+                if (wipeAll) {
+                  onClearDemoData(true);
+                }
               }
             }}
             className="px-2 py-1 bg-rose-900/60 hover:bg-rose-800 text-rose-200 rounded border border-rose-500/50 text-[11px] font-semibold flex items-center space-x-1 transition cursor-pointer"
