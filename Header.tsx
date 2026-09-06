@@ -10,6 +10,7 @@ interface HeaderProps {
   onSync?: () => void;
   onRefresh?: () => void;
   onLogout: () => void;
+  onClearDemoData?: (includeInventory?: boolean) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +21,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSync,
   onRefresh,
   onLogout,
+  onClearDemoData,
 }) => {
   const syncing = isSyncing || syncStatus === 'syncing';
   const handleRefresh = onSync || onRefresh || (() => {});
@@ -68,8 +70,25 @@ export const Header: React.FC<HeaderProps> = ({
           className="px-2.5 py-1 bg-[#142848] hover:bg-[#203c66] text-slate-200 rounded border border-[#2d5084] text-[11px] font-semibold flex items-center space-x-1 transition cursor-pointer"
           title="Refresh data from Azure SQL database"
         >
-          <span>🔄 Refresh</span>
+          <span>🔄 Refresh SQL</span>
         </button>
+
+        {onClearDemoData && (
+          <button
+            onClick={() => {
+              const ok = window.confirm(
+                'Clear Demo Records / Activate Pure SQL State:\n\nThis will remove all demo/mock Jobs, DTs, RTs, and Callouts from your local browser so the application only reflects live records from Azure SQL.\n\nProceed?'
+              );
+              if (ok) {
+                onClearDemoData(false);
+              }
+            }}
+            className="px-2 py-1 bg-rose-900/60 hover:bg-rose-800 text-rose-200 rounded border border-rose-500/50 text-[11px] font-semibold flex items-center space-x-1 transition cursor-pointer"
+            title="Clear demo data and activate clean Pure SQL State"
+          >
+            <span>🗑️ Clear Demo Data</span>
+          </button>
+        )}
 
         {/* Protected Download: Admin clearance required */}
         {user?.role === 'Admin' && (

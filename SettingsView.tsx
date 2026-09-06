@@ -8,7 +8,7 @@ interface SettingsViewProps {
   onResetData: () => void;
   onExportData: () => void;
   onImportData: (json: string) => void;
-  onClearDemoData?: () => void;
+  onClearDemoData?: (includeInventory?: boolean) => void;
   onFetchLiveSql?: () => void;
   dbStatus?: DbConnectionStatus;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
@@ -246,10 +246,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           <div className="p-3 bg-slate-50 rounded border border-slate-200 text-slate-700 font-mono text-[11px] space-y-1">
-            <div><strong>Host:</strong> tooltracking-sqlserver.database.windows.net</div>
+            <div><strong>Host (Azure SQL Server):</strong> tooltracking-sqlserver.database.windows.net</div>
             <div><strong>Production DB:</strong> ToolTrackingDB</div>
-            <div><strong>Test / Pilot DB:</strong> ToolTrackingDB_PILOT</div>
             <div><strong>Hosting:</strong> Azure Static Web App (tooltracker-app)</div>
+            <div><strong>Data Source Protocol:</strong> Azure Static Web Apps Linked Database (<code>/data-api/rest</code>) or Azure Function REST</div>
           </div>
 
           {testResult && (
@@ -258,21 +258,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           )}
 
-          <div className="flex justify-between items-center pt-1">
-            <div className="space-x-2">
+          <div className="flex flex-wrap justify-between items-center gap-2 pt-1">
+            <div className="flex flex-wrap gap-2">
               {onClearDemoData && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const ok = window.confirm(
-                      'Clear Demo Records Confirmation:\n\nThis will remove the default mock Jobs, Delivery Tickets, and Callouts from local cache so the app displays the pure empty/real state from your Azure SQL database.\n\nDo you want to proceed?'
-                    );
-                    if (ok) onClearDemoData();
-                  }}
-                  className="px-3 py-1.5 rounded bg-rose-50 hover:bg-rose-100 border border-rose-300 font-bold text-rose-700 cursor-pointer text-xs"
-                >
-                  🗑️ Clear Demo Data (Show Pure SQL State)
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ok = window.confirm(
+                        'Clear Demo Records Confirmation:\n\nThis will remove the default mock Jobs, Delivery Tickets, Return Tickets, and Callouts from local cache so the app displays the pure empty/real state from your Azure SQL database.\n\nDo you want to proceed?'
+                      );
+                      if (ok) onClearDemoData(false);
+                    }}
+                    className="px-3 py-1.5 rounded bg-rose-50 hover:bg-rose-100 border border-rose-300 font-bold text-rose-700 cursor-pointer text-xs"
+                  >
+                    🗑️ Clear Demo Data (Show Pure SQL State)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ok = window.confirm(
+                        'Clear ALL Data (Including Demo Inventory):\n\nThis will empty ALL tables (Jobs, Delivery Tickets, RTs, and Inventory tools) from local storage. The inventory will only display rows fetched live from your Azure SQL database.\n\nDo you want to proceed?'
+                      );
+                      if (ok) onClearDemoData(true);
+                    }}
+                    className="px-2.5 py-1.5 rounded bg-slate-100 hover:bg-slate-200 border border-slate-300 font-semibold text-slate-700 cursor-pointer text-xs"
+                  >
+                    Reset Inventory to Empty (Pure SQL)
+                  </button>
+                </>
               )}
             </div>
             <div className="flex space-x-2">

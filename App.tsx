@@ -77,50 +77,62 @@ export const App: React.FC = () => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Primary Domain State (Loaded from localStorage if present, else initial catalogs)
+  // Check if Pure SQL / Production mode is active (empty state when no live SQL data exists)
+  const isPureSqlMode = typeof window !== 'undefined' && localStorage.getItem('emdad_mode') === 'production';
+
+  // Primary Domain State (Loaded from localStorage if present, else empty in pure SQL mode or initial catalogs)
   const [inventory, setInventory] = useState<ToolItem[]>(() => {
     const s = localStorage.getItem('emdad_inventory');
-    return s ? JSON.parse(s) : INITIAL_INVENTORY;
+    if (s) return JSON.parse(s);
+    return isPureSqlMode ? [] : INITIAL_INVENTORY;
   });
 
   const [callouts, setCallouts] = useState<Callout[]>(() => {
     const s = localStorage.getItem('emdad_callouts');
-    return s ? JSON.parse(s) : INITIAL_CALLOUTS;
+    if (s) return JSON.parse(s);
+    return isPureSqlMode ? [] : INITIAL_CALLOUTS;
   });
 
   const [jobs, setJobs] = useState<DrillingJob[]>(() => {
     const s = localStorage.getItem('emdad_jobs');
-    return s ? JSON.parse(s) : INITIAL_JOBS;
+    if (s) return JSON.parse(s);
+    return isPureSqlMode ? [] : INITIAL_JOBS;
   });
 
   const [dtBatches, setDtBatches] = useState<DTBatch[]>(() => {
     const s = localStorage.getItem('emdad_dt_batches');
-    return s ? JSON.parse(s) : INITIAL_DT_BATCHES;
+    if (s) return JSON.parse(s);
+    return isPureSqlMode ? [] : INITIAL_DT_BATCHES;
   });
 
   const [rtBatches, setRtBatches] = useState<RTBatch[]>(() => {
     const s = localStorage.getItem('emdad_rt_batches');
-    return s ? JSON.parse(s) : INITIAL_RT_BATCHES;
+    if (s) return JSON.parse(s);
+    return isPureSqlMode ? [] : INITIAL_RT_BATCHES;
   });
 
   const [inspections, setInspections] = useState<InspectionRecord[]>(() => {
     const s = localStorage.getItem('emdad_inspections');
-    return s ? JSON.parse(s) : INITIAL_INSPECTIONS;
+    if (s) return JSON.parse(s);
+    return isPureSqlMode ? [] : INITIAL_INSPECTIONS;
   });
 
   const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>(() => {
     const s = localStorage.getItem('emdad_maintenance');
-    return s ? JSON.parse(s) : INITIAL_MAINTENANCE;
+    if (s) return JSON.parse(s);
+    return isPureSqlMode ? [] : INITIAL_MAINTENANCE;
   });
 
   const [gatePasses, setGatePasses] = useState<GatePass[]>(() => {
     const s = localStorage.getItem('emdad_gate_passes');
-    return s ? JSON.parse(s) : INITIAL_GATE_PASSES;
+    if (s) return JSON.parse(s);
+    return isPureSqlMode ? [] : INITIAL_GATE_PASSES;
   });
 
   const [contracts, setContracts] = useState<ContractRecord[]>(() => {
     const s = localStorage.getItem('emdad_contracts');
-    return s ? JSON.parse(s) : INITIAL_CONTRACTS;
+    if (s) return JSON.parse(s);
+    return isPureSqlMode ? [] : INITIAL_CONTRACTS;
   });
 
   // LocalStorage Persistence
@@ -170,12 +182,6 @@ export const App: React.FC = () => {
       jobs: jobs.length,
       dtBatches: dtBatches.length,
       rtBatches: rtBatches.length,
-      const res = await fetchLiveDatabaseData();
-if (res.success && res.data) {
-   setDbStatus({
-      isConnected: true,
-      source: res.source,  // <-- Changes to 'data-api' or 'azure-sql'
-      ...
     },
   });
 
@@ -185,7 +191,7 @@ if (res.success && res.data) {
       try {
         const res = await fetchLiveDatabaseData();
         if (res.success && res.data) {
-          if (res.data.inventory && res.data.inventory.length > 0) {
+          if (res.data.inventory !== undefined) {
             setInventory(res.data.inventory);
           }
           if (res.data.jobs !== undefined) {
@@ -248,7 +254,8 @@ if (res.success && res.data) {
   }, [handleFetchLiveSql]);
 
   // Handler to clear demo data and reflect pure SQL state
-  const handleClearDemoData = useCallback(() => {
+  const handleClearDemoData = useCallback((includeInventory = false) => {
+    localStorage.setItem('emdad_mode', 'production');
     localStorage.removeItem('emdad_jobs');
     localStorage.removeItem('emdad_dt_batches');
     localStorage.removeItem('emdad_rt_batches');
@@ -256,6 +263,7 @@ if (res.success && res.data) {
     localStorage.removeItem('emdad_inspections');
     localStorage.removeItem('emdad_maintenance');
     localStorage.removeItem('emdad_gate_passes');
+    localStorage.removeItem('emdad_contracts');
     setJobs([]);
     setDtBatches([]);
     setRtBatches([]);
@@ -263,7 +271,12 @@ if (res.success && res.data) {
     setInspections([]);
     setMaintenance([]);
     setGatePasses([]);
-    showToast('Demo records cleared. Clean production state active.', 'success');
+    setContracts([]);
+    if (includeInventory) {
+      localStorage.removeItem('emdad_inventory');
+      setInventory([]);
+    }
+    showToast('Demo records cleared. Clean production SQL state active.', 'success');
   }, [showToast]);
 
   // Sync with Azure SQL
@@ -931,6 +944,7 @@ if (res.success && res.data) {
         onSync={handleManualSync}
         onRefresh={() => handleFetchLiveSql(false)}
         onLogout={() => setCurrentUser(null)}
+        onClearDemoData={handleClearDemoData}
       />
 
       {/* Main Workspace Layout */}
