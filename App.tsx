@@ -170,6 +170,12 @@ export const App: React.FC = () => {
       jobs: jobs.length,
       dtBatches: dtBatches.length,
       rtBatches: rtBatches.length,
+      const res = await fetchLiveDatabaseData();
+if (res.success && res.data) {
+   setDbStatus({
+      isConnected: true,
+      source: res.source,  // <-- Changes to 'data-api' or 'azure-sql'
+      ...
     },
   });
 
