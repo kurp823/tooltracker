@@ -27,12 +27,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   showToast,
   currentData,
 }) => {
-  const [azureEndpoint, setAzureEndpoint] = useState(
-    localStorage.getItem('azure_api_endpoint') || '/data-api/rest'
-  );
-  const [azureApiKey, setAzureApiKey] = useState(
-    localStorage.getItem('azure_api_key') || ''
-  );
+  const [azureEndpoint, setAzureEndpoint] = useState<string>(() => {
+    const saved = localStorage.getItem('azure_api_endpoint');
+    if (saved && !saved.includes('emdad-drilling-api') && saved.trim()) return saved.trim();
+    localStorage.removeItem('azure_api_endpoint');
+    return '/data-api/rest';
+  });
+  const [azureApiKey, setAzureApiKey] = useState<string>(() => {
+    const saved = localStorage.getItem('azure_api_key');
+    if (saved && !saved.includes('ak_live_emdad_drilling') && saved.trim()) return saved.trim();
+    localStorage.removeItem('azure_api_key');
+    return '';
+  });
   const [showKey, setShowKey] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
@@ -173,6 +179,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         <form onSubmit={handleSaveAzureConfig} className="space-y-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2 pb-1">
+            <span className="text-[11px] font-bold text-slate-600">Quick Presets:</span>
+            <button
+              type="button"
+              onClick={() => {
+                setAzureEndpoint('/data-api/rest');
+                setAzureApiKey('');
+                localStorage.setItem('azure_api_endpoint', '/data-api/rest');
+                localStorage.removeItem('azure_api_key');
+                showToast('Endpoint set to Azure Static Web App Database (/data-api/rest)', 'success');
+              }}
+              className="px-2 py-0.5 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-300 rounded text-[11px] font-semibold cursor-pointer"
+            >
+              Option 1: Static Web App Database (/data-api/rest)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const fnUrl = 'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
+                setAzureEndpoint(fnUrl);
+                localStorage.setItem('azure_api_endpoint', fnUrl);
+                showToast('Endpoint set to Azure Function (ToolTracker API)', 'success');
+              }}
+              className="px-2 py-0.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-300 rounded text-[11px] font-semibold cursor-pointer"
+            >
+              Option 2: Azure Function Backend
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block font-bold mb-1">
