@@ -130,7 +130,7 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
 
   // Rate Configuration
   const clientCode = useMemo(() => {
-    if (!currentJob) return 'ADNOC-D';
+    if (!currentJob || !currentJob.client) return 'ADNOC-D';
     if (currentJob.client.includes('Drilling')) return 'ADNOC-D';
     if (currentJob.client.includes('Offshore')) return 'AOF';
     if (currentJob.client.includes('Onshore')) return 'AON';
@@ -1092,10 +1092,50 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `${MONTH_NAMES[selectedMonthIdx]}_${selectedYear}`);
 
-    const fileName = `UTILIZATION_${activeTab.replace(/\s+/g, '_')}_${(currentJob.rig || 'RIG').replace(/\s+/g, '_')}_${activeYM}.xlsx`;
+    const fileName = `UTILIZATION_${activeTab.replace(/\s+/g, '_')}_${((currentJob && currentJob.rig) || 'RIG').replace(/\s+/g, '_')}_${activeYM}.xlsx`;
     XLSX.writeFile(wb, fileName);
     showToast(`Exported spreadsheet: ${fileName}`, 'ok');
   };
+
+  if (!currentJob) {
+    return (
+      <div className="space-y-4 text-xs select-none w-full">
+        <div className="bg-white border border-[#b8c9db] rounded p-6 shadow-2xs">
+          <div className="flex items-center gap-3 border-b border-slate-200 pb-3 mb-4">
+            <div className="w-9 h-9 rounded bg-[#1a3055] text-white flex items-center justify-center font-bold text-base shadow-2xs">
+              📊
+            </div>
+            <div>
+              <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                Operations &bull; Upstream Resource Accounting
+              </div>
+              <h1 className="text-base font-extrabold text-[#1a3055] tracking-tight">
+                Utilization Master
+              </h1>
+            </div>
+          </div>
+
+          <div className="py-12 px-4 text-center max-w-lg mx-auto">
+            <div className="w-16 h-16 bg-blue-50 text-[#1a3055] rounded-full flex items-center justify-center mx-auto mb-4 text-2xl border border-blue-200 shadow-xs">
+              ⚡
+            </div>
+            <h3 className="text-sm font-extrabold text-slate-800 mb-1">No Active Drilling Jobs Available</h3>
+            <p className="text-slate-500 text-xs mb-4 leading-relaxed">
+              Equipment utilization and monthly billing are tracked against specific drilling jobs.
+              Currently, there are no drilling jobs in your local environment (demo records cleared, or waiting for live SQL sync).
+            </p>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-900 text-xs text-left mb-5">
+              <strong>Next Steps:</strong>
+              <ul className="list-disc list-inside mt-1 space-y-0.5 text-[11px] text-amber-800">
+                <li>Create a new Drilling Job from the <strong>Drilling Jobs</strong> section on the left sidebar.</li>
+                <li>Or click <strong>🔄 Refresh SQL</strong> in the top header to pull live jobs from your Azure SQL database.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3 text-xs select-none w-full">
