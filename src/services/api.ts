@@ -385,29 +385,35 @@ export async function fetchLiveDatabaseData(): Promise<{
   const endpoint = getApiEndpoint();
 
   try {
-    // NOTE (2026-09-08, revised): Callouts/GatePasses/Contracts/Inspections/
-    // Maintenance are NOT part of GET_ALL_DATA in the real Function — they
-    // each have their own existing action (getcallouts, getgatepasses,
-    // getcontracts, getinspections, getmaintenance), already fully built
-    // server-side. Fetched here in parallel and merged into one result so
-    // App.tsx's existing handleFetchLiveSql code doesn't need to change.
-    const [gadJson, calloutsRaw, gatePassesRaw, contractsRaw, inspectionsRaw, maintenanceRaw] = await Promise.all([
-      fetch(`${endpoint}?action=GET_ALL_DATA&env=live`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'GET_ALL_DATA', env: 'live' }),
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null),
-      fetchFromApi<any[]>('getcallouts'),
-      fetchFromApi<any[]>('getgatepasses'),
-      fetchFromApi<any[]>('getcontracts'),
-      fetchFromApi<any[]>('getinspections'),
-      fetchFromApi<any[]>('getmaintenance'),
-    ]);
+    // NOTE (2026-09-08, revised twice): Callouts/GatePasses/Contracts/
+    // Inspections/Maintenance are NOT part of GET_ALL_DATA in the real
+    // Function — they each have their own existing action. They used to be
+    // fired in one big Promise.all alongside GET_ALL_DATA, but that meant 6
+    // simultaneous requests hit the Function on every login. On a cold
+    // start, the Function's getPool() has a check-then-act race (multiple
+    // concurrent calls all see "no pool yet" and each try to open one),
+    // and that race was causing the FIRST login after a while to silently
+    // fail and fall back to local cache — fixed by clicking "Refresh SQL",
+    // which retried once the pool was already warm from the failed race.
+    // Fix: run GET_ALL_DATA alone first (safely establishes/warms the
+    // pool), then fire the other five only once that's succeeded.
+    const gadJson = await fetch(`${endpoint}?action=GET_ALL_DATA&env=live`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'GET_ALL_DATA', env: 'live' }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
 
     const payload = gadJson ? gadJson.data || gadJson : null;
     if (payload && (payload.inventory || payload.jobs)) {
+      const [calloutsRaw, gatePassesRaw, contractsRaw, inspectionsRaw, maintenanceRaw] = await Promise.all([
+        fetchFromApi<any[]>('getcallouts'),
+        fetchFromApi<any[]>('getgatepasses'),
+        fetchFromApi<any[]>('getcontracts'),
+        fetchFromApi<any[]>('getinspections'),
+        fetchFromApi<any[]>('getmaintenance'),
+      ]);
       return {
         success: true,
         source: 'azure-function',
