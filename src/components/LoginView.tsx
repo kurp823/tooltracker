@@ -1,42 +1,46 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { USERS } from '../data/initialData';
+import { getApiEndpoint } from '../services/api';
 
 interface LoginViewProps {
   onLoginSuccess: (user: User) => void;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
-  const [username, setUsername] = useState('ravi');
-  const [password, setPassword] = useState('Ravi@2026');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLogin = (u?: string, p?: string) => {
-    const userToTry = (u || username).trim().toLowerCase();
-    const passToTry = p || password;
+  const handleLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const userToTry = username.trim().toLowerCase();
     setError('');
 
-    if (!userToTry || !passToTry) {
+    if (!userToTry || !password) {
       setError('Please enter both username and password.');
       return;
     }
 
-    const found = USERS.find(
-      (x) => x.username.toLowerCase() === userToTry && x.pass === passToTry
-    );
-
-    if (!found) {
-      setError('Invalid username or password.');
-      return;
+    setIsSubmitting(true);
+    try {
+      const endpoint = getApiEndpoint();
+      const res = await fetch(`${endpoint}?action=login&env=live`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', username: userToTry, password }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.success === false) {
+        setError(json.error || 'Invalid username or password.');
+        setIsSubmitting(false);
+        return;
+      }
+      onLoginSuccess(json.data || json);
+    } catch (err) {
+      setError('Unable to reach Azure SQL login service. Check your connection.');
+      setIsSubmitting(false);
     }
-
-    onLoginSuccess(found);
-  };
-
-  const handleQuickFill = (u: string, p: string) => {
-    setUsername(u);
-    setPassword(p);
-    handleLogin(u, p);
   };
 
   return (
@@ -53,12 +57,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         </div>
 
         <div className="bg-white rounded p-6 shadow-2xl border border-[#b8c9db]">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleLogin();
-            }}
-          >
+          <form onSubmit={handleLogin}>
             <div className="mb-4">
               <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                 Username
@@ -68,6 +67,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full border border-[#b8c9db] rounded px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-amber-400"
+                autoFocus
               />
             </div>
 
@@ -91,55 +91,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
             <button
               type="submit"
-              className="w-full bg-[#ffd875] hover:brightness-105 text-[#4a2e00] font-bold py-2 rounded text-xs border border-[#c8860d] shadow-sm transition cursor-pointer"
+              disabled={isSubmitting}
+              className="w-full bg-[#ffd875] hover:brightness-105 text-[#4a2e00] font-bold py-2 rounded text-xs border border-[#c8860d] shadow-sm transition cursor-pointer disabled:opacity-60"
             >
-              Sign In &rarr;
+              {isSubmitting ? 'Signing in...' : 'Sign In \u2192'}
             </button>
           </form>
-
-          <div className="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-500 space-y-1">
-            <div className="font-bold text-slate-400 uppercase tracking-wider mb-1">Demo Credentials</div>
-            <div className="flex items-center justify-between">
-              <div>
-                <span
-                  className="font-mono font-bold text-slate-700 cursor-pointer hover:underline"
-                  onClick={() => handleQuickFill('ravi', 'Ravi@2026')}
-                >
-                  ravi
-                </span>{' '}
-                (Admin)
-              </div>
-              <div>
-                <span
-                  className="font-mono font-bold text-slate-700 cursor-pointer hover:underline"
-                  onClick={() => handleQuickFill('azim', 'Azim@2026')}
-                >
-                  azim
-                </span>{' '}
-                (Handler)
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <span
-                  className="font-mono font-bold text-slate-700 cursor-pointer hover:underline"
-                  onClick={() => handleQuickFill('nihas', 'Nihas@2026')}
-                >
-                  nihas
-                </span>{' '}
-                (QC)
-              </div>
-              <div>
-                <span
-                  className="font-mono font-bold text-slate-700 cursor-pointer hover:underline"
-                  onClick={() => handleQuickFill('viewer', 'View@2026')}
-                >
-                  viewer
-                </span>{' '}
-                (Viewer)
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
