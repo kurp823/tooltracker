@@ -34,6 +34,8 @@ import {
   saveInspectionApi,
   saveMaintenanceApi,
   saveJobApi,
+  saveDeliveryTicketApi,
+  saveReceivingTicketApi,
 } from './services/api';
 import { Toast, ToastNotification } from './components/Toast';
 import { Header } from './components/Header';
@@ -448,6 +450,9 @@ export const App: React.FC = () => {
       lockedDate: new Date().toISOString(),
     };
     setDtBatches((prev) => [finalizedBatch, ...prev]);
+    saveDeliveryTicketApi(finalizedBatch).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
+    });
 
     // Update tool statuses in inventory to 'On Rig'
     const dispatchedSerials = batch.toolLines.map((t) => t.serial);
@@ -486,6 +491,9 @@ export const App: React.FC = () => {
     removedTools?: ToolItem[]
   ) => {
     setDtBatches((prev) => prev.map((b) => (b.id === updatedBatch.id ? updatedBatch : b)));
+    saveDeliveryTicketApi(updatedBatch).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
+    });
 
     if (addedTools && addedTools.length > 0) {
       const addedSerials = new Set(addedTools.map((t) => t.serial));
@@ -515,11 +523,16 @@ export const App: React.FC = () => {
   // RT Batch Actions (Backload receiving)
   const handleSaveRTBatch = (batch: RTBatch) => {
     setRtBatches((prev) => [batch, ...prev]);
+    saveReceivingTicketApi(batch).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
+    });
 
     // Update DT line statuses from OnRig to Returned
     const returnedSerials = batch.toolLines.map((t) => t.serial);
+    const affectedDtBatches: DTBatch[] = [];
     setDtBatches((prev) =>
       prev.map((dt) => {
+        const hasReturnedLine = dt.toolLines.some((line) => returnedSerials.includes(line.serial));
         const updatedLines = dt.toolLines.map((line) => {
           if (returnedSerials.includes(line.serial)) {
             const rtLine = batch.toolLines.find((l) => l.serial === line.serial);
@@ -531,9 +544,19 @@ export const App: React.FC = () => {
           }
           return line;
         });
-        return { ...dt, toolLines: updatedLines };
+        const updatedDt = { ...dt, toolLines: updatedLines };
+        if (hasReturnedLine) affectedDtBatches.push(updatedDt);
+        return updatedDt;
       })
     );
+    // Persist the DT tickets whose lines just flipped to Returned — otherwise
+    // this status change would only live in local state until the next
+    // manual Sync.
+    affectedDtBatches.forEach((dt) => {
+      saveDeliveryTicketApi(dt).then((r) => {
+        if (!r.success) showToast(r.message, 'error');
+      });
+    });
 
     // Update tool statuses & create inspection records for USED tools
     const curYr = new Date().getFullYear().toString().slice(-2);
