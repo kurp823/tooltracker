@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   User,
   ToolItem,
@@ -307,9 +307,30 @@ export const App: React.FC = () => {
   );
 
   // Initial load check on startup
+  //
+  // NOTE (2026-09-08): previously this fired unconditionally on mount, even
+  // before login, and the app rendered straight into the dashboard the
+  // instant `dbStatus` flipped — which is why the "LOCAL CACHE / DEMO" badge
+  // flashed briefly on every load instead of a proper connecting screen.
+  // Now: (a) it only runs once currentUser is set (post-login), and (b) a
+  // dedicated `isInitialLoading` splash covers the fetch instead of the
+  // dashboard rendering mid-fetch. `initialLoadUserRef` guards against
+  // re-firing every time handleFetchLiveSql's identity changes (its own
+  // deps include the live counts, so it's recreated after every fetch).
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const initialLoadUserRef = useRef<string | null>(null);
+
   useEffect(() => {
-    handleFetchLiveSql(true);
-  }, [handleFetchLiveSql]);
+    if (!currentUser) {
+      setIsInitialLoading(true);
+      initialLoadUserRef.current = null;
+      return;
+    }
+    if (initialLoadUserRef.current === currentUser.username) return;
+    initialLoadUserRef.current = currentUser.username;
+    setIsInitialLoading(true);
+    handleFetchLiveSql(true).finally(() => setIsInitialLoading(false));
+  }, [currentUser, handleFetchLiveSql]);
 
   // Handler to clear demo data and reflect pure SQL state
   const handleClearDemoData = useCallback((includeInventory = false) => {
@@ -1025,6 +1046,28 @@ export const App: React.FC = () => {
   // If user not authenticated
   if (!currentUser) {
     return <LoginView onLogin={(user) => setCurrentUser(user)} />;
+  }
+
+  // Post-login, pre-dashboard: cover the initial Azure SQL fetch with a
+  // connecting screen instead of flashing "LOCAL CACHE / DEMO" while data
+  // loads. The sync itself still happens the same way in the background
+  // (handleFetchLiveSql) — this only changes what's on screen while it runs.
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0f1f38] px-4">
+        <div className="text-center">
+          <div className="w-16 h-16 rounded bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-[#1a3055] text-3xl shadow-lg mx-auto mb-5 animate-pulse">
+            E
+          </div>
+          <div className="font-extrabold text-2xl text-white tracking-wide">EMDAD SERVICES LLC</div>
+          <div className="text-amber-300 text-xs font-semibold mt-1">Well Intervention - Upstream Services</div>
+          <div className="flex items-center justify-center space-x-2 mt-6">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            <span className="text-slate-300 text-xs font-medium">Connecting to Azure SQL…</span>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Active counts for badges
