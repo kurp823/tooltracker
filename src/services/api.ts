@@ -232,6 +232,135 @@ function normalizeRTBatch(row: any): any {
 }
 
 /**
+ * tbl_Callouts + tbl_CalloutItems + tbl_CalloutSerials -> Callout
+ * (added 2026-09-08 — these five modules previously lived only in browser
+ * localStorage; the tables already existed, empty, and were never wired up.
+ * See tooltracker-full-modules-function-updates.js for the server side.)
+ */
+function normalizeCalloutItem(row: any): any {
+  return {
+    itemId: row.ItemID,
+    seq: Number(row.Seq ?? 0),
+    size: row.Size || '',
+    shortDesc: row.ShortDesc || '',
+    qty: Number(row.Qty ?? 0),
+    assigned: Number(row.Assigned ?? 0),
+    serialNos: Array.isArray(row.serialNos) ? row.serialNos : [],
+    status: row.Status || 'Pending',
+  };
+}
+
+function normalizeCallout(row: any): any {
+  const items = Array.isArray(row.items) ? row.items.map(normalizeCalloutItem) : [];
+  return {
+    id: row.CalloutID || row.id || '',
+    CalloutID: row.CalloutID || '',
+    rig: row.Rig || '',
+    well: row.Well || '',
+    client: row.Client || '',
+    contract: row.Contract || '',
+    poRef: row.PORef || '',
+    status: row.Status || 'Pending',
+    createdDate: row.CreatedDate || '',
+    createdBy: row.CreatedBy || '',
+    items,
+    jobId: row.jobId || null,
+  };
+}
+
+/** tbl_GatePass + tbl_GatePassLines -> GatePass */
+function normalizeGatePassLine(row: any): any {
+  return {
+    lineId: row.LineID,
+    serial: row.Serial || '',
+    assetNo: row.AssetNo || '',
+    shortDesc: row.ShortDesc || '',
+    size: row.Size || '',
+    qty: Number(row.Qty ?? 1),
+    condition: row.Condition || '',
+  };
+}
+
+function normalizeGatePass(row: any): any {
+  const toolLines = Array.isArray(row.toolLines) ? row.toolLines.map(normalizeGatePassLine) : [];
+  return {
+    id: row.GatePassID || row.id || '',
+    gpNumber: row.GPNumber || '',
+    supplier: row.Supplier || '',
+    gpDate: row.GPDate || '',
+    preparedBy: row.PreparedBy || '',
+    authorizedBy: row.AuthorizedBy || '',
+    notes: row.Notes || '',
+    toolLines,
+  };
+}
+
+/** tbl_Contracts -> ContractRecord */
+function normalizeContract(row: any): any {
+  return {
+    id: row.ContractID || row.id || '',
+    contractRef: row.ContractRef || '',
+    client: row.Client || '',
+    poNumber: row.PONumber || '',
+    currency: row.Currency || 'USD',
+    status: row.Status || 'Active',
+    contractValue: row.ContractValue != null ? Number(row.ContractValue) : null,
+    startDate: row.StartDate || null,
+    endDate: row.EndDate || null,
+    pbgNumber: row.PBGNumber || '',
+    pbgValue: row.PBGValue != null ? Number(row.PBGValue) : null,
+    pbgIssueDate: row.PBGIssueDate || null,
+    pbgExpiryDate: row.PBGExpiryDate || null,
+    invoicedToDate: row.InvoicedToDate != null ? Number(row.InvoicedToDate) : null,
+    notes: row.Notes || '',
+  };
+}
+
+/** tbl_Inspection -> InspectionRecord */
+function normalizeInspection(row: any): any {
+  return {
+    id: row.InspectionID || row.id || '',
+    woNumber: row.WONumber || '',
+    serial: row.Serial || '',
+    assetNo: row.AssetNo || '',
+    shortDesc: row.ShortDesc || '',
+    size: row.Size || '',
+    fromRtId: row.FromRTBatchID || null,
+    rtNumber: row.RTNumber || '',
+    receivedDate: row.ReceivedDate || '',
+    inspector: row.Inspector || '',
+    inspectionDate: row.InspectionDate || null,
+    status: row.Status || 'Pending',
+    reportNumber: row.ReportNumber || '',
+    disposition: row.Disposition || null,
+    notes: row.Notes || '',
+  };
+}
+
+/** tbl_Maintenance -> MaintenanceRecord */
+function normalizeMaintenance(row: any): any {
+  return {
+    id: row.MaintenanceID || row.id || '',
+    woNumber: row.WONumber || '',
+    serial: row.Serial || '',
+    assetNo: row.AssetNo || '',
+    shortDesc: row.ShortDesc || '',
+    size: row.Size || '',
+    fromInspectionId: row.FromInspectionID || null,
+    issue: row.Issue || '',
+    type: row.Type || 'InHouse',
+    vendor: row.Vendor || '',
+    assignedTo: row.AssignedTo || '',
+    startDate: row.StartDate || '',
+    estCompleteDate: row.EstCompleteDate || null,
+    completedDate: row.CompletedDate || null,
+    status: row.Status || 'In Progress',
+    cost: row.Cost != null ? Number(row.Cost) : null,
+    notes: row.Notes || '',
+  };
+}
+
+/**
  * Attempts to fetch live data from the Azure Function backend
  */
 export async function fetchLiveDatabaseData(): Promise<{
@@ -241,7 +370,11 @@ export async function fetchLiveDatabaseData(): Promise<{
     jobs?: any[];
     dtBatches?: any[];
     rtBatches?: any[];
+    callouts?: any[];
+    gatePasses?: any[];
     contracts?: any[];
+    inspections?: any[];
+    maintenance?: any[];
   };
   source: 'azure-function' | 'failed';
   message: string;
@@ -269,6 +402,16 @@ export async function fetchLiveDatabaseData(): Promise<{
             jobs: Array.isArray(payload.jobs) ? payload.jobs.map(normalizeJob) : [],
             dtBatches: Array.isArray(payload.dtBatches) ? payload.dtBatches.map(normalizeDTBatch) : [],
             rtBatches: Array.isArray(payload.rtBatches) ? payload.rtBatches.map(normalizeRTBatch) : [],
+            // Added 2026-09-08 — these five modules are only actually "live"
+            // once the Function's GET_ALL_DATA returns them (see
+            // tooltracker-full-modules-function-updates.js). Until that's
+            // deployed, payload.callouts etc. will be undefined and
+            // App.tsx keeps whatever it already has (local cache).
+            callouts: Array.isArray(payload.callouts) ? payload.callouts.map(normalizeCallout) : undefined,
+            gatePasses: Array.isArray(payload.gatePasses) ? payload.gatePasses.map(normalizeGatePass) : undefined,
+            contracts: Array.isArray(payload.contracts) ? payload.contracts.map(normalizeContract) : undefined,
+            inspections: Array.isArray(payload.inspections) ? payload.inspections.map(normalizeInspection) : undefined,
+            maintenance: Array.isArray(payload.maintenance) ? payload.maintenance.map(normalizeMaintenance) : undefined,
           },
           message: `Connected to Azure Function (${payload.inventory?.length || 0} tools, ${payload.jobs?.length || 0} jobs, ${payload.dtBatches?.length || 0} delivery tickets, ${payload.rtBatches?.length || 0} receiving tickets)`,
         };
@@ -283,6 +426,48 @@ export async function fetchLiveDatabaseData(): Promise<{
     source: 'failed',
     message: 'Unable to reach the Azure Function backend. Using local cache.',
   };
+}
+
+/**
+ * Save actions for the five modules that were previously localStorage-only
+ * (Callouts, Gate Passes, Contracts, Inspections, Maintenance). Each POSTs
+ * the full current record to the matching Azure Function action (see
+ * tooltracker-full-modules-function-updates.js) so it's written to Azure
+ * SQL and visible to every user/device, not just the browser that saved it.
+ */
+export async function saveCalloutApi(callout: any): Promise<{ success: boolean; message: string }> {
+  const result = await fetchFromApi('save_callout', { callout });
+  return result !== null
+    ? { success: true, message: 'Callout saved to Azure SQL.' }
+    : { success: false, message: 'Could not reach Azure SQL — callout saved locally only for now.' };
+}
+
+export async function saveGatePassApi(gatePass: any): Promise<{ success: boolean; message: string }> {
+  const result = await fetchFromApi('save_gate_pass', { gatePass });
+  return result !== null
+    ? { success: true, message: 'Gate pass saved to Azure SQL.' }
+    : { success: false, message: 'Could not reach Azure SQL — gate pass saved locally only for now.' };
+}
+
+export async function saveContractApi(contract: any): Promise<{ success: boolean; message: string }> {
+  const result = await fetchFromApi('save_contract', { contract });
+  return result !== null
+    ? { success: true, message: 'Contract saved to Azure SQL.' }
+    : { success: false, message: 'Could not reach Azure SQL — contract saved locally only for now.' };
+}
+
+export async function saveInspectionApi(inspection: any): Promise<{ success: boolean; message: string }> {
+  const result = await fetchFromApi('save_inspection', { inspection });
+  return result !== null
+    ? { success: true, message: 'Inspection saved to Azure SQL.' }
+    : { success: false, message: 'Could not reach Azure SQL — inspection saved locally only for now.' };
+}
+
+export async function saveMaintenanceApi(maintenance: any): Promise<{ success: boolean; message: string }> {
+  const result = await fetchFromApi('save_maintenance', { maintenance });
+  return result !== null
+    ? { success: true, message: 'Maintenance record saved to Azure SQL.' }
+    : { success: false, message: 'Could not reach Azure SQL — maintenance record saved locally only for now.' };
 }
 
 /**
