@@ -1,412 +1,166 @@
-/**
- * EMDAD Operations Platform - Type Definitions
- */
+import React, { useState } from 'react';
+import { User } from '../types';
+import { loginWithApi } from '../services/api';
 
-export type UserRole = 'Admin' | 'Handler' | 'QC' | 'Inspector' | 'Accounts' | 'Viewer' | 'Operations';
-
-export interface User {
-  id: number;
-  username: string;
-  name: string;
-  role: UserRole;
-  pass: string;
+interface LoginViewProps {
+  // NOTE (2026-09-08): this was previously declared as `onLoginSuccess`,
+  // but App.tsx has always passed `onLogin` — a real prop-name mismatch
+  // that would throw "onLoginSuccess is not a function" at runtime on a
+  // successful login in this exact file. Renamed to match App.tsx.
+  onLogin: (user: User) => void;
 }
 
-export type NavModule =
-  | 'dashboard'          // Operations Dashboard
-  | 'callouts'           // Rig Callouts
-  | 'jobs'               // Drilling Jobs
-  | 'dt'                 // Delivery Tickets (DT)
-  | 'rt'                 // Receiving Tickets (RT)
-  | 'gatepass'           // Security Gate Pass
-  | 'utilization'        // Fleet Utilization (Moved to Operations Module)
-  | 'inventory-dash'     // Inventory Dashboard
-  | 'inventory'          // Tool Fleet Catalog
-  | 'maintenance-dash'   // Maintenance & QC Dashboard
-  | 'inspection'         // QC Inspection Bay
-  | 'maintenance'        // Maintenance Orders
-  | 'billing-dash'       // Billing Dashboard
-  | 'contracts'          // Master Contracts
-  | 'settings';          // System & Azure SQL
+export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-export type ViewKey = NavModule;
+  // NOTE (2026-09-08): login now checks the real tbl_Users table (10 real
+  // rows) via the Azure Function's LOGIN action, instead of the hardcoded
+  // USERS array in data/initialData.ts (architecture-review-2026-09-06.md
+  // — "no server-side login check" finding). tbl_Users.Password shows no
+  // sign of hashing, so this compares as-stored; that's a separate
+  // security gap worth a follow-up fix, not something this change papers
+  // over.
+  const handleLogin = async (u?: string, p?: string) => {
+    const userToTry = (u || username).trim();
+    const passToTry = p || password;
+    setError('');
 
-export interface ToolItem {
-  id: string;          // SystemID (e.g. EMD-1125, 351)
-  serial: string;      // Serial Number / SystemID
-  assetNo: string;     // Asset/Part Number (e.g. DJ650-003)
-  size: string;        // e.g. 8", 6-3/4", 9-1/2"
-  shortDesc: string;   // Category / Tool Type (e.g. HYD DRILLING JAR)
-  desc: string;        // Full technical description
-  qty: number;
-  location: string;    // Emdad Base, On Rig, Inspection Bay, Workshop, Returned to Supplier
-  status: 'Good' | 'Repair' | 'Inspection' | 'Redress' | 'Removed' | 'On Rig';
-  ownership: string;   // EMDAD, MOTORMAX, EPIS, ELITE, SALTIRE, FLOW TOOLS, etc.
-  isEmdad: boolean;
-  oemSerial?: string;
-  supplier?: string;
-  addedDate?: string;
-  rig?: string;
-  well?: string;
-  contract?: string;
-  currentJobId?: string | null;
-}
+    if (!userToTry || !passToTry) {
+      setError('Please enter both username and password.');
+      return;
+    }
 
-export interface CalloutItem {
-  seq: number;
-  size: string;
-  shortDesc: string;
-  qty: number;
-  assigned: number;
-  serialNos: string[];
-  status: 'Pending' | 'Partial' | 'Assigned' | 'Released';
-}
-
-export interface Callout {
-  id: string;           // CAL-YY-NNNNN
-  CalloutID?: string;
-  rig: string;
-  well: string;
-  client: string;
-  contract?: string;
-  poRef?: string;
-  status: 'Active' | 'Forecast' | 'Closed' | 'Pending' | 'In Progress';
-  createdDate: string;
-  items: CalloutItem[];
-  jobId?: string | null;
-}
-
-export type JobLifecycleStatus =
-  | 'Open'
-  | 'Ongoing'
-  | 'Job completed and waiting signed docs'
-  | 'Job completed'
-  | 'Tickets submitted to billing team'
-  | 'Draft invoiced'
-  | 'Under SES approval'
-  | 'Final invoiced'
-  | 'Closed';
-
-export interface DrillingJob {
-  id: string;           // JOB-YY-NNNNN
-  JobID?: string;
-  jobNumber?: string;
-  calloutId?: string | null;
-  rig: string;
-  well: string;
-  client: string;
-  contract?: string;
-  poNumber?: string;
-  clientRef?: string;
-  erpRef?: string;
-  holeSection?: string;
-  serviceType?: string;
-  invoicingType?: 'PerJob' | 'Monthly';
-  currency?: string;
-  mobDate?: string | null;
-  demobDate?: string | null;
-  status: JobLifecycleStatus;
-  createdDate?: string;
-  createdBy?: string;
-  // Lifecycle timestamps & details
-  firstDtDate?: string | null;
-  lastRtDate?: string | null;
-  docsSignedDate?: string | null;
-  submittedToBillingDate?: string | null;
-  draftInvoicedDate?: string | null;
-  sesSubmittedDate?: string | null;
-  finalInvoicedDate?: string | null;
-  draftInvoiceNumber?: string;
-  sesNumber?: string;
-  legalInvoiceNumber?: string;
-  invoiceAmount?: number | null;
-  notes?: string;
-}
-
-export interface DTLine {
-  serial: string;
-  assetNo: string;
-  shortDesc: string;
-  desc: string;
-  size: string;
-  status: 'OnRig' | 'Returned';
-  rtBatchId?: string | null;
-  used?: boolean | null;
-  ownership: string;
-  isEmdad: boolean;
-  // Real columns from tbl_DeliveryTicketLines (added 2026-09-08 once the
-  // app was rewired from the empty tbl_DTBatchLines to the populated
-  // tbl_DeliveryTicketLines table — see api.ts header note)
-  itemNo?: number;
-  qty?: number;
-  remarks?: string;
-  dtNumber?: string;
-}
-
-export interface DTBatch {
-  id: string;           // DTB-timestamp
-  DTBatchID?: string;
-  dtNumber: string;     // DT-YY-NNNNN
-  jobId: string;
-  rmDate: string;
-  rmRef: string;
-  dispatchDate: string;
-  rig: string;
-  well: string;
-  contract?: string;
-  dispatchedBy: string;
-  recipient?: string;
-  notes?: string;
-  toolLines: DTLine[];
-  isLocked?: boolean;
-  lockedBy?: string;
-  lockedDate?: string;
-  // Document attachment
-  signedDocUrl?: string;
-  signedDocName?: string;
-  signedDate?: string;
-  isSigned?: boolean;
-  // Real columns from tbl_DeliveryTickets (added 2026-09-08 — see api.ts
-  // header note; this table replaced the empty tbl_DTBatches as the
-  // app's actual delivery-ticket source)
-  clientCode?: string;
-  poNumber?: string;
-  clientRef?: string;
-  vehicleVessel?: string;
-  driverName?: string;
-  lockStage?: string;
-  calloutRef?: string;
-  status?: string;
-  createdBy?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface RTLine {
-  serial: string;
-  assetNo: string;
-  shortDesc: string;
-  dtBatchId?: string;
-  used: boolean;
-  routedTo: string;
-  condition?: string;
-  size?: string;
-  ownership?: string;
-  // Real columns from tbl_ReceivingTicketLines (added 2026-09-08 — see
-  // api.ts header note)
-  itemNo?: number;
-  qty?: number;
-  remarks?: string;
-  routedAt?: string;
-  routedBy?: string;
-}
-
-export interface RTBatch {
-  id: string;           // RTB-timestamp
-  RTBatchID?: string;
-  rtNumber: string;     // RT-YY-NNNNN
-  jobId: string;
-  rtDate: string;
-  backloadRmDate?: string;
-  contract?: string;
-  rig: string;
-  well: string;
-  receivedBy: string;
-  toolLines: RTLine[];
-  // Document attachment
-  signedDocUrl?: string;
-  signedDocName?: string;
-  signedDate?: string;
-  isSigned?: boolean;
-  // Real columns from tbl_ReceivingTickets (added 2026-09-08 — this table
-  // replaced the empty tbl_RTBatches as the app's actual receiving-ticket
-  // source; see api.ts header note)
-  linkedDtNumber?: string;
-  clientCode?: string;
-  manifestNumber?: string;
-  clientRef?: string;
-  vehicleVessel?: string;
-  isLocked?: boolean;
-  lockedBy?: string;
-  lockedDate?: string;
-  lockStage?: string;
-  status?: string;
-  createdBy?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface GatePassLine {
-  serial: string;
-  assetNo: string;
-  shortDesc: string;
-  size: string;
-  qty: number;
-  condition?: string;
-}
-
-export interface GatePass {
-  id: string;
-  gpNumber: string;     // GP-YY-NNNNN
-  supplier: string;
-  gpDate: string;
-  preparedBy: string;
-  authorizedBy?: string;
-  notes?: string;
-  toolLines: GatePassLine[];
-}
-
-export interface InspectionRecord {
-  id: string;           // INS-YY-NNNNN
-  woNumber: string;     // WO-INS-YY-NNNNN
-  serial: string;
-  assetNo: string;
-  shortDesc: string;
-  size: string;
-  fromRtId?: string | null;
-  rtNumber?: string;
-  receivedDate: string;
-  inspector?: string;
-  inspectionDate?: string | null;
-  status: 'Pending' | 'Complete' | 'Pass' | 'Fail';
-  reportNumber?: string;
-  hasReport?: boolean;
-  reportDate?: string | null;
-  reportDocUrl?: string;
-  reportDocName?: string;
-  qcApproved?: boolean;
-  qcApprovedBy?: string | null;
-  qcApprovedDate?: string | null;
-  disposition?: string | null;
-  notes?: string;
-}
-
-export interface MaintenanceRecord {
-  id: string;           // MNT-YY-NNNNN
-  woNumber: string;     // WO-MNT-YY-NNNNN
-  serial: string;
-  assetNo: string;
-  shortDesc: string;
-  size: string;
-  fromInspectionId?: string | null;
-  issue: string;
-  type: 'InHouse' | 'Vendor' | 'ThirdParty';
-  vendor?: string;
-  vendorPoRef?: string;
-  vendorQuoteRef?: string;
-  vendorInvoiceRef?: string;
-  repairScope?: string;
-  partsReplaced?: string;
-  assignedTo?: string;
-  startDate: string;
-  dispatchToVendorDate?: string | null;
-  receivedFromVendorDate?: string | null;
-  estCompleteDate?: string | null;
-  completedDate?: string | null;
-  status: 'In Progress' | 'Sent to Vendor' | 'Received from Vendor' | 'Ready for QC' | 'Awaiting Parts' | 'Complete - Ready' | 'Completed' | 'Closed';
-  stage?: 'Workshop' | 'Dispatched to Vendor' | 'Received from Vendor' | 'Ready for QC' | 'Completed';
-  cost?: number | null;
-  estCost?: number | null;
-  hasReport?: boolean;
-  reportDocUrl?: string;
-  reportDocName?: string;
-  thirdPartyCocRef?: string;
-  hasThirdPartyCoc?: boolean;
-  thirdPartyCocDocUrl?: string;
-  thirdPartyCocDocName?: string;
-  notes?: string;
-}
-
-export interface JobUtRow {
-  id: string;
-  serial: string;
-  assetNo: string;
-  desc: string;
-  dtNum: string;
-  dtDate: string;
-  rmDateDispatch: string;
-  rtNum?: string;
-  rtDate?: string;
-  rmDateBackload?: string;
-  rotHours?: number | string;
-}
-
-export interface JobUtData {
-  jobId: string;
-  cells: Record<string, string>; // key: `${rowId}|${YYYY-MM-DD}` => 'S' | '1' | 'B' | ''
-  rmDates?: Record<string, { rmDateDispatch?: string; rmDateBackload?: string; rotHours?: string }>;
-  savedMonths?: Record<string, { at: string }>;
-  rates?: {
-    currency: string;
-    standby: number;
-    ops: number;
-    cap: number | null;
+    setIsSubmitting(true);
+    try {
+      const result = await loginWithApi(userToTry, passToTry);
+      if (result.success && result.user) {
+        onLogin(result.user);
+      } else {
+        setError(result.message || 'Invalid username or password.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
-  signedDocUrl?: string;
-  signedDocName?: string;
-  signedDate?: string;
-  isSigned?: boolean;
-}
 
-export interface ContractRecord {
-  id: string;
-  contractNo?: string;
-  contractRef?: string;
-  name?: string;
-  client: string;
-  poNumber?: string;
-  currency: string;
-  status: 'Active' | 'Completed' | 'Expired';
-  contractValue?: number | null;
-  startDate?: string | null;
-  endDate?: string | null;
-  standbyDiscountPct?: number;
-  description?: string;
-  pbgNumber?: string;
-  pbgValue?: number | null;
-  pbgIssueDate?: string | null;
-  pbgExpiryDate?: string | null;
-  invoicedToDate?: number | null;
-  notes?: string;
-}
+  const handleQuickFill = (u: string, p: string) => {
+    setUsername(u);
+    setPassword(p);
+    handleLogin(u, p);
+  };
 
-export interface MovementLog {
-  id: number;
-  serial: string;
-  action: string;
-  from: string;
-  to: string;
-  ref: string;
-  date: string;
-  by: string;
-}
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0f1f38] px-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <div className="w-14 h-14 rounded bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-[#1a3055] text-2xl shadow-lg mx-auto mb-4">
+            E
+          </div>
+          <div className="font-extrabold text-xl text-white tracking-wide">EMDAD SERVICES LLC</div>
+          <div className="text-slate-400 text-[11px] mt-1">
+            Oilfield Tool Tracking, Rental Operations &amp; Azure SQL Sync
+          </div>
+        </div>
 
-export interface ToastMessage {
-  id: string;
-  msg: string;
-  type?: 'ok' | 'err' | 'wrn' | 'inf';
-}
+        <div className="bg-white rounded p-6 shadow-2xl border border-[#b8c9db]">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleLogin();
+            }}
+          >
+            <div className="mb-4">
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Username
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={isSubmitting}
+                className="w-full border border-[#b8c9db] rounded px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+              />
+            </div>
 
-export interface AppState {
-  inventory: ToolItem[];
-  callouts: Callout[];
-  jobs: DrillingJob[];
-  dtBatches: DTBatch[];
-  rtBatches: RTBatch[];
-  inspections: InspectionRecord[];
-  maintenance: MaintenanceRecord[];
-  gatePasses: GatePass[];
-  contracts: ContractRecord[];
-}
+            <div className="mb-5">
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isSubmitting}
+                className="w-full border border-[#b8c9db] rounded px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+              />
+            </div>
 
-export interface SubmittedInvoiceRecord {
-  invoiceNo: string;
-  jobId: string;
-  periodYM: string;
-  submittedAt: string;
-  subtotal: number;
-  vatAmount: number;
-  totalWithVat: number;
-  status: 'Submitted' | 'Draft' | 'Final';
-  notes?: string;
-}
+            {error && (
+              <div className="mb-3 text-[11px] text-rose-700 bg-rose-50 border border-rose-300 rounded px-2.5 py-2">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full bg-[#ffd875] hover:brightness-105 text-[#4a2e00] font-bold py-2 rounded text-xs border border-[#c8860d] shadow-sm transition cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+            >
+              {isSubmitting ? 'Signing In…' : <>Sign In &rarr;</>}
+            </button>
+          </form>
+
+          <div className="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-500 space-y-1">
+            <div className="font-bold text-slate-400 uppercase tracking-wider mb-1">Quick Sign-In (dev/demo)</div>
+            <div className="flex items-center justify-between">
+              <div>
+                <span
+                  className="font-mono font-bold text-slate-700 cursor-pointer hover:underline"
+                  onClick={() => handleQuickFill('ravi', 'Ravi@2026')}
+                >
+                  ravi
+                </span>{' '}
+                (Admin)
+              </div>
+              <div>
+                <span
+                  className="font-mono font-bold text-slate-700 cursor-pointer hover:underline"
+                  onClick={() => handleQuickFill('azim', 'Azim@2026')}
+                >
+                  azim
+                </span>{' '}
+                (Handler)
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <span
+                  className="font-mono font-bold text-slate-700 cursor-pointer hover:underline"
+                  onClick={() => handleQuickFill('nihas', 'Nihas@2026')}
+                >
+                  nihas
+                </span>{' '}
+                (QC)
+              </div>
+              <div>
+                <span
+                  className="font-mono font-bold text-slate-700 cursor-pointer hover:underline"
+                  onClick={() => handleQuickFill('viewer', 'View@2026')}
+                >
+                  viewer
+                </span>{' '}
+                (Viewer)
+              </div>
+            </div>
+            <div className="text-slate-400 pt-1">
+              These now authenticate against the live Users table, not a hardcoded list — they'll only work if these accounts exist in tbl_Users with these passwords.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
