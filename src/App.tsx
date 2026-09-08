@@ -1063,7 +1063,7 @@ export const App: React.FC = () => {
           <div className="text-amber-300 text-xs font-semibold mt-1">Well Intervention - Upstream Services</div>
           <div className="flex items-center justify-center space-x-2 mt-6">
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-            <span className="text-slate-300 text-xs font-medium">Connecting to Azure SQL…</span>
+            <span className="text-slate-300 text-xs font-medium">Welcome..…</span>
           </div>
         </div>
       </div>
