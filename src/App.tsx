@@ -13,7 +13,6 @@ import {
   ViewKey,
 } from './types';
 import {
-  INITIAL_USER,
   INITIAL_INVENTORY,
   INITIAL_CALLOUTS,
   INITIAL_JOBS,
@@ -80,8 +79,19 @@ const safeSetLocalStorage = (key: string, value: unknown) => {
 export const App: React.FC = () => {
   // Auth state
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('emdad_current_user');
-    return saved ? JSON.parse(saved) : INITIAL_USER;
+    // NOTE (2026-09-08): this previously fell back to INITIAL_USER when
+    // nothing was cached, and since INITIAL_USER is always truthy the
+    // `if (!currentUser) return <LoginView />` gate below never fired for
+    // a fresh browser/incognito/cleared-cache session — the app booted
+    // straight into the dashboard (and immediately pulled live SQL data)
+    // without ever showing Login or Welcome. Must default to null so an
+    // uncached session always has to authenticate via LoginView.
+    try {
+      const saved = localStorage.getItem('emdad_current_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
 
   // Current Active Module View
