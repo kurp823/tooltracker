@@ -491,6 +491,30 @@ export async function saveJobApi(job: any): Promise<{ success: boolean; message:
 }
 
 /**
+ * Added 2026-09-08 — closes the last real gap: new/edited Delivery and
+ * Receiving Tickets previously only reached SQL via the manual "Sync"
+ * button (which silently swallows failures). These call new
+ * `savedeliveryticket`/`savereceivingticket` actions targeting the real
+ * tbl_DeliveryTickets/tbl_ReceivingTickets tables (NOT the old
+ * savedtbatch/savertbatch actions, which point at the empty
+ * tbl_DTBatches/tbl_RTBatches tables) — see
+ * tooltracker-dt-rt-save-actions.js for the server side.
+ */
+export async function saveDeliveryTicketApi(batch: any): Promise<{ success: boolean; message: string }> {
+  const result = await fetchFromApi('savedeliveryticket', { batch });
+  return result !== null
+    ? { success: true, message: 'Delivery ticket saved to Azure SQL.' }
+    : { success: false, message: 'Could not reach Azure SQL — delivery ticket saved locally only for now.' };
+}
+
+export async function saveReceivingTicketApi(batch: any): Promise<{ success: boolean; message: string }> {
+  const result = await fetchFromApi('savereceivingticket', { batch });
+  return result !== null
+    ? { success: true, message: 'Receiving ticket saved to Azure SQL.' }
+    : { success: false, message: 'Could not reach Azure SQL — receiving ticket saved locally only for now.' };
+}
+
+/**
  * General API caller
  */
 export async function fetchFromApi<T = any>(
