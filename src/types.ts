@@ -10,7 +10,6 @@ export interface User {
   name: string;
   role: UserRole;
   pass: string;
-  mustChangePassword?: boolean;
 }
 
 export type NavModule =
@@ -135,6 +134,13 @@ export interface DTLine {
   used?: boolean | null;
   ownership: string;
   isEmdad: boolean;
+  // Real columns from tbl_DeliveryTicketLines (added 2026-09-08 once the
+  // app was rewired from the empty tbl_DTBatchLines to the populated
+  // tbl_DeliveryTicketLines table — see api.ts header note)
+  itemNo?: number;
+  qty?: number;
+  remarks?: string;
+  dtNumber?: string;
 }
 
 export interface DTBatch {
@@ -160,6 +166,20 @@ export interface DTBatch {
   signedDocName?: string;
   signedDate?: string;
   isSigned?: boolean;
+  // Real columns from tbl_DeliveryTickets (added 2026-09-08 — see api.ts
+  // header note; this table replaced the empty tbl_DTBatches as the
+  // app's actual delivery-ticket source)
+  clientCode?: string;
+  poNumber?: string;
+  clientRef?: string;
+  vehicleVessel?: string;
+  driverName?: string;
+  lockStage?: string;
+  calloutRef?: string;
+  status?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface RTLine {
@@ -172,6 +192,13 @@ export interface RTLine {
   condition?: string;
   size?: string;
   ownership?: string;
+  // Real columns from tbl_ReceivingTicketLines (added 2026-09-08 — see
+  // api.ts header note)
+  itemNo?: number;
+  qty?: number;
+  remarks?: string;
+  routedAt?: string;
+  routedBy?: string;
 }
 
 export interface RTBatch {
@@ -191,6 +218,22 @@ export interface RTBatch {
   signedDocName?: string;
   signedDate?: string;
   isSigned?: boolean;
+  // Real columns from tbl_ReceivingTickets (added 2026-09-08 — this table
+  // replaced the empty tbl_RTBatches as the app's actual receiving-ticket
+  // source; see api.ts header note)
+  linkedDtNumber?: string;
+  clientCode?: string;
+  manifestNumber?: string;
+  clientRef?: string;
+  vehicleVessel?: string;
+  isLocked?: boolean;
+  lockedBy?: string;
+  lockedDate?: string;
+  lockStage?: string;
+  status?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface GatePassLine {
