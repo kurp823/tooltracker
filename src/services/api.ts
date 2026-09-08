@@ -314,17 +314,23 @@ export async function fetchFromApi<T = any>(
 }
 
 /**
- * Real server-side login against tbl_Users via the Azure Function's LOGIN
- * action. Replaces the previous client-side check against a hardcoded
+ * Real server-side login against tbl_Users via the Azure Function's real
+ * `login` action (lowercase — confirmed from the actual Kudu source, not
+ * guessed). Replaces the previous client-side check against a hardcoded
  * array in data/initialData.ts (architecture-review-2026-09-06.md finding
  * under "Login" — no server-side check existed before this).
  *
- * NOTE: tbl_Users.Password has no indication of hashing. This function
- * sends the password as typed and the server compares it as stored. That
- * means credentials are only as safe as the transport (HTTPS) — the
- * underlying plaintext-storage/comparison is a real gap worth a follow-up
- * fix (e.g. bcrypt + a one-time migration prompting a password reset for
- * the 10 existing users), not something silently solved by this change.
+ * The Function's `login` case already returns exactly the shape the app's
+ * User type needs (id, username, name, role) plus `email` and
+ * `mustChangePassword`, via `ok(context, user)` / `err(context, msg, code)`
+ * helpers — this parses that {success, data|error} envelope directly
+ * rather than remapping PascalCase columns (there's no remapping to do).
+ *
+ * NOTE: tbl_Users.Password has no indication of hashing (plain
+ * varchar(200)). This sends the password as typed and the server compares
+ * it as stored. That's a real gap worth a follow-up fix (e.g. bcrypt with
+ * a one-time forced reset for the 10 existing users), not something this
+ * change silently solves.
  */
 export async function loginWithApi(
   username: string,
@@ -332,34 +338,64 @@ export async function loginWithApi(
 ): Promise<{ success: boolean; user?: any; message: string }> {
   const endpoint = getApiEndpoint();
   try {
-    const res = await fetch(`${endpoint}?action=LOGIN&env=live`, {
+    const res = await fetch(`${endpoint}?action=login&env=live`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'LOGIN', env: 'live', username, password }),
+      body: JSON.stringify({ action: 'login', env: 'live', username, password }),
     });
     const json = await res.json().catch(() => null);
-    if (res.ok && json && json.success && json.user) {
-      const u = json.user;
+    // The Function's ok()/err() envelope: { success: true, data: user } or
+    // { success: false, error: msg }. Handled defensively in case that
+    // envelope shape differs from what fetchFromApi elsewhere assumes.
+    const user = json?.data ?? json?.user;
+    if (res.ok && json?.success !== false && user?.id) {
       return {
         success: true,
         message: 'Login successful.',
         user: {
-          id: u.UserID ?? u.id,
-          username: u.Username ?? u.username,
-          name: u.FullName ?? u.name,
-          role: u.Role ?? u.role,
+          id: user.id,
+          username: user.username,
+          name: user.name,
+          role: user.role,
+          email: user.email,
+          mustChangePassword: Boolean(user.mustChangePassword),
         },
       };
     }
     return {
       success: false,
-      message: (json && (json.error || json.message)) || 'Invalid username or password.',
+      message: json?.error || json?.message || 'Invalid username or password.',
     };
   } catch (err: any) {
     return {
       success: false,
       message: 'Unable to reach the login service. Check your connection.',
     };
+  }
+}
+
+/**
+ * Forces a password change via the Function's real `change_password`
+ * action, used when `loginWithApi` returns `mustChangePassword: true`.
+ */
+export async function changePasswordWithApi(
+  userId: number,
+  newPassword: string
+): Promise<{ success: boolean; message: string }> {
+  const endpoint = getApiEndpoint();
+  try {
+    const res = await fetch(`${endpoint}?action=change_password&env=live`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'change_password', env: 'live', userId, newPassword }),
+    });
+    const json = await res.json().catch(() => null);
+    if (res.ok && json?.success !== false) {
+      return { success: true, message: 'Password updated.' };
+    }
+    return { success: false, message: json?.error || json?.message || 'Failed to update password.' };
+  } catch (err: any) {
+    return { success: false, message: 'Unable to reach the login service. Check your connection.' };
   }
 }
 
