@@ -9,7 +9,13 @@ export interface User {
   username: string;
   name: string;
   role: UserRole;
-  pass: string;
+  // Optional now (2026-09-08): a server-authenticated login (tbl_Users via
+  // the Function's real `login` action) never sends the password back to
+  // the client, so this is only populated by the old hardcoded-array demo
+  // data path in initialData.ts.
+  pass?: string;
+  email?: string;
+  mustChangePassword?: boolean;
 }
 
 export type NavModule =
