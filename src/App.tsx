@@ -24,12 +24,20 @@ import {
   INITIAL_GATE_PASSES,
   INITIAL_CONTRACTS,
 } from './data/initialData';
-import { syncWithAzureSql, fetchLiveDatabaseData, DbConnectionStatus } from './services/api';
+import {
+  syncWithAzureSql,
+  fetchLiveDatabaseData,
+  DbConnectionStatus,
+  saveCalloutApi,
+  saveGatePassApi,
+  saveContractApi,
+  saveInspectionApi,
+  saveMaintenanceApi,
+} from './services/api';
 import { Toast, ToastNotification } from './components/Toast';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { LoginView } from './components/LoginView';
-import { ChangePasswordView } from './components/ChangePasswordView';
 import { DashboardView } from './components/DashboardView';
 import { InventoryView } from './components/InventoryView';
 import { CalloutsView } from './components/CalloutsView';
@@ -46,13 +54,33 @@ import { InventoryDashboardView } from './components/InventoryDashboardView';
 import { MaintenanceDashboardView } from './components/MaintenanceDashboardView';
 import { BillingDashboardView } from './components/BillingDashboardView';
 
+// Safe localStorage write — never lets a quota failure crash the app.
+//
+// NOTE (2026-09-08): with real Azure SQL data flowing in (2,643 delivery
+// tickets, 2,424 receiving tickets, 5,000+ inventory rows, each DT/RT
+// batch now carrying nested, Inventory-enriched toolLines), JSON-stringifying
+// inventory/jobs/dtBatches/rtBatches routinely exceeds the browser's
+// ~5-10MB localStorage quota. localStorage.setItem throws synchronously
+// when that happens, and since these calls previously ran uncaught inside
+// useEffect, that exception was crashing the entire app to a blank white
+// screen on every load once live data got large enough — exactly the
+// failure mode architecture-review-2026-09-06.md finding #3 warned about,
+// now confirmed happening for ticket data (not just document attachments).
+const safeSetLocalStorage = (key: string, value: unknown) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.warn(`Skipped saving '${key}' to local cache (likely over the browser storage quota):`, e);
+  }
+};
+
 export const App: React.FC = () => {
   // Auth state
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('emdad_current_user');
-    return saved ? JSON.parse(saved) : null;
+    return saved ? JSON.parse(saved) : INITIAL_USER;
   });
-const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User | null>(null);
+
   // Current Active Module View
   const [activeView, setActiveView] = useState<ViewKey>('dashboard');
 
@@ -65,8 +93,7 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
 
   // Sync state
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('saved');
-  // Blocks rendering real data until the first live-SQL fetch attempt finishes
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
   // Toasts
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
 
@@ -82,7 +109,17 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
   // Check if Pure SQL / Production mode is active (empty state when no live SQL data exists)
   const isPureSqlMode = typeof window !== 'undefined' && localStorage.getItem('emdad_mode') === 'production';
 
-  // Primary Domain State (Loaded from localStorage if present, else empty in pure SQL mode or initial catalogs)
+  // Primary Domain State
+  //
+  // NOTE (2026-09-08): inventory/jobs/dtBatches/rtBatches are backed by live
+  // Azure SQL and re-fetched fresh via handleFetchLiveSql() on every app
+  // load (see the "Initial load check on startup" effect below). We still
+  // read any old cached copy here as a harmless first-paint placeholder,
+  // but we no longer WRITE these four back to localStorage (see the
+  // persistence effects further down) — at real production volume that
+  // write reliably exceeds the browser's storage quota and was crashing
+  // the app. The live fetch overwrites whatever placeholder is used here
+  // within moments of mount.
   const [inventory, setInventory] = useState<ToolItem[]>(() => {
     const s = localStorage.getItem('emdad_inventory');
     if (s) return JSON.parse(s);
@@ -138,36 +175,21 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
   });
 
   // LocalStorage Persistence
-  useEffect(() => {
-    localStorage.setItem('emdad_inventory', JSON.stringify(inventory));
-  }, [inventory]);
-  useEffect(() => {
-    localStorage.setItem('emdad_callouts', JSON.stringify(callouts));
-  }, [callouts]);
-  useEffect(() => {
-    localStorage.setItem('emdad_jobs', JSON.stringify(jobs));
-  }, [jobs]);
-  useEffect(() => {
-    localStorage.setItem('emdad_dt_batches', JSON.stringify(dtBatches));
-  }, [dtBatches]);
-  useEffect(() => {
-    localStorage.setItem('emdad_rt_batches', JSON.stringify(rtBatches));
-  }, [rtBatches]);
-  useEffect(() => {
-    localStorage.setItem('emdad_inspections', JSON.stringify(inspections));
-  }, [inspections]);
-  useEffect(() => {
-    localStorage.setItem('emdad_maintenance', JSON.stringify(maintenance));
-  }, [maintenance]);
-  useEffect(() => {
-    localStorage.setItem('emdad_gate_passes', JSON.stringify(gatePasses));
-  }, [gatePasses]);
-  useEffect(() => {
-    localStorage.setItem('emdad_contracts', JSON.stringify(contracts));
-  }, [contracts]);
+  //
+  // NONE of the domain collections are written to localStorage anymore
+  // (2026-09-08). Inventory/Jobs/DTBatches/RTBatches were already backed by
+  // live Azure SQL. Callouts/Inspections/Maintenance/GatePasses/Contracts
+  // are now ALSO backed by live Azure SQL (see saveCalloutApi/
+  // saveGatePassApi/saveContractApi/saveInspectionApi/saveMaintenanceApi
+  // calls in the handlers below, and tooltracker-full-modules-function-
+  // updates.js for the server side) — every save handler pushes straight to
+  // SQL so the data is visible to every user, on every device, immediately.
+  // The only thing still cached locally is currentUser, purely so a
+  // refresh doesn't force a re-login — that's a session convenience, not a
+  // data store.
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('emdad_current_user', JSON.stringify(currentUser));
+      safeSetLocalStorage('emdad_current_user', currentUser);
     } else {
       localStorage.removeItem('emdad_current_user');
     }
@@ -204,6 +226,27 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
           }
           if (res.data.rtBatches !== undefined) {
             setRtBatches(res.data.rtBatches);
+          }
+          // Added 2026-09-08 — these five modules are now backed by Azure
+          // SQL too (see tooltracker-full-modules-function-updates.js).
+          // Guarded with `!== undefined` the same way as the four above, so
+          // if the Function hasn't been redeployed yet, whatever's already
+          // in state (from local cache) is left alone instead of being
+          // wiped to empty.
+          if (res.data.callouts !== undefined) {
+            setCallouts(res.data.callouts);
+          }
+          if (res.data.gatePasses !== undefined) {
+            setGatePasses(res.data.gatePasses);
+          }
+          if (res.data.contracts !== undefined) {
+            setContracts(res.data.contracts);
+          }
+          if (res.data.inspections !== undefined) {
+            setInspections(res.data.inspections);
+          }
+          if (res.data.maintenance !== undefined) {
+            setMaintenance(res.data.maintenance);
           }
           setDbStatus({
             isConnected: true,
@@ -245,8 +288,6 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
         if (!isSilent) {
           showToast('Unable to reach Azure SQL endpoint.', 'error');
         }
-      }  finally {
-        setIsInitialLoading(false);
       }
     },
     [showToast, inventory.length, jobs.length, dtBatches.length, rtBatches.length]
@@ -260,14 +301,14 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
   // Handler to clear demo data and reflect pure SQL state
   const handleClearDemoData = useCallback((includeInventory = false) => {
     localStorage.setItem('emdad_mode', 'production');
-    localStorage.setItem('emdad_jobs', '[]');
-    localStorage.setItem('emdad_dt_batches', '[]');
-    localStorage.setItem('emdad_rt_batches', '[]');
-    localStorage.setItem('emdad_callouts', '[]');
-    localStorage.setItem('emdad_inspections', '[]');
-    localStorage.setItem('emdad_maintenance', '[]');
-    localStorage.setItem('emdad_gate_passes', '[]');
-    localStorage.setItem('emdad_contracts', '[]');
+    localStorage.removeItem('emdad_jobs');
+    localStorage.removeItem('emdad_dt_batches');
+    localStorage.removeItem('emdad_rt_batches');
+    localStorage.removeItem('emdad_callouts');
+    localStorage.removeItem('emdad_inspections');
+    localStorage.removeItem('emdad_maintenance');
+    localStorage.removeItem('emdad_gate_passes');
+    localStorage.removeItem('emdad_contracts');
     setJobs([]);
     setDtBatches([]);
     setRtBatches([]);
@@ -277,24 +318,10 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
     setGatePasses([]);
     setContracts([]);
     if (includeInventory) {
-      localStorage.setItem('emdad_inventory', '[]');
+      localStorage.removeItem('emdad_inventory');
       setInventory([]);
-      showToast('All records and inventory wiped to 0. Ready for Azure SQL.', 'success');
-    } else {
-      // If keeping inventory catalog, recall all tools deployed to demo rigs back to Base/Ready
-      setInventory((prev) => {
-        const cleaned = prev.map((t) => ({
-          ...t,
-          status: (t.status === 'On Rig' ? 'Good' : t.status) as any,
-          location: (t.location === 'On Rig' ? 'Base / Workshop' : t.location) as any,
-          rig: undefined,
-          currentJobId: undefined,
-        }));
-        localStorage.setItem('emdad_inventory', JSON.stringify(cleaned));
-        return cleaned;
-      });
-      showToast('Demo operational records cleared. All tools returned to Base (0 active on rig).', 'success');
     }
+    showToast('Demo records cleared. Clean production SQL state active.', 'success');
   }, [showToast]);
 
   // Sync with Azure SQL
@@ -364,6 +391,9 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
         return prev.map((c) => (c.id === saved.id ? saved : c));
       }
       return [saved, ...prev];
+    });
+    saveCalloutApi(saved).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
     });
     showToast(`Callout ${saved.id} saved successfully.`, 'success');
   };
@@ -536,6 +566,11 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
 
     if (newInspections.length > 0) {
       setInspections((prev) => [...newInspections, ...prev]);
+      newInspections.forEach((ins) => {
+        saveInspectionApi(ins).then((r) => {
+          if (!r.success) showToast(r.message, 'error');
+        });
+      });
     }
 
     setInventory((prev) =>
@@ -570,6 +605,9 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
   // Gate Pass Actions
   const handleSaveGatePass = (gp: GatePass, removedTools: ToolItem[]) => {
     setGatePasses((prev) => [gp, ...prev]);
+    saveGatePassApi(gp).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
+    });
     const removedIds = new Set(removedTools.map((t) => t.id));
     setInventory((prev) =>
       prev.map((t) => {
@@ -594,10 +632,14 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
   ) => {
     const ins = inspections.find((i) => i.id === insId);
     if (!ins) return;
+    const mergedIns = { ...ins, ...updates };
 
     setInspections((prev) =>
-      prev.map((i) => (i.id === insId ? { ...i, ...updates } : i))
+      prev.map((i) => (i.id === insId ? mergedIns : i))
     );
+    saveInspectionApi(mergedIns).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
+    });
 
     if (updates.status === 'Pass') {
       setInventory((prev) =>
@@ -611,6 +653,9 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
     } else if (updates.status === 'Fail') {
       if (newMaintenanceWO) {
         setMaintenance((prev) => [newMaintenanceWO, ...prev]);
+        saveMaintenanceApi(newMaintenanceWO).then((r) => {
+          if (!r.success) showToast(r.message, 'error');
+        });
       }
       setInventory((prev) =>
         prev.map((t) =>
@@ -629,6 +674,9 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
   // Maintenance Actions
   const handleSaveMaintenance = (record: MaintenanceRecord) => {
     setMaintenance((prev) => [record, ...prev]);
+    saveMaintenanceApi(record).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
+    });
     setInventory((prev) =>
       prev.map((t) =>
         t.serial === record.serial
@@ -655,26 +703,24 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
   ) => {
     const mnt = maintenance.find((m) => m.id === mId);
     if (!mnt) return;
+    const mergedMnt: MaintenanceRecord = {
+      ...mnt,
+      type: 'Vendor',
+      vendor: vendorName,
+      vendorPoRef,
+      vendorQuoteRef,
+      estCost,
+      dispatchToVendorDate: dispatchDate,
+      repairScope,
+      status: 'Sent to Vendor',
+      stage: 'Dispatched to Vendor',
+      notes: notes || mnt.notes,
+    };
 
-    setMaintenance((prev) =>
-      prev.map((m) =>
-        m.id === mId
-          ? {
-              ...m,
-              type: 'Vendor',
-              vendor: vendorName,
-              vendorPoRef,
-              vendorQuoteRef,
-              estCost,
-              dispatchToVendorDate: dispatchDate,
-              repairScope,
-              status: 'Sent to Vendor',
-              stage: 'Dispatched to Vendor',
-              notes: notes || m.notes,
-            }
-          : m
-      )
-    );
+    setMaintenance((prev) => prev.map((m) => (m.id === mId ? mergedMnt : m)));
+    saveMaintenanceApi(mergedMnt).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
+    });
 
     setInventory((prev) =>
       prev.map((t) =>
@@ -701,23 +747,21 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
   ) => {
     const mnt = maintenance.find((m) => m.id === mId);
     if (!mnt) return;
+    const mergedMnt: MaintenanceRecord = {
+      ...mnt,
+      receivedFromVendorDate: receivedDate,
+      vendorInvoiceRef,
+      cost: actualCost !== null ? actualCost : mnt.cost,
+      partsReplaced,
+      status: 'Received from Vendor',
+      stage: 'Received from Vendor',
+      notes: notes || mnt.notes,
+    };
 
-    setMaintenance((prev) =>
-      prev.map((m) =>
-        m.id === mId
-          ? {
-              ...m,
-              receivedFromVendorDate: receivedDate,
-              vendorInvoiceRef,
-              cost: actualCost !== null ? actualCost : m.cost,
-              partsReplaced,
-              status: 'Received from Vendor',
-              stage: 'Received from Vendor',
-              notes: notes || m.notes,
-            }
-          : m
-      )
-    );
+    setMaintenance((prev) => prev.map((m) => (m.id === mId ? mergedMnt : m)));
+    saveMaintenanceApi(mergedMnt).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
+    });
 
     setInventory((prev) =>
       prev.map((t) =>
@@ -770,18 +814,19 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
     };
 
     setInspections((prev) => [newIns, ...prev]);
+    saveInspectionApi(newIns).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
+    });
 
-    setMaintenance((prev) =>
-      prev.map((m) =>
-        m.id === mId
-          ? {
-              ...m,
-              status: 'Ready for QC',
-              stage: 'Ready for QC',
-            }
-          : m
-      )
-    );
+    const mergedMnt: MaintenanceRecord = {
+      ...mnt,
+      status: 'Ready for QC',
+      stage: 'Ready for QC',
+    };
+    setMaintenance((prev) => prev.map((m) => (m.id === mId ? mergedMnt : m)));
+    saveMaintenanceApi(mergedMnt).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
+    });
 
     setInventory((prev) =>
       prev.map((t) =>
@@ -807,20 +852,18 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
   ) => {
     const mnt = maintenance.find((m) => m.id === mId);
     if (!mnt) return;
+    const mergedMnt: MaintenanceRecord = {
+      ...mnt,
+      status: 'Completed',
+      completedDate,
+      cost: cost !== null ? cost : mnt.cost,
+      notes: notes || mnt.notes,
+    };
 
-    setMaintenance((prev) =>
-      prev.map((m) =>
-        m.id === mId
-          ? {
-              ...m,
-              status: 'Completed',
-              completedDate,
-              cost: cost !== null ? cost : m.cost,
-              notes: notes || m.notes,
-            }
-          : m
-      )
-    );
+    setMaintenance((prev) => prev.map((m) => (m.id === mId ? mergedMnt : m)));
+    saveMaintenanceApi(mergedMnt).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
+    });
 
     if (destination === 'QC') {
       const curYr = new Date().getFullYear().toString().slice(-2);
@@ -852,6 +895,9 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
       };
 
       setInspections((prev) => [newIns, ...prev]);
+      saveInspectionApi(newIns).then((r) => {
+        if (!r.success) showToast(r.message, 'error');
+      });
 
       setInventory((prev) =>
         prev.map((t) =>
@@ -878,6 +924,9 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
   // Contract Actions
   const handleSaveContract = (c: ContractRecord) => {
     setContracts((prev) => [c, ...prev]);
+    saveContractApi(c).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
+    });
     showToast(`Master contract ${c.name} saved.`, 'success');
   };
 
@@ -937,43 +986,10 @@ const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User 
   };
 
   // If user not authenticated
-if (!currentUser) {
-  if (pendingPasswordChangeUser) {
-    return (
-      <ChangePasswordView
-        user={pendingPasswordChangeUser}
-        onPasswordChanged={(user) => {
-          setPendingPasswordChangeUser(null);
-          setCurrentUser(user);
-        }}
-        onCancel={() => setPendingPasswordChangeUser(null)}
-      />
-    );
+  if (!currentUser) {
+    return <LoginView onLogin={(user) => setCurrentUser(user)} />;
   }
-  return (
-    <LoginView
-      onLoginSuccess={(user) => {
-        if (user.mustChangePassword) {
-          setPendingPasswordChangeUser(user);
-        } else {
-          setCurrentUser(user);
-        }
-      }}
-    />
-  );
-}
-// Wait for the first live Azure SQL fetch to finish (success or fail) before showing any data,
-  // instead of flashing local cache first.
-  if (isInitialLoading) {
-    return (
-      <div className="min-h-screen bg-[#c8d8e8] flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="w-10 h-10 border-4 border-[#1a3055] border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <div className="text-sm font-bold text-[#1a3055]">Welcome to EMDAD - Well Intervention</div>
-        </div>
-      </div>
-    );
-  }
+
   // Active counts for badges
   const pendingCalloutsCount = callouts.filter((c) => c.status === 'Pending').length;
   const onRigToolsCount = inventory.filter(
