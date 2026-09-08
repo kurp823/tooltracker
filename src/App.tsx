@@ -946,7 +946,7 @@ export const App: React.FC = () => {
       <div className="min-h-screen bg-[#c8d8e8] flex items-center justify-center">
         <div className="text-center space-y-3">
           <div className="w-10 h-10 border-4 border-[#1a3055] border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <div className="text-sm font-bold text-[#1a3055]">Connecting to Azure SQL Live Database...</div>
+          <div className="text-sm font-bold text-[#1a3055]">Welcome to EMDAD - Well Intervention</div>
         </div>
       </div>
     );
