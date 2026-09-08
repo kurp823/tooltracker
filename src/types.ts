@@ -10,6 +10,7 @@ export interface User {
   name: string;
   role: UserRole;
   pass: string;
+  mustChangePassword?: boolean;
 }
 
 export type NavModule =
