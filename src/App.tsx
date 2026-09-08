@@ -246,6 +246,7 @@ export const App: React.FC = () => {
         }
       }  finally {
         setIsInitialLoading(false);
+      }
     },
     [showToast, inventory.length, jobs.length, dtBatches.length, rtBatches.length]
   );
