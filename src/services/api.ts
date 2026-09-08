@@ -232,87 +232,90 @@ function normalizeRTBatch(row: any): any {
 }
 
 /**
- * tbl_Callouts + tbl_CalloutItems + tbl_CalloutSerials -> Callout
- * (added 2026-09-08 — these five modules previously lived only in browser
- * localStorage; the tables already existed, empty, and were never wired up.
- * See tooltracker-full-modules-function-updates.js for the server side.)
+ * NOTE (2026-09-08, revised): The Azure Function's `getcallouts`,
+ * `getgatepasses`, and `getcontracts` actions already alias their SQL
+ * columns to the exact camelCase shape these types use (confirmed from the
+ * real index.js — this was NOT missing backend work, only missing frontend
+ * calls). These normalizers are written tolerant of BOTH that already-
+ * camelCase shape and a raw-PascalCase fallback, so they're safe either way.
  */
 function normalizeCalloutItem(row: any): any {
   return {
     itemId: row.ItemID,
-    seq: Number(row.Seq ?? 0),
-    size: row.Size || '',
-    shortDesc: row.ShortDesc || '',
-    qty: Number(row.Qty ?? 0),
-    assigned: Number(row.Assigned ?? 0),
+    seq: Number(row.seq ?? row.Seq ?? 0),
+    size: row.size || row.Size || '',
+    shortDesc: row.shortDesc || row.ShortDesc || '',
+    qty: Number(row.qty ?? row.Qty ?? 0),
+    assigned: Number(row.assigned ?? row.Assigned ?? 0),
     serialNos: Array.isArray(row.serialNos) ? row.serialNos : [],
-    status: row.Status || 'Pending',
+    status: row.status || row.Status || 'Pending',
   };
 }
 
 function normalizeCallout(row: any): any {
   const items = Array.isArray(row.items) ? row.items.map(normalizeCalloutItem) : [];
+  const id = row.id || row.CalloutID || '';
   return {
-    id: row.CalloutID || row.id || '',
-    CalloutID: row.CalloutID || '',
-    rig: row.Rig || '',
-    well: row.Well || '',
-    client: row.Client || '',
-    contract: row.Contract || '',
-    poRef: row.PORef || '',
-    status: row.Status || 'Pending',
-    createdDate: row.CreatedDate || '',
-    createdBy: row.CreatedBy || '',
+    id,
+    CalloutID: id,
+    rig: row.rig || row.Rig || '',
+    well: row.well || row.Well || '',
+    client: row.client || row.Client || '',
+    contract: row.contract || row.Contract || '',
+    poRef: row.poRef || row.PORef || '',
+    status: row.status || row.Status || 'Pending',
+    createdDate: row.createdDate || row.CreatedDate || '',
+    createdBy: row.createdBy || row.CreatedBy || '',
     items,
     jobId: row.jobId || null,
   };
 }
 
-/** tbl_GatePass + tbl_GatePassLines -> GatePass */
+/** tbl_GatePass + tbl_GatePassLines -> GatePass (via getgatepasses) */
 function normalizeGatePassLine(row: any): any {
   return {
     lineId: row.LineID,
-    serial: row.Serial || '',
-    assetNo: row.AssetNo || '',
-    shortDesc: row.ShortDesc || '',
-    size: row.Size || '',
-    qty: Number(row.Qty ?? 1),
-    condition: row.Condition || '',
+    serial: row.serial || row.Serial || '',
+    assetNo: row.assetNo || row.AssetNo || '',
+    shortDesc: row.shortDesc || row.ShortDesc || '',
+    size: row.size || row.Size || '',
+    qty: Number(row.qty ?? row.Qty ?? 1),
+    condition: row.condition || row.Condition || '',
   };
 }
 
 function normalizeGatePass(row: any): any {
   const toolLines = Array.isArray(row.toolLines) ? row.toolLines.map(normalizeGatePassLine) : [];
   return {
-    id: row.GatePassID || row.id || '',
-    gpNumber: row.GPNumber || '',
-    supplier: row.Supplier || '',
-    gpDate: row.GPDate || '',
-    preparedBy: row.PreparedBy || '',
-    authorizedBy: row.AuthorizedBy || '',
-    notes: row.Notes || '',
+    id: row.id || row.GatePassID || '',
+    gpNumber: row.gpNumber || row.GPNumber || '',
+    supplier: row.supplier || row.Supplier || '',
+    gpDate: row.gpDate || row.GPDate || '',
+    preparedBy: row.preparedBy || row.PreparedBy || '',
+    authorizedBy: row.authorizedBy || row.AuthorizedBy || '',
+    notes: row.notes || row.Notes || '',
     toolLines,
   };
 }
 
-/** tbl_Contracts -> ContractRecord */
+/** tbl_Contracts -> ContractRecord (via getcontracts) */
 function normalizeContract(row: any): any {
   return {
-    id: row.ContractID || row.id || '',
-    contractRef: row.ContractRef || '',
-    client: row.Client || '',
-    poNumber: row.PONumber || '',
-    currency: row.Currency || 'USD',
-    status: row.Status || 'Active',
-    contractValue: row.ContractValue != null ? Number(row.ContractValue) : null,
-    startDate: row.StartDate || null,
-    endDate: row.EndDate || null,
-    pbgNumber: row.PBGNumber || '',
-    pbgValue: row.PBGValue != null ? Number(row.PBGValue) : null,
-    pbgIssueDate: row.PBGIssueDate || null,
-    pbgExpiryDate: row.PBGExpiryDate || null,
-    invoicedToDate: row.InvoicedToDate != null ? Number(row.InvoicedToDate) : null,
-    notes: row.Notes || '',
+    id: row.id || row.ContractID || '',
+    contractRef: row.contractRef || row.ContractRef || '',
+    client: row.client || row.Client || '',
+    poNumber: row.poNumber || row.PONumber || '',
+    currency: row.currency || row.Currency || 'USD',
+    status: row.status || row.Status || 'Active',
+    contractValue: (row.contractValue ?? row.ContractValue) != null ? Number(row.contractValue ?? row.ContractValue) : null,
+    startDate: row.startDate || row.StartDate || null,
+    endDate: row.endDate || row.EndDate || null,
+    pbgNumber: row.pbgNumber || row.PBGNumber || '',
+    pbgValue: (row.pbgValue ?? row.PBGValue) != null ? Number(row.pbgValue ?? row.PBGValue) : null,
+    pbgIssueDate: row.pbgIssueDate || row.PBGIssueDate || null,
+    pbgExpiryDate: row.pbgExpiryDate || row.PBGExpiryDate || null,
+    invoicedToDate: (row.invoicedToDate ?? row.InvoicedToDate) != null ? Number(row.invoicedToDate ?? row.InvoicedToDate) : null,
+    notes: row.notes || row.Notes || '',
   };
 }
 
@@ -382,40 +385,47 @@ export async function fetchLiveDatabaseData(): Promise<{
   const endpoint = getApiEndpoint();
 
   try {
-    const res = await fetch(`${endpoint}?action=GET_ALL_DATA&env=live`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'GET_ALL_DATA', env: 'live' }),
-    });
+    // NOTE (2026-09-08, revised): Callouts/GatePasses/Contracts/Inspections/
+    // Maintenance are NOT part of GET_ALL_DATA in the real Function — they
+    // each have their own existing action (getcallouts, getgatepasses,
+    // getcontracts, getinspections, getmaintenance), already fully built
+    // server-side. Fetched here in parallel and merged into one result so
+    // App.tsx's existing handleFetchLiveSql code doesn't need to change.
+    const [gadJson, calloutsRaw, gatePassesRaw, contractsRaw, inspectionsRaw, maintenanceRaw] = await Promise.all([
+      fetch(`${endpoint}?action=GET_ALL_DATA&env=live`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'GET_ALL_DATA', env: 'live' }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+      fetchFromApi<any[]>('getcallouts'),
+      fetchFromApi<any[]>('getgatepasses'),
+      fetchFromApi<any[]>('getcontracts'),
+      fetchFromApi<any[]>('getinspections'),
+      fetchFromApi<any[]>('getmaintenance'),
+    ]);
 
-    if (res.ok) {
-      const json = await res.json();
-      const payload = json.data || json;
-      if (payload && (payload.inventory || payload.jobs)) {
-        return {
-          success: true,
-          source: 'azure-function',
-          data: {
-            inventory: Array.isArray(payload.inventory)
-              ? payload.inventory.map(normalizeInventoryItem)
-              : undefined,
-            jobs: Array.isArray(payload.jobs) ? payload.jobs.map(normalizeJob) : [],
-            dtBatches: Array.isArray(payload.dtBatches) ? payload.dtBatches.map(normalizeDTBatch) : [],
-            rtBatches: Array.isArray(payload.rtBatches) ? payload.rtBatches.map(normalizeRTBatch) : [],
-            // Added 2026-09-08 — these five modules are only actually "live"
-            // once the Function's GET_ALL_DATA returns them (see
-            // tooltracker-full-modules-function-updates.js). Until that's
-            // deployed, payload.callouts etc. will be undefined and
-            // App.tsx keeps whatever it already has (local cache).
-            callouts: Array.isArray(payload.callouts) ? payload.callouts.map(normalizeCallout) : undefined,
-            gatePasses: Array.isArray(payload.gatePasses) ? payload.gatePasses.map(normalizeGatePass) : undefined,
-            contracts: Array.isArray(payload.contracts) ? payload.contracts.map(normalizeContract) : undefined,
-            inspections: Array.isArray(payload.inspections) ? payload.inspections.map(normalizeInspection) : undefined,
-            maintenance: Array.isArray(payload.maintenance) ? payload.maintenance.map(normalizeMaintenance) : undefined,
-          },
-          message: `Connected to Azure Function (${payload.inventory?.length || 0} tools, ${payload.jobs?.length || 0} jobs, ${payload.dtBatches?.length || 0} delivery tickets, ${payload.rtBatches?.length || 0} receiving tickets)`,
-        };
-      }
+    const payload = gadJson ? gadJson.data || gadJson : null;
+    if (payload && (payload.inventory || payload.jobs)) {
+      return {
+        success: true,
+        source: 'azure-function',
+        data: {
+          inventory: Array.isArray(payload.inventory)
+            ? payload.inventory.map(normalizeInventoryItem)
+            : undefined,
+          jobs: Array.isArray(payload.jobs) ? payload.jobs.map(normalizeJob) : [],
+          dtBatches: Array.isArray(payload.dtBatches) ? payload.dtBatches.map(normalizeDTBatch) : [],
+          rtBatches: Array.isArray(payload.rtBatches) ? payload.rtBatches.map(normalizeRTBatch) : [],
+          callouts: Array.isArray(calloutsRaw) ? calloutsRaw.map(normalizeCallout) : undefined,
+          gatePasses: Array.isArray(gatePassesRaw) ? gatePassesRaw.map(normalizeGatePass) : undefined,
+          contracts: Array.isArray(contractsRaw) ? contractsRaw.map(normalizeContract) : undefined,
+          inspections: Array.isArray(inspectionsRaw) ? inspectionsRaw.map(normalizeInspection) : undefined,
+          maintenance: Array.isArray(maintenanceRaw) ? maintenanceRaw.map(normalizeMaintenance) : undefined,
+        },
+        message: `Connected to Azure Function (${payload.inventory?.length || 0} tools, ${payload.jobs?.length || 0} jobs, ${payload.dtBatches?.length || 0} delivery tickets, ${payload.rtBatches?.length || 0} receiving tickets)`,
+      };
     }
   } catch (err: any) {
     console.warn('Azure Function fetch warning:', err);
@@ -429,45 +439,55 @@ export async function fetchLiveDatabaseData(): Promise<{
 }
 
 /**
- * Save actions for the five modules that were previously localStorage-only
- * (Callouts, Gate Passes, Contracts, Inspections, Maintenance). Each POSTs
- * the full current record to the matching Azure Function action (see
- * tooltracker-full-modules-function-updates.js) so it's written to Azure
- * SQL and visible to every user/device, not just the browser that saved it.
+ * Save actions for the modules that were previously localStorage-only on
+ * the frontend (Callouts, Gate Passes, Contracts, Inspections, Maintenance,
+ * Jobs). The Azure Function already has working `savecallout`/
+ * `savegatepass`/`savecontract`/`saveinspection`/`savemaintenance`/`savejob`
+ * actions (confirmed from the real index.js on 2026-09-08) — these were
+ * simply never called from the frontend. Action names and body payload
+ * keys below match that real backend exactly (note: no underscores, and
+ * `gatepass` — not `gatePass` — as the body key for the gate pass action).
  */
 export async function saveCalloutApi(callout: any): Promise<{ success: boolean; message: string }> {
-  const result = await fetchFromApi('save_callout', { callout });
+  const result = await fetchFromApi('savecallout', { callout });
   return result !== null
     ? { success: true, message: 'Callout saved to Azure SQL.' }
     : { success: false, message: 'Could not reach Azure SQL — callout saved locally only for now.' };
 }
 
 export async function saveGatePassApi(gatePass: any): Promise<{ success: boolean; message: string }> {
-  const result = await fetchFromApi('save_gate_pass', { gatePass });
+  const result = await fetchFromApi('savegatepass', { gatepass: gatePass });
   return result !== null
     ? { success: true, message: 'Gate pass saved to Azure SQL.' }
     : { success: false, message: 'Could not reach Azure SQL — gate pass saved locally only for now.' };
 }
 
 export async function saveContractApi(contract: any): Promise<{ success: boolean; message: string }> {
-  const result = await fetchFromApi('save_contract', { contract });
+  const result = await fetchFromApi('savecontract', { contract });
   return result !== null
     ? { success: true, message: 'Contract saved to Azure SQL.' }
     : { success: false, message: 'Could not reach Azure SQL — contract saved locally only for now.' };
 }
 
 export async function saveInspectionApi(inspection: any): Promise<{ success: boolean; message: string }> {
-  const result = await fetchFromApi('save_inspection', { inspection });
+  const result = await fetchFromApi('saveinspection', { inspection });
   return result !== null
     ? { success: true, message: 'Inspection saved to Azure SQL.' }
     : { success: false, message: 'Could not reach Azure SQL — inspection saved locally only for now.' };
 }
 
 export async function saveMaintenanceApi(maintenance: any): Promise<{ success: boolean; message: string }> {
-  const result = await fetchFromApi('save_maintenance', { maintenance });
+  const result = await fetchFromApi('savemaintenance', { maintenance });
   return result !== null
     ? { success: true, message: 'Maintenance record saved to Azure SQL.' }
     : { success: false, message: 'Could not reach Azure SQL — maintenance record saved locally only for now.' };
+}
+
+export async function saveJobApi(job: any): Promise<{ success: boolean; message: string }> {
+  const result = await fetchFromApi('savejob', { job });
+  return result !== null
+    ? { success: true, message: 'Job saved to Azure SQL.' }
+    : { success: false, message: 'Could not reach Azure SQL — job saved locally only for now.' };
 }
 
 /**
