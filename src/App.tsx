@@ -29,6 +29,7 @@ import { Toast, ToastNotification } from './components/Toast';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { LoginView } from './components/LoginView';
+import { ChangePasswordView } from './components/ChangePasswordView';
 import { DashboardView } from './components/DashboardView';
 import { InventoryView } from './components/InventoryView';
 import { CalloutsView } from './components/CalloutsView';
@@ -49,9 +50,9 @@ export const App: React.FC = () => {
   // Auth state
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('emdad_current_user');
-    return saved ? JSON.parse(saved) : INITIAL_USER;
+    return saved ? JSON.parse(saved) : null;
   });
-
+const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<User | null>(null);
   // Current Active Module View
   const [activeView, setActiveView] = useState<ViewKey>('dashboard');
 
@@ -936,9 +937,31 @@ export const App: React.FC = () => {
   };
 
   // If user not authenticated
-  if (!currentUser) {
-    return <LoginView onLogin={(user) => setCurrentUser(user)} />;
+if (!currentUser) {
+  if (pendingPasswordChangeUser) {
+    return (
+      <ChangePasswordView
+        user={pendingPasswordChangeUser}
+        onPasswordChanged={(user) => {
+          setPendingPasswordChangeUser(null);
+          setCurrentUser(user);
+        }}
+        onCancel={() => setPendingPasswordChangeUser(null)}
+      />
+    );
   }
+  return (
+    <LoginView
+      onLoginSuccess={(user) => {
+        if (user.mustChangePassword) {
+          setPendingPasswordChangeUser(user);
+        } else {
+          setCurrentUser(user);
+        }
+      }}
+    />
+  );
+}
 // Wait for the first live Azure SQL fetch to finish (success or fail) before showing any data,
   // instead of flashing local cache first.
   if (isInitialLoading) {
