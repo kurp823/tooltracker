@@ -64,7 +64,8 @@ export const App: React.FC = () => {
 
   // Sync state
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('saved');
-
+  // Blocks rendering real data until the first live-SQL fetch attempt finishes
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   // Toasts
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
 
@@ -243,7 +244,8 @@ export const App: React.FC = () => {
         if (!isSilent) {
           showToast('Unable to reach Azure SQL endpoint.', 'error');
         }
-      }
+      }  finally {
+        setIsInitialLoading(false);
     },
     [showToast, inventory.length, jobs.length, dtBatches.length, rtBatches.length]
   );
@@ -936,7 +938,18 @@ export const App: React.FC = () => {
   if (!currentUser) {
     return <LoginView onLogin={(user) => setCurrentUser(user)} />;
   }
-
+// Wait for the first live Azure SQL fetch to finish (success or fail) before showing any data,
+  // instead of flashing local cache first.
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen bg-[#c8d8e8] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-[#1a3055] border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <div className="text-sm font-bold text-[#1a3055]">Connecting to Azure SQL Live Database...</div>
+        </div>
+      </div>
+    );
+  }
   // Active counts for badges
   const pendingCalloutsCount = callouts.filter((c) => c.status === 'Pending').length;
   const onRigToolsCount = inventory.filter(
