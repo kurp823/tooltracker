@@ -33,6 +33,7 @@ import {
   saveContractApi,
   saveInspectionApi,
   saveMaintenanceApi,
+  saveJobApi,
 } from './services/api';
 import { Toast, ToastNotification } from './components/Toast';
 import { Header } from './components/Header';
@@ -414,6 +415,9 @@ export const App: React.FC = () => {
         return copy;
       }
       return [job, ...prev];
+    });
+    saveJobApi(job).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
     });
 
     // If job is linked to a callout, update callout status
