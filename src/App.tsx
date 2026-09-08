@@ -1059,7 +1059,7 @@ export const App: React.FC = () => {
           <div className="w-16 h-16 rounded bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-[#1a3055] text-3xl shadow-lg mx-auto mb-5 animate-pulse">
             E
           </div>
-          <div className="font-extrabold text-2xl text-white tracking-wide">EMDAD SERVICES LLC</div>
+          <div className="font-extrabold text-2xl text-white tracking-wide">EMDAD LLC</div>
           <div className="text-amber-300 text-xs font-semibold mt-1">Well Intervention - Upstream Services</div>
           <div className="flex items-center justify-center space-x-2 mt-6">
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
