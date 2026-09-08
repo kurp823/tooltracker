@@ -1,11 +1,20 @@
 /**
- * Service for Azure SQL integration, Data API Builder, Azure Functions backend,
- * and standalone deployment exports
+ * Service for Azure SQL integration via the Azure Function backend,
+ * and standalone deployment exports.
+ *
+ * This app previously also supported Azure Static Web Apps' Data API Builder
+ * ("linked database") as an alternative backend, auto-selected whenever the
+ * hostname ended in azurestaticapps.net. That was removed: it assumed every
+ * such deployment had a database connection linked in Azure, which isn't
+ * true for all of them (e.g. polite-tree-...), and a deployment without one
+ * gets back the Static Web App's default HTML error page (HTTP 405) instead
+ * of JSON — which is exactly what broke login there. The Azure Function
+ * below is the single confirmed-working backend, so it's now the only path.
  */
 
 export interface DbConnectionStatus {
   isConnected: boolean;
-  source: 'azure-sql' | 'data-api' | 'azure-function' | 'local-cache';
+  source: 'azure-sql' | 'azure-function' | 'local-cache';
   lastChecked: string;
   message: string;
   counts: {
@@ -16,15 +25,13 @@ export interface DbConnectionStatus {
   };
 }
 
+const DEFAULT_FUNCTION_ENDPOINT =
+  'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
+
 export function getApiEndpoint(): string {
   const custom = localStorage.getItem('azure_api_endpoint');
   if (custom && custom.trim()) return custom.trim();
-  // By default, if deployed on Azure Static Web Apps with Database Connection,
-  // the relative path /data-api/rest is used.
-  if (typeof window !== 'undefined' && window.location.hostname.includes('azurestaticapps.net')) {
-    return '/data-api/rest';
-  }
-  return 'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
+  return DEFAULT_FUNCTION_ENDPOINT;
 }
 
 /**
@@ -111,7 +118,7 @@ function normalizeRTBatch(row: any): any {
 }
 
 /**
- * Attempts to fetch live data from Azure Static Web Apps Data API or Azure Functions
+ * Attempts to fetch live data from the Azure Function backend
  */
 export async function fetchLiveDatabaseData(): Promise<{
   success: boolean;
@@ -122,90 +129,11 @@ export async function fetchLiveDatabaseData(): Promise<{
     rtBatches?: any[];
     contracts?: any[];
   };
-  source: 'data-api' | 'azure-function' | 'failed';
+  source: 'azure-function' | 'failed';
   message: string;
 }> {
   const endpoint = getApiEndpoint();
 
-  // Strategy 1: If endpoint is /data-api/rest (Azure Static Web Apps Linked Database)
-  if (endpoint.includes('/data-api/rest') || endpoint.endsWith('/rest')) {
-    try {
-      const invPromise = fetch(`${endpoint}/tbl_Inventory?$top=500`).catch(() =>
-        fetch(`${endpoint}/Inventory?$top=500`)
-      );
-      const jobsPromise = fetch(`${endpoint}/tbl_Jobs?$top=200`).catch(() =>
-        fetch(`${endpoint}/Jobs?$top=200`)
-      );
-      const dtPromise = fetch(`${endpoint}/tbl_DTBatches?$top=200`).catch(() =>
-        fetch(`${endpoint}/DTBatches?$top=200`)
-      );
-      const rtPromise = fetch(`${endpoint}/tbl_RTBatches?$top=200`).catch(() =>
-        fetch(`${endpoint}/RTBatches?$top=200`)
-      );
-
-      const [invRes, jobsRes, dtRes, rtRes] = await Promise.allSettled([
-        invPromise,
-        jobsPromise,
-        dtPromise,
-        rtPromise,
-      ]);
-
-      let hasAnySuccess = false;
-      let inventory: any[] | undefined = undefined;
-      let jobs: any[] | undefined = undefined;
-      let dtBatches: any[] | undefined = undefined;
-      let rtBatches: any[] | undefined = undefined;
-
-      if (invRes.status === 'fulfilled' && invRes.value.ok) {
-        const json = await invRes.value.json();
-        const rows = json.value || json;
-        if (Array.isArray(rows)) {
-          inventory = rows.map(normalizeInventoryItem);
-          hasAnySuccess = true;
-        }
-      }
-
-      if (jobsRes.status === 'fulfilled' && jobsRes.value.ok) {
-        const json = await jobsRes.value.json();
-        const rows = json.value || json;
-        if (Array.isArray(rows)) {
-          jobs = rows.map(normalizeJob);
-          hasAnySuccess = true;
-        }
-      }
-
-      if (dtRes.status === 'fulfilled' && dtRes.value.ok) {
-        const json = await dtRes.value.json();
-        const rows = json.value || json;
-        if (Array.isArray(rows)) {
-          dtBatches = rows.map(normalizeDTBatch);
-          hasAnySuccess = true;
-        }
-      }
-
-      if (rtRes.status === 'fulfilled' && rtRes.value.ok) {
-        const json = await rtRes.value.json();
-        const rows = json.value || json;
-        if (Array.isArray(rows)) {
-          rtBatches = rows.map(normalizeRTBatch);
-          hasAnySuccess = true;
-        }
-      }
-
-      if (hasAnySuccess) {
-        return {
-          success: true,
-          source: 'data-api',
-          data: { inventory, jobs: jobs || [], dtBatches: dtBatches || [], rtBatches: rtBatches || [] },
-          message: `Loaded live from Azure Data API (${inventory?.length ?? 0} tools, ${jobs?.length ?? 0} jobs)`,
-        };
-      }
-    } catch (err: any) {
-      console.warn('Azure Data API fetch warning:', err);
-    }
-  }
-
-  // Strategy 2: Azure Function POST
   try {
     const res = await fetch(`${endpoint}?action=GET_ALL_DATA&env=live`, {
       method: 'POST',
@@ -239,7 +167,7 @@ export async function fetchLiveDatabaseData(): Promise<{
   return {
     success: false,
     source: 'failed',
-    message: 'Unable to reach Azure SQL or Data API endpoint. Using local cache.',
+    message: 'Unable to reach the Azure Function backend. Using local cache.',
   };
 }
 
@@ -292,16 +220,6 @@ export async function testAzureConnection(): Promise<{
     );
 
     const latencyMs = Math.round(performance.now() - start);
-
-    if (res.status === 404 && endpoint.includes('/data-api/rest')) {
-      return {
-        ok: false,
-        latencyMs,
-        endpoint,
-        message:
-          'Data API returned 404. Ensure "Database connection" is linked in Azure Static Web Apps Settings.',
-      };
-    }
 
     if (res.ok || res.status === 401 || res.status === 403 || res.status === 405) {
       return {
@@ -387,4 +305,3 @@ export function downloadStandaloneHtml(data?: Record<string, any>) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-
