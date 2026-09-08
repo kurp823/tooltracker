@@ -10,6 +10,18 @@
  * gets back the Static Web App's default HTML error page (HTTP 405) instead
  * of JSON — which is exactly what broke login there. The Azure Function
  * below is the single confirmed-working backend, so it's now the only path.
+ *
+ * IMPORTANT (2026-09-08): The Azure Function's GET_ALL_DATA action was
+ * previously reading Delivery/Receiving Tickets from tbl_DTBatches and
+ * tbl_RTBatches — both confirmed EMPTY (0 rows). The real, populated data
+ * (2,643 delivery tickets, 2,424 receiving tickets) lives in
+ * tbl_DeliveryTickets/tbl_DeliveryTicketLines and
+ * tbl_ReceivingTickets/tbl_ReceivingTicketLines, which the app had never
+ * queried. The normalizers below were rewritten to match those tables'
+ * real columns (see the accompanying Azure Function code for the
+ * corresponding server-side query/shape). Login was also moved server-side
+ * against the real tbl_Users table (10 real rows, previously unused —
+ * the app authenticated against a hardcoded array in initialData.ts).
  */
 
 export interface DbConnectionStatus {
@@ -82,38 +94,140 @@ function normalizeJob(row: any): any {
     isLocked: Boolean(row.LegalInvoiceNo || row.legalInvoiceNo),
     invoiceNumber: row.LegalInvoiceNo || row.EmdadInvoiceNo || '',
     invoiceDate: row.InvoiceDate || row.LegalInvoiceDate || '',
+    // NOTE: kept for backward compat with any cached local data; the live
+    // field the rest of the app actually reads is `invoiceAmount` (see
+    // architecture-review-2026-09-06.md finding #5 — this mismatch is not
+    // fixed here, flagging only).
     invoicedAmountUSD: Number(row.InvoicedAmountUSD || 0),
   };
 }
 
-function normalizeDTBatch(row: any): any {
+/** tbl_DeliveryTicketLines (enriched server-side with tbl_Inventory + return status) -> DTLine */
+function normalizeDTLine(row: any, parentDtNumber?: string): any {
+  const usedStatus = (row.usedStatus || '').toString().toLowerCase();
   return {
-    id: row.DTBatchID || row.dtBatchId || row.id || '',
-    dtNumber: row.DTNumber || row.dtNumber || '',
-    jobId: row.JobID || row.jobId || '',
-    rmDate: row.RMDate || row.rmDate || row.DispatchDate || '',
-    rmRef: row.RMRef || row.rmRef || '',
-    rig: row.Rig || row.rig || '',
-    well: row.Well || row.well || '',
-    contract: row.Contract || row.contract || '',
-    dispatchedBy: row.DispatchedBy || row.dispatchedBy || '',
-    recipient: row.Recipient || row.recipient || '',
-    notes: row.Notes || row.notes || '',
-    tools: [],
+    serial: row.serial || '',
+    assetNo: row.AssetNo || row.assetNo || '',
+    shortDesc: row.ShortDesc || row.shortDesc || row.toolDescription || '',
+    desc: row.toolDescription || row.ShortDesc || row.shortDesc || '',
+    size: row.Size || row.size || '',
+    status: row.lineStatus === 'Returned' ? 'Returned' : 'OnRig',
+    rtBatchId: row.returnedRtNumber || null,
+    used: row.usedStatus != null ? usedStatus === 'used' : null,
+    ownership: row.Ownership || row.ownership || '',
+    isEmdad: Boolean(row.IsEmdad ?? row.isEmdad ?? true),
+    // extra columns carried through from tbl_DeliveryTicketLines, not on
+    // the original DTLine type but useful and harmless as optional fields
+    itemNo: row.itemNo,
+    qty: row.qty,
+    remarks: row.remarks,
+    dtNumber: row.dtNumber || parentDtNumber,
   };
 }
 
-function normalizeRTBatch(row: any): any {
+/** tbl_DeliveryTickets -> DTBatch (real, populated table — see header note) */
+function normalizeDTBatch(row: any): any {
+  const id = String(row.id ?? row.DTBatchID ?? row.dtBatchId ?? '');
+  const deliveryDate = row.deliveryDate || row.DeliveryDate || row.RMDate || row.rmDate || '';
+  const lines = Array.isArray(row.toolLines)
+    ? row.toolLines.map((l: any) => normalizeDTLine(l, row.dtNumber))
+    : [];
   return {
-    id: row.RTBatchID || row.rtBatchId || row.id || '',
-    rtNumber: row.RTNumber || row.rtNumber || '',
-    jobId: row.JobID || row.jobId || '',
-    rtDate: row.RTDate || row.rtDate || '',
-    contract: row.Contract || row.contract || '',
-    rig: row.Rig || row.rig || '',
-    well: row.Well || row.well || '',
-    receivedBy: row.ReceivedBy || row.receivedBy || '',
-    tools: [],
+    id,
+    DTBatchID: id,
+    dtNumber: row.dtNumber || row.DTNumber || '',
+    jobId: row.jobNumber || row.JobID || row.jobId || '',
+    clientCode: row.clientCode || '',
+    rmDate: deliveryDate,
+    rmRef: row.rmRef || '',
+    dispatchDate: deliveryDate,
+    rig: row.rig || row.Rig || '',
+    well: row.well || row.Well || '',
+    contract: row.contract || row.Contract || '',
+    poNumber: row.poNumber || '',
+    clientRef: row.clientRef || '',
+    vehicleVessel: row.vehicleVessel || '',
+    driverName: row.driverName || '',
+    dispatchedBy: row.emdadRep || row.dispatchedBy || row.DispatchedBy || '',
+    recipient: row.clientSignedBy || row.recipient || row.Recipient || '',
+    notes: row.notes || row.Notes || '',
+    toolLines: lines,
+    isLocked: Boolean(row.lockedAt || row.lockStage === 'Locked'),
+    lockedBy: row.lockedBy || '',
+    lockedDate: row.lockedAt || '',
+    lockStage: row.lockStage || '',
+    calloutRef: row.calloutRef || '',
+    status: row.status || '',
+    createdBy: row.createdBy || '',
+    createdAt: row.createdAt || '',
+    updatedAt: row.updatedAt || '',
+    // Document attachment — now backed by the real attachmentRef column
+    // instead of base64-in-localStorage (architecture-review finding #3)
+    signedDocUrl: row.attachmentRef || row.signedDocUrl || '',
+    signedDocName: row.attachmentRef ? String(row.attachmentRef).split('/').pop() : row.signedDocName || '',
+    signedDate: row.clientSignDate || row.emdadSignDate || row.signedDate || '',
+    isSigned: Boolean(row.clientSignedBy || row.isSigned),
+  };
+}
+
+/** tbl_ReceivingTicketLines (enriched server-side with tbl_Inventory) -> RTLine */
+function normalizeRTLine(row: any, parentLinkedDtNumber?: string): any {
+  const usedStatus = (row.usedStatus || '').toString().toLowerCase();
+  return {
+    serial: row.serial || '',
+    assetNo: row.AssetNo || row.assetNo || '',
+    shortDesc: row.ShortDesc || row.shortDesc || row.toolDescription || '',
+    dtBatchId: row.dtNumber || parentLinkedDtNumber || undefined,
+    used: usedStatus === 'used',
+    routedTo: row.routedTo || '',
+    condition: row.condition || '',
+    size: row.Size || row.size || '',
+    ownership: row.Ownership || row.ownership || '',
+    // extra columns from tbl_ReceivingTicketLines, optional/passthrough
+    itemNo: row.itemNo,
+    qty: row.qty,
+    remarks: row.remarks,
+    routedAt: row.routedAt,
+    routedBy: row.routedBy,
+  };
+}
+
+/** tbl_ReceivingTickets -> RTBatch (real, populated table — see header note) */
+function normalizeRTBatch(row: any): any {
+  const id = String(row.id ?? row.RTBatchID ?? row.rtBatchId ?? '');
+  const lines = Array.isArray(row.toolLines)
+    ? row.toolLines.map((l: any) => normalizeRTLine(l, row.linkedDtNumber))
+    : [];
+  return {
+    id,
+    RTBatchID: id,
+    rtNumber: row.rtNumber || row.RTNumber || '',
+    jobId: row.jobNumber || row.JobID || row.jobId || '',
+    linkedDtNumber: row.linkedDtNumber || '',
+    clientCode: row.clientCode || '',
+    rtDate: row.receivingDate || row.RTDate || row.rtDate || '',
+    manifestNumber: row.manifestNumber || '',
+    clientRef: row.clientRef || '',
+    vehicleVessel: row.vehicleVessel || '',
+    contract: row.contract || row.Contract || '',
+    rig: row.rig || row.Rig || '',
+    well: row.well || row.Well || '',
+    receivedBy: row.emdadRep || row.receivedBy || row.ReceivedBy || '',
+    toolLines: lines,
+    isLocked: Boolean(row.lockedAt || row.lockStage === 'Locked'),
+    lockedBy: row.lockedBy || '',
+    lockedDate: row.lockedAt || '',
+    lockStage: row.lockStage || '',
+    status: row.status || '',
+    notes: row.notes || '',
+    createdBy: row.createdBy || '',
+    createdAt: row.createdAt || '',
+    updatedAt: row.updatedAt || '',
+    // Document attachment — now backed by the real attachmentRef column
+    signedDocUrl: row.attachmentRef || row.signedDocUrl || '',
+    signedDocName: row.attachmentRef ? String(row.attachmentRef).split('/').pop() : row.signedDocName || '',
+    signedDate: row.clientSignDate || row.emdadSignDate || row.signedDate || '',
+    isSigned: Boolean(row.clientSignedBy || row.isSigned),
   };
 }
 
@@ -156,7 +270,7 @@ export async function fetchLiveDatabaseData(): Promise<{
             dtBatches: Array.isArray(payload.dtBatches) ? payload.dtBatches.map(normalizeDTBatch) : [],
             rtBatches: Array.isArray(payload.rtBatches) ? payload.rtBatches.map(normalizeRTBatch) : [],
           },
-          message: `Connected to Azure Function (${payload.inventory?.length || 0} tools, ${payload.jobs?.length || 0} jobs)`,
+          message: `Connected to Azure Function (${payload.inventory?.length || 0} tools, ${payload.jobs?.length || 0} jobs, ${payload.dtBatches?.length || 0} delivery tickets, ${payload.rtBatches?.length || 0} receiving tickets)`,
         };
       }
     }
@@ -196,6 +310,56 @@ export async function fetchFromApi<T = any>(
   } catch (e: any) {
     console.warn(`API call [${action}] notice:`, e?.message || e);
     return null;
+  }
+}
+
+/**
+ * Real server-side login against tbl_Users via the Azure Function's LOGIN
+ * action. Replaces the previous client-side check against a hardcoded
+ * array in data/initialData.ts (architecture-review-2026-09-06.md finding
+ * under "Login" — no server-side check existed before this).
+ *
+ * NOTE: tbl_Users.Password has no indication of hashing. This function
+ * sends the password as typed and the server compares it as stored. That
+ * means credentials are only as safe as the transport (HTTPS) — the
+ * underlying plaintext-storage/comparison is a real gap worth a follow-up
+ * fix (e.g. bcrypt + a one-time migration prompting a password reset for
+ * the 10 existing users), not something silently solved by this change.
+ */
+export async function loginWithApi(
+  username: string,
+  password: string
+): Promise<{ success: boolean; user?: any; message: string }> {
+  const endpoint = getApiEndpoint();
+  try {
+    const res = await fetch(`${endpoint}?action=LOGIN&env=live`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'LOGIN', env: 'live', username, password }),
+    });
+    const json = await res.json().catch(() => null);
+    if (res.ok && json && json.success && json.user) {
+      const u = json.user;
+      return {
+        success: true,
+        message: 'Login successful.',
+        user: {
+          id: u.UserID ?? u.id,
+          username: u.Username ?? u.username,
+          name: u.FullName ?? u.name,
+          role: u.Role ?? u.role,
+        },
+      };
+    }
+    return {
+      success: false,
+      message: (json && (json.error || json.message)) || 'Invalid username or password.',
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: 'Unable to reach the login service. Check your connection.',
+    };
   }
 }
 
