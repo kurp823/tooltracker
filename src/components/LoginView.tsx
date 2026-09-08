@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { loginWithApi } from '../services/api';
+import { loginWithApi, changePasswordWithApi } from '../services/api';
 
 interface LoginViewProps {
   // NOTE (2026-09-08): this was previously declared as `onLoginSuccess`,
@@ -16,13 +16,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Set once login succeeds with mustChangePassword: true — the real
+  // tbl_Users-backed `login` action already returns this flag, so this
+  // wires up the forced-reset flow the backend's `change_password` action
+  // was already built for, rather than silently ignoring the flag.
+  const [pendingUser, setPendingUser] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
   // NOTE (2026-09-08): login now checks the real tbl_Users table (10 real
-  // rows) via the Azure Function's LOGIN action, instead of the hardcoded
-  // USERS array in data/initialData.ts (architecture-review-2026-09-06.md
-  // — "no server-side login check" finding). tbl_Users.Password shows no
-  // sign of hashing, so this compares as-stored; that's a separate
-  // security gap worth a follow-up fix, not something this change papers
-  // over.
+  // rows) via the Azure Function's `login` action, instead of the
+  // hardcoded USERS array in data/initialData.ts
+  // (architecture-review-2026-09-06.md — "no server-side login check"
+  // finding). tbl_Users.Password shows no sign of hashing, so this
+  // compares as-stored; that's a separate security gap worth a follow-up
+  // fix, not something this change papers over.
   const handleLogin = async (u?: string, p?: string) => {
     const userToTry = (u || username).trim();
     const passToTry = p || password;
@@ -37,7 +45,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     try {
       const result = await loginWithApi(userToTry, passToTry);
       if (result.success && result.user) {
-        onLogin(result.user);
+        if (result.user.mustChangePassword) {
+          setPendingUser(result.user);
+        } else {
+          onLogin(result.user);
+        }
       } else {
         setError(result.message || 'Invalid username or password.');
       }
@@ -51,6 +63,92 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     setPassword(p);
     handleLogin(u, p);
   };
+
+  const handleForcedPasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pendingUser) return;
+    setError('');
+
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const result = await changePasswordWithApi(pendingUser.id, newPassword);
+      if (result.success) {
+        onLogin({ ...pendingUser, mustChangePassword: false });
+      } else {
+        setError(result.message || 'Failed to update password.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (pendingUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0f1f38] px-4">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <div className="w-14 h-14 rounded bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-[#1a3055] text-2xl shadow-lg mx-auto mb-4">
+              E
+            </div>
+            <div className="font-extrabold text-xl text-white tracking-wide">EMDAD SERVICES LLC</div>
+            <div className="text-slate-400 text-[11px] mt-1">Password change required before continuing</div>
+          </div>
+
+          <div className="bg-white rounded p-6 shadow-2xl border border-[#b8c9db]">
+            <form onSubmit={handleForcedPasswordChange}>
+              <div className="mb-4">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  disabled={isSubmitting}
+                  className="w-full border border-[#b8c9db] rounded px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+                />
+              </div>
+              <div className="mb-5">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={isSubmitting}
+                  className="w-full border border-[#b8c9db] rounded px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+                />
+              </div>
+
+              {error && (
+                <div className="mb-3 text-[11px] text-rose-700 bg-rose-50 border border-rose-300 rounded px-2.5 py-2">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-[#ffd875] hover:brightness-105 text-[#4a2e00] font-bold py-2 rounded text-xs border border-[#c8860d] shadow-sm transition cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+              >
+                {isSubmitting ? 'Updating…' : 'Set New Password & Continue'}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0f1f38] px-4">
