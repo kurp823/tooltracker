@@ -103,23 +103,39 @@ function normalizeJob(row: any): any {
 }
 
 function normalizeDTBatch(row: any): any {
+  const lines = Array.isArray(row.toolLines)
+    ? row.toolLines
+    : Array.isArray(row.tools)
+    ? row.tools
+    : Array.isArray(row.lines)
+    ? row.lines
+    : [];
   return {
     id: row.DTBatchID || row.dtBatchId || row.id || '',
     dtNumber: row.DTNumber || row.dtNumber || '',
     jobId: row.JobID || row.jobId || '',
     rmDate: row.RMDate || row.rmDate || row.DispatchDate || '',
     rmRef: row.RMRef || row.rmRef || '',
+    dispatchDate: row.DispatchDate || row.dispatchDate || row.RMDate || row.rmDate || '',
     rig: row.Rig || row.rig || '',
     well: row.Well || row.well || '',
     contract: row.Contract || row.contract || '',
     dispatchedBy: row.DispatchedBy || row.dispatchedBy || '',
     recipient: row.Recipient || row.recipient || '',
     notes: row.Notes || row.notes || '',
-    tools: [],
+    toolLines: lines,
+    tools: lines,
   };
 }
 
 function normalizeRTBatch(row: any): any {
+  const lines = Array.isArray(row.toolLines)
+    ? row.toolLines
+    : Array.isArray(row.tools)
+    ? row.tools
+    : Array.isArray(row.lines)
+    ? row.lines
+    : [];
   return {
     id: row.RTBatchID || row.rtBatchId || row.id || '',
     rtNumber: row.RTNumber || row.rtNumber || '',
@@ -129,7 +145,9 @@ function normalizeRTBatch(row: any): any {
     rig: row.Rig || row.rig || '',
     well: row.Well || row.well || '',
     receivedBy: row.ReceivedBy || row.receivedBy || '',
-    tools: [],
+    notes: row.Notes || row.notes || '',
+    toolLines: lines,
+    tools: lines,
   };
 }
 
