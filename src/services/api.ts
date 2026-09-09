@@ -102,50 +102,254 @@ function normalizeJob(row: any): any {
   };
 }
 
-function normalizeDTBatch(row: any): any {
-  const lines = Array.isArray(row.toolLines)
+/**
+ * Utility to extract tool diameter/size from toolDescription when size is not a dedicated column.
+ * e.g., '8-1/8" OVERSHOT' -> '8-1/8"', 'CARGO BASKET 8FT X 4FT' -> '8FT X 4FT'
+ */
+export function extractSizeFromDescription(desc?: string): string {
+  if (!desc) return '';
+  const str = String(desc).trim();
+
+  // Pattern 1: inch sizes like 8-1/8", 8 1/8", 6-1/2", 4", 13-5/8", 2-7/8", 8-1/2", 12.1/4"
+  const fracMatch = str.match(/\b(\d+(?:[-. ]\d+\/\d+|\/\d+)?["'”]|(?:\d+\.?\d*["'”]))/);
+  if (fracMatch) return fracMatch[0].replace(/\s+/, '-');
+
+  // Pattern 2: basket or container dimensions like 8FT X 4FT, 8' x 4'
+  const ftMatch = str.match(/\b(\d+\s*(?:FT|ft|')\s*[xX]\s*\d+\s*(?:FT|ft|'))/);
+  if (ftMatch) return ftMatch[0].toUpperCase();
+
+  // Pattern 3: OD format like 8-1/8 OD or 6-1/2 OD
+  const odMatch = str.match(/\b(\d+(?:[-. ]\d+\/\d+|\/\d+)?)\s*(?:OD|od)/);
+  if (odMatch) return `${odMatch[1]}"`;
+
+  return '';
+}
+
+/**
+ * Normalizes a single row from tbl_DeliveryTicketLines (or nested tool line) into DTLine
+ */
+export function normalizeDTLine(row: any): any {
+  if (!row) return null;
+  const serial = String(row.serial || row.Serial || row.serialNo || row.SerialNo || '').trim();
+
+  const shortDesc = String(
+    row.shortDesc ||
+    row.ShortDesc ||
+    row.toolType ||
+    row.ToolType ||
+    row.category ||
+    row.Category ||
+    ''
+  ).trim();
+
+  const rawDesc = String(
+    row.desc ||
+    row.Description ||
+    row.description ||
+    row.toolDescription ||
+    row.ToolDescription ||
+    row.toolDesc ||
+    row.ToolDesc ||
+    row.ToolName ||
+    shortDesc ||
+    ''
+  ).trim();
+
+  let size = String(row.size || row.Size || '').trim();
+  if (!size && rawDesc) {
+    size = extractSizeFromDescription(rawDesc);
+  }
+
+  const finalShortDesc = shortDesc || rawDesc || 'Downhole Tool';
+  const finalDesc = rawDesc || shortDesc || 'Downhole Tool';
+  const rawStatus = String(row.status || row.Status || '').trim().toLowerCase();
+  const status = (rawStatus === 'returned' || rawStatus === 'backloaded') ? 'Returned' : 'OnRig';
+  const ownership = String(row.ownership || row.Ownership || 'EMDAD').trim();
+  const isEmdad = Boolean(row.isEmdad ?? row.IsEmdad ?? (ownership.toUpperCase().includes('EMDAD')));
+
+  return {
+    id: row.id || row.ID || row.LineID || row.itemNo || undefined,
+    itemNo: Number(row.itemNo ?? row.ItemNo ?? 1),
+    serial,
+    assetNo: String(row.assetNo || row.AssetNo || serial).trim(),
+    size,
+    shortDesc: finalShortDesc,
+    desc: finalDesc,
+    toolDescription: finalDesc,
+    qty: Number(row.qty ?? row.Qty ?? 1),
+    remarks: String(row.remarks || row.Remarks || '').trim(),
+    status,
+    ownership,
+    isEmdad,
+    used: row.used ?? null,
+    rtBatchId: row.rtBatchId || row.RTBatchID || null,
+  };
+}
+
+export function normalizeDTBatch(row: any): any {
+  const rawLines = Array.isArray(row.toolLines)
     ? row.toolLines
     : Array.isArray(row.tools)
     ? row.tools
     : Array.isArray(row.lines)
     ? row.lines
     : [];
+
+  const lines = rawLines.map(normalizeDTLine).filter(Boolean);
+
+  const cleanDateStr = (d: any) => {
+    if (!d) return '';
+    const s = String(d).trim();
+    return s.includes('T') ? s.split('T')[0] : s;
+  };
+
+  const rawDate = cleanDateStr(
+    row.DTDate ||
+    row.dtDate ||
+    row.TicketDate ||
+    row.ticketDate ||
+    row.RMDate ||
+    row.rmDate ||
+    row.DispatchDate ||
+    row.dispatchDate ||
+    row.DeliveryDate ||
+    row.deliveryDate ||
+    row.Date ||
+    row.date ||
+    row.CreatedDate ||
+    row.createdDate ||
+    row.createdAt ||
+    row.CreatedAt
+  );
+
   return {
-    id: row.DTBatchID || row.dtBatchId || row.id || '',
-    dtNumber: row.DTNumber || row.dtNumber || '',
-    jobId: row.JobID || row.jobId || '',
-    rmDate: row.RMDate || row.rmDate || row.DispatchDate || '',
-    rmRef: row.RMRef || row.rmRef || '',
-    dispatchDate: row.DispatchDate || row.dispatchDate || row.RMDate || row.rmDate || '',
-    rig: row.Rig || row.rig || '',
-    well: row.Well || row.well || '',
-    contract: row.Contract || row.contract || '',
-    dispatchedBy: row.DispatchedBy || row.dispatchedBy || '',
-    recipient: row.Recipient || row.recipient || '',
-    notes: row.Notes || row.notes || '',
+    id: String(row.DTBatchID || row.dtBatchId || row.id || row.ID || row.dtNumber || row.DTNumber || ''),
+    dtNumber: String(row.DTNumber || row.dtNumber || row.TicketNumber || row.ticketNumber || row.id || ''),
+    jobId: String(row.JobID || row.jobId || row.JobNumber || row.jobNumber || row.JobNo || row.jobNo || row.Job || row.job || ''),
+    rmDate: rawDate,
+    rmRef: String(row.RMRef || row.rmRef || row.RefNo || row.refNo || row.ManifestRef || row.manifestRef || row.ManifestNo || row.manifestNo || row.Reference || row.reference || ''),
+    dispatchDate: rawDate,
+    rig: String(row.Rig || row.rig || ''),
+    well: String(row.Well || row.well || ''),
+    contract: String(row.Contract || row.contract || row.ContractRef || row.contractRef || row.ContractNo || row.contractNo || row.Client || row.client || ''),
+    dispatchedBy: String(row.DispatchedBy || row.dispatchedBy || row.PreparedBy || row.preparedBy || row.CreatedBy || row.createdBy || 'Operations'),
+    recipient: String(row.Recipient || row.recipient || row.ReceivedBy || row.receivedBy || row.Consignee || row.consignee || ''),
+    notes: String(row.Notes || row.notes || row.Remarks || row.remarks || row.Description || row.description || ''),
+    isLocked: row.isLocked !== false && row.IsLocked !== false,
+    lockedBy: row.lockedBy || row.LockedBy || null,
+    lockedDate: cleanDateStr(row.lockedDate || row.LockedDate || null),
+    isSigned: Boolean(row.isSigned || row.IsSigned || row.signedDocUrl || row.SignedDocUrl),
+    signedDocUrl: row.signedDocUrl || row.SignedDocUrl || '',
+    signedDocName: row.signedDocName || row.SignedDocName || '',
+    signedDate: cleanDateStr(row.signedDate || row.SignedDate || ''),
     toolLines: lines,
     tools: lines,
   };
 }
 
-function normalizeRTBatch(row: any): any {
-  const lines = Array.isArray(row.toolLines)
+/**
+ * Normalizes a single row from tbl_ReceivingTicketLines (or nested tool line) into RTLine
+ */
+export function normalizeRTLine(row: any): any {
+  if (!row) return null;
+  const serial = String(row.serial || row.Serial || row.serialNo || row.SerialNo || '').trim();
+
+  const shortDesc = String(
+    row.shortDesc ||
+    row.ShortDesc ||
+    row.toolType ||
+    row.ToolType ||
+    row.category ||
+    row.Category ||
+    ''
+  ).trim();
+
+  const rawDesc = String(
+    row.desc ||
+    row.Description ||
+    row.description ||
+    row.toolDescription ||
+    row.ToolDescription ||
+    row.toolDesc ||
+    row.ToolDesc ||
+    row.ToolName ||
+    shortDesc ||
+    ''
+  ).trim();
+
+  let size = String(row.size || row.Size || '').trim();
+  if (!size && rawDesc) {
+    size = extractSizeFromDescription(rawDesc);
+  }
+
+  const finalShortDesc = shortDesc || rawDesc || 'Downhole Tool';
+  const finalDesc = rawDesc || shortDesc || 'Downhole Tool';
+
+  return {
+    id: row.id || row.ID || row.LineID || row.itemNo || undefined,
+    itemNo: Number(row.itemNo ?? row.ItemNo ?? 1),
+    serial,
+    assetNo: String(row.assetNo || row.AssetNo || serial).trim(),
+    shortDesc: finalShortDesc,
+    desc: finalDesc,
+    toolDescription: finalDesc,
+    size,
+    used: Boolean(row.used ?? row.Used ?? false),
+    routedTo: String(row.routedTo || row.RoutedTo || (row.used ? 'Inspection Bay' : 'Base Stock')),
+    condition: String(row.condition || row.Condition || 'Good condition'),
+    ownership: String(row.ownership || row.Ownership || 'EMDAD'),
+    remarks: String(row.remarks || row.Remarks || ''),
+    qty: Number(row.qty ?? row.Qty ?? 1),
+    dtBatchId: row.dtBatchId || row.DTBatchID || null,
+  };
+}
+
+export function normalizeRTBatch(row: any): any {
+  const rawLines = Array.isArray(row.toolLines)
     ? row.toolLines
     : Array.isArray(row.tools)
     ? row.tools
     : Array.isArray(row.lines)
     ? row.lines
     : [];
+
+  const lines = rawLines.map(normalizeRTLine).filter(Boolean);
+
+  const cleanDateStr = (d: any) => {
+    if (!d) return '';
+    const s = String(d).trim();
+    return s.includes('T') ? s.split('T')[0] : s;
+  };
+
+  const rawDate = cleanDateStr(
+    row.RTDate ||
+    row.rtDate ||
+    row.Date ||
+    row.date ||
+    row.TicketDate ||
+    row.ticketDate ||
+    row.ReceivedDate ||
+    row.receivedDate ||
+    row.CreatedDate ||
+    row.createdDate
+  );
+
   return {
-    id: row.RTBatchID || row.rtBatchId || row.id || '',
-    rtNumber: row.RTNumber || row.rtNumber || '',
-    jobId: row.JobID || row.jobId || '',
-    rtDate: row.RTDate || row.rtDate || '',
-    contract: row.Contract || row.contract || '',
-    rig: row.Rig || row.rig || '',
-    well: row.Well || row.well || '',
-    receivedBy: row.ReceivedBy || row.receivedBy || '',
-    notes: row.Notes || row.notes || '',
+    id: String(row.RTBatchID || row.rtBatchId || row.id || row.ID || row.rtNumber || row.RTNumber || ''),
+    rtNumber: String(row.RTNumber || row.rtNumber || row.TicketNumber || row.ticketNumber || row.id || ''),
+    jobId: String(row.JobID || row.jobId || row.JobNumber || row.jobNumber || row.JobNo || row.jobNo || ''),
+    rtDate: rawDate,
+    backloadRmDate: cleanDateStr(row.BackloadRMDate || row.backloadRmDate || row.BackloadDate || rawDate),
+    contract: String(row.Contract || row.contract || row.ContractRef || row.contractRef || ''),
+    rig: String(row.Rig || row.rig || ''),
+    well: String(row.Well || row.well || ''),
+    receivedBy: String(row.ReceivedBy || row.receivedBy || row.Inspector || row.DispatchedBy || 'Receiving Staff'),
+    condition: String(row.Condition || row.condition || row.Notes || row.notes || ''),
+    notes: String(row.Notes || row.notes || ''),
+    isSigned: Boolean(row.isSigned || row.IsSigned || row.signedDocUrl || row.SignedDocUrl),
+    signedDocUrl: row.signedDocUrl || row.SignedDocUrl || '',
+    signedDocName: row.signedDocName || row.SignedDocName || '',
+    signedDate: cleanDateStr(row.signedDate || row.SignedDate || ''),
     toolLines: lines,
     tools: lines,
   };
@@ -374,17 +578,37 @@ export async function fetchLiveDatabaseData(): Promise<{
       const jobsPromise = fetch(`${endpoint}/tbl_Jobs?$top=1000`)
         .catch(() => fetch(`${endpoint}/Jobs?$top=1000`))
         .catch(() => null);
-      const dtPromise = fetch(`${endpoint}/tbl_DTBatches?$top=1000`)
-        .catch(() => fetch(`${endpoint}/DTBatches?$top=1000`))
-        .catch(() => null);
-      const rtPromise = fetch(`${endpoint}/tbl_RTBatches?$top=1000`)
-        .catch(() => fetch(`${endpoint}/RTBatches?$top=1000`))
+
+      const dtPromise = fetch(`${endpoint}/tbl_DeliveryTickets?$top=5000`)
+        .catch(() => fetch(`${endpoint}/DeliveryTickets?$top=5000`))
+        .catch(() => fetch(`${endpoint}/tbl_DTBatches?$top=5000`))
+        .catch(() => fetch(`${endpoint}/DTBatches?$top=5000`))
         .catch(() => null);
 
-      const [jobsRes, dtRes, rtRes] = await Promise.allSettled([
+      const dtLinesPromise = fetch(`${endpoint}/tbl_DeliveryTicketLines?$top=50000`)
+        .catch(() => fetch(`${endpoint}/DeliveryTicketLines?$top=50000`))
+        .catch(() => fetch(`${endpoint}/tbl_DTBatchLines?$top=50000`))
+        .catch(() => fetch(`${endpoint}/DTBatchLines?$top=50000`))
+        .catch(() => null);
+
+      const rtPromise = fetch(`${endpoint}/tbl_ReceivingTickets?$top=5000`)
+        .catch(() => fetch(`${endpoint}/ReceivingTickets?$top=5000`))
+        .catch(() => fetch(`${endpoint}/tbl_RTBatches?$top=5000`))
+        .catch(() => fetch(`${endpoint}/RTBatches?$top=5000`))
+        .catch(() => null);
+
+      const rtLinesPromise = fetch(`${endpoint}/tbl_ReceivingTicketLines?$top=50000`)
+        .catch(() => fetch(`${endpoint}/ReceivingTicketLines?$top=50000`))
+        .catch(() => fetch(`${endpoint}/tbl_RTBatchLines?$top=50000`))
+        .catch(() => fetch(`${endpoint}/RTBatchLines?$top=50000`))
+        .catch(() => null);
+
+      const [jobsRes, dtRes, dtLinesRes, rtRes, rtLinesRes] = await Promise.allSettled([
         jobsPromise,
         dtPromise,
+        dtLinesPromise,
         rtPromise,
+        rtLinesPromise,
       ]);
 
       let hasAnySuccess = false;
@@ -407,12 +631,56 @@ export async function fetchLiveDatabaseData(): Promise<{
         }
       }
 
+      const dtLinesByDt = new Map<string, any[]>();
+      if (dtLinesRes.status === 'fulfilled' && dtLinesRes.value && dtLinesRes.value.ok) {
+        try {
+          const json = await dtLinesRes.value.json();
+          const rows = json.value || json;
+          if (Array.isArray(rows)) {
+            rows.forEach((line: any) => {
+              const dtNum = String(line.dtNumber || line.DTNumber || line.dtBatchId || line.DTBatchID || '').trim();
+              if (dtNum) {
+                if (!dtLinesByDt.has(dtNum)) dtLinesByDt.set(dtNum, []);
+                dtLinesByDt.get(dtNum)!.push(line);
+              }
+            });
+          }
+        } catch {
+          // ignore parsing error
+        }
+      }
+
       if (dtRes.status === 'fulfilled' && dtRes.value && dtRes.value.ok) {
         const json = await dtRes.value.json();
         const rows = json.value || json;
         if (Array.isArray(rows)) {
-          dtBatches = rows.map(normalizeDTBatch);
+          dtBatches = rows.map((r: any) => {
+            const dtNum = String(r.dtNumber || r.DTNumber || r.TicketNumber || r.ticketNumber || r.id || '').trim();
+            if ((!r.toolLines || r.toolLines.length === 0) && dtLinesByDt.has(dtNum)) {
+              r.toolLines = dtLinesByDt.get(dtNum);
+            }
+            return normalizeDTBatch(r);
+          });
           hasAnySuccess = true;
+        }
+      }
+
+      const rtLinesByRt = new Map<string, any[]>();
+      if (rtLinesRes.status === 'fulfilled' && rtLinesRes.value && rtLinesRes.value.ok) {
+        try {
+          const json = await rtLinesRes.value.json();
+          const rows = json.value || json;
+          if (Array.isArray(rows)) {
+            rows.forEach((line: any) => {
+              const rtNum = String(line.rtNumber || line.RTNumber || line.rtBatchId || line.RTBatchID || '').trim();
+              if (rtNum) {
+                if (!rtLinesByRt.has(rtNum)) rtLinesByRt.set(rtNum, []);
+                rtLinesByRt.get(rtNum)!.push(line);
+              }
+            });
+          }
+        } catch {
+          // ignore parsing error
         }
       }
 
@@ -420,7 +688,13 @@ export async function fetchLiveDatabaseData(): Promise<{
         const json = await rtRes.value.json();
         const rows = json.value || json;
         if (Array.isArray(rows)) {
-          rtBatches = rows.map(normalizeRTBatch);
+          rtBatches = rows.map((r: any) => {
+            const rtNum = String(r.rtNumber || r.RTNumber || r.TicketNumber || r.ticketNumber || r.id || '').trim();
+            if ((!r.toolLines || r.toolLines.length === 0) && rtLinesByRt.has(rtNum)) {
+              r.toolLines = rtLinesByRt.get(rtNum);
+            }
+            return normalizeRTBatch(r);
+          });
           hasAnySuccess = true;
         }
       }
@@ -518,8 +792,75 @@ export async function fetchLiveDatabaseData(): Promise<{
             payload.records;
 
           rawJobs = payload.jobs || payload.tbl_Jobs || payload.Jobs || [];
-          rawDt = payload.dtBatches || payload.dt || payload.tbl_DTBatches || payload.deliveryTickets || [];
-          rawRt = payload.rtBatches || payload.rt || payload.tbl_RTBatches || payload.returnTickets || [];
+
+          rawDt =
+            payload.dtBatches ||
+            payload.dt ||
+            payload.tbl_DTBatches ||
+            payload.tbl_DeliveryTickets ||
+            payload.DeliveryTickets ||
+            payload.deliveryTickets ||
+            [];
+          const rawDtLines =
+            payload.deliveryTicketLines ||
+            payload.tbl_DeliveryTicketLines ||
+            payload.DeliveryTicketLines ||
+            payload.tbl_DTBatchLines ||
+            payload.DTBatchLines ||
+            payload.dtLines ||
+            [];
+
+          rawRt =
+            payload.rtBatches ||
+            payload.rt ||
+            payload.tbl_RTBatches ||
+            payload.tbl_ReceivingTickets ||
+            payload.ReceivingTickets ||
+            payload.receivingTickets ||
+            payload.returnTickets ||
+            [];
+          const rawRtLines =
+            payload.receivingTicketLines ||
+            payload.tbl_ReceivingTicketLines ||
+            payload.ReceivingTicketLines ||
+            payload.tbl_RTBatchLines ||
+            payload.RTBatchLines ||
+            payload.rtLines ||
+            [];
+
+          if (Array.isArray(rawDt) && Array.isArray(rawDtLines) && rawDtLines.length > 0) {
+            const linesByDt = new Map<string, any[]>();
+            rawDtLines.forEach((line: any) => {
+              const dtNum = String(line.dtNumber || line.DTNumber || line.dtBatchId || line.DTBatchID || '').trim();
+              if (dtNum) {
+                if (!linesByDt.has(dtNum)) linesByDt.set(dtNum, []);
+                linesByDt.get(dtNum)!.push(line);
+              }
+            });
+            rawDt.forEach((ticket: any) => {
+              const dtNum = String(ticket.dtNumber || ticket.DTNumber || ticket.TicketNumber || ticket.id || '').trim();
+              if ((!ticket.toolLines || ticket.toolLines.length === 0) && linesByDt.has(dtNum)) {
+                ticket.toolLines = linesByDt.get(dtNum);
+              }
+            });
+          }
+
+          if (Array.isArray(rawRt) && Array.isArray(rawRtLines) && rawRtLines.length > 0) {
+            const linesByRt = new Map<string, any[]>();
+            rawRtLines.forEach((line: any) => {
+              const rtNum = String(line.rtNumber || line.RTNumber || line.rtBatchId || line.RTBatchID || '').trim();
+              if (rtNum) {
+                if (!linesByRt.has(rtNum)) linesByRt.set(rtNum, []);
+                linesByRt.get(rtNum)!.push(line);
+              }
+            });
+            rawRt.forEach((ticket: any) => {
+              const rtNum = String(ticket.rtNumber || ticket.RTNumber || ticket.TicketNumber || ticket.id || '').trim();
+              if ((!ticket.toolLines || ticket.toolLines.length === 0) && linesByRt.has(rtNum)) {
+                ticket.toolLines = linesByRt.get(rtNum);
+              }
+            });
+          }
         }
 
         if (Array.isArray(rawInventory) || (Array.isArray(rawJobs) && rawJobs.length > 0)) {
