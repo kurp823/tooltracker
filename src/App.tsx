@@ -41,6 +41,7 @@ import { Toast, ToastNotification } from './components/Toast';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { LoginView } from './components/LoginView';
+import { ChangePasswordView } from './components/ChangePasswordView';
 import { DashboardView } from './components/DashboardView';
 import { InventoryView } from './components/InventoryView';
 import { CalloutsView } from './components/CalloutsView';
@@ -183,9 +184,13 @@ export const App: React.FC = () => {
   });
 
   const [contracts, setContracts] = useState<ContractRecord[]>(() => {
-    const s = localStorage.getItem('emdad_contracts');
-    if (s) return JSON.parse(s);
-    return isPureSqlMode ? [] : INITIAL_CONTRACTS;
+    // Stale local storage purge: domain entities are backed by Azure SQL & INITIAL_CONTRACTS
+    try {
+      localStorage.removeItem('emdad_contracts');
+    } catch {
+      // ignore
+    }
+    return INITIAL_CONTRACTS;
   });
 
   // LocalStorage Persistence
@@ -326,7 +331,21 @@ export const App: React.FC = () => {
       fetchSecondaryModules().then((res) => {
         if (res.callouts !== undefined) setCallouts(res.callouts);
         if (res.gatePasses !== undefined) setGatePasses(res.gatePasses);
-        if (res.contracts !== undefined) setContracts(res.contracts);
+        if (res.contracts !== undefined) {
+          setContracts((prev) => {
+            return res.contracts!.map((c) => {
+              const existing = prev.find((p) => p.id === c.id || p.contractRef === c.contractRef || (c.contractNo && p.contractNo === c.contractNo));
+              const initial = INITIAL_CONTRACTS.find((i) => i.id === c.id || i.contractRef === c.contractRef || (c.contractNo && i.contractNo === c.contractNo));
+              const rates = (c.rates && c.rates.length > 0)
+                ? c.rates
+                : ((existing && existing.rates && existing.rates.length > 0) ? existing.rates : (initial?.rates || []));
+              return {
+                ...c,
+                rates,
+              };
+            });
+          });
+        }
         if (res.inspections !== undefined) setInspections(res.inspections);
         if (res.maintenance !== undefined) setMaintenance(res.maintenance);
       });
@@ -982,11 +1001,19 @@ export const App: React.FC = () => {
 
   // Contract Actions
   const handleSaveContract = (c: ContractRecord) => {
-    setContracts((prev) => [c, ...prev]);
+    setContracts((prev) => {
+      const idx = prev.findIndex((item) => item.id === c.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = c;
+        return next;
+      }
+      return [c, ...prev];
+    });
     saveContractApi(c).then((r) => {
       if (!r.success) showToast(r.message, 'error');
     });
-    showToast(`Master contract ${c.name} saved.`, 'success');
+    showToast(`Master contract ${c.name || c.contractNo} saved.`, 'success');
   };
 
   // Backup & Reset
@@ -1047,6 +1074,20 @@ export const App: React.FC = () => {
   // If user not authenticated
   if (!currentUser) {
     return <LoginView onLogin={(user) => setCurrentUser(user)} />;
+  }
+
+  // If user must change password
+  if (currentUser.mustChangePassword) {
+    return (
+      <ChangePasswordView
+        user={currentUser}
+        onPasswordChanged={(updatedUser) => {
+          setCurrentUser(updatedUser);
+          showToast('Password updated successfully.', 'success');
+        }}
+        onCancel={() => setCurrentUser(null)}
+      />
+    );
   }
 
   // Post-login, pre-dashboard: cover the initial Azure SQL fetch with a
@@ -1283,6 +1324,27 @@ export const App: React.FC = () => {
               contracts={contracts}
               jobs={jobs}
               onSaveContract={handleSaveContract}
+              onRefresh={async () => {
+                const sec = await fetchSecondaryModules();
+                if (sec.contracts && sec.contracts.length > 0) {
+                  setContracts((prev) => {
+                    return sec.contracts!.map((c) => {
+                      const existing = prev.find((p) => p.id === c.id || p.contractRef === c.contractRef || (c.contractNo && p.contractNo === c.contractNo));
+                      const initial = INITIAL_CONTRACTS.find((i) => i.id === c.id || i.contractRef === c.contractRef || (c.contractNo && i.contractNo === c.contractNo));
+                      const rates = (c.rates && c.rates.length > 0)
+                        ? c.rates
+                        : ((existing && existing.rates && existing.rates.length > 0) ? existing.rates : (initial?.rates || []));
+                      return {
+                        ...c,
+                        rates,
+                      };
+                    });
+                  });
+                  showToast(`Synced ${sec.contracts.length} contracts from Azure SQL.`, 'success');
+                } else {
+                  showToast('Contracts master register up to date.', 'info');
+                }
+              }}
             />
           )}
 

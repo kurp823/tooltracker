@@ -9,12 +9,7 @@ export interface User {
   username: string;
   name: string;
   role: UserRole;
-  // Optional now (2026-09-08): a server-authenticated login (tbl_Users via
-  // the Function's real `login` action) never sends the password back to
-  // the client, so this is only populated by the old hardcoded-array demo
-  // data path in initialData.ts.
-  pass?: string;
-  email?: string;
+  pass: string;
   mustChangePassword?: boolean;
 }
 
@@ -140,13 +135,6 @@ export interface DTLine {
   used?: boolean | null;
   ownership: string;
   isEmdad: boolean;
-  // Real columns from tbl_DeliveryTicketLines (added 2026-09-08 once the
-  // app was rewired from the empty tbl_DTBatchLines to the populated
-  // tbl_DeliveryTicketLines table — see api.ts header note)
-  itemNo?: number;
-  qty?: number;
-  remarks?: string;
-  dtNumber?: string;
 }
 
 export interface DTBatch {
@@ -172,20 +160,6 @@ export interface DTBatch {
   signedDocName?: string;
   signedDate?: string;
   isSigned?: boolean;
-  // Real columns from tbl_DeliveryTickets (added 2026-09-08 — see api.ts
-  // header note; this table replaced the empty tbl_DTBatches as the
-  // app's actual delivery-ticket source)
-  clientCode?: string;
-  poNumber?: string;
-  clientRef?: string;
-  vehicleVessel?: string;
-  driverName?: string;
-  lockStage?: string;
-  calloutRef?: string;
-  status?: string;
-  createdBy?: string;
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 export interface RTLine {
@@ -198,13 +172,6 @@ export interface RTLine {
   condition?: string;
   size?: string;
   ownership?: string;
-  // Real columns from tbl_ReceivingTicketLines (added 2026-09-08 — see
-  // api.ts header note)
-  itemNo?: number;
-  qty?: number;
-  remarks?: string;
-  routedAt?: string;
-  routedBy?: string;
 }
 
 export interface RTBatch {
@@ -224,22 +191,6 @@ export interface RTBatch {
   signedDocName?: string;
   signedDate?: string;
   isSigned?: boolean;
-  // Real columns from tbl_ReceivingTickets (added 2026-09-08 — this table
-  // replaced the empty tbl_RTBatches as the app's actual receiving-ticket
-  // source; see api.ts header note)
-  linkedDtNumber?: string;
-  clientCode?: string;
-  manifestNumber?: string;
-  clientRef?: string;
-  vehicleVessel?: string;
-  isLocked?: boolean;
-  lockedBy?: string;
-  lockedDate?: string;
-  lockStage?: string;
-  status?: string;
-  createdBy?: string;
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 export interface GatePassLine {
@@ -354,15 +305,31 @@ export interface JobUtData {
   isSigned?: boolean;
 }
 
+export interface ContractRateItem {
+  no?: number | string;
+  contractRef?: string;       // e.g. "SCHEDULE 2", "A.3.6"
+  category: string;          // ERP Name, e.g. "FAST REAMER", "GUNDRILL REAMER"
+  shortDesc: string;         // EMDAD ShortDesc (Inventory Match), e.g. "FAST REAMER", "HWDP"
+  size?: string;             // Tool OD, e.g. "12-1/4\"", "16\""
+  holeSection?: string;      // Rate Section / Hole Section, e.g. "12-1/4\"", "16\""
+  opsRate: number;           // Operating Day Rate (USD/AED)
+  standbyRate: number;       // Standby Day Rate (USD/AED)
+  runCharges?: number | null;
+  monthlyCharges?: number | null;
+  redress?: number | null;    // Redress / inspection fee
+  currency?: string;         // USD or AED
+}
+
 export interface ContractRecord {
   id: string;
   contractNo?: string;
   contractRef?: string;
   name?: string;
+  shortDesc?: string;
   client: string;
   poNumber?: string;
   currency: string;
-  status: 'Active' | 'Completed' | 'Expired';
+  status: 'Active' | 'Completed' | 'Expired' | 'Closed' | 'Archived';
   contractValue?: number | null;
   startDate?: string | null;
   endDate?: string | null;
@@ -374,6 +341,7 @@ export interface ContractRecord {
   pbgExpiryDate?: string | null;
   invoicedToDate?: number | null;
   notes?: string;
+  rates?: ContractRateItem[];
 }
 
 export interface MovementLog {
