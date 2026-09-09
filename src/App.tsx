@@ -26,6 +26,7 @@ import {
 import {
   syncWithAzureSql,
   fetchLiveDatabaseData,
+  fetchSecondaryModules,
   DbConnectionStatus,
   saveCalloutApi,
   saveGatePassApi,
@@ -240,27 +241,12 @@ export const App: React.FC = () => {
           if (res.data.rtBatches !== undefined) {
             setRtBatches(res.data.rtBatches);
           }
-          // Added 2026-09-08 — these five modules are now backed by Azure
-          // SQL too (see tooltracker-full-modules-function-updates.js).
-          // Guarded with `!== undefined` the same way as the four above, so
-          // if the Function hasn't been redeployed yet, whatever's already
-          // in state (from local cache) is left alone instead of being
-          // wiped to empty.
-          if (res.data.callouts !== undefined) {
-            setCallouts(res.data.callouts);
-          }
-          if (res.data.gatePasses !== undefined) {
-            setGatePasses(res.data.gatePasses);
-          }
-          if (res.data.contracts !== undefined) {
-            setContracts(res.data.contracts);
-          }
-          if (res.data.inspections !== undefined) {
-            setInspections(res.data.inspections);
-          }
-          if (res.data.maintenance !== undefined) {
-            setMaintenance(res.data.maintenance);
-          }
+          // (2026-09-09) Callouts/GatePasses/Contracts/Inspections/
+          // Maintenance are no longer part of this call — they're fetched
+          // separately, in the background, right after this so the
+          // dashboard can render as soon as Inventory/Jobs/DT/RT are back
+          // instead of waiting on all nine. See the effect below that
+          // calls fetchSecondaryModules().
           setDbStatus({
             isConnected: true,
             source: res.source,
@@ -329,7 +315,22 @@ export const App: React.FC = () => {
     if (initialLoadUserRef.current === currentUser.username) return;
     initialLoadUserRef.current = currentUser.username;
     setIsInitialLoading(true);
-    handleFetchLiveSql(true).finally(() => setIsInitialLoading(false));
+    handleFetchLiveSql(true).finally(() => {
+      setIsInitialLoading(false);
+      // Added 2026-09-09 — Callouts/Gate Passes/Contracts/Inspections/
+      // Maintenance load AFTER the dashboard is already on screen, so the
+      // user isn't staring at a loading screen for tables that (for now)
+      // mostly have nothing in them anyway. If this fails, the dashboard
+      // just keeps whatever it already had — no error shown, matching how
+      // these were handled before.
+      fetchSecondaryModules().then((res) => {
+        if (res.callouts !== undefined) setCallouts(res.callouts);
+        if (res.gatePasses !== undefined) setGatePasses(res.gatePasses);
+        if (res.contracts !== undefined) setContracts(res.contracts);
+        if (res.inspections !== undefined) setInspections(res.inspections);
+        if (res.maintenance !== undefined) setMaintenance(res.maintenance);
+      });
+    });
   }, [currentUser, handleFetchLiveSql]);
 
   // Handler to clear demo data and reflect pure SQL state
