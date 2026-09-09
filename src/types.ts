@@ -125,16 +125,21 @@ export interface DrillingJob {
 }
 
 export interface DTLine {
+  id?: number | string;
+  itemNo?: number;
   serial: string;
   assetNo: string;
   shortDesc: string;
   desc: string;
+  toolDescription?: string;
   size: string;
   status: 'OnRig' | 'Returned';
   rtBatchId?: string | null;
   used?: boolean | null;
   ownership: string;
   isEmdad: boolean;
+  qty?: number;
+  remarks?: string;
 }
 
 export interface DTBatch {
@@ -163,15 +168,21 @@ export interface DTBatch {
 }
 
 export interface RTLine {
+  id?: number | string;
+  itemNo?: number;
   serial: string;
   assetNo: string;
   shortDesc: string;
+  desc?: string;
+  toolDescription?: string;
   dtBatchId?: string;
   used: boolean;
   routedTo: string;
   condition?: string;
   size?: string;
   ownership?: string;
+  qty?: number;
+  remarks?: string;
 }
 
 export interface RTBatch {
