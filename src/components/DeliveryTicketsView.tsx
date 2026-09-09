@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { DTBatch, DTLine, DrillingJob, Callout, ToolItem, User } from '../types';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
+import { extractSizeFromDescription } from '../services/api';
 
 interface DeliveryTicketsViewProps {
   user?: User | null;
@@ -31,10 +32,27 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
 }) => {
   const [tab, setTab] = useState<'onrig' | 'all'>('onrig');
   const [search, setSearch] = useState('');
-  const [selectedDTDetail, setSelectedDTDetail] = useState<DTBatch | null>(null);
+  const [selectedDTId, setSelectedDTId] = useState<string | null>(null);
+  const [modalToolSearch, setModalToolSearch] = useState('');
 
-  // Collapsible state (Request #7: Default collapsed mode)
-  const [expandedDTIds, setExpandedDTIds] = useState<Record<string, boolean>>({});
+  // Active selected Delivery Ticket (always in sync with dtBatches)
+  const selectedDTDetail = useMemo(
+    () => dtBatches.find((b) => b.id === selectedDTId) || null,
+    [dtBatches, selectedDTId]
+  );
+
+  // Fast lookup index for inventory tools by serial
+  const inventoryMap = useMemo(() => {
+    const map = new Map<string, ToolItem>();
+    if (Array.isArray(inventory)) {
+      inventory.forEach((item) => {
+        if (item && item.serial) {
+          map.set(item.serial.trim().toUpperCase(), item);
+        }
+      });
+    }
+    return map;
+  }, [inventory]);
 
   // Document Attachment Modal state
   const [attachTargetDT, setAttachTargetDT] = useState<DTBatch | null>(null);
@@ -164,12 +182,19 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
 
   const filteredDTs = useMemo(() => {
     const list = dtBatches.filter((b) => {
-      const hasOnRig = b.toolLines.some((t) => t.status === 'OnRig');
+      const hasOnRig = (b.toolLines || []).some((t) => (t.status || (t.rtBatchId ? 'Returned' : 'OnRig')) === 'OnRig');
       if (tab === 'onrig' && !hasOnRig) return false;
       if (search.trim()) {
         const q = search.toLowerCase();
         const full = `${b.dtNumber} ${b.jobId} ${b.rig} ${b.well} ${b.contract || ''} ${b.rmRef}`.toLowerCase();
-        if (!full.includes(q)) return false;
+        const hasToolMatch = (b.toolLines || []).some(
+          (t) =>
+            t.serial?.toLowerCase().includes(q) ||
+            t.shortDesc?.toLowerCase().includes(q) ||
+            (t as any).toolDescription?.toLowerCase().includes(q) ||
+            t.size?.toLowerCase().includes(q)
+        );
+        if (!full.includes(q) && !hasToolMatch) return false;
       }
       return true;
     });
@@ -188,25 +213,6 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
       return sortOrder === 'desc' ? -diff : diff;
     });
   }, [dtBatches, tab, search, sortField, sortOrder]);
-
-  const toggleDTExpand = (dtId: string) => {
-    setExpandedDTIds((prev) => ({
-      ...prev,
-      [dtId]: !prev[dtId],
-    }));
-  };
-
-  const handleExpandAll = () => {
-    const allOpen: Record<string, boolean> = {};
-    filteredDTs.forEach((b) => {
-      allOpen[b.id] = true;
-    });
-    setExpandedDTIds(allOpen);
-  };
-
-  const handleCollapseAll = () => {
-    setExpandedDTIds({});
-  };
 
   const handleCreateDTSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -409,16 +415,22 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
       </tr>
     </thead>
     <tbody>
-      ${b.toolLines
+      ${(b.toolLines || [])
         .map(
-          (t, i) => `<tr>
+          (t, i) => {
+            const invTool = t.serial ? inventoryMap.get(t.serial.trim().toUpperCase()) : undefined;
+            const displayDesc = t.desc || t.shortDesc || (t as any).toolDescription || invTool?.shortDesc || invTool?.desc || 'Downhole Tool';
+            const displaySize = t.size || invTool?.size || extractSizeFromDescription(displayDesc) || '—';
+            const displayOwner = t.ownership || invTool?.ownership || 'EMDAD';
+            return `<tr>
         <td>${i + 1}</td>
         <td style="font-family: monospace; font-weight: bold;">${t.serial}</td>
-        <td style="font-family: monospace;">${t.size}</td>
-        <td>${t.desc || t.shortDesc}</td>
-        <td>${t.ownership}</td>
-        <td style="text-align: center;">1</td>
-      </tr>`
+        <td style="font-family: monospace;">${displaySize}</td>
+        <td>${displayDesc}</td>
+        <td>${displayOwner}</td>
+        <td style="text-align: center;">${(t as any).qty || 1}</td>
+      </tr>`;
+          }
         )
         .join('')}
     </tbody>
@@ -479,7 +491,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
               tab === 'onrig' ? 'bg-[#1a3055] text-white' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            🛢 Tools On Rig ({dtBatches.filter((b) => b.toolLines.some((t) => t.status === 'OnRig')).length})
+            🛢 Tools On Rig ({dtBatches.filter((b) => (b.toolLines || []).some((t) => (t.status || (t.rtBatchId ? 'Returned' : 'OnRig')) === 'OnRig')).length})
           </button>
           <button
             onClick={() => setTab('all')}
@@ -492,360 +504,165 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleExpandAll}
-            className="px-2.5 py-1 text-xs font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition cursor-pointer"
-            title="Expand All Delivery Tickets"
-          >
-            ▼ Expand All
-          </button>
-          <button
-            onClick={handleCollapseAll}
-            className="px-2.5 py-1 text-xs font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition cursor-pointer"
-            title="Collapse All Delivery Tickets"
-          >
-            ▲ Collapse All
-          </button>
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search DT #, job, rig, well, RM ref..."
-            className="bg-white border border-[#b8c9db] rounded px-3 py-1 text-xs w-60 outline-none font-medium focus:ring-1 focus:ring-amber-400"
+            placeholder="Search DT #, job, rig, well, RM ref, serial..."
+            className="bg-white border border-[#b8c9db] rounded px-3 py-1.5 text-xs w-64 outline-none font-medium focus:ring-1 focus:ring-amber-400 shadow-2xs"
           />
         </div>
       </div>
 
-      {/* DT List (Default Collapsed with Expandable Manifests) */}
+      {/* DT List (Clean, Professional, Compact Ledger) */}
       <div className="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold select-none">
               <tr>
-                <th className="px-2 py-2 w-8 text-center"></th>
                 <th
                   onClick={() => handleSortToggle('dtNumber')}
-                  className="px-3 py-2 cursor-pointer hover:bg-slate-100"
+                  className="px-3 py-2.5 cursor-pointer hover:bg-slate-100"
                 >
                   DT Number {sortField === 'dtNumber' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
                 </th>
                 <th
                   onClick={() => handleSortToggle('jobId')}
-                  className="px-3 py-2 cursor-pointer hover:bg-slate-100"
+                  className="px-3 py-2.5 cursor-pointer hover:bg-slate-100"
                 >
                   Job # {sortField === 'jobId' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
                 </th>
                 <th
                   onClick={() => handleSortToggle('rig')}
-                  className="px-3 py-2 cursor-pointer hover:bg-slate-100"
+                  className="px-3 py-2.5 cursor-pointer hover:bg-slate-100"
                 >
                   Rig / Well {sortField === 'rig' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
                 </th>
-                <th className="px-3 py-2">Contract</th>
-                <th className="px-3 py-2">RM Ref</th>
+                <th className="px-3 py-2.5">Contract</th>
+                <th className="px-3 py-2.5">RM Ref</th>
                 <th
                   onClick={() => handleSortToggle('date')}
-                  className="px-3 py-2 cursor-pointer hover:bg-slate-100"
+                  className="px-3 py-2.5 cursor-pointer hover:bg-slate-100"
                 >
-                  Date {sortField === 'date' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                  Dispatch Date {sortField === 'date' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
                 </th>
-                <th className="px-3 py-2 text-center">Signed Copy</th>
-                <th className="px-3 py-2 text-center">Total Tools</th>
-                <th className="px-3 py-2 text-center">On Rig</th>
-                <th className="px-3 py-2 text-center">Returned</th>
-                <th className="px-3 py-2 text-center">Actions</th>
+                <th className="px-3 py-2.5 text-center">Signed Copy</th>
+                <th className="px-3 py-2.5 text-center">Total Tools</th>
+                <th className="px-3 py-2.5 text-center">On Rig</th>
+                <th className="px-3 py-2.5 text-center">Returned</th>
+                <th className="px-3 py-2.5 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e2e8f0]">
               {filteredDTs.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="p-8 text-center text-slate-500 font-medium">
+                  <td colSpan={11} className="p-8 text-center text-slate-500 font-medium">
                     No delivery tickets found.
                   </td>
                 </tr>
               ) : (
                 filteredDTs.map((b) => {
-                  const onRig = b.toolLines.filter((t) => t.status === 'OnRig').length;
-                  const ret = b.toolLines.filter((t) => t.status === 'Returned').length;
-                  const isOpen = Boolean(expandedDTIds[b.id]);
-                  const isLocked = b.isLocked !== false;
-                  const isEditingThis = editingDTId === b.id;
+                  const onRig = (b.toolLines || []).filter(
+                    (t) => (t.status || (t.rtBatchId ? 'Returned' : 'OnRig')) === 'OnRig'
+                  ).length;
+                  const ret = (b.toolLines || []).filter(
+                    (t) => (t.status || (t.rtBatchId ? 'Returned' : 'OnRig')) === 'Returned'
+                  ).length;
+                  const isSelected = selectedDTId === b.id;
 
                   return (
-                    <React.Fragment key={b.id}>
-                      <tr
-                        className={`transition cursor-pointer ${
-                          isOpen ? 'bg-[#edf4fb]' : 'hover:bg-[#f3f7fb]'
-                        }`}
-                        onClick={() => toggleDTExpand(b.id)}
-                      >
-                        <td className="px-2 py-2 text-center text-slate-400 font-bold">
-                          {isOpen ? '▲' : '▼'}
-                        </td>
-                        <td className="px-3 py-2 font-mono font-bold text-amber-900">
-                          {b.dtNumber}
-                        </td>
-                        <td className="px-3 py-2 font-mono text-[10px] text-blue-700">{b.jobId}</td>
-                        <td className="px-3 py-2 font-medium">
-                          {b.rig} <span className="text-slate-400">|</span> {b.well}
-                        </td>
-                        <td className="px-3 py-2">{b.contract || '—'}</td>
-                        <td className="px-3 py-2 font-mono text-slate-500 text-[10px]">{b.rmRef}</td>
-                        <td className="px-3 py-2 font-mono">{b.rmDate}</td>
-                        <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
-                          {b.isSigned || b.signedDocUrl ? (
-                            <button
-                              type="button"
-                              onClick={() => setAttachTargetDT(b)}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200 cursor-pointer shadow-2xs"
-                              title="Click to view or replace signed ticket"
-                            >
-                              <span>✓</span> Signed Copy
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setAttachTargetDT(b)}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 cursor-pointer shadow-2xs"
-                              title="Click to attach signed and stamped ticket"
-                            >
-                              <span>📎</span> Attach Signed
-                            </button>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 font-mono font-bold text-center">{b.toolLines?.length || 0}</td>
-                        <td
-                          className={`px-3 py-2 font-mono font-bold text-center ${
-                            onRig > 0 ? 'text-amber-700' : 'text-slate-400'
-                          }`}
-                        >
-                          {onRig}
-                        </td>
-                        <td
-                          className={`px-3 py-2 font-mono text-center ${
-                            ret > 0 ? 'text-emerald-700 font-bold' : 'text-slate-400'
-                          }`}
-                        >
-                          {ret}
-                        </td>
-                        <td className="px-3 py-2 text-center space-x-2" onClick={(e) => e.stopPropagation()}>
+                    <tr
+                      key={b.id}
+                      onClick={() => {
+                        setSelectedDTId(b.id);
+                        setModalToolSearch('');
+                      }}
+                      className={`transition cursor-pointer ${
+                        isSelected ? 'bg-amber-50/70' : 'hover:bg-blue-50/40'
+                      }`}
+                      title="Click to view full ticket details and mobilized tools"
+                    >
+                      <td className="px-3 py-2.5">
+                        <span className="inline-flex items-center gap-1.5 font-mono font-bold text-amber-900 group hover:text-blue-700">
+                          <span className="text-blue-600 text-[12px]">📄</span>
+                          <span className="underline decoration-amber-300 group-hover:decoration-blue-500 font-bold">
+                            {b.dtNumber}
+                          </span>
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-[11px] text-blue-700 font-semibold">{b.jobId}</td>
+                      <td className="px-3 py-2.5 font-medium text-slate-800">
+                        {b.rig} <span className="text-slate-400">|</span> {b.well}
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-700">{b.contract || '—'}</td>
+                      <td className="px-3 py-2.5 font-mono text-slate-500 text-[11px]">{b.rmRef || '—'}</td>
+                      <td className="px-3 py-2.5 font-mono text-slate-700">{b.rmDate}</td>
+                      <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                        {b.isSigned || b.signedDocUrl ? (
                           <button
-                            onClick={() => setSelectedDTDetail(b)}
-                            className="text-blue-700 hover:underline font-bold text-[11px] cursor-pointer"
+                            type="button"
+                            onClick={() => setAttachTargetDT(b)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200 cursor-pointer shadow-2xs"
+                            title="Click to view or replace signed ticket"
                           >
-                            View
+                            <span>✓</span> Signed Copy
                           </button>
+                        ) : (
                           <button
-                            onClick={() => handlePrintDT(b)}
-                            className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[10px] font-bold border border-slate-300 cursor-pointer"
+                            type="button"
+                            onClick={() => setAttachTargetDT(b)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 cursor-pointer shadow-2xs"
+                            title="Click to attach signed and stamped ticket"
                           >
-                            🖨 Print
+                            <span>📎</span> Attach Signed
                           </button>
-                        </td>
-                      </tr>
-
-                      {/* Expandable Manifest Body (Request #7 & Request #8) */}
-                      {isOpen && (
-                        <tr className="bg-slate-50/80">
-                          <td colSpan={12} className="p-4 border-t border-b border-slate-200">
-                            <div className="space-y-3">
-                              {/* Header & Revision Controls */}
-                              <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-200">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold text-[#1a3055] text-xs">
-                                    Tools Mobilized under {b.dtNumber}
-                                  </span>
-                                  {isLocked ? (
-                                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-300">
-                                      Dispatched Manifest
-                                    </span>
-                                  ) : (
-                                    <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 text-[10px] font-bold border border-amber-300">
-                                      Manifest in Revision
-                                    </span>
-                                  )}
-                                  {b.dispatchedBy && (
-                                    <span className="text-slate-500 text-[11px]">
-                                      Dispatched by <strong>{b.dispatchedBy}</strong>
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Actions for Amendment */}
-                                <div className="flex items-center gap-2">
-                                  {isLocked ? (
-                                    user?.role === 'Admin' ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setUnlockTargetDT(b);
-                                          setAdminUnlockRemark('');
-                                          setUnlockError('');
-                                        }}
-                                        className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold text-xs shadow-xs cursor-pointer"
-                                      >
-                                        Amend Manifest
-                                      </button>
-                                    ) : (
-                                      <span className="text-[11px] text-slate-500 italic">
-                                        Dispatched: Admin authorization required to amend
-                                      </span>
-                                    )
-                                  ) : (
-                                    user?.role === 'Admin' && (
-                                      <>
-                                        <button
-                                          type="button"
-                                          onClick={() => setEditingDTId(isEditingThis ? null : b.id)}
-                                          className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs cursor-pointer"
-                                        >
-                                          {isEditingThis ? 'Done Picking' : '+ Add Tool from Base'}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleLockDT(b)}
-                                          className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer"
-                                        >
-                                          Finalize Manifest
-                                        </button>
-                                      </>
-                                    )
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Tools Table in Expanded Manifest */}
-                              <div className="border border-[#b8c9db] rounded overflow-hidden bg-white">
-                                <table className="w-full text-left text-xs border-collapse">
-                                  <thead className="bg-[#eef3f9] text-[#1a3055] font-bold border-b border-[#b8c9db]">
-                                    <tr>
-                                      <th className="px-3 py-1.5 w-10">#</th>
-                                      <th className="px-3 py-1.5">Serial / ID</th>
-                                      <th className="px-3 py-1.5">Size</th>
-                                      <th className="px-3 py-1.5">Tool Category</th>
-                                      <th className="px-3 py-1.5">Ownership</th>
-                                      <th className="px-3 py-1.5 text-center">Status</th>
-                                      {!isLocked && user?.role === 'Admin' && (
-                                        <th className="px-3 py-1.5 text-center w-24">Action</th>
-                                      )}
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-200">
-                                    {b.toolLines.map((t, idx) => (
-                                      <tr key={idx} className="hover:bg-slate-50">
-                                        <td className="px-3 py-1.5 text-slate-400 font-mono">{idx + 1}</td>
-                                        <td className="px-3 py-1.5 font-mono font-bold text-amber-900">
-                                          {t.serial}
-                                        </td>
-                                        <td className="px-3 py-1.5 font-mono">{t.size}</td>
-                                        <td className="px-3 py-1.5 font-semibold text-slate-800">
-                                          {t.shortDesc}
-                                        </td>
-                                        <td className="px-3 py-1.5 text-slate-600">{t.ownership}</td>
-                                        <td className="px-3 py-1.5 text-center">
-                                          <span
-                                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                              t.status === 'OnRig'
-                                                ? 'bg-blue-100 text-blue-800'
-                                                : 'bg-emerald-100 text-emerald-800'
-                                            }`}
-                                          >
-                                            {t.status}
-                                          </span>
-                                        </td>
-                                        {!isLocked && user?.role === 'Admin' && (
-                                          <td className="px-3 py-1.5 text-center">
-                                            <button
-                                              type="button"
-                                              onClick={() => handleRemoveToolFromUnlockedDT(b, t.serial)}
-                                              className="text-rose-600 hover:text-rose-800 font-bold text-[11px] cursor-pointer"
-                                            >
-                                              Return to Base
-                                            </button>
-                                          </td>
-                                        )}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-
-                              {/* Unlocked DT: Picker to add tools from Base */}
-                              {!isLocked && isEditingThis && user?.role === 'Admin' && (
-                                <div className="p-3 bg-amber-50/70 border border-amber-300 rounded space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <div className="font-bold text-xs text-amber-900">
-                                      Select Available Tool from Base to Add to {b.dtNumber}:
-                                    </div>
-                                    <input
-                                      type="text"
-                                      value={addExtraToolSearch}
-                                      onChange={(e) => setAddExtraToolSearch(e.target.value)}
-                                      placeholder="Filter serial, category, size..."
-                                      className="border rounded px-2 py-1 text-xs bg-white w-56"
-                                    />
-                                  </div>
-
-                                  <div className="max-h-48 overflow-y-auto border border-amber-200 rounded bg-white">
-                                    <table className="w-full text-left text-xs">
-                                      <thead className="bg-slate-50 font-bold border-b">
-                                        <tr>
-                                          <th className="px-2 py-1">Serial</th>
-                                          <th className="px-2 py-1">Size</th>
-                                          <th className="px-2 py-1">Tool Category</th>
-                                          <th className="px-2 py-1">Owner</th>
-                                          <th className="px-2 py-1 text-center">Action</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y">
-                                        {availableBaseTools
-                                          .filter((t) => {
-                                            if (!addExtraToolSearch.trim()) return true;
-                                            const q = addExtraToolSearch.toLowerCase();
-                                            return `${t.serial} ${t.shortDesc} ${t.size} ${t.ownership}`
-                                              .toLowerCase()
-                                              .includes(q);
-                                          })
-                                          .slice(0, 15)
-                                          .map((tool) => (
-                                            <tr key={tool.id} className="hover:bg-slate-50">
-                                              <td className="px-2 py-1 font-mono font-bold text-amber-900">
-                                                {tool.serial}
-                                              </td>
-                                              <td className="px-2 py-1 font-mono">{tool.size}</td>
-                                              <td className="px-2 py-1 font-semibold">{tool.shortDesc}</td>
-                                              <td className="px-2 py-1 text-slate-500">{tool.ownership}</td>
-                                              <td className="px-2 py-1 text-center">
-                                                <button
-                                                  type="button"
-                                                  onClick={() => handleAddToolToUnlockedDT(b, tool)}
-                                                  className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] cursor-pointer"
-                                                >
-                                                  + Add to Manifest
-                                                </button>
-                                              </td>
-                                            </tr>
-                                          ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Manifest Notes & Remarks */}
-                              {b.notes && (
-                                <div className="p-2.5 bg-slate-100/80 rounded border border-slate-200 text-xs text-slate-700">
-                                  <strong>Manifest Remarks &amp; Audit Trail:</strong>
-                                  <div className="whitespace-pre-line font-mono text-[11px] mt-1 text-slate-600">
-                                    {b.notes}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono font-bold text-center">
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 text-[11px] font-bold border border-slate-200">
+                          {b.toolLines?.length || 0}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono font-bold text-center">
+                        {onRig > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[11px] font-bold border border-blue-200">
+                            {onRig}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal">0</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-center">
+                        {ret > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-200">
+                            {ret}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal">0</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-center space-x-1.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedDTId(b.id);
+                            setModalToolSearch('');
+                          }}
+                          className="px-2 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-[11px] border border-blue-200 cursor-pointer transition shadow-2xs"
+                          title="Open full ticket details window"
+                        >
+                          View Details
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePrintDT(b)}
+                          className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold border border-slate-300 cursor-pointer transition shadow-2xs"
+                          title="Print Delivery Ticket"
+                        >
+                          🖨 Print
+                        </button>
+                      </td>
+                    </tr>
                   );
                 })
               )}
@@ -1386,136 +1203,358 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
         </div>
       )}
 
-      {/* DT Detail Modal */}
+      {/* DT Detail Window (Professional, Compact, Full Details Modal) */}
       {selectedDTDetail && (
         <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 no-print"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-6 no-print"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setSelectedDTDetail(null);
+            if (e.target === e.currentTarget) setSelectedDTId(null);
           }}
         >
-          <div className="bg-white rounded shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-4 py-3 bg-[#1a3055] text-white flex justify-between items-center flex-shrink-0">
-              <div>
-                <h3 className="font-bold text-sm">Delivery Ticket: {selectedDTDetail.dtNumber}</h3>
-                <div className="text-[11px] text-slate-300">
-                  {selectedDTDetail.jobId} &bull; {selectedDTDetail.rig} / {selectedDTDetail.well}
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedDTDetail(null)}
-                className="text-white/80 hover:text-amber-300 font-bold text-lg cursor-pointer"
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="p-4 space-y-3 text-xs">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded border border-slate-200">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="px-5 py-3.5 bg-[#1a3055] text-white flex justify-between items-center flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="p-2 rounded-lg bg-blue-500/20 text-amber-300 text-base">
+                  📄
+                </span>
                 <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">Job Number:</span>
-                  <span className="font-bold text-[#1a3055]">{selectedDTDetail.jobId}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">RM Ref:</span>
-                  <span className="font-mono">{selectedDTDetail.rmRef}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">Dispatch Date:</span>
-                  <span>{selectedDTDetail.rmDate}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">Dispatched By:</span>
-                  <span>{selectedDTDetail.dispatchedBy}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-2 rounded bg-slate-100 border border-slate-200">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-700">Manifest Status:</span>
-                  {selectedDTDetail.isLocked !== false ? (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      ✓ Dispatched &amp; Finalized
-                    </span>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                      Draft / Pending Finalization
-                    </span>
-                  )}
-                </div>
-                {selectedDTDetail.isLocked !== false && user?.role === 'Admin' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUnlockTargetDT(selectedDTDetail);
-                      setSelectedDTDetail(null);
-                    }}
-                    className="px-2 py-1 rounded bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold text-[10px] cursor-pointer"
-                  >
-                    ✏️ Admin Edit Manifest
-                  </button>
-                )}
-              </div>
-
-              <div className="border border-slate-200 rounded overflow-hidden">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-50 text-[#24476b] border-b border-slate-200 font-bold">
-                    <tr>
-                      <th className="px-2.5 py-1.5 w-10">#</th>
-                      <th className="px-2.5 py-1.5">Serial</th>
-                      <th className="px-2.5 py-1.5">Size</th>
-                      <th className="px-2.5 py-1.5">Tool Category</th>
-                      <th className="px-2.5 py-1.5">Owner</th>
-                      <th className="px-2.5 py-1.5">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {selectedDTDetail.toolLines.map((t, i) => (
-                      <tr key={i} className="hover:bg-slate-50">
-                        <td className="px-2.5 py-1.5 text-slate-400 font-mono">{i + 1}</td>
-                        <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">{t.serial}</td>
-                        <td className="px-2.5 py-1.5 font-mono">{t.size}</td>
-                        <td className="px-2.5 py-1.5 font-semibold text-[#1a3055]">{t.shortDesc}</td>
-                        <td className="px-2.5 py-1.5 text-slate-600">{t.ownership}</td>
-                        <td className="px-2.5 py-1.5">
-                          <span
-                            className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                              t.status === 'OnRig'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-slate-100 text-slate-700'
-                            }`}
-                          >
-                            {t.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {selectedDTDetail.notes && (
-                <div className="p-2.5 bg-slate-50 rounded border border-slate-200 text-xs">
-                  <strong className="text-slate-700">Remarks &amp; Audit Log:</strong>
-                  <div className="whitespace-pre-line text-slate-600 font-mono text-[11px] mt-1">
-                    {selectedDTDetail.notes}
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-base tracking-wide text-white">
+                      Delivery Ticket: <span className="text-amber-400 font-mono">{selectedDTDetail.dtNumber}</span>
+                    </h3>
+                    {selectedDTDetail.isLocked !== false ? (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/50">
+                        ✓ Dispatched &amp; Finalized
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-500/50">
+                        ⚠️ Manifest in Revision
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-300 mt-0.5">
+                    Job <span className="font-semibold text-white">{selectedDTDetail.jobId}</span> &bull; Rig <span className="font-semibold text-white">{selectedDTDetail.rig}</span> &bull; Well <span className="font-semibold text-white">{selectedDTDetail.well}</span> &bull; Contract: <span className="text-slate-200">{selectedDTDetail.contract || 'EMDAD'}</span>
                   </div>
                 </div>
-              )}
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedDTDetail.isSigned || selectedDTDetail.signedDocUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => setAttachTargetDT(selectedDTDetail)}
+                    className="px-2.5 py-1 rounded text-xs font-bold bg-emerald-500/20 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/30 cursor-pointer transition"
+                    title="View signed & stamped document"
+                  >
+                    ✓ Signed Copy Attached
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setAttachTargetDT(selectedDTDetail)}
+                    className="px-2.5 py-1 rounded text-xs font-bold bg-amber-500/20 text-amber-200 border border-amber-400/40 hover:bg-amber-500/30 cursor-pointer transition"
+                    title="Attach signed ticket"
+                  >
+                    📎 Attach Signed Copy
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedDTId(null)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 text-xl font-bold transition cursor-pointer"
+                  title="Close Window (Esc)"
+                >
+                  &times;
+                </button>
+              </div>
             </div>
 
-            <div className="px-4 py-3 bg-slate-50 border-t border-[#b8c9db] flex justify-between items-center flex-shrink-0 text-xs">
+            {/* Scrollable Body */}
+            {(() => {
+              const isDTLocked = selectedDTDetail.isLocked !== false;
+              return (
+                <div className="p-5 space-y-4 overflow-y-auto text-xs">
+                  {/* Top Metadata Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                      <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Job Number</span>
+                      <span className="font-bold text-[#1a3055] text-xs font-mono">{selectedDTDetail.jobId}</span>
+                    </div>
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                      <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Rig &amp; Well</span>
+                      <span className="font-semibold text-slate-800 text-xs">{selectedDTDetail.rig} / {selectedDTDetail.well}</span>
+                    </div>
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                      <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">RM / Manifest Ref</span>
+                      <span className="font-mono text-slate-700 text-xs">{selectedDTDetail.rmRef || '—'}</span>
+                    </div>
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                      <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Dispatch Date</span>
+                      <span className="font-mono text-slate-700 text-xs">{selectedDTDetail.rmDate || '—'}</span>
+                    </div>
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                      <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Dispatched By</span>
+                      <span className="font-medium text-slate-800 text-xs">{selectedDTDetail.dispatchedBy || 'Operations'}</span>
+                    </div>
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                      <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Recipient / Consignee</span>
+                      <span className="font-medium text-slate-800 text-xs">{selectedDTDetail.recipient || 'Rig Operations'}</span>
+                    </div>
+                  </div>
+
+                  {/* Manifest Bar: Stats + In-modal Search + Admin Amendment Controls */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-800 text-xs">Mobilized Manifest:</span>
+                      <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 font-bold text-[11px]">
+                        Total: {selectedDTDetail.toolLines?.length || 0}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold text-[11px] border border-blue-200">
+                        On Rig: {(selectedDTDetail.toolLines || []).filter((t) => (t.status || (t.rtBatchId ? 'Returned' : 'OnRig')) === 'OnRig').length}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px] border border-emerald-200">
+                        Returned: {(selectedDTDetail.toolLines || []).filter((t) => (t.status || (t.rtBatchId ? 'Returned' : 'OnRig')) === 'Returned').length}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={modalToolSearch}
+                        onChange={(e) => setModalToolSearch(e.target.value)}
+                        placeholder="Search tools in manifest..."
+                        className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs w-48 sm:w-56 outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+
+                      {/* Admin Amendment Controls */}
+                      {isDTLocked ? (
+                        user?.role === 'Admin' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUnlockTargetDT(selectedDTDetail);
+                              setAdminUnlockRemark('');
+                              setUnlockError('');
+                            }}
+                            className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold text-xs shadow-xs cursor-pointer transition"
+                          >
+                            ✏️ Amend Manifest
+                          </button>
+                        )
+                      ) : (
+                        user?.role === 'Admin' && (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setEditingDTId(editingDTId === selectedDTDetail.id ? null : selectedDTDetail.id)}
+                              className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs cursor-pointer transition"
+                            >
+                              {editingDTId === selectedDTDetail.id ? 'Done Picking' : '+ Add Tool from Base'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleLockDT(selectedDTDetail)}
+                              className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer transition"
+                            >
+                              ✓ Finalize Manifest
+                            </button>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Tool Picker from Base Stock (when unlocked and admin toggles picking) */}
+                  {!isDTLocked && editingDTId === selectedDTDetail.id && user?.role === 'Admin' && (
+                    <div className="p-3.5 bg-amber-50/80 border border-amber-300 rounded-lg space-y-2.5 animate-in fade-in duration-150">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-bold text-xs text-amber-950 flex items-center gap-1.5">
+                          <span>📦</span> Available Tools in Base Stock to Add to {selectedDTDetail.dtNumber}:
+                        </div>
+                        <input
+                          type="text"
+                          value={addExtraToolSearch}
+                          onChange={(e) => setAddExtraToolSearch(e.target.value)}
+                          placeholder="Filter serial, size, description..."
+                          className="border border-amber-300 rounded px-2 py-1 text-xs bg-white w-52 outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div className="max-h-48 overflow-y-auto border border-amber-200 rounded-md bg-white">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-amber-100/60 font-bold border-b border-amber-200 text-amber-900 sticky top-0">
+                            <tr>
+                              <th className="px-2.5 py-1.5">Serial</th>
+                              <th className="px-2.5 py-1.5">Size</th>
+                              <th className="px-2.5 py-1.5">Tool Type</th>
+                              <th className="px-2.5 py-1.5">Description</th>
+                              <th className="px-2.5 py-1.5">Owner</th>
+                              <th className="px-2.5 py-1.5 text-center">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-amber-100">
+                            {availableBaseTools
+                              .filter((t) => {
+                                if (!addExtraToolSearch.trim()) return true;
+                                const q = addExtraToolSearch.toLowerCase();
+                                return `${t.serial} ${t.shortDesc} ${t.desc} ${t.size} ${t.ownership}`
+                                  .toLowerCase()
+                                  .includes(q);
+                              })
+                              .slice(0, 15)
+                              .map((tool) => (
+                                <tr key={tool.id} className="hover:bg-amber-50/50">
+                                  <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">{tool.serial}</td>
+                                  <td className="px-2.5 py-1.5 font-mono">{tool.size}</td>
+                                  <td className="px-2.5 py-1.5 font-bold text-[#1a3055]">{tool.shortDesc}</td>
+                                  <td className="px-2.5 py-1.5 text-slate-600 text-xs max-w-xs truncate" title={tool.desc}>{tool.desc}</td>
+                                  <td className="px-2.5 py-1.5 text-slate-500">{tool.ownership}</td>
+                                  <td className="px-2.5 py-1.5 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddToolToUnlockedDT(selectedDTDetail, tool)}
+                                      className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] cursor-pointer"
+                                    >
+                                      + Add to Manifest
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tools Manifest Table */}
+                  <div className="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+                    <div className="max-h-96 overflow-y-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-[#eef3f9] text-[#1a3055] border-b border-slate-200 font-bold sticky top-0 z-10 select-none">
+                          <tr>
+                            <th className="px-3 py-2 w-10 text-slate-500">#</th>
+                            <th className="px-3 py-2">Serial #</th>
+                            <th className="px-3 py-2">Size</th>
+                            <th className="px-3 py-2">Tool Type</th>
+                            <th className="px-3 py-2">Description</th>
+                            <th className="px-3 py-2">Owner</th>
+                            <th className="px-3 py-2 text-center">Status</th>
+                            {!isDTLocked && user?.role === 'Admin' && (
+                              <th className="px-3 py-2 text-center w-28">Action</th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {(() => {
+                            const allTools = selectedDTDetail.toolLines || [];
+                            const filteredModalTools = allTools.filter((t) => {
+                              if (!modalToolSearch.trim()) return true;
+                              const q = modalToolSearch.toLowerCase();
+                              const invTool = t.serial ? inventoryMap.get(t.serial.trim().toUpperCase()) : undefined;
+                              const toolType = t.shortDesc || invTool?.shortDesc || '';
+                              const desc = t.desc || invTool?.desc || (t as any).toolDescription || '';
+                              const sz = t.size || invTool?.size || '';
+                              const owner = t.ownership || invTool?.ownership || '';
+                              return (
+                                t.serial?.toLowerCase().includes(q) ||
+                                toolType.toLowerCase().includes(q) ||
+                                desc.toLowerCase().includes(q) ||
+                                sz.toLowerCase().includes(q) ||
+                                owner.toLowerCase().includes(q)
+                              );
+                            });
+
+                            if (filteredModalTools.length === 0) {
+                              return (
+                                <tr>
+                                  <td colSpan={!isDTLocked && user?.role === 'Admin' ? 8 : 7} className="p-8 text-center text-slate-400 font-medium">
+                                    {allTools.length === 0
+                                      ? 'No tool lines recorded for this delivery ticket.'
+                                      : 'No tools match your search filter.'}
+                                  </td>
+                                </tr>
+                              );
+                            }
+
+                            return filteredModalTools.map((t, i) => {
+                              const invTool = t.serial ? inventoryMap.get(t.serial.trim().toUpperCase()) : undefined;
+                              const toolType = t.shortDesc || invTool?.shortDesc || 'Downhole Tool';
+                              const description = t.desc || invTool?.desc || (t as any).toolDescription || toolType;
+                              const displaySize = t.size || invTool?.size || extractSizeFromDescription(description) || '—';
+                              const displayOwnership = t.ownership || invTool?.ownership || (t.isEmdad ? 'EMDAD' : 'EMDAD');
+                              const statusVal = t.status || (t.rtBatchId ? 'Returned' : 'OnRig');
+                              const isOnRig = statusVal === 'OnRig';
+
+                              return (
+                                <tr key={i} className="hover:bg-slate-50 transition">
+                                  <td className="px-3 py-2 text-slate-400 font-mono text-[11px]">{i + 1}</td>
+                                  <td className="px-3 py-2 font-mono font-bold text-amber-900">{t.serial}</td>
+                                  <td className="px-3 py-2 font-mono font-semibold text-slate-800">{displaySize}</td>
+                                  <td className="px-3 py-2 font-bold text-[#1a3055] whitespace-nowrap">{toolType}</td>
+                                  <td className="px-3 py-2 text-slate-700 text-xs" title={description}>
+                                    {description}
+                                  </td>
+                                  <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{displayOwnership}</td>
+                                  <td className="px-3 py-2 text-center whitespace-nowrap">
+                                    <span
+                                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                        isOnRig
+                                          ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                          : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                      }`}
+                                    >
+                                      {isOnRig ? 'On Rig' : 'Returned'}
+                                    </span>
+                                  </td>
+                                  {!isDTLocked && user?.role === 'Admin' && (
+                                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveToolFromUnlockedDT(selectedDTDetail, t.serial)}
+                                        className="text-rose-600 hover:text-rose-800 font-bold text-[11px] hover:underline cursor-pointer"
+                                      >
+                                        Return to Base
+                                      </button>
+                                    </td>
+                                  )}
+                                </tr>
+                              );
+                            });
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Remarks & Audit Trail */}
+                  {selectedDTDetail.notes && (
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+                      <strong className="text-slate-700 block mb-1">Manifest Remarks &amp; Audit Trail:</strong>
+                      <div className="whitespace-pre-line text-slate-600 font-mono text-[11px] bg-white p-2.5 rounded border border-slate-200">
+                        {selectedDTDetail.notes}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Footer */}
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-wrap justify-between items-center gap-3 flex-shrink-0 text-xs">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePrintDT(selectedDTDetail)}
+                  className="px-3.5 py-1.5 rounded-lg bg-slate-200 text-slate-800 font-bold hover:bg-slate-300 cursor-pointer transition flex items-center gap-1.5 shadow-2xs"
+                >
+                  <span>🖨</span> Print Delivery Ticket
+                </button>
+              </div>
+
               <button
-                onClick={() => handlePrintDT(selectedDTDetail)}
-                className="px-3 py-1.5 rounded bg-slate-200 text-slate-800 font-bold hover:bg-slate-300 cursor-pointer"
+                type="button"
+                onClick={() => setSelectedDTId(null)}
+                className="px-4 py-1.5 rounded-lg bg-[#1a3055] text-white font-bold hover:bg-[#24426d] cursor-pointer transition shadow-2xs"
               >
-                🖨 Print Document
-              </button>
-              <button
-                onClick={() => setSelectedDTDetail(null)}
-                className="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold hover:bg-[#24426d] cursor-pointer"
-              >
-                Close
+                Close Window
               </button>
             </div>
           </div>
