@@ -169,10 +169,10 @@ export const JobsView: React.FC<JobsViewProps> = ({
       } else if (sortField === 'mobDate') {
         comparison = (a.mobDate || '').localeCompare(b.mobDate || '');
       } else if (sortField === 'toolsOnRig') {
-        const aDTs = dtBatches.filter((x) => x.jobId === a.id).reduce((s, x) => s + x.toolLines.length, 0);
-        const aRTs = rtBatches.filter((x) => x.jobId === a.id).reduce((s, x) => s + x.toolLines.length, 0);
-        const bDTs = dtBatches.filter((x) => x.jobId === b.id).reduce((s, x) => s + x.toolLines.length, 0);
-        const bRTs = rtBatches.filter((x) => x.jobId === b.id).reduce((s, x) => s + x.toolLines.length, 0);
+        const aDTs = dtBatches.filter((x) => x.jobId === a.id).reduce((s, x) => s + (x.toolLines?.length || 0), 0);
+        const aRTs = rtBatches.filter((x) => x.jobId === a.id).reduce((s, x) => s + (x.toolLines?.length || 0), 0);
+        const bDTs = dtBatches.filter((x) => x.jobId === b.id).reduce((s, x) => s + (x.toolLines?.length || 0), 0);
+        const bRTs = rtBatches.filter((x) => x.jobId === b.id).reduce((s, x) => s + (x.toolLines?.length || 0), 0);
         comparison = (aDTs - aRTs) - (bDTs - bRTs);
       }
       return sortOrder === 'desc' ? -comparison : comparison;
@@ -414,8 +414,8 @@ export const JobsView: React.FC<JobsViewProps> = ({
                 filteredAndSortedJobs.map((job) => {
                   const jobDTs = dtBatches.filter((b) => b.jobId === job.id);
                   const jobRTs = rtBatches.filter((b) => b.jobId === job.id);
-                  const dtToolsCount = jobDTs.reduce((s, b) => s + b.toolLines.length, 0);
-                  const rtToolsCount = jobRTs.reduce((s, b) => s + b.toolLines.length, 0);
+                  const dtToolsCount = jobDTs.reduce((s, b) => s + (b.toolLines?.length || 0), 0);
+                  const rtToolsCount = jobRTs.reduce((s, b) => s + (b.toolLines?.length || 0), 0);
                   const toolsOnRig = Math.max(0, dtToolsCount - rtToolsCount);
 
                   return (
@@ -806,11 +806,11 @@ export const JobsView: React.FC<JobsViewProps> = ({
                             <span className="font-mono font-bold text-amber-900">{b.dtNumber}</span>
                             <span className="text-slate-500 text-[10px]">
                               Date: <strong>{b.rmDate}</strong> &bull; Total Tools:{' '}
-                              <strong>{b.toolLines.length}</strong>
+                              <strong>{b.toolLines?.length || 0}</strong>
                             </span>
                           </div>
                           <div className="text-[11px] text-slate-600 font-mono">
-                            {b.toolLines.map((t) => `${t.serial} (${t.shortDesc})`).join(', ')}
+                            {(b.toolLines || []).map((t) => `${t.serial} (${t.shortDesc})`).join(', ')}
                           </div>
                         </div>
                       ))}
@@ -837,11 +837,11 @@ export const JobsView: React.FC<JobsViewProps> = ({
                             <span className="font-mono font-bold text-emerald-900">{b.rtNumber}</span>
                             <span className="text-slate-500 text-[10px]">
                               Received: <strong>{b.rtDate}</strong> &bull; Returned Tools:{' '}
-                              <strong>{b.toolLines.length}</strong>
+                              <strong>{b.toolLines?.length || 0}</strong>
                             </span>
                           </div>
                           <div className="text-[11px] text-slate-600 font-mono">
-                            {b.toolLines.map((t) => `${t.serial} (${t.shortDesc})`).join(', ')}
+                            {(b.toolLines || []).map((t) => `${t.serial} (${t.shortDesc})`).join(', ')}
                           </div>
                         </div>
                       ))}

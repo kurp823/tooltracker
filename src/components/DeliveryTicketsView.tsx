@@ -132,7 +132,6 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
         ['Emdad Base', 'Base', 'Our Base'].includes(t.location) &&
         !dispatchedSerials.has(t.serial) &&
         !assignedIds.has(t.id) &&
-        t.status !== 'On Rig' &&
         t.location !== 'On Rig' &&
         !t.location?.toLowerCase().includes('rig')
     );
@@ -614,7 +613,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                             </button>
                           )}
                         </td>
-                        <td className="px-3 py-2 font-mono font-bold text-center">{b.toolLines.length}</td>
+                        <td className="px-3 py-2 font-mono font-bold text-center">{b.toolLines?.length || 0}</td>
                         <td
                           className={`px-3 py-2 font-mono font-bold text-center ${
                             onRig > 0 ? 'text-amber-700' : 'text-slate-400'
@@ -1526,24 +1525,23 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
       {/* Document Attachment Modal */}
       {attachTargetDT && (
         <DocumentAttachmentModal
-          documentType="DT"
-          ticketNumber={attachTargetDT.dtNumber}
-          jobId={attachTargetDT.jobId}
-          rig={attachTargetDT.rig}
-          well={attachTargetDT.well}
-          existingFileUrl={attachTargetDT.signedDocUrl}
-          existingFileName={attachTargetDT.signedDocName}
-          existingSignedDate={attachTargetDT.signedDate}
-          onSave={({ fileUrl, fileName, signedDate, notes }) => {
+          title="Delivery Ticket Attachment"
+          subtitle={`Rig: ${attachTargetDT.rig} | Well: ${attachTargetDT.well} | Job: ${attachTargetDT.jobId}`}
+          referenceNumber={attachTargetDT.dtNumber}
+          currentDocUrl={attachTargetDT.signedDocUrl}
+          currentDocName={attachTargetDT.signedDocName}
+          currentSignedDate={attachTargetDT.signedDate}
+          isSigned={attachTargetDT.isSigned}
+          onSave={({ docUrl, docName, signedDate }) => {
             const updated: DTBatch = {
               ...attachTargetDT,
               isSigned: true,
-              signedDocUrl: fileUrl,
-              signedDocName: fileName,
+              signedDocUrl: docUrl,
+              signedDocName: docName,
               signedDate: signedDate,
               notes: attachTargetDT.notes
-                ? `${attachTargetDT.notes}\n[Signed Copy attached by ${user?.name || 'User'}: ${notes || fileName}]`
-                : `[Signed Copy attached by ${user?.name || 'User'}: ${notes || fileName}]`,
+                ? `${attachTargetDT.notes}\n[Signed Copy attached by ${user?.name || 'User'}: ${docName}]`
+                : `[Signed Copy attached by ${user?.name || 'User'}: ${docName}]`,
             };
             if (onUpdateDTBatch) {
               onUpdateDTBatch(updated);

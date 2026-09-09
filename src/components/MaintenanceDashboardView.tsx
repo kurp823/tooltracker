@@ -122,7 +122,7 @@ export const MaintenanceDashboardView: React.FC<MaintenanceDashboardViewProps> =
       const v = m.vendor || m.facility || 'Base Workshop';
       if (v.includes('Noor')) counts['Noor Islam'] += 1;
       else if (v.includes('Rainbow')) counts['Rainbow'] += 1;
-      else if (v.includes('Base') || m.type === 'Internal') counts['Base Workshop'] += 1;
+      else if (v.includes('Base') || m.type === 'InHouse') counts['Base Workshop'] += 1;
       else counts['Other Vendor'] += 1;
     });
 

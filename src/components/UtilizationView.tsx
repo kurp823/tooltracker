@@ -178,11 +178,11 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
 
     if (jobDTs.length > 0) {
       jobDTs.forEach((dt) => {
-        dt.toolLines.forEach((tl) => {
+        (dt.toolLines || []).forEach((tl) => {
           const matchedRT = rtBatches.find(
             (rt) =>
               rt.jobId === currentJob.id &&
-              rt.toolLines.some((rtl) => rtl.serial === tl.serial)
+              (rt.toolLines || []).some((rtl) => rtl.serial === tl.serial)
           );
           const toolInv = inventory.find((t) => t.serial === tl.serial);
 
@@ -1983,7 +1983,7 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                   {displayedItems.length} Equipment Lines
                 </div>
                 <div className="text-[10px] text-slate-500 truncate">
-                  {currentJob?.jobNo || 'All Active Lines'} &bull; {MONTH_NAMES[selectedMonthIdx]} {selectedYear}
+                  {currentJob?.id || 'All Active Lines'} &bull; {MONTH_NAMES[selectedMonthIdx]} {selectedYear}
                 </div>
               </div>
 

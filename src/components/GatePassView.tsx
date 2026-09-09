@@ -366,7 +366,7 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
                         <td className="px-3 py-2 font-mono font-bold text-amber-900">{gp.gpNumber}</td>
                         <td className="px-3 py-2 font-bold text-[#1a3055]">{gp.supplier}</td>
                         <td className="px-3 py-2 font-mono">{formatDateDDMMYY(gp.gpDate)}</td>
-                        <td className="px-3 py-2 font-mono font-bold text-center">{gp.toolLines.length}</td>
+                        <td className="px-3 py-2 font-mono font-bold text-center">{gp.toolLines?.length || 0}</td>
                         <td className="px-3 py-2">{gp.preparedBy}</td>
                         <td className="px-3 py-2">{gp.authorizedBy || '—'}</td>
                         <td className="px-3 py-2 text-center space-x-2" onClick={(e) => e.stopPropagation()}>

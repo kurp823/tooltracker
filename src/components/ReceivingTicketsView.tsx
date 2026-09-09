@@ -594,7 +594,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                           </td>
                           <td className="px-3 py-2">{r.contract || '—'}</td>
                           <td className="px-3 py-2 font-mono">{r.rtDate}</td>
-                          <td className="px-3 py-2 font-mono font-bold text-center">{r.toolLines.length}</td>
+                          <td className="px-3 py-2 font-mono font-bold text-center">{r.toolLines?.length || 0}</td>
                           <td className="px-3 py-2">{r.receivedBy}</td>
                           <td className="px-3 py-2 text-center space-x-2" onClick={(e) => e.stopPropagation()}>
                             <button
@@ -617,7 +617,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                             <td colSpan={9} className="p-4 border-t border-b border-slate-200">
                               <div className="space-y-2">
                                 <div className="font-bold text-[#1a3055] text-xs">
-                                  Received Manifest Tools under {r.rtNumber} ({r.toolLines.length} Tools)
+                                  Received Manifest Tools under {r.rtNumber} ({r.toolLines?.length || 0} Tools)
                                 </div>
                                 <div className="border border-[#b8c9db] rounded overflow-hidden bg-white">
                                   <table className="w-full text-left text-xs border-collapse">

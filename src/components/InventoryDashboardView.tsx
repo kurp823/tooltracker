@@ -795,7 +795,7 @@ export const InventoryDashboardView: React.FC<InventoryDashboardViewProps> = ({
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => onNavigate('inspections')}
+                onClick={() => onNavigate('inspection')}
                 className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded text-xs font-bold transition"
               >
                 Go to Inspections &rarr;

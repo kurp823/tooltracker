@@ -50,13 +50,13 @@ const PALETTE = ['#1a3055', '#2563eb', '#0d9488', '#f59e0b', '#8b5cf6', '#ec4899
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   user,
-  inventory,
-  jobs,
-  callouts,
-  dtBatches,
+  inventory = [],
+  jobs = [],
+  callouts = [],
+  dtBatches = [],
   rtBatches = [],
-  inspections,
-  maintenance,
+  inspections = [],
+  maintenance = [],
   contracts = [],
   jobUtMap = {},
   onNavigate,
@@ -81,11 +81,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // 2. Tools on Rig Calculation
   const totalDispatchedTools = useMemo(() => {
-    return dtBatches.reduce((acc, b) => acc + b.toolLines.length, 0);
+    return dtBatches.reduce((acc, b) => acc + (b?.toolLines?.length || 0), 0);
   }, [dtBatches]);
 
   const totalReturnedTools = useMemo(() => {
-    return rtBatches.reduce((acc, b) => acc + b.toolLines.length, 0);
+    return rtBatches.reduce((acc, b) => acc + (b?.toolLines?.length || 0), 0);
   }, [rtBatches]);
 
   const toolsOnRigCount = Math.max(0, totalDispatchedTools - totalReturnedTools);
@@ -127,8 +127,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       // Calculate tools on rig for this job
       const jDTs = dtBatches.filter((b) => b.jobId === job.id);
       const jRTs = rtBatches.filter((b) => b.jobId === job.id);
-      const disp = jDTs.reduce((s, b) => s + b.toolLines.length, 0);
-      const ret = jRTs.reduce((s, b) => s + b.toolLines.length, 0);
+      const disp = jDTs.reduce((s, b) => s + (b?.toolLines?.length || 0), 0);
+      const ret = jRTs.reduce((s, b) => s + (b?.toolLines?.length || 0), 0);
       map[c].toolsOnRig += Math.max(0, disp - ret);
     });
 
@@ -145,7 +145,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const categoryDeploymentData = useMemo(() => {
     const counts: Record<string, number> = {};
     inventory.forEach((t) => {
-      const cat = t.category || t.shortDesc || 'Drilling Tool';
+      const cat = (t as any).category || t.shortDesc || 'Drilling Tool';
       counts[cat] = (counts[cat] || 0) + 1;
     });
 
@@ -185,7 +185,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       const rigName = job.rig || 'Rig Unassigned';
       const jDTs = dtBatches.filter((b) => b.jobId === job.id);
       const toolsList: string[] = [];
-      jDTs.forEach((b) => b.toolLines.forEach((t) => toolsList.push(t.serial)));
+      jDTs.forEach((b) => (b.toolLines || []).forEach((t) => toolsList.push(t.serial)));
 
       rigMap[rigName] = {
         rig: rigName,
