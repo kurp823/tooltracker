@@ -405,15 +405,14 @@ export async function fetchLiveDatabaseData(): Promise<{
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
 
+    // (2026-09-09): Callouts/GatePasses/Contracts/Inspections/Maintenance
+    // are no longer fetched here — see fetchSecondaryModules() below, which
+    // the app now calls AFTER the dashboard is already showing
+    // Inventory/Jobs/DT/RT, instead of making the user wait on all nine
+    // calls before seeing anything (several of those tables have no rows
+    // yet anyway, so waiting on them bought nothing but a slower screen).
     const payload = gadJson ? gadJson.data || gadJson : null;
     if (payload && (payload.inventory || payload.jobs)) {
-      const [calloutsRaw, gatePassesRaw, contractsRaw, inspectionsRaw, maintenanceRaw] = await Promise.all([
-        fetchFromApi<any[]>('getcallouts'),
-        fetchFromApi<any[]>('getgatepasses'),
-        fetchFromApi<any[]>('getcontracts'),
-        fetchFromApi<any[]>('getinspections'),
-        fetchFromApi<any[]>('getmaintenance'),
-      ]);
       return {
         success: true,
         source: 'azure-function',
@@ -424,11 +423,6 @@ export async function fetchLiveDatabaseData(): Promise<{
           jobs: Array.isArray(payload.jobs) ? payload.jobs.map(normalizeJob) : [],
           dtBatches: Array.isArray(payload.dtBatches) ? payload.dtBatches.map(normalizeDTBatch) : [],
           rtBatches: Array.isArray(payload.rtBatches) ? payload.rtBatches.map(normalizeRTBatch) : [],
-          callouts: Array.isArray(calloutsRaw) ? calloutsRaw.map(normalizeCallout) : undefined,
-          gatePasses: Array.isArray(gatePassesRaw) ? gatePassesRaw.map(normalizeGatePass) : undefined,
-          contracts: Array.isArray(contractsRaw) ? contractsRaw.map(normalizeContract) : undefined,
-          inspections: Array.isArray(inspectionsRaw) ? inspectionsRaw.map(normalizeInspection) : undefined,
-          maintenance: Array.isArray(maintenanceRaw) ? maintenanceRaw.map(normalizeMaintenance) : undefined,
         },
         message: `Connected to Azure Function (${payload.inventory?.length || 0} tools, ${payload.jobs?.length || 0} jobs, ${payload.dtBatches?.length || 0} delivery tickets, ${payload.rtBatches?.length || 0} receiving tickets)`,
       };
@@ -441,6 +435,37 @@ export async function fetchLiveDatabaseData(): Promise<{
     success: false,
     source: 'failed',
     message: 'Unable to reach the Azure Function backend. Using local cache.',
+  };
+}
+
+/**
+ * Added 2026-09-09 — fetches Callouts/Gate Passes/Contracts/Inspections/
+ * Maintenance on their own, separately from fetchLiveDatabaseData() above.
+ * Call this AFTER the dashboard is already rendering the core data, so
+ * these five (slower, currently mostly-empty) tables never delay first
+ * paint. Same tolerant shape as before: a field is `undefined` (never
+ * overwritten) if its call fails.
+ */
+export async function fetchSecondaryModules(): Promise<{
+  callouts?: any[];
+  gatePasses?: any[];
+  contracts?: any[];
+  inspections?: any[];
+  maintenance?: any[];
+}> {
+  const [calloutsRaw, gatePassesRaw, contractsRaw, inspectionsRaw, maintenanceRaw] = await Promise.all([
+    fetchFromApi<any[]>('getcallouts'),
+    fetchFromApi<any[]>('getgatepasses'),
+    fetchFromApi<any[]>('getcontracts'),
+    fetchFromApi<any[]>('getinspections'),
+    fetchFromApi<any[]>('getmaintenance'),
+  ]);
+  return {
+    callouts: Array.isArray(calloutsRaw) ? calloutsRaw.map(normalizeCallout) : undefined,
+    gatePasses: Array.isArray(gatePassesRaw) ? gatePassesRaw.map(normalizeGatePass) : undefined,
+    contracts: Array.isArray(contractsRaw) ? contractsRaw.map(normalizeContract) : undefined,
+    inspections: Array.isArray(inspectionsRaw) ? inspectionsRaw.map(normalizeInspection) : undefined,
+    maintenance: Array.isArray(maintenanceRaw) ? maintenanceRaw.map(normalizeMaintenance) : undefined,
   };
 }
 
