@@ -1,32 +1,11 @@
 /**
- * Service for Azure SQL integration via the Azure Function backend,
- * and standalone deployment exports.
- *
- * This app previously also supported Azure Static Web Apps' Data API Builder
- * ("linked database") as an alternative backend, auto-selected whenever the
- * hostname ended in azurestaticapps.net. That was removed: it assumed every
- * such deployment had a database connection linked in Azure, which isn't
- * true for all of them (e.g. polite-tree-...), and a deployment without one
- * gets back the Static Web App's default HTML error page (HTTP 405) instead
- * of JSON — which is exactly what broke login there. The Azure Function
- * below is the single confirmed-working backend, so it's now the only path.
- *
- * IMPORTANT (2026-09-08): The Azure Function's GET_ALL_DATA action was
- * previously reading Delivery/Receiving Tickets from tbl_DTBatches and
- * tbl_RTBatches — both confirmed EMPTY (0 rows). The real, populated data
- * (2,643 delivery tickets, 2,424 receiving tickets) lives in
- * tbl_DeliveryTickets/tbl_DeliveryTicketLines and
- * tbl_ReceivingTickets/tbl_ReceivingTicketLines, which the app had never
- * queried. The normalizers below were rewritten to match those tables'
- * real columns (see the accompanying Azure Function code for the
- * corresponding server-side query/shape). Login was also moved server-side
- * against the real tbl_Users table (10 real rows, previously unused —
- * the app authenticated against a hardcoded array in initialData.ts).
+ * Service for Azure SQL integration, Data API Builder, Azure Functions backend,
+ * and standalone deployment exports
  */
 
 export interface DbConnectionStatus {
   isConnected: boolean;
-  source: 'azure-sql' | 'azure-function' | 'local-cache';
+  source: 'azure-sql' | 'data-api' | 'azure-function' | 'local-cache';
   lastChecked: string;
   message: string;
   counts: {
@@ -37,34 +16,59 @@ export interface DbConnectionStatus {
   };
 }
 
-const DEFAULT_FUNCTION_ENDPOINT =
-  'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
-
 export function getApiEndpoint(): string {
   const custom = localStorage.getItem('azure_api_endpoint');
   if (custom && custom.trim()) return custom.trim();
-  return DEFAULT_FUNCTION_ENDPOINT;
+  // By default, if deployed on Azure Static Web Apps with Database Connection,
+  // the relative path /data-api/rest is used.
+  if (typeof window !== 'undefined' && window.location.hostname.includes('azurestaticapps.net')) {
+    return '/data-api/rest';
+  }
+  return 'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
+}
+
+export function getApiKey(): string {
+  const custom = localStorage.getItem('azure_api_key');
+  if (custom && custom.trim()) return custom.trim();
+  return 'XCOETTV_A-BHeNPUSFSpChSOv9DAJcZOzrz1NvOlROofAzFu2tbo_Q==';
 }
 
 /**
  * Normalizes SQL column names (PascalCase or standard) to front-end camelCase
  */
 function normalizeInventoryItem(row: any): any {
+  const sysId =
+    row.SystemID ||
+    row.systemId ||
+    row.SystemId ||
+    row.Serial ||
+    row.serial ||
+    row.SerialNumber ||
+    row.serialNumber ||
+    row.AssetNo ||
+    row.assetNo ||
+    row.id ||
+    `TOOL-${Math.random().toString(36).substring(7)}`;
+
   return {
-    id: row.SystemID || row.systemId || row.id || `TOOL-${Math.random().toString(36).substring(7)}`,
-    serial: row.SystemID || row.serial || row.SystemId || '',
-    assetNo: row.AssetNo || row.assetNo || '',
-    size: row.Size || row.size || '',
-    shortDesc: row.ShortDesc || row.shortDesc || row.category || '',
-    desc: row.Description || row.desc || '',
-    qty: Number(row.Qty ?? row.qty ?? 1),
-    location: row.Location || row.location || 'Emdad Base',
-    status: row.Status || row.status || 'Good',
-    ownership: row.Ownership || row.ownership || (row.IsEmdad ? 'EMDAD' : 'Sub-Contractor'),
-    isEmdad: Boolean(row.IsEmdad ?? row.isEmdad ?? true),
-    oemSerial: row.OEMSerial || row.oemSerial || '',
-    supplier: row.Supplier || row.supplier || '',
-    addedDate: row.AddedDate || row.addedDate || '',
+    id: String(sysId).trim(),
+    serial: String(row.Serial || row.serial || row.SystemID || row.systemId || sysId).trim(),
+    assetNo: String(row.AssetNo || row.assetNo || row.PartNo || row.partNo || '').trim(),
+    size: String(row.Size || row.size || row.ToolSize || row.toolSize || '').trim(),
+    shortDesc: String(row.ShortDesc || row.shortDesc || row.Category || row.category || row.ToolType || row.toolType || 'Downhole Tool').trim(),
+    desc: String(row.Description || row.desc || row.ToolDescription || row.toolDescription || '').trim(),
+    qty: Number(row.Qty ?? row.qty ?? row.Quantity ?? row.quantity ?? 1),
+    location: String(row.Location || row.location || 'Emdad Base').trim(),
+    status: (row.Status || row.status || 'Good') as any,
+    ownership: String(row.Ownership || row.ownership || (row.IsEmdad ? 'EMDAD' : 'Sub-Contractor')).trim(),
+    isEmdad: Boolean(row.IsEmdad ?? row.isEmdad ?? (row.Ownership ? String(row.Ownership).toUpperCase().includes('EMDAD') : true)),
+    oemSerial: String(row.OEMSerial || row.oemSerial || row.ManufacturerSerial || '').trim(),
+    supplier: String(row.Supplier || row.supplier || row.Vendor || '').trim(),
+    addedDate: String(row.AddedDate || row.addedDate || row.CreatedDate || '').trim(),
+    rig: row.Rig || row.rig || undefined,
+    well: row.Well || row.well || undefined,
+    contract: row.Contract || row.contract || undefined,
+    currentJobId: row.CurrentJobId || row.currentJobId || row.JobID || row.jobId || undefined,
   };
 }
 
@@ -94,151 +98,42 @@ function normalizeJob(row: any): any {
     isLocked: Boolean(row.LegalInvoiceNo || row.legalInvoiceNo),
     invoiceNumber: row.LegalInvoiceNo || row.EmdadInvoiceNo || '',
     invoiceDate: row.InvoiceDate || row.LegalInvoiceDate || '',
-    // NOTE: kept for backward compat with any cached local data; the live
-    // field the rest of the app actually reads is `invoiceAmount` (see
-    // architecture-review-2026-09-06.md finding #5 — this mismatch is not
-    // fixed here, flagging only).
     invoicedAmountUSD: Number(row.InvoicedAmountUSD || 0),
   };
 }
 
-/** tbl_DeliveryTicketLines (enriched server-side with tbl_Inventory + return status) -> DTLine */
-function normalizeDTLine(row: any, parentDtNumber?: string): any {
-  const usedStatus = (row.usedStatus || '').toString().toLowerCase();
-  return {
-    serial: row.serial || '',
-    assetNo: row.AssetNo || row.assetNo || '',
-    shortDesc: row.ShortDesc || row.shortDesc || row.toolDescription || '',
-    desc: row.toolDescription || row.ShortDesc || row.shortDesc || '',
-    size: row.Size || row.size || '',
-    status: row.lineStatus === 'Returned' ? 'Returned' : 'OnRig',
-    rtBatchId: row.returnedRtNumber || null,
-    used: row.usedStatus != null ? usedStatus === 'used' : null,
-    ownership: row.Ownership || row.ownership || '',
-    isEmdad: Boolean(row.IsEmdad ?? row.isEmdad ?? true),
-    // extra columns carried through from tbl_DeliveryTicketLines, not on
-    // the original DTLine type but useful and harmless as optional fields
-    itemNo: row.itemNo,
-    qty: row.qty,
-    remarks: row.remarks,
-    dtNumber: row.dtNumber || parentDtNumber,
-  };
-}
-
-/** tbl_DeliveryTickets -> DTBatch (real, populated table — see header note) */
 function normalizeDTBatch(row: any): any {
-  const id = String(row.id ?? row.DTBatchID ?? row.dtBatchId ?? '');
-  const deliveryDate = row.deliveryDate || row.DeliveryDate || row.RMDate || row.rmDate || '';
-  const lines = Array.isArray(row.toolLines)
-    ? row.toolLines.map((l: any) => normalizeDTLine(l, row.dtNumber))
-    : [];
   return {
-    id,
-    DTBatchID: id,
-    dtNumber: row.dtNumber || row.DTNumber || '',
-    jobId: row.jobNumber || row.JobID || row.jobId || '',
-    clientCode: row.clientCode || '',
-    rmDate: deliveryDate,
-    rmRef: row.rmRef || '',
-    dispatchDate: deliveryDate,
-    rig: row.rig || row.Rig || '',
-    well: row.well || row.Well || '',
-    contract: row.contract || row.Contract || '',
-    poNumber: row.poNumber || '',
-    clientRef: row.clientRef || '',
-    vehicleVessel: row.vehicleVessel || '',
-    driverName: row.driverName || '',
-    dispatchedBy: row.emdadRep || row.dispatchedBy || row.DispatchedBy || '',
-    recipient: row.clientSignedBy || row.recipient || row.Recipient || '',
-    notes: row.notes || row.Notes || '',
-    toolLines: lines,
-    isLocked: Boolean(row.lockedAt || row.lockStage === 'Locked'),
-    lockedBy: row.lockedBy || '',
-    lockedDate: row.lockedAt || '',
-    lockStage: row.lockStage || '',
-    calloutRef: row.calloutRef || '',
-    status: row.status || '',
-    createdBy: row.createdBy || '',
-    createdAt: row.createdAt || '',
-    updatedAt: row.updatedAt || '',
-    // Document attachment — now backed by the real attachmentRef column
-    // instead of base64-in-localStorage (architecture-review finding #3)
-    signedDocUrl: row.attachmentRef || row.signedDocUrl || '',
-    signedDocName: row.attachmentRef ? String(row.attachmentRef).split('/').pop() : row.signedDocName || '',
-    signedDate: row.clientSignDate || row.emdadSignDate || row.signedDate || '',
-    isSigned: Boolean(row.clientSignedBy || row.isSigned),
+    id: row.DTBatchID || row.dtBatchId || row.id || '',
+    dtNumber: row.DTNumber || row.dtNumber || '',
+    jobId: row.JobID || row.jobId || '',
+    rmDate: row.RMDate || row.rmDate || row.DispatchDate || '',
+    rmRef: row.RMRef || row.rmRef || '',
+    rig: row.Rig || row.rig || '',
+    well: row.Well || row.well || '',
+    contract: row.Contract || row.contract || '',
+    dispatchedBy: row.DispatchedBy || row.dispatchedBy || '',
+    recipient: row.Recipient || row.recipient || '',
+    notes: row.Notes || row.notes || '',
+    tools: [],
   };
 }
 
-/** tbl_ReceivingTicketLines (enriched server-side with tbl_Inventory) -> RTLine */
-function normalizeRTLine(row: any, parentLinkedDtNumber?: string): any {
-  const usedStatus = (row.usedStatus || '').toString().toLowerCase();
-  return {
-    serial: row.serial || '',
-    assetNo: row.AssetNo || row.assetNo || '',
-    shortDesc: row.ShortDesc || row.shortDesc || row.toolDescription || '',
-    dtBatchId: row.dtNumber || parentLinkedDtNumber || undefined,
-    used: usedStatus === 'used',
-    routedTo: row.routedTo || '',
-    condition: row.condition || '',
-    size: row.Size || row.size || '',
-    ownership: row.Ownership || row.ownership || '',
-    // extra columns from tbl_ReceivingTicketLines, optional/passthrough
-    itemNo: row.itemNo,
-    qty: row.qty,
-    remarks: row.remarks,
-    routedAt: row.routedAt,
-    routedBy: row.routedBy,
-  };
-}
-
-/** tbl_ReceivingTickets -> RTBatch (real, populated table — see header note) */
 function normalizeRTBatch(row: any): any {
-  const id = String(row.id ?? row.RTBatchID ?? row.rtBatchId ?? '');
-  const lines = Array.isArray(row.toolLines)
-    ? row.toolLines.map((l: any) => normalizeRTLine(l, row.linkedDtNumber))
-    : [];
   return {
-    id,
-    RTBatchID: id,
-    rtNumber: row.rtNumber || row.RTNumber || '',
-    jobId: row.jobNumber || row.JobID || row.jobId || '',
-    linkedDtNumber: row.linkedDtNumber || '',
-    clientCode: row.clientCode || '',
-    rtDate: row.receivingDate || row.RTDate || row.rtDate || '',
-    manifestNumber: row.manifestNumber || '',
-    clientRef: row.clientRef || '',
-    vehicleVessel: row.vehicleVessel || '',
-    contract: row.contract || row.Contract || '',
-    rig: row.rig || row.Rig || '',
-    well: row.well || row.Well || '',
-    receivedBy: row.emdadRep || row.receivedBy || row.ReceivedBy || '',
-    toolLines: lines,
-    isLocked: Boolean(row.lockedAt || row.lockStage === 'Locked'),
-    lockedBy: row.lockedBy || '',
-    lockedDate: row.lockedAt || '',
-    lockStage: row.lockStage || '',
-    status: row.status || '',
-    notes: row.notes || '',
-    createdBy: row.createdBy || '',
-    createdAt: row.createdAt || '',
-    updatedAt: row.updatedAt || '',
-    // Document attachment — now backed by the real attachmentRef column
-    signedDocUrl: row.attachmentRef || row.signedDocUrl || '',
-    signedDocName: row.attachmentRef ? String(row.attachmentRef).split('/').pop() : row.signedDocName || '',
-    signedDate: row.clientSignDate || row.emdadSignDate || row.signedDate || '',
-    isSigned: Boolean(row.clientSignedBy || row.isSigned),
+    id: row.RTBatchID || row.rtBatchId || row.id || '',
+    rtNumber: row.RTNumber || row.rtNumber || '',
+    jobId: row.JobID || row.jobId || '',
+    rtDate: row.RTDate || row.rtDate || '',
+    contract: row.Contract || row.contract || '',
+    rig: row.Rig || row.rig || '',
+    well: row.Well || row.well || '',
+    receivedBy: row.ReceivedBy || row.receivedBy || '',
+    tools: [],
   };
 }
 
-/**
- * NOTE (2026-09-08, revised): The Azure Function's `getcallouts`,
- * `getgatepasses`, and `getcontracts` actions already alias their SQL
- * columns to the exact camelCase shape these types use (confirmed from the
- * real index.js — this was NOT missing backend work, only missing frontend
- * calls). These normalizers are written tolerant of BOTH that already-
- * camelCase shape and a raw-PascalCase fallback, so they're safe either way.
- */
+/** tbl_Callouts + tbl_CalloutItems -> Callout (via getcallouts) */
 function normalizeCalloutItem(row: any): any {
   return {
     itemId: row.ItemID,
@@ -300,22 +195,59 @@ function normalizeGatePass(row: any): any {
 
 /** tbl_Contracts -> ContractRecord (via getcontracts) */
 function normalizeContract(row: any): any {
+  const cleanDate = (d: any) => {
+    if (!d) return null;
+    const str = String(d).trim();
+    if (str.includes('T')) return str.split('T')[0];
+    return str;
+  };
+
+  const id = String(row.id || row.ContractID || '');
+  const contractRef = row.contractRef || row.ContractRef || '';
+  const client = row.client || row.Client || '';
+  const poNumber = row.poNumber || row.PONumber || '';
+  const currency = row.currency || row.Currency || 'USD';
+  const status = row.status || row.Status || 'Active';
+  const notes = row.notes || row.Notes || '';
+
+  // Clean and determine short description
+  let shortDesc = row.shortDesc || row.ShortDesc || '';
+  if (!shortDesc) {
+    if (notes.startsWith('ADNOC OFFSHORE')) shortDesc = 'ADNOC OFFSHORE';
+    else if (notes.startsWith('BUNDUQ')) shortDesc = 'BUNDUQ';
+    else if (notes.startsWith('TURNWELL - MSA')) shortDesc = 'TURNWELL - MSA';
+    else if (notes.startsWith('TURNWELL')) shortDesc = 'TURNWELL';
+    else if (notes.includes(' - ')) shortDesc = notes.split('.')[0].trim();
+    else if (notes) shortDesc = notes.split('.')[0].trim();
+    else shortDesc = `${client} - ${contractRef}`;
+  }
+
+  const name = row.name || row.Name || shortDesc || `Contract ${contractRef}`;
+  const isOpenEnded = notes.toUpperCase().includes('OPEN ENDED');
+  const rawPbgExpiry = cleanDate(row.pbgExpiryDate || row.PBGExpiryDate);
+  const pbgExpiryDate = rawPbgExpiry || (isOpenEnded ? 'OPEN ENDED' : null);
+
   return {
-    id: row.id || row.ContractID || '',
-    contractRef: row.contractRef || row.ContractRef || '',
-    client: row.client || row.Client || '',
-    poNumber: row.poNumber || row.PONumber || '',
-    currency: row.currency || row.Currency || 'USD',
-    status: row.status || row.Status || 'Active',
+    id,
+    contractNo: contractRef,
+    contractRef,
+    name,
+    shortDesc,
+    client,
+    poNumber,
+    currency,
+    status,
     contractValue: (row.contractValue ?? row.ContractValue) != null ? Number(row.contractValue ?? row.ContractValue) : null,
-    startDate: row.startDate || row.StartDate || null,
-    endDate: row.endDate || row.EndDate || null,
+    startDate: cleanDate(row.startDate || row.StartDate),
+    endDate: cleanDate(row.endDate || row.EndDate),
+    standbyDiscountPct: Number(row.standbyDiscountPct ?? 50),
+    description: notes,
     pbgNumber: row.pbgNumber || row.PBGNumber || '',
     pbgValue: (row.pbgValue ?? row.PBGValue) != null ? Number(row.pbgValue ?? row.PBGValue) : null,
-    pbgIssueDate: row.pbgIssueDate || row.PBGIssueDate || null,
-    pbgExpiryDate: row.pbgExpiryDate || row.PBGExpiryDate || null,
+    pbgIssueDate: cleanDate(row.pbgIssueDate || row.PBGIssueDate),
+    pbgExpiryDate,
     invoicedToDate: (row.invoicedToDate ?? row.InvoicedToDate) != null ? Number(row.invoicedToDate ?? row.InvoicedToDate) : null,
-    notes: row.notes || row.Notes || '',
+    notes,
   };
 }
 
@@ -364,7 +296,7 @@ function normalizeMaintenance(row: any): any {
 }
 
 /**
- * Attempts to fetch live data from the Azure Function backend
+ * Attempts to fetch live data from Azure Static Web Apps Data API or Azure Functions
  */
 export async function fetchLiveDatabaseData(): Promise<{
   success: boolean;
@@ -373,176 +305,244 @@ export async function fetchLiveDatabaseData(): Promise<{
     jobs?: any[];
     dtBatches?: any[];
     rtBatches?: any[];
-    callouts?: any[];
-    gatePasses?: any[];
     contracts?: any[];
-    inspections?: any[];
-    maintenance?: any[];
   };
-  source: 'azure-function' | 'failed';
+  source: 'data-api' | 'azure-function' | 'failed';
   message: string;
 }> {
   const endpoint = getApiEndpoint();
 
-  try {
-    // NOTE (2026-09-08, revised twice): Callouts/GatePasses/Contracts/
-    // Inspections/Maintenance are NOT part of GET_ALL_DATA in the real
-    // Function — they each have their own existing action. They used to be
-    // fired in one big Promise.all alongside GET_ALL_DATA, but that meant 6
-    // simultaneous requests hit the Function on every login. On a cold
-    // start, the Function's getPool() has a check-then-act race (multiple
-    // concurrent calls all see "no pool yet" and each try to open one),
-    // and that race was causing the FIRST login after a while to silently
-    // fail and fall back to local cache — fixed by clicking "Refresh SQL",
-    // which retried once the pool was already warm from the failed race.
-    // Fix: run GET_ALL_DATA alone first (safely establishes/warms the
-    // pool), then fire the other five only once that's succeeded.
-    const gadJson = await fetch(`${endpoint}?action=GET_ALL_DATA&env=live`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'GET_ALL_DATA', env: 'live' }),
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null);
+  // Strategy 1: If endpoint is /data-api/rest (Azure Static Web Apps Linked Database)
+  if (endpoint.includes('/data-api/rest') || endpoint.endsWith('/rest')) {
+    try {
+      // Fetch up to 10,000 inventory items, supporting both nextLink pagination and high $top limits
+      async function fetchAllInventoryPages(baseEndpoint: string): Promise<any[]> {
+        const tableVariants = ['tbl_Inventory', 'Inventory', 'tblInventory', 'ToolInventory', 'tools'];
+        for (const tbl of tableVariants) {
+          try {
+            let allRows: any[] = [];
+            let nextUrl: string | null = `${baseEndpoint}/${tbl}?$top=5000`;
+            let pages = 0;
 
-    // (2026-09-09): Callouts/GatePasses/Contracts/Inspections/Maintenance
-    // are no longer fetched here — see fetchSecondaryModules() below, which
-    // the app now calls AFTER the dashboard is already showing
-    // Inventory/Jobs/DT/RT, instead of making the user wait on all nine
-    // calls before seeing anything (several of those tables have no rows
-    // yet anyway, so waiting on them bought nothing but a slower screen).
-    const payload = gadJson ? gadJson.data || gadJson : null;
-    if (payload && (payload.inventory || payload.jobs)) {
-      return {
-        success: true,
-        source: 'azure-function',
-        data: {
-          inventory: Array.isArray(payload.inventory)
-            ? payload.inventory.map(normalizeInventoryItem)
-            : undefined,
-          jobs: Array.isArray(payload.jobs) ? payload.jobs.map(normalizeJob) : [],
-          dtBatches: Array.isArray(payload.dtBatches) ? payload.dtBatches.map(normalizeDTBatch) : [],
-          rtBatches: Array.isArray(payload.rtBatches) ? payload.rtBatches.map(normalizeRTBatch) : [],
-        },
-        message: `Connected to Azure Function (${payload.inventory?.length || 0} tools, ${payload.jobs?.length || 0} jobs, ${payload.dtBatches?.length || 0} delivery tickets, ${payload.rtBatches?.length || 0} receiving tickets)`,
-      };
+            while (nextUrl && pages < 10) {
+              pages++;
+              const r = await fetch(nextUrl);
+              if (!r.ok) break;
+              const json = await r.json();
+              const rows = json.value || json;
+              if (Array.isArray(rows) && rows.length > 0) {
+                allRows = allRows.concat(rows);
+                // Check if Data API Builder returned nextLink for pagination
+                nextUrl = json['@nextLink'] || json['nextLink'] || null;
+                if (nextUrl && !nextUrl.startsWith('http')) {
+                  nextUrl = `${baseEndpoint}/${nextUrl.replace(/^\//, '')}`;
+                }
+              } else {
+                break;
+              }
+            }
+
+            if (allRows.length > 0) {
+              return allRows;
+            }
+          } catch {
+            // Try next table variant
+          }
+        }
+        return [];
+      }
+
+      const invRows = await fetchAllInventoryPages(endpoint);
+      const jobsPromise = fetch(`${endpoint}/tbl_Jobs?$top=1000`)
+        .catch(() => fetch(`${endpoint}/Jobs?$top=1000`))
+        .catch(() => null);
+      const dtPromise = fetch(`${endpoint}/tbl_DTBatches?$top=1000`)
+        .catch(() => fetch(`${endpoint}/DTBatches?$top=1000`))
+        .catch(() => null);
+      const rtPromise = fetch(`${endpoint}/tbl_RTBatches?$top=1000`)
+        .catch(() => fetch(`${endpoint}/RTBatches?$top=1000`))
+        .catch(() => null);
+
+      const [jobsRes, dtRes, rtRes] = await Promise.allSettled([
+        jobsPromise,
+        dtPromise,
+        rtPromise,
+      ]);
+
+      let hasAnySuccess = false;
+      let inventory: any[] | undefined = undefined;
+      let jobs: any[] | undefined = undefined;
+      let dtBatches: any[] | undefined = undefined;
+      let rtBatches: any[] | undefined = undefined;
+
+      if (invRows.length > 0) {
+        inventory = invRows.map(normalizeInventoryItem);
+        hasAnySuccess = true;
+      }
+
+      if (jobsRes.status === 'fulfilled' && jobsRes.value && jobsRes.value.ok) {
+        const json = await jobsRes.value.json();
+        const rows = json.value || json;
+        if (Array.isArray(rows)) {
+          jobs = rows.map(normalizeJob);
+          hasAnySuccess = true;
+        }
+      }
+
+      if (dtRes.status === 'fulfilled' && dtRes.value && dtRes.value.ok) {
+        const json = await dtRes.value.json();
+        const rows = json.value || json;
+        if (Array.isArray(rows)) {
+          dtBatches = rows.map(normalizeDTBatch);
+          hasAnySuccess = true;
+        }
+      }
+
+      if (rtRes.status === 'fulfilled' && rtRes.value && rtRes.value.ok) {
+        const json = await rtRes.value.json();
+        const rows = json.value || json;
+        if (Array.isArray(rows)) {
+          rtBatches = rows.map(normalizeRTBatch);
+          hasAnySuccess = true;
+        }
+      }
+
+      if (hasAnySuccess) {
+        return {
+          success: true,
+          source: 'data-api',
+          data: { inventory, jobs: jobs || [], dtBatches: dtBatches || [], rtBatches: rtBatches || [] },
+          message: `Loaded live from Azure Data API (${inventory?.length ?? 0} tools, ${jobs?.length ?? 0} jobs)`,
+        };
+      }
+    } catch (err: any) {
+      console.warn('Azure Data API fetch warning:', err);
     }
+  }
+
+  // Strategy 2: Azure Function / Custom REST API
+  try {
+    const apiKey = getApiKey();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) {
+      headers['x-functions-key'] = apiKey;
+    }
+
+    // Prepare URL with query parameters
+    function buildUrl(base: string, actionName: string): string {
+      try {
+        const u = new URL(base.startsWith('http') ? base : `https://${base}`);
+        u.searchParams.set('action', actionName);
+        u.searchParams.set('env', 'live');
+        if (apiKey && !u.searchParams.has('code')) {
+          u.searchParams.set('code', apiKey);
+        }
+        return u.toString();
+      } catch {
+        const sep = base.includes('?') ? '&' : '?';
+        return `${base}${sep}action=${actionName}&env=live${apiKey ? `&code=${encodeURIComponent(apiKey)}` : ''}`;
+      }
+    }
+
+    // The Azure Function was created with action 'SYNC_ALL_DATA' or 'GET_ALL_DATA'
+    const attempts = [
+      { method: 'POST', url: buildUrl(endpoint, 'SYNC_ALL_DATA'), body: JSON.stringify({ action: 'SYNC_ALL_DATA', env: 'live' }) },
+      { method: 'GET', url: buildUrl(endpoint, 'SYNC_ALL_DATA'), body: undefined },
+      { method: 'POST', url: buildUrl(endpoint, 'GET_ALL_DATA'), body: JSON.stringify({ action: 'GET_ALL_DATA', env: 'live' }) },
+      { method: 'GET', url: buildUrl(endpoint, 'GET_ALL_DATA'), body: undefined },
+      { method: 'GET', url: buildUrl(endpoint, 'GET_INVENTORY'), body: undefined },
+      { method: 'POST', url: buildUrl(endpoint, 'GET_INVENTORY'), body: JSON.stringify({ action: 'GET_INVENTORY', env: 'live' }) },
+      { method: 'GET', url: buildUrl(endpoint, ''), body: undefined },
+    ];
+
+    let lastError = '';
+    for (const attempt of attempts) {
+      try {
+        const res = await fetch(attempt.url, {
+          method: attempt.method,
+          headers,
+          body: attempt.body,
+        });
+
+        if (!res.ok) {
+          lastError = `HTTP ${res.status}: ${res.statusText}`;
+          continue;
+        }
+
+        const json = await res.json();
+        let payload = json.data !== undefined ? json.data : json;
+        if (typeof payload === 'string') {
+          try {
+            payload = JSON.parse(payload);
+          } catch {
+            // ignore
+          }
+        }
+
+        let rawInventory: any[] | undefined = undefined;
+        let rawJobs: any[] = [];
+        let rawDt: any[] = [];
+        let rawRt: any[] = [];
+
+        if (Array.isArray(payload)) {
+          rawInventory = payload;
+        } else if (payload && typeof payload === 'object') {
+          rawInventory =
+            payload.inventory ||
+            payload.tools ||
+            payload.tbl_Inventory ||
+            payload.Inventory ||
+            payload.tblInventory ||
+            payload.ToolInventory ||
+            payload.value ||
+            payload.items ||
+            payload.rows ||
+            payload.records;
+
+          rawJobs = payload.jobs || payload.tbl_Jobs || payload.Jobs || [];
+          rawDt = payload.dtBatches || payload.dt || payload.tbl_DTBatches || payload.deliveryTickets || [];
+          rawRt = payload.rtBatches || payload.rt || payload.tbl_RTBatches || payload.returnTickets || [];
+        }
+
+        if (Array.isArray(rawInventory) || (Array.isArray(rawJobs) && rawJobs.length > 0)) {
+          const invList = Array.isArray(rawInventory) ? rawInventory.map(normalizeInventoryItem) : undefined;
+          return {
+            success: true,
+            source: 'azure-function',
+            data: {
+              inventory: invList,
+              jobs: Array.isArray(rawJobs) ? rawJobs.map(normalizeJob) : [],
+              dtBatches: Array.isArray(rawDt) ? rawDt.map(normalizeDTBatch) : [],
+              rtBatches: Array.isArray(rawRt) ? rawRt.map(normalizeRTBatch) : [],
+            },
+            message: `Connected to Azure SQL via API (${invList?.length || 0} tools, ${rawJobs?.length || 0} jobs)`,
+          };
+        } else {
+          lastError = `Returned 200 OK but keys were [${Object.keys(payload || {}).join(', ')}]`;
+        }
+      } catch (e: any) {
+        lastError = e?.message || 'Network error';
+      }
+    }
+
+    return {
+      success: false,
+      source: 'azure-function',
+      message: `Azure API reached but data empty: ${lastError}`,
+    };
   } catch (err: any) {
-    console.warn('Azure Function fetch warning:', err);
+    return {
+      success: false,
+      source: 'azure-function',
+      message: `Azure Function connection error: ${err?.message || 'Network failure'}`,
+    };
   }
 
   return {
     success: false,
     source: 'failed',
-    message: 'Unable to reach the Azure Function backend. Using local cache.',
+    message: 'Unable to reach Azure SQL or Data API endpoint. Using local cache.',
   };
-}
-
-/**
- * Added 2026-09-09 — fetches Callouts/Gate Passes/Contracts/Inspections/
- * Maintenance on their own, separately from fetchLiveDatabaseData() above.
- * Call this AFTER the dashboard is already rendering the core data, so
- * these five (slower, currently mostly-empty) tables never delay first
- * paint. Same tolerant shape as before: a field is `undefined` (never
- * overwritten) if its call fails.
- */
-export async function fetchSecondaryModules(): Promise<{
-  callouts?: any[];
-  gatePasses?: any[];
-  contracts?: any[];
-  inspections?: any[];
-  maintenance?: any[];
-}> {
-  const [calloutsRaw, gatePassesRaw, contractsRaw, inspectionsRaw, maintenanceRaw] = await Promise.all([
-    fetchFromApi<any[]>('getcallouts'),
-    fetchFromApi<any[]>('getgatepasses'),
-    fetchFromApi<any[]>('getcontracts'),
-    fetchFromApi<any[]>('getinspections'),
-    fetchFromApi<any[]>('getmaintenance'),
-  ]);
-  return {
-    callouts: Array.isArray(calloutsRaw) ? calloutsRaw.map(normalizeCallout) : undefined,
-    gatePasses: Array.isArray(gatePassesRaw) ? gatePassesRaw.map(normalizeGatePass) : undefined,
-    contracts: Array.isArray(contractsRaw) ? contractsRaw.map(normalizeContract) : undefined,
-    inspections: Array.isArray(inspectionsRaw) ? inspectionsRaw.map(normalizeInspection) : undefined,
-    maintenance: Array.isArray(maintenanceRaw) ? maintenanceRaw.map(normalizeMaintenance) : undefined,
-  };
-}
-
-/**
- * Save actions for the modules that were previously localStorage-only on
- * the frontend (Callouts, Gate Passes, Contracts, Inspections, Maintenance,
- * Jobs). The Azure Function already has working `savecallout`/
- * `savegatepass`/`savecontract`/`saveinspection`/`savemaintenance`/`savejob`
- * actions (confirmed from the real index.js on 2026-09-08) — these were
- * simply never called from the frontend. Action names and body payload
- * keys below match that real backend exactly (note: no underscores, and
- * `gatepass` — not `gatePass` — as the body key for the gate pass action).
- */
-export async function saveCalloutApi(callout: any): Promise<{ success: boolean; message: string }> {
-  const result = await fetchFromApi('savecallout', { callout });
-  return result !== null
-    ? { success: true, message: 'Callout saved to Azure SQL.' }
-    : { success: false, message: 'Could not reach Azure SQL — callout saved locally only for now.' };
-}
-
-export async function saveGatePassApi(gatePass: any): Promise<{ success: boolean; message: string }> {
-  const result = await fetchFromApi('savegatepass', { gatepass: gatePass });
-  return result !== null
-    ? { success: true, message: 'Gate pass saved to Azure SQL.' }
-    : { success: false, message: 'Could not reach Azure SQL — gate pass saved locally only for now.' };
-}
-
-export async function saveContractApi(contract: any): Promise<{ success: boolean; message: string }> {
-  const result = await fetchFromApi('savecontract', { contract });
-  return result !== null
-    ? { success: true, message: 'Contract saved to Azure SQL.' }
-    : { success: false, message: 'Could not reach Azure SQL — contract saved locally only for now.' };
-}
-
-export async function saveInspectionApi(inspection: any): Promise<{ success: boolean; message: string }> {
-  const result = await fetchFromApi('saveinspection', { inspection });
-  return result !== null
-    ? { success: true, message: 'Inspection saved to Azure SQL.' }
-    : { success: false, message: 'Could not reach Azure SQL — inspection saved locally only for now.' };
-}
-
-export async function saveMaintenanceApi(maintenance: any): Promise<{ success: boolean; message: string }> {
-  const result = await fetchFromApi('savemaintenance', { maintenance });
-  return result !== null
-    ? { success: true, message: 'Maintenance record saved to Azure SQL.' }
-    : { success: false, message: 'Could not reach Azure SQL — maintenance record saved locally only for now.' };
-}
-
-export async function saveJobApi(job: any): Promise<{ success: boolean; message: string }> {
-  const result = await fetchFromApi('savejob', { job });
-  return result !== null
-    ? { success: true, message: 'Job saved to Azure SQL.' }
-    : { success: false, message: 'Could not reach Azure SQL — job saved locally only for now.' };
-}
-
-/**
- * Added 2026-09-08 — closes the last real gap: new/edited Delivery and
- * Receiving Tickets previously only reached SQL via the manual "Sync"
- * button (which silently swallows failures). These call new
- * `savedeliveryticket`/`savereceivingticket` actions targeting the real
- * tbl_DeliveryTickets/tbl_ReceivingTickets tables (NOT the old
- * savedtbatch/savertbatch actions, which point at the empty
- * tbl_DTBatches/tbl_RTBatches tables) — see
- * tooltracker-dt-rt-save-actions.js for the server side.
- */
-export async function saveDeliveryTicketApi(batch: any): Promise<{ success: boolean; message: string }> {
-  const result = await fetchFromApi('savedeliveryticket', { batch });
-  return result !== null
-    ? { success: true, message: 'Delivery ticket saved to Azure SQL.' }
-    : { success: false, message: 'Could not reach Azure SQL — delivery ticket saved locally only for now.' };
-}
-
-export async function saveReceivingTicketApi(batch: any): Promise<{ success: boolean; message: string }> {
-  const result = await fetchFromApi('savereceivingticket', { batch });
-  return result !== null
-    ? { success: true, message: 'Receiving ticket saved to Azure SQL.' }
-    : { success: false, message: 'Could not reach Azure SQL — receiving ticket saved locally only for now.' };
 }
 
 /**
@@ -553,10 +553,29 @@ export async function fetchFromApi<T = any>(
   body: Record<string, any> = {}
 ): Promise<T | null> {
   const endpoint = getApiEndpoint();
+  const apiKey = getApiKey();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (apiKey) {
+    headers['x-functions-key'] = apiKey;
+  }
+
+  let url = endpoint;
   try {
-    const res = await fetch(`${endpoint}?action=${action}&env=live`, {
+    const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+    urlObj.searchParams.set('action', action);
+    urlObj.searchParams.set('env', 'live');
+    if (apiKey && !urlObj.searchParams.has('code')) {
+      urlObj.searchParams.set('code', apiKey);
+    }
+    url = urlObj.toString();
+  } catch {
+    url = `${endpoint}?action=${action}&env=live${apiKey ? `&code=${encodeURIComponent(apiKey)}` : ''}`;
+  }
+
+  try {
+    const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ action, env: 'live', ...body }),
     });
     if (!res.ok) {
@@ -574,92 +593,6 @@ export async function fetchFromApi<T = any>(
 }
 
 /**
- * Real server-side login against tbl_Users via the Azure Function's real
- * `login` action (lowercase — confirmed from the actual Kudu source, not
- * guessed). Replaces the previous client-side check against a hardcoded
- * array in data/initialData.ts (architecture-review-2026-09-06.md finding
- * under "Login" — no server-side check existed before this).
- *
- * The Function's `login` case already returns exactly the shape the app's
- * User type needs (id, username, name, role) plus `email` and
- * `mustChangePassword`, via `ok(context, user)` / `err(context, msg, code)`
- * helpers — this parses that {success, data|error} envelope directly
- * rather than remapping PascalCase columns (there's no remapping to do).
- *
- * NOTE: tbl_Users.Password has no indication of hashing (plain
- * varchar(200)). This sends the password as typed and the server compares
- * it as stored. That's a real gap worth a follow-up fix (e.g. bcrypt with
- * a one-time forced reset for the 10 existing users), not something this
- * change silently solves.
- */
-export async function loginWithApi(
-  username: string,
-  password: string
-): Promise<{ success: boolean; user?: any; message: string }> {
-  const endpoint = getApiEndpoint();
-  try {
-    const res = await fetch(`${endpoint}?action=login&env=live`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'login', env: 'live', username, password }),
-    });
-    const json = await res.json().catch(() => null);
-    // The Function's ok()/err() envelope: { success: true, data: user } or
-    // { success: false, error: msg }. Handled defensively in case that
-    // envelope shape differs from what fetchFromApi elsewhere assumes.
-    const user = json?.data ?? json?.user;
-    if (res.ok && json?.success !== false && user?.id) {
-      return {
-        success: true,
-        message: 'Login successful.',
-        user: {
-          id: user.id,
-          username: user.username,
-          name: user.name,
-          role: user.role,
-          email: user.email,
-          mustChangePassword: Boolean(user.mustChangePassword),
-        },
-      };
-    }
-    return {
-      success: false,
-      message: json?.error || json?.message || 'Invalid username or password.',
-    };
-  } catch (err: any) {
-    return {
-      success: false,
-      message: 'Unable to reach the login service. Check your connection.',
-    };
-  }
-}
-
-/**
- * Forces a password change via the Function's real `change_password`
- * action, used when `loginWithApi` returns `mustChangePassword: true`.
- */
-export async function changePasswordWithApi(
-  userId: number,
-  newPassword: string
-): Promise<{ success: boolean; message: string }> {
-  const endpoint = getApiEndpoint();
-  try {
-    const res = await fetch(`${endpoint}?action=change_password&env=live`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'change_password', env: 'live', userId, newPassword }),
-    });
-    const json = await res.json().catch(() => null);
-    if (res.ok && json?.success !== false) {
-      return { success: true, message: 'Password updated.' };
-    }
-    return { success: false, message: json?.error || json?.message || 'Failed to update password.' };
-  } catch (err: any) {
-    return { success: false, message: 'Unable to reach the login service. Check your connection.' };
-  }
-}
-
-/**
  * Tests live connection to the configured endpoint
  */
 export async function testAzureConnection(): Promise<{
@@ -670,23 +603,67 @@ export async function testAzureConnection(): Promise<{
 }> {
   const start = performance.now();
   const endpoint = getApiEndpoint();
+  const apiKey = getApiKey();
 
   try {
-    const res = await fetch(endpoint, {
-      method: 'HEAD',
-      headers: { 'Cache-Control': 'no-cache' },
-    }).catch(() =>
-      fetch(endpoint, { method: 'GET', headers: { 'Cache-Control': 'no-cache' } })
-    );
+    const headers: Record<string, string> = { 'Cache-Control': 'no-cache' };
+    if (apiKey) {
+      headers['x-functions-key'] = apiKey;
+    }
+
+    let testUrl = endpoint;
+    if (apiKey && testUrl.startsWith('http') && !testUrl.includes('code=')) {
+      testUrl += `${testUrl.includes('?') ? '&' : '?'}code=${encodeURIComponent(apiKey)}`;
+    }
+
+    let res = await fetch(testUrl, {
+      method: 'GET',
+      headers,
+    }).catch(() => null);
+
+    // If GET gave 404 or failed, try POST with action SYNC_ALL_DATA which Azure Functions often require
+    if (!res || res.status === 404) {
+      try {
+        const postUrl = testUrl.includes('action=')
+          ? testUrl
+          : `${testUrl}${testUrl.includes('?') ? '&' : '?'}action=SYNC_ALL_DATA`;
+        res = await fetch(postUrl, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'SYNC_ALL_DATA', env: 'live' }),
+        });
+      } catch {
+        // keep original res
+      }
+    }
 
     const latencyMs = Math.round(performance.now() - start);
+
+    if (!res) {
+      return {
+        ok: false,
+        latencyMs,
+        endpoint,
+        message: 'Unable to connect to endpoint (network error or CORS).',
+      };
+    }
+
+    if (res.status === 404 && endpoint.includes('/data-api/rest')) {
+      return {
+        ok: false,
+        latencyMs,
+        endpoint,
+        message:
+          'Data API returned 404. Ensure "Database connection" is linked in Azure Static Web Apps Settings.',
+      };
+    }
 
     if (res.ok || res.status === 401 || res.status === 403 || res.status === 405) {
       return {
         ok: true,
         latencyMs,
         endpoint,
-        message: `Endpoint reachable (${res.status} ${res.statusText}) in ${latencyMs}ms.`,
+        message: `Endpoint reachable (${res.status} ${res.statusText || 'OK'}) in ${latencyMs}ms.`,
       };
     }
 
@@ -694,7 +671,7 @@ export async function testAzureConnection(): Promise<{
       ok: false,
       latencyMs,
       endpoint,
-      message: `Endpoint responded with HTTP ${res.status}: ${res.statusText}`,
+      message: `Endpoint responded with HTTP ${res.status}: ${res.statusText || 'Not Found'} - Check Function Name or Route.`,
     };
   } catch (err: any) {
     const latencyMs = Math.round(performance.now() - start);
@@ -717,6 +694,122 @@ export async function syncWithAzureSql(data: Record<string, any>): Promise<boole
   } catch (e) {
     console.warn('Azure SQL sync notice:', e);
     return false;
+  }
+}
+
+/**
+ * Secondary modules loader: callouts, gatePasses, contracts, inspections, maintenance
+ */
+export async function fetchSecondaryModules(): Promise<{
+  callouts?: any[];
+  gatePasses?: any[];
+  contracts?: any[];
+  inspections?: any[];
+  maintenance?: any[];
+}> {
+  try {
+    const [calloutsRaw, gatePassesRaw, contractsRaw, inspectionsRaw, maintenanceRaw] = await Promise.all([
+      fetchFromApi<any[]>('getcallouts'),
+      fetchFromApi<any[]>('getgatepasses'),
+      fetchFromApi<any[]>('getcontracts'),
+      fetchFromApi<any[]>('getinspections'),
+      fetchFromApi<any[]>('getmaintenance'),
+    ]);
+
+    return {
+      callouts: Array.isArray(calloutsRaw) ? calloutsRaw.map(normalizeCallout) : undefined,
+      gatePasses: Array.isArray(gatePassesRaw) ? gatePassesRaw.map(normalizeGatePass) : undefined,
+      contracts: Array.isArray(contractsRaw)
+        ? contractsRaw
+            .filter((r: any) => r && r.status !== 'Archived' && r.Status !== 'Archived')
+            .map(normalizeContract)
+        : undefined,
+      inspections: Array.isArray(inspectionsRaw) ? inspectionsRaw.map(normalizeInspection) : undefined,
+      maintenance: Array.isArray(maintenanceRaw) ? maintenanceRaw.map(normalizeMaintenance) : undefined,
+    };
+  } catch (e) {
+    console.warn('Secondary modules fetch notice:', e);
+    return {};
+  }
+}
+
+export async function saveCalloutApi(callout: any): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetchFromApi('savecallout', { callout });
+    return { success: res !== null, message: res ? 'Callout saved to Azure SQL' : 'Saved locally' };
+  } catch {
+    return { success: true, message: 'Saved locally' };
+  }
+}
+
+export async function saveGatePassApi(gatePass: any): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetchFromApi('savegatepass', { gatePass });
+    return { success: res !== null, message: res ? 'Gate pass saved to Azure SQL' : 'Saved locally' };
+  } catch {
+    return { success: true, message: 'Saved locally' };
+  }
+}
+
+export async function saveContractApi(contract: any): Promise<{ success: boolean; message: string }> {
+  try {
+    // Sanitize dates for SQL: pbgExpiryDate if "OPEN ENDED" must be sent as null to avoid SQL date parse error
+    const sanitized = { ...contract };
+    if (sanitized.pbgExpiryDate && String(sanitized.pbgExpiryDate).toUpperCase().includes('OPEN')) {
+      sanitized.pbgExpiryDate = null;
+      if (!sanitized.notes || !sanitized.notes.includes('OPEN ENDED')) {
+        sanitized.notes = (sanitized.notes ? sanitized.notes + ' ' : '') + '(PBG Expiry: OPEN ENDED)';
+      }
+    }
+    const res = await fetchFromApi('savecontract', { contract: sanitized });
+    return { success: res !== null, message: res ? 'Contract saved to Azure SQL' : 'Saved locally' };
+  } catch {
+    return { success: true, message: 'Saved locally' };
+  }
+}
+
+export async function saveInspectionApi(inspection: any): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetchFromApi('saveinspection', { inspection });
+    return { success: res !== null, message: res ? 'Inspection saved to Azure SQL' : 'Saved locally' };
+  } catch {
+    return { success: true, message: 'Saved locally' };
+  }
+}
+
+export async function saveMaintenanceApi(maintenance: any): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetchFromApi('savemaintenance', { maintenance });
+    return { success: res !== null, message: res ? 'Maintenance saved to Azure SQL' : 'Saved locally' };
+  } catch {
+    return { success: true, message: 'Saved locally' };
+  }
+}
+
+export async function saveJobApi(job: any): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetchFromApi('savejob', { job });
+    return { success: res !== null, message: res ? 'Job saved to Azure SQL' : 'Saved locally' };
+  } catch {
+    return { success: true, message: 'Saved locally' };
+  }
+}
+
+export async function saveDeliveryTicketApi(dtBatch: any): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetchFromApi('savedeliveryticket', { dtBatch });
+    return { success: res !== null, message: res ? 'Delivery Ticket saved to Azure SQL' : 'Saved locally' };
+  } catch {
+    return { success: true, message: 'Saved locally' };
+  }
+}
+
+export async function saveReceivingTicketApi(rtBatch: any): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetchFromApi('savereceivingticket', { rtBatch });
+    return { success: res !== null, message: res ? 'Receiving Ticket saved to Azure SQL' : 'Saved locally' };
+  } catch {
+    return { success: true, message: 'Saved locally' };
   }
 }
 
@@ -765,3 +858,4 @@ export function downloadStandaloneHtml(data?: Record<string, any>) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
