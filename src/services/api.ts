@@ -593,6 +593,73 @@ export async function fetchFromApi<T = any>(
 }
 
 /**
+ * Authenticates against tbl_Users via the Azure Function's `login` action.
+ */
+export async function loginWithApi(
+  username: string,
+  password: string
+): Promise<{ success: boolean; user?: any; message: string }> {
+  const endpoint = getApiEndpoint();
+  try {
+    const res = await fetch(`${endpoint}?action=login&env=live`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'login', env: 'live', username, password }),
+    });
+    const json = await res.json().catch(() => null);
+    const user = json?.data ?? json?.user;
+    if (res.ok && json?.success !== false && user?.id) {
+      return {
+        success: true,
+        message: 'Login successful.',
+        user: {
+          id: user.id,
+          username: user.username,
+          name: user.name,
+          role: user.role,
+          email: user.email,
+          mustChangePassword: Boolean(user.mustChangePassword),
+        },
+      };
+    }
+    return {
+      success: false,
+      message: json?.error || json?.message || 'Invalid username or password.',
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: 'Unable to reach the login service. Check your connection.',
+    };
+  }
+}
+
+/**
+ * Forces a password change via the Function's real `change_password`
+ * action, used when `loginWithApi` returns `mustChangePassword: true`.
+ */
+export async function changePasswordWithApi(
+  userId: number,
+  newPassword: string
+): Promise<{ success: boolean; message: string }> {
+  const endpoint = getApiEndpoint();
+  try {
+    const res = await fetch(`${endpoint}?action=change_password&env=live`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'change_password', env: 'live', userId, newPassword }),
+    });
+    const json = await res.json().catch(() => null);
+    if (res.ok && json?.success !== false) {
+      return { success: true, message: 'Password updated.' };
+    }
+    return { success: false, message: json?.error || json?.message || 'Failed to update password.' };
+  } catch (err: any) {
+    return { success: false, message: 'Unable to reach the login service. Check your connection.' };
+  }
+}
+
+/**
  * Tests live connection to the configured endpoint
  */
 export async function testAzureConnection(): Promise<{
