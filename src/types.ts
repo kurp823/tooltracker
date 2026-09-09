@@ -186,6 +186,8 @@ export interface RTBatch {
   well: string;
   receivedBy: string;
   toolLines: RTLine[];
+  condition?: string;
+  notes?: string;
   // Document attachment
   signedDocUrl?: string;
   signedDocName?: string;
@@ -200,6 +202,7 @@ export interface GatePassLine {
   size: string;
   qty: number;
   condition?: string;
+  ownership?: string;
 }
 
 export interface GatePass {
@@ -264,6 +267,11 @@ export interface MaintenanceRecord {
   stage?: 'Workshop' | 'Dispatched to Vendor' | 'Received from Vendor' | 'Ready for QC' | 'Completed';
   cost?: number | null;
   estCost?: number | null;
+  actualCost?: number | null;
+  estimatedCost?: number | null;
+  facility?: string;
+  scope?: string;
+  reason?: string;
   hasReport?: boolean;
   reportDocUrl?: string;
   reportDocName?: string;
