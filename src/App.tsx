@@ -43,6 +43,7 @@ import { Sidebar } from './components/Sidebar';
 import { LoginView } from './components/LoginView';
 import { ChangePasswordView } from './components/ChangePasswordView';
 import { DashboardView } from './components/DashboardView';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { InventoryView } from './components/InventoryView';
 import { CalloutsView } from './components/CalloutsView';
 import { JobsView } from './components/JobsView';
@@ -254,7 +255,7 @@ export const App: React.FC = () => {
           // calls fetchSecondaryModules().
           setDbStatus({
             isConnected: true,
-            source: res.source,
+            source: res.source === 'failed' ? 'local-cache' : res.source,
             lastChecked: new Date().toLocaleTimeString(),
             message: res.message,
             counts: {
@@ -1154,6 +1155,7 @@ export const App: React.FC = () => {
 
         {/* Dynamic View Canvas */}
         <main className="flex-1 p-3 md:p-5 overflow-y-auto w-full">
+          <ErrorBoundary onReset={() => setActiveView('dashboard')}>
           {activeView === 'dashboard' && (
             <DashboardView
               user={currentUser}
@@ -1374,6 +1376,7 @@ export const App: React.FC = () => {
               }}
             />
           )}
+          </ErrorBoundary>
         </main>
       </div>
     </div>
