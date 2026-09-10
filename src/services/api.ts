@@ -81,7 +81,17 @@ function normalizeJob(row: any): any {
     rig: row.Rig || row.rig || '',
     well: row.Well || row.well || '',
     client: row.Client || row.client || '',
-    contract: row.Contract || row.contract || '',
+    contract: String(
+      row.ContractNo ||
+      row.contractNo ||
+      row.ContractNumber ||
+      row.contractNumber ||
+      row.ContractRef ||
+      row.contractRef ||
+      row.Contract ||
+      row.contract ||
+      ''
+    ).trim(),
     poNumber: row.PONumber || row.poNumber || '',
     clientRef: row.ClientRef || row.clientRef || '',
     erpRef: row.ERPRef || row.erpRef || '',
@@ -323,8 +333,6 @@ export function normalizeDTBatch(row: any): any {
     rig: String(row.Rig || row.rig || ''),
     well: String(row.Well || row.well || ''),
     contract: String(
-      row.Contract ||
-      row.contract ||
       row.ContractNo ||
       row.contractNo ||
       row.ContractNumber ||
@@ -335,6 +343,8 @@ export function normalizeDTBatch(row: any): any {
       row.contract_no ||
       row.Contract_Ref ||
       row.contract_ref ||
+      row.Contract ||
+      row.contract ||
       row.ContractID ||
       row.contractId ||
       row.ContractName ||
@@ -540,7 +550,15 @@ function normalizeContract(row: any): any {
   };
 
   const id = String(row.id || row.ContractID || '');
-  const contractRef = row.contractRef || row.ContractRef || '';
+  const contractRef = String(
+    row.contractNo ||
+    row.ContractNo ||
+    row.contractNumber ||
+    row.ContractNumber ||
+    row.contractRef ||
+    row.ContractRef ||
+    ''
+  ).trim();
   const client = row.client || row.Client || '';
   const poNumber = row.poNumber || row.PONumber || '';
   const currency = row.currency || row.Currency || 'USD';
