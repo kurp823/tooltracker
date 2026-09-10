@@ -1214,6 +1214,7 @@ export const App: React.FC = () => {
               jobs={jobs}
               callouts={callouts}
               dtBatches={dtBatches}
+              contracts={contracts}
               onSaveJob={handleSaveJob}
               onDispatchJob={handleDispatchJob}
               isNewJobModalOpen={isNewJobOpen}
