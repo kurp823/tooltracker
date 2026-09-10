@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { DrillingJob, Callout, DTBatch, RTBatch, User } from '../types';
+import { DrillingJob, Callout, DTBatch, RTBatch, User, ContractRecord } from '../types';
 
 interface JobsViewProps {
   user?: User | null;
+  contracts?: ContractRecord[];
   jobs: DrillingJob[];
   callouts: Callout[];
   dtBatches: DTBatch[];
@@ -22,6 +23,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   callouts,
   dtBatches,
   rtBatches = [],
+  contracts = [],
   onSaveJob,
   onDispatchJob,
   onReceiveJob,
@@ -428,9 +430,14 @@ export const JobsView: React.FC<JobsViewProps> = ({
                       </td>
                       <td className="px-3.5 py-2.5">
                         <span className="font-bold text-[#1a3055] block leading-tight">{job.client || '—'}</span>
-                        {job.contract && (
-                          <span className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">{job.contract}</span>
-                        )}
+                        {job.contract && (() => {
+                          // Resolve short codes (AOF/AON/ADD/TWL) to SAP contract number via contracts lookup
+                          const contractRec = contracts.find(c => c.id === job.contract);
+                          const displayRef = contractRec?.contractNo || job.contract;
+                          return (
+                            <span className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">{displayRef}</span>
+                          );
+                        })()}
                       </td>
                       <td className="px-3.5 py-2.5 font-medium">
                         <span className="font-bold text-slate-900">{job.rig}</span>{' '}
