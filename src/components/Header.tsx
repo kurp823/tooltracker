@@ -24,18 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
   onClearDemoData,
 }) => {
   const syncing = isSyncing || syncStatus === 'syncing';
-  // NOTE (2026-09-08): architecture-review-2026-09-06.md claimed this was
-  // already fixed ("swap onSync/onRefresh priority"), but the deployed file
-  // still had `onSync || onRefresh` — that earlier fix never actually made
-  // it in. Confirmed real symptom: clicking "🔄 Refresh SQL" was silently
-  // triggering a PUSH (handleManualSync -> SYNC_ALL_DATA, an action that
-  // doesn't even exist in the real Azure Function, so it just failed
-  // quietly) instead of the intended PULL (handleFetchLiveSql). The button
-  // appearing to fix the LOCAL CACHE / DEMO badge after ~1 minute was
-  // actually just the original automatic on-load fetch finally finishing —
-  // Azure Functions Consumption-plan cold start plus establishing the SQL
-  // connection pool can genuinely take that long; the click wasn't the fix.
-  const handleRefresh = onRefresh || onSync || (() => {});
+  const handleRefresh = onSync || onRefresh || (() => {});
 
   return (
     <header className="bg-[#1a3055] text-white px-5 py-2.5 flex items-center justify-between shadow-md border-b border-[#0f1f38] no-print sticky top-0 z-40">
@@ -87,11 +76,21 @@ export const Header: React.FC<HeaderProps> = ({
         {onClearDemoData && (
           <button
             onClick={() => {
-              const ok = window.confirm(
-                'Clear Demo Records / Activate Pure SQL State:\n\nThis will remove all demo/mock Jobs, DTs, RTs, and Callouts from your local browser so the application only reflects live records from Azure SQL.\n\nProceed?'
+              const choice = window.confirm(
+                'Clear Demo Operations:\n\n' +
+                '• Click [OK] to clear demo Jobs, Delivery Tickets, and Callouts (keeps the tool catalog, but returns all tools to Base with 0 on rig).\n\n' +
+                '• Click [Cancel] if you want to wipe EVERYTHING (including the 48 tools down to 0 for pure Azure SQL).'
               );
-              if (ok) {
+              if (choice) {
                 onClearDemoData(false);
+              } else {
+                const wipeAll = window.confirm(
+                  'Wipe Complete Inventory Catalog (0 Tools)?\n\n' +
+                  'Click [OK] to delete all 48 tools and set inventory to 0 for a completely clean Azure SQL state.'
+                );
+                if (wipeAll) {
+                  onClearDemoData(true);
+                }
               }
             }}
             className="px-2 py-1 bg-rose-900/60 hover:bg-rose-800 text-rose-200 rounded border border-rose-500/50 text-[11px] font-semibold flex items-center space-x-1 transition cursor-pointer"

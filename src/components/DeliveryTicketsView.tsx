@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { DTBatch, DTLine, DrillingJob, Callout, ToolItem, User } from '../types';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
-import { extractSizeFromDescription } from '../services/api';
+import { extractSizeFromDescription, extractToolType } from '../services/api';
 
 interface DeliveryTicketsViewProps {
   user?: User | null;
@@ -9,6 +9,7 @@ interface DeliveryTicketsViewProps {
   jobs: DrillingJob[];
   callouts: Callout[];
   inventory: ToolItem[];
+  contracts?: any[];
   onSaveDTBatch: (batch: DTBatch) => void;
   onUpdateDTBatch?: (batch: DTBatch, addedTools?: ToolItem[], removedTools?: ToolItem[]) => void;
   isNewDTOpen: boolean;
@@ -23,6 +24,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   jobs,
   callouts,
   inventory,
+  contracts,
   onSaveDTBatch,
   onUpdateDTBatch,
   isNewDTOpen,
@@ -34,12 +36,6 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   const [search, setSearch] = useState('');
   const [selectedDTId, setSelectedDTId] = useState<string | null>(null);
   const [modalToolSearch, setModalToolSearch] = useState('');
-
-  // Active selected Delivery Ticket (always in sync with dtBatches)
-  const selectedDTDetail = useMemo(
-    () => dtBatches.find((b) => b.id === selectedDTId) || null,
-    [dtBatches, selectedDTId]
-  );
 
   // Fast lookup index for inventory tools by serial
   const inventoryMap = useMemo(() => {
@@ -53,6 +49,100 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
     }
     return map;
   }, [inventory]);
+
+  // Fast lookup map for jobs by ID / Number
+  const jobMap = useMemo(() => {
+    const map = new Map<string, DrillingJob>();
+    if (Array.isArray(jobs)) {
+      jobs.forEach((j) => {
+        if (j && j.id) map.set(j.id.trim().toUpperCase(), j);
+        if (j && j.jobNumber) map.set(j.jobNumber.trim().toUpperCase(), j);
+      });
+    }
+    return map;
+  }, [jobs]);
+
+  // Fast lookup map for callouts by ID
+  const calloutMap = useMemo(() => {
+    const map = new Map<string, Callout>();
+    if (Array.isArray(callouts)) {
+      callouts.forEach((c) => {
+        if (c && c.id) map.set(c.id.trim().toUpperCase(), c);
+      });
+    }
+    return map;
+  }, [callouts]);
+
+  // Fast lookup map for contracts by ID / Ref / No
+  const contractMap = useMemo(() => {
+    const map = new Map<string, any>();
+    if (Array.isArray(contracts)) {
+      contracts.forEach((c) => {
+        if (c && c.id) map.set(String(c.id).trim().toUpperCase(), c);
+        if (c && c.contractNo) map.set(String(c.contractNo).trim().toUpperCase(), c);
+        if (c && c.contractRef) map.set(String(c.contractRef).trim().toUpperCase(), c);
+      });
+    }
+    return map;
+  }, [contracts]);
+
+  // Helper to determine the best display Contract # for a Delivery Ticket
+  const getDisplayContract = useMemo(() => {
+    return (b: DTBatch): string => {
+      // 1. Direct contract on batch if non-empty and meaningful
+      const direct = (b.contract || '').trim();
+      if (direct && direct !== '—' && direct !== 'null' && direct !== 'undefined') {
+        const match = contractMap.get(direct.toUpperCase());
+        if (match) return match.contractNo || match.shortDesc || match.name || direct;
+        return direct;
+      }
+
+      // 2. Resolve via linked Job
+      if (b.jobId) {
+        const job = jobMap.get(b.jobId.trim().toUpperCase());
+        if (job) {
+          const jContract = (job.contract || '').trim();
+          if (jContract && jContract !== '—' && jContract !== 'null' && jContract !== 'undefined') {
+            const match = contractMap.get(jContract.toUpperCase());
+            if (match) return match.contractNo || match.shortDesc || match.name || jContract;
+            return jContract;
+          }
+
+          // 3. Resolve via Job's Callout
+          if (job.calloutId) {
+            const cal = calloutMap.get(job.calloutId.trim().toUpperCase());
+            if (cal && cal.contract && cal.contract.trim() && cal.contract.trim() !== '—') {
+              const match = contractMap.get(cal.contract.trim().toUpperCase());
+              if (match) return match.contractNo || match.shortDesc || match.name || cal.contract.trim();
+              return cal.contract.trim();
+            }
+          }
+
+          // 4. Fallback to Job's client or clientRef or poNumber
+          if (job.client && job.client.trim()) return job.client.trim();
+          if (job.clientRef && job.clientRef.trim()) return job.clientRef.trim();
+          if (job.poNumber && job.poNumber.trim()) return `PO-${job.poNumber.trim()}`;
+        }
+      }
+
+      // 5. Fallback check: match rig/well with contracts
+      if (b.rig && contracts && contracts.length > 0) {
+        const match = contracts.find((c: any) =>
+          (c.client && b.rig.toLowerCase().includes(c.client.toLowerCase())) ||
+          (c.notes && c.notes.toLowerCase().includes(b.rig.toLowerCase()))
+        );
+        if (match) return match.contractNo || match.shortDesc || match.name;
+      }
+
+      return '—';
+    };
+  }, [contractMap, jobMap, calloutMap, contracts]);
+
+  // Active selected Delivery Ticket (always in sync with dtBatches)
+  const selectedDTDetail = useMemo(
+    () => dtBatches.find((b) => b.id === selectedDTId) || null,
+    [dtBatches, selectedDTId]
+  );
 
   // Document Attachment Modal state
   const [attachTargetDT, setAttachTargetDT] = useState<DTBatch | null>(null);
@@ -163,10 +253,10 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
     );
   }, [availableBaseTools, extraSearch]);
 
-  const [sortField, setSortField] = useState<'dtNumber' | 'jobId' | 'rig' | 'date'>('dtNumber');
+  const [sortField, setSortField] = useState<'dtNumber' | 'jobId' | 'rig' | 'date' | 'contract'>('dtNumber');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-  const handleSortToggle = (field: 'dtNumber' | 'jobId' | 'rig' | 'date') => {
+  const handleSortToggle = (field: 'dtNumber' | 'jobId' | 'rig' | 'date' | 'contract') => {
     if (sortField === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
@@ -186,7 +276,8 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
       if (tab === 'onrig' && !hasOnRig) return false;
       if (search.trim()) {
         const q = search.toLowerCase();
-        const full = `${b.dtNumber} ${b.jobId} ${b.rig} ${b.well} ${b.contract || ''} ${b.rmRef}`.toLowerCase();
+        const contractStr = getDisplayContract(b);
+        const full = `${b.dtNumber} ${b.jobId} ${b.rig} ${b.well} ${contractStr} ${b.contract || ''} ${b.rmRef}`.toLowerCase();
         const hasToolMatch = (b.toolLines || []).some(
           (t) =>
             t.serial?.toLowerCase().includes(q) ||
@@ -207,12 +298,14 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
         diff = extractDTSeq(a.jobId) - extractDTSeq(b.jobId);
       } else if (sortField === 'rig') {
         diff = `${a.rig} ${a.well}`.localeCompare(`${b.rig} ${b.well}`);
+      } else if (sortField === 'contract') {
+        diff = getDisplayContract(a).localeCompare(getDisplayContract(b));
       } else if (sortField === 'date') {
         diff = (a.rmDate || '').localeCompare(b.rmDate || '');
       }
       return sortOrder === 'desc' ? -diff : diff;
     });
-  }, [dtBatches, tab, search, sortField, sortOrder]);
+  }, [dtBatches, tab, search, sortField, sortOrder, getDisplayContract]);
 
   const handleCreateDTSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -398,7 +491,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
     <div class="box"><div class="lbl">Drilling Job Number</div><div class="val">${b.jobId}</div></div>
     <div class="box"><div class="lbl">RM / ATK Reference</div><div class="val">${b.rmRef}</div></div>
     <div class="box"><div class="lbl">Rig &amp; Well</div><div class="val">${b.rig} / ${b.well}</div></div>
-    <div class="box"><div class="lbl">Master Contract</div><div class="val">${b.contract || '—'}</div></div>
+    <div class="box"><div class="lbl">Master Contract</div><div class="val">${getDisplayContract(b)}</div></div>
     <div class="box"><div class="lbl">Dispatch Date</div><div class="val">${b.rmDate}</div></div>
     <div class="box"><div class="lbl">Dispatched By</div><div class="val">${b.dispatchedBy}</div></div>
   </div>
@@ -538,7 +631,12 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                 >
                   Rig / Well {sortField === 'rig' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
                 </th>
-                <th className="px-3 py-2.5">Contract</th>
+                <th
+                  onClick={() => handleSortToggle('contract')}
+                  className="px-3 py-2.5 cursor-pointer hover:bg-slate-100"
+                >
+                  Contract # {sortField === 'contract' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
                 <th className="px-3 py-2.5">RM Ref</th>
                 <th
                   onClick={() => handleSortToggle('date')}
@@ -569,6 +667,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                     (t) => (t.status || (t.rtBatchId ? 'Returned' : 'OnRig')) === 'Returned'
                   ).length;
                   const isSelected = selectedDTId === b.id;
+                  const displayContract = getDisplayContract(b);
 
                   return (
                     <tr
@@ -594,7 +693,16 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                       <td className="px-3 py-2.5 font-medium text-slate-800">
                         {b.rig} <span className="text-slate-400">|</span> {b.well}
                       </td>
-                      <td className="px-3 py-2.5 text-slate-700">{b.contract || '—'}</td>
+                      <td className="px-3 py-2.5 font-medium text-slate-800">
+                        {displayContract !== '—' ? (
+                          <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-[#1a3055] bg-slate-100/90 px-2 py-0.5 rounded border border-slate-200">
+                            <span className="text-slate-400 text-[10px]">📋</span>
+                            {displayContract}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-mono text-xs">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2.5 font-mono text-slate-500 text-[11px]">{b.rmRef || '—'}</td>
                       <td className="px-3 py-2.5 font-mono text-slate-700">{b.rmDate}</td>
                       <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
@@ -781,7 +889,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                     <option value="">— Select job —</option>
                     {activeJobs.map((j) => (
                       <option key={j.id} value={j.id}>
-                        {j.id} — {j.rig}/{j.well} ({j.client})
+                        {j.id} — {j.rig}/{j.well} ({j.client}{j.contract ? ` | ${j.contract}` : ''})
                       </option>
                     ))}
                   </select>
@@ -836,6 +944,16 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                   />
                 </div>
               </div>
+
+              {currentJob && (
+                <div className="p-2.5 rounded bg-blue-50/80 border border-blue-200 text-xs flex flex-wrap items-center gap-3 text-slate-700">
+                  <span>Client: <strong className="text-[#1a3055]">{currentJob.client}</strong></span>
+                  <span className="text-slate-300">&bull;</span>
+                  <span>Contract #: <strong className="text-amber-900 font-mono">{currentJob.contract || 'Standard Master Service Agreement'}</strong></span>
+                  <span className="text-slate-300">&bull;</span>
+                  <span>Rig / Well: <strong>{currentJob.rig} / {currentJob.well}</strong></span>
+                </div>
+              )}
 
               {/* Notification Banner when tool inserted */}
               {insertNotice && (
@@ -1213,71 +1331,83 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
         >
           <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Header */}
-            <div className="px-5 py-3.5 bg-[#1a3055] text-white flex justify-between items-center flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <span className="p-2 rounded-lg bg-blue-500/20 text-amber-300 text-base">
-                  📄
-                </span>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-base tracking-wide text-white">
-                      Delivery Ticket: <span className="text-amber-400 font-mono">{selectedDTDetail.dtNumber}</span>
-                    </h3>
-                    {selectedDTDetail.isLocked !== false ? (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/50">
-                        ✓ Dispatched &amp; Finalized
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-500/50">
-                        ⚠️ Manifest in Revision
-                      </span>
-                    )}
+            {(() => {
+              const modalContract = getDisplayContract(selectedDTDetail);
+              return (
+                <div className="px-5 py-3.5 bg-[#1a3055] text-white flex justify-between items-center flex-shrink-0">
+                  <div className="flex items-center gap-3">
+                    <span className="p-2 rounded-lg bg-blue-500/20 text-amber-300 text-base">
+                      📄
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-base tracking-wide text-white">
+                          Delivery Ticket: <span className="text-amber-400 font-mono">{selectedDTDetail.dtNumber}</span>
+                        </h3>
+                        {selectedDTDetail.isLocked !== false ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/50">
+                            ✓ Dispatched &amp; Finalized
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-500/50">
+                            ⚠️ Manifest in Revision
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-300 mt-0.5">
+                        Job <span className="font-semibold text-white">{selectedDTDetail.jobId}</span> &bull; Rig <span className="font-semibold text-white">{selectedDTDetail.rig}</span> &bull; Well <span className="font-semibold text-white">{selectedDTDetail.well}</span> &bull; Contract: <span className="text-amber-300 font-mono font-bold">{modalContract}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-300 mt-0.5">
-                    Job <span className="font-semibold text-white">{selectedDTDetail.jobId}</span> &bull; Rig <span className="font-semibold text-white">{selectedDTDetail.rig}</span> &bull; Well <span className="font-semibold text-white">{selectedDTDetail.well}</span> &bull; Contract: <span className="text-slate-200">{selectedDTDetail.contract || 'EMDAD'}</span>
+                  <div className="flex items-center gap-2">
+                    {selectedDTDetail.isSigned || selectedDTDetail.signedDocUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => setAttachTargetDT(selectedDTDetail)}
+                        className="px-2.5 py-1 rounded text-xs font-bold bg-emerald-500/20 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/30 cursor-pointer transition"
+                        title="View signed & stamped document"
+                      >
+                        ✓ Signed Copy Attached
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setAttachTargetDT(selectedDTDetail)}
+                        className="px-2.5 py-1 rounded text-xs font-bold bg-amber-500/20 text-amber-200 border border-amber-400/40 hover:bg-amber-500/30 cursor-pointer transition"
+                        title="Attach signed ticket"
+                      >
+                        📎 Attach Signed Copy
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setSelectedDTId(null)}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 text-xl font-bold transition cursor-pointer"
+                      title="Close Window (Esc)"
+                    >
+                      &times;
+                    </button>
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {selectedDTDetail.isSigned || selectedDTDetail.signedDocUrl ? (
-                  <button
-                    type="button"
-                    onClick={() => setAttachTargetDT(selectedDTDetail)}
-                    className="px-2.5 py-1 rounded text-xs font-bold bg-emerald-500/20 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/30 cursor-pointer transition"
-                    title="View signed & stamped document"
-                  >
-                    ✓ Signed Copy Attached
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setAttachTargetDT(selectedDTDetail)}
-                    className="px-2.5 py-1 rounded text-xs font-bold bg-amber-500/20 text-amber-200 border border-amber-400/40 hover:bg-amber-500/30 cursor-pointer transition"
-                    title="Attach signed ticket"
-                  >
-                    📎 Attach Signed Copy
-                  </button>
-                )}
-                <button
-                  onClick={() => setSelectedDTId(null)}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 text-xl font-bold transition cursor-pointer"
-                  title="Close Window (Esc)"
-                >
-                  &times;
-                </button>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Scrollable Body */}
             {(() => {
               const isDTLocked = selectedDTDetail.isLocked !== false;
+              const modalContract = getDisplayContract(selectedDTDetail);
               return (
                 <div className="p-5 space-y-4 overflow-y-auto text-xs">
                   {/* Top Metadata Cards */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5">
                     <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                       <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Job Number</span>
                       <span className="font-bold text-[#1a3055] text-xs font-mono">{selectedDTDetail.jobId}</span>
+                    </div>
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                      <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Contract #</span>
+                      <span className="font-bold text-[#1a3055] text-xs font-mono">
+                        {modalContract !== '—' ? modalContract : '—'}
+                      </span>
                     </div>
                     <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                       <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Rig &amp; Well</span>

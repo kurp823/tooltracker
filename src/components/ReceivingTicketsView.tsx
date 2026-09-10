@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { RTBatch, RTLine, DTBatch, ToolItem, User } from '../types';
+import { extractSizeFromDescription } from '../services/api';
 
 interface ReceivingTicketsViewProps {
   user?: User | null;
@@ -19,6 +20,19 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
   const [tab, setTab] = useState<'pending' | 'history'>('pending');
   const [search, setSearch] = useState('');
   const [selectedRTDetail, setSelectedRTDetail] = useState<RTBatch | null>(null);
+
+  // Fast lookup index for inventory tools by serial
+  const inventoryMap = useMemo(() => {
+    const map = new Map<string, ToolItem>();
+    if (Array.isArray(inventory)) {
+      inventory.forEach((item) => {
+        if (item && item.serial) {
+          map.set(item.serial.trim().toUpperCase(), item);
+        }
+      });
+    }
+    return map;
+  }, [inventory]);
 
   // Collapsible state (Request #7: default display is collapsed)
   const [openRigKeys, setOpenRigKeys] = useState<Record<string, boolean>>({});
@@ -633,35 +647,42 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-200">
-                                      {r.toolLines.map((t, i) => (
-                                        <tr key={i} className="hover:bg-slate-50">
-                                          <td className="px-3 py-1.5 text-slate-400 font-mono">{i + 1}</td>
-                                          <td className="px-3 py-1.5 font-mono font-bold text-amber-900">{t.serial}</td>
-                                          <td className="px-3 py-1.5 font-mono">{t.size}</td>
-                                          <td className="px-3 py-1.5 font-semibold text-slate-800">{t.shortDesc}</td>
-                                          <td className="px-3 py-1.5 text-slate-600">{t.ownership}</td>
-                                          <td className="px-3 py-1.5 text-center">
-                                            <span
-                                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                                t.used ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'
-                                              }`}
-                                            >
-                                              {t.used ? 'Used on Well' : 'Standby (Not Used)'}
-                                            </span>
-                                          </td>
-                                          <td className="px-3 py-1.5 text-center">
-                                            <span
-                                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                                t.used
-                                                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                                  : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                              }`}
-                                            >
-                                              {t.used ? '🛠 Routed to QC / Maintenance' : '✓ Restored to Base Ready Stock'}
-                                            </span>
-                                          </td>
-                                        </tr>
-                                      ))}
+                                      {(r.toolLines || []).map((t, i) => {
+                                        const invTool = t.serial ? inventoryMap.get(t.serial.trim().toUpperCase()) : undefined;
+                                        const displayCategory = t.shortDesc || (t as any).toolDescription || invTool?.shortDesc || invTool?.desc || 'Downhole Tool';
+                                        const displaySize = t.size || invTool?.size || extractSizeFromDescription(displayCategory) || '—';
+                                        const displayOwnership = t.ownership || invTool?.ownership || 'EMDAD';
+
+                                        return (
+                                          <tr key={i} className="hover:bg-slate-50">
+                                            <td className="px-3 py-1.5 text-slate-400 font-mono">{i + 1}</td>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-amber-900">{t.serial}</td>
+                                            <td className="px-3 py-1.5 font-mono">{displaySize}</td>
+                                            <td className="px-3 py-1.5 font-semibold text-slate-800" title={displayCategory}>{displayCategory}</td>
+                                            <td className="px-3 py-1.5 text-slate-600">{displayOwnership}</td>
+                                            <td className="px-3 py-1.5 text-center">
+                                              <span
+                                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                  t.used ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'
+                                                }`}
+                                              >
+                                                {t.used ? 'Used on Well' : 'Standby (Not Used)'}
+                                              </span>
+                                            </td>
+                                            <td className="px-3 py-1.5 text-center">
+                                              <span
+                                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                  t.used
+                                                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                                    : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                                }`}
+                                              >
+                                                {t.used ? '🛠 Routed to QC / Maintenance' : '✓ Restored to Base Ready Stock'}
+                                              </span>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
                                     </tbody>
                                   </table>
                                 </div>
@@ -823,21 +844,29 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {selectedRTDetail.toolLines.map((t, i) => (
-                      <tr key={i} className="hover:bg-slate-50">
-                        <td className="px-2.5 py-1.5 text-slate-400 font-mono">{i + 1}</td>
-                        <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">{t.serial}</td>
-                        <td className="px-2.5 py-1.5 font-semibold text-[#1a3055]">{t.shortDesc}</td>
-                        <td className="px-2.5 py-1.5 font-bold">
-                          {t.used ? (
-                            <span className="text-amber-700">Used</span>
-                          ) : (
-                            <span className="text-emerald-700">Not Used</span>
-                          )}
-                        </td>
-                        <td className="px-2.5 py-1.5 text-slate-600">{t.routedTo}</td>
-                      </tr>
-                    ))}
+                    {(selectedRTDetail.toolLines || []).map((t, i) => {
+                      const invTool = t.serial ? inventoryMap.get(t.serial.trim().toUpperCase()) : undefined;
+                      const displayCategory = t.shortDesc || (t as any).toolDescription || invTool?.shortDesc || invTool?.desc || 'Downhole Tool';
+                      const displaySize = t.size || invTool?.size || extractSizeFromDescription(displayCategory) || '—';
+
+                      return (
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className="px-2.5 py-1.5 text-slate-400 font-mono">{i + 1}</td>
+                          <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">{t.serial}</td>
+                          <td className="px-2.5 py-1.5 font-semibold text-[#1a3055]" title={displayCategory}>
+                            {displayCategory} <span className="text-slate-400 font-mono text-[10px]">({displaySize})</span>
+                          </td>
+                          <td className="px-2.5 py-1.5 font-bold">
+                            {t.used ? (
+                              <span className="text-amber-700">Used</span>
+                            ) : (
+                              <span className="text-emerald-700">Not Used</span>
+                            )}
+                          </td>
+                          <td className="px-2.5 py-1.5 text-slate-600">{t.routedTo}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

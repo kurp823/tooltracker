@@ -15,9 +15,6 @@ interface SettingsViewProps {
   currentData: any;
 }
 
-const DEFAULT_FUNCTION_URL =
-  'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
-
 export const SettingsView: React.FC<SettingsViewProps> = ({
   user,
   onUpdateUserRole,
@@ -33,14 +30,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [azureEndpoint, setAzureEndpoint] = useState<string>(() => {
     const saved = localStorage.getItem('azure_api_endpoint');
     if (saved && !saved.includes('emdad-drilling-api') && saved.trim()) return saved.trim();
-    localStorage.removeItem('azure_api_endpoint');
-    return DEFAULT_FUNCTION_URL;
+    return 'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
   });
   const [azureApiKey, setAzureApiKey] = useState<string>(() => {
     const saved = localStorage.getItem('azure_api_key');
     if (saved && !saved.includes('ak_live_emdad_drilling') && saved.trim()) return saved.trim();
-    localStorage.removeItem('azure_api_key');
-    return '';
+    return 'XCOETTV_A-BHeNPUSFSpChSOv9DAJcZOzrz1NvOlROofAzFu2tbo_Q==';
   });
   const [showKey, setShowKey] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -172,10 +167,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             {onFetchLiveSql && (
               <button
                 type="button"
-                onClick={onFetchLiveSql}
-                className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-300 rounded text-[11px] font-bold cursor-pointer"
+                onClick={async () => {
+                  setTestResult('Connecting to Azure SQL and downloading live tables...');
+                  await onFetchLiveSql();
+                }}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded shadow text-xs flex items-center space-x-1.5 cursor-pointer"
               >
-                🔄 Fetch Live SQL Data
+                <span>🔄</span>
+                <span>Pull Live SQL Data (5000+ Tools)</span>
               </button>
             )}
           </div>
@@ -183,17 +182,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
         <form onSubmit={handleSaveAzureConfig} className="space-y-3 text-xs">
           <div className="flex flex-wrap items-center gap-2 pb-1">
-            <span className="text-[11px] font-bold text-slate-600">Quick Preset:</span>
+            <span className="text-[11px] font-bold text-slate-600">Quick Presets:</span>
             <button
               type="button"
               onClick={() => {
-                setAzureEndpoint(DEFAULT_FUNCTION_URL);
-                localStorage.setItem('azure_api_endpoint', DEFAULT_FUNCTION_URL);
-                showToast('Endpoint set to Azure Function (ToolTracker API)', 'success');
+                setAzureEndpoint('/data-api/rest');
+                setAzureApiKey('');
+                localStorage.setItem('azure_api_endpoint', '/data-api/rest');
+                localStorage.removeItem('azure_api_key');
+                showToast('Endpoint set to Azure Static Web App Database (/data-api/rest)', 'success');
+              }}
+              className="px-2 py-0.5 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-300 rounded text-[11px] font-semibold cursor-pointer"
+            >
+              Option 1: Static Web App Database (/data-api/rest)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const fnUrl = 'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
+                const fnKey = 'XCOETTV_A-BHeNPUSFSpChSOv9DAJcZOzrz1NvOlROofAzFu2tbo_Q==';
+                setAzureEndpoint(fnUrl);
+                setAzureApiKey(fnKey);
+                localStorage.setItem('azure_api_endpoint', fnUrl);
+                localStorage.setItem('azure_api_key', fnKey);
+                showToast('Endpoint and API Key configured for Azure Function backend!', 'success');
               }}
               className="px-2 py-0.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-300 rounded text-[11px] font-semibold cursor-pointer"
             >
-              Restore Default: Azure Function Backend
+              Option 2: Azure Function Backend
             </button>
           </div>
 
@@ -202,14 +218,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <label className="block font-bold mb-1">
                 Azure API / Gateway Endpoint
                 <span className="font-normal text-slate-500 ml-1">
-                  (Default: Azure Function URL)
+                  (Default: <code>/data-api/rest</code> or Azure Function URL)
                 </span>
               </label>
               <input
                 type="text"
                 value={azureEndpoint}
                 onChange={(e) => setAzureEndpoint(e.target.value)}
-                placeholder={DEFAULT_FUNCTION_URL}
+                placeholder="/data-api/rest"
                 className="w-full border rounded px-2.5 py-1.5 font-mono"
               />
             </div>
@@ -228,7 +244,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 type={showKey ? 'text' : 'password'}
                 value={azureApiKey}
                 onChange={(e) => setAzureApiKey(e.target.value)}
-                placeholder="Leave blank unless the Function requires a key"
+                placeholder="Leave blank for Static Web Apps Database Connection"
                 className="w-full border rounded px-2.5 py-1.5 font-mono"
               />
             </div>
@@ -238,7 +254,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div><strong>Host (Azure SQL Server):</strong> tooltracking-sqlserver.database.windows.net</div>
             <div><strong>Production DB:</strong> ToolTrackingDB</div>
             <div><strong>Hosting:</strong> Azure Static Web App (tooltracker-app)</div>
-            <div><strong>Data Source Protocol:</strong> Azure Function REST (ToolTracker API)</div>
+            <div><strong>Data Source Protocol:</strong> Azure Static Web Apps Linked Database (<code>/data-api/rest</code>) or Azure Function REST</div>
           </div>
 
           {testResult && (

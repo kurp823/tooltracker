@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { getApiEndpoint } from '../services/api';
+import { getApiEndpoint, getApiKey } from '../services/api';
 
 interface ChangePasswordViewProps {
   user: User;
@@ -30,9 +30,14 @@ export const ChangePasswordView: React.FC<ChangePasswordViewProps> = ({ user, on
     setIsSubmitting(true);
     try {
       const endpoint = getApiEndpoint();
-      const res = await fetch(`${endpoint}?action=change_password&env=live`, {
+      const apiKey = getApiKey();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (apiKey) {
+        headers['x-functions-key'] = apiKey;
+      }
+      const res = await fetch(`${endpoint}?action=change_password&env=live${apiKey ? `&code=${encodeURIComponent(apiKey)}` : ''}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ action: 'change_password', userId: user.id, newPassword }),
       });
       const json = await res.json();
@@ -41,7 +46,7 @@ export const ChangePasswordView: React.FC<ChangePasswordViewProps> = ({ user, on
         setIsSubmitting(false);
         return;
       }
-      onPasswordChanged({ ...user, mustChangePassword: false });
+      onPasswordChanged({ ...user, pass: newPassword, mustChangePassword: false });
     } catch (err) {
       setError('Unable to reach Azure SQL. Check your connection.');
       setIsSubmitting(false);
