@@ -375,7 +375,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   onClick={() => handleSortToggle('client')}
                   className="px-3.5 py-2.5 cursor-pointer hover:bg-slate-100"
                 >
-                  Contract / Client {sortField === 'client' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                  Client / Contract {sortField === 'client' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
                 </th>
                 <th
                   onClick={() => handleSortToggle('rig')}
@@ -426,8 +426,11 @@ export const JobsView: React.FC<JobsViewProps> = ({
                       <td className="px-3.5 py-2.5 font-mono text-[11px] text-slate-500">
                         {job.calloutId || '—'}
                       </td>
-                      <td className="px-3.5 py-2.5 font-bold text-[#1a3055]">
-                        {job.contract || job.client}
+                      <td className="px-3.5 py-2.5">
+                        <span className="font-bold text-[#1a3055] block leading-tight">{job.client || '—'}</span>
+                        {job.contract && (
+                          <span className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">{job.contract}</span>
+                        )}
                       </td>
                       <td className="px-3.5 py-2.5 font-medium">
                         <span className="font-bold text-slate-900">{job.rig}</span>{' '}
