@@ -104,13 +104,29 @@ function normalizeJob(row: any): any {
     mobDate: row.MobDate || row.mobDate || '',
     demobDate: row.DemobDate || row.demobDate || '',
     status: row.Status || row.status || 'Open',
+    createdDate: row.CreatedDate || row.createdDate || '',
+    createdBy: row.CreatedBy || row.createdBy || '',
+    // Billing lifecycle timestamps (from DB columns added 2026-09-10)
+    firstDtDate: row.FirstDtDate || row.firstDtDate || null,
+    lastRtDate: row.LastRtDate || row.lastRtDate || null,
+    docsSignedDate: row.DocsSignedDate || row.docsSignedDate || null,
+    submittedToBillingDate: row.SubmittedToBillingDate || row.submittedToBillingDate || null,
+    draftInvoicedDate: row.DraftInvoicedDate || row.draftInvoicedDate || null,
+    sesSubmittedDate: row.SesSubmittedDate || row.sesSubmittedDate || null,
+    finalInvoicedDate: row.FinalInvoicedDate || row.finalInvoicedDate || null,
+    draftInvoiceNumber: row.DraftInvoiceNumber || row.draftInvoiceNumber || '',
+    sesNumber: row.SesNumber || row.sesNumber || '',
+    legalInvoiceNumber: row.LegalInvoiceNumber || row.LegalInvoiceNo || row.legalInvoiceNumber || '',
+    invoiceAmount: row.InvoiceAmount != null ? Number(row.InvoiceAmount) : null,
+    notes: row.Notes || row.notes || '',
     tools: [],
     operatingDays: 0,
     standbyDays: 0,
-    isLocked: Boolean(row.LegalInvoiceNo || row.legalInvoiceNo),
-    invoiceNumber: row.LegalInvoiceNo || row.EmdadInvoiceNo || '',
+    // Legacy compatibility fields (kept for any existing code that reads them)
+    isLocked: Boolean(row.LegalInvoiceNumber || row.LegalInvoiceNo || row.legalInvoiceNo),
+    invoiceNumber: row.LegalInvoiceNumber || row.LegalInvoiceNo || row.EmdadInvoiceNo || '',
     invoiceDate: row.InvoiceDate || row.LegalInvoiceDate || '',
-    invoicedAmountUSD: Number(row.InvoicedAmountUSD || 0),
+    invoicedAmountUSD: row.InvoiceAmount != null ? Number(row.InvoiceAmount) : Number(row.InvoicedAmountUSD || 0),
   };
 }
 
@@ -1451,4 +1467,3 @@ export function downloadStandaloneHtml(data?: Record<string, any>) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-
