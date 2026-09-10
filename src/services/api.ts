@@ -126,6 +126,97 @@ export function extractSizeFromDescription(desc?: string): string {
 }
 
 /**
+ * Utility to extract clean, concise oilfield Tool Type from long descriptions
+ * e.g., '11-3/4" FS OVERSHOT W/ 6-5/8" REG BOX' -> 'FS OVERSHOT'
+ * e.g., '33 feet cargo basket (L x 10.26 W x 1.19 H x 1.22)...' -> 'CARGO BASKET'
+ */
+export function extractToolType(desc?: string, shortDesc?: string, invShortDesc?: string): string {
+  // If invShortDesc is a clean, concise category (< 35 chars, no long connection specs)
+  if (invShortDesc && invShortDesc !== 'Downhole Tool') {
+    const s = invShortDesc.trim();
+    if (s.length > 0 && s.length <= 35 && !s.includes(' W/') && !s.includes('PIN X') && !s.includes(' C/W ') && !s.includes(' C/ W ') && !s.includes('REG Box') && !s.includes('REG PIN')) {
+      return s;
+    }
+  }
+
+  // If shortDesc is clean and concise
+  if (shortDesc && shortDesc !== 'Downhole Tool') {
+    const s = shortDesc.trim();
+    if (s.length > 0 && s.length <= 35 && !s.includes(' W/') && !s.includes('PIN X') && !s.includes(' C/W ') && !s.includes(' C/ W ') && !s.includes('REG Box') && !s.includes('REG PIN')) {
+      return s;
+    }
+  }
+
+  const text = `${shortDesc || ''} ${desc || ''}`.toUpperCase();
+  if (!text.trim()) return 'Downhole Tool';
+
+  if (text.includes('CARGO BASKET') || text.includes('TOOL BASKET') || (text.includes('BASKET') && !text.includes('JUNK BASKET'))) {
+    return 'CARGO BASKET';
+  }
+  if (text.includes('CONTAINER')) return 'CONTAINER';
+
+  if (text.includes('FS OVERSHOT EXTENSION') || text.includes('OVERSHOT EXTENSION')) return 'OVERSHOT EXTENSION';
+  if (text.includes('FS OVERSHOT')) return 'FS OVERSHOT';
+  if (text.includes('OVERSHOT')) return 'OVERSHOT';
+
+  if (text.includes('NEAR BIT STABILIZER') || text.includes('NEAR BIT STAB')) return 'NEAR BIT STABILIZER';
+  if (text.includes('STRING STABILIZER') || text.includes('STRING STAB')) return 'STRING STABILIZER';
+  if (text.includes('STABILIZER') || text.includes('STAB')) return 'STABILIZER';
+
+  if (text.includes('HYD-MECH') || text.includes('HYDRO-MECH')) return 'HYD-MECH DRILLING JAR';
+  if (text.includes('DRILLING JAR')) return 'DRILLING JAR';
+  if (text.includes('FISHING JAR') || text.includes(' JAR')) return 'DRILLING JAR';
+
+  if (text.includes('SHOCK TOOL') || text.includes('SHOCK SUB')) return 'SHOCK TOOL';
+
+  if (text.includes('SAVER SUB')) return 'SAVER SUB';
+  if (text.includes('CROSS OVER SUB') || text.includes('CROSSOVER SUB') || text.includes('X-OVER') || text.includes('CROSS-OVER')) return 'CROSS OVER SUB';
+  if (text.includes('BIT SUB')) return 'BIT SUB';
+  if (text.includes('FLOAT SUB')) return 'FLOAT SUB';
+  if (text.includes('LIFT SUB') || text.includes('LIFTING SUB') || text.includes('LIFT NIPPLE')) return 'LIFT SUB';
+  if (text.includes('CIRCULATING SUB') || text.includes('CIRCULATION SUB')) return 'CIRCULATING SUB';
+  if (text.includes('TOP DRIVE SUB')) return 'TOP DRIVE SUB';
+  if (text.includes('PUP JOINT')) return 'PUP JOINT';
+  if (text.includes('SUB') && !text.includes('SUB-CONTRACTOR')) return 'SUB';
+
+  if (text.includes('DIVERTER')) return 'DIVERTER';
+  if (text.includes('SAFETY VALVE') || text.includes('FOSV') || text.includes('TIW') || text.includes('IBOP')) return 'SAFETY VALVE';
+  if (text.includes('BOP') || text.includes('BLOWOUT PREVENTER')) return 'BLOWOUT PREVENTER';
+
+  if (text.includes('SPIRAL DRILL COLLAR')) return 'SPIRAL DRILL COLLAR';
+  if (text.includes('PONY DRILL COLLAR') || text.includes('PONY COLLAR')) return 'PONY DRILL COLLAR';
+  if (text.includes('NON-MAG') || text.includes('NMDC')) return 'NON-MAG DRILL COLLAR';
+  if (text.includes('DRILL COLLAR') || text.includes('COLLAR')) return 'DRILL COLLAR';
+
+  if (text.includes('HEVI-WATE') || text.includes('HWDP')) return 'HEVI-WATE DRILL PIPE';
+  if (text.includes('DRILL PIPE')) return 'DRILL PIPE';
+  if (text.includes('TUBING')) return 'TUBING';
+
+  if (text.includes('ROLLER REAMER') || text.includes('UNDERREAMER') || text.includes('REAMER')) return 'ROLLER REAMER';
+  if (text.includes('HOLE OPENER')) return 'HOLE OPENER';
+  if (text.includes('CASING SCRAPER') || text.includes('SCRAPER')) return 'CASING SCRAPER';
+
+  if (text.includes('JUNK MILL') || text.includes('TAPER MILL') || text.includes('PILOT MILL') || text.includes('MILL')) return 'MILL';
+  if (text.includes('FISHING MAGNET') || text.includes('MAGNET')) return 'FISHING MAGNET';
+  if (text.includes('JUNK BASKET')) return 'JUNK BASKET';
+  if (text.includes('IMPRESSION BLOCK')) return 'IMPRESSION BLOCK';
+  if (text.includes('SPEAR')) return 'CASING SPEAR';
+  if (text.includes('MOTOR') || text.includes('MUD MOTOR')) return 'MUD MOTOR';
+
+  // Fallback: strip leading size / dimensions if present, take first phrase before W/, C/W, etc.
+  const cleaned = (desc || shortDesc || 'Downhole Tool')
+    .replace(/^[\d\s\-/."'’]+(?:OD|ID)?\s*/i, '')
+    .split(/\s+(?:W\/|C\/W|WITH|C\/\s*W|\/W|\()\s*/i)[0]
+    .trim();
+
+  if (cleaned && cleaned.length > 0 && cleaned.length <= 35) {
+    return cleaned.toUpperCase();
+  }
+
+  return 'Downhole Tool';
+}
+
+/**
  * Normalizes a single row from tbl_DeliveryTicketLines (or nested tool line) into DTLine
  */
 export function normalizeDTLine(row: any): any {
@@ -160,8 +251,8 @@ export function normalizeDTLine(row: any): any {
     size = extractSizeFromDescription(rawDesc);
   }
 
-  const finalShortDesc = shortDesc || rawDesc || 'Downhole Tool';
   const finalDesc = rawDesc || shortDesc || 'Downhole Tool';
+  const finalShortDesc = extractToolType(finalDesc, shortDesc);
   const rawStatus = String(row.status || row.Status || '').trim().toLowerCase();
   const status = (rawStatus === 'returned' || rawStatus === 'backloaded') ? 'Returned' : 'OnRig';
   const ownership = String(row.ownership || row.Ownership || 'EMDAD').trim();
@@ -231,7 +322,31 @@ export function normalizeDTBatch(row: any): any {
     dispatchDate: rawDate,
     rig: String(row.Rig || row.rig || ''),
     well: String(row.Well || row.well || ''),
-    contract: String(row.Contract || row.contract || row.ContractRef || row.contractRef || row.ContractNo || row.contractNo || row.Client || row.client || ''),
+    contract: String(
+      row.Contract ||
+      row.contract ||
+      row.ContractNo ||
+      row.contractNo ||
+      row.ContractNumber ||
+      row.contractNumber ||
+      row.ContractRef ||
+      row.contractRef ||
+      row.Contract_No ||
+      row.contract_no ||
+      row.Contract_Ref ||
+      row.contract_ref ||
+      row.ContractID ||
+      row.contractId ||
+      row.ContractName ||
+      row.contractName ||
+      row.Client ||
+      row.client ||
+      row.ClientRef ||
+      row.clientRef ||
+      row.Customer ||
+      row.customer ||
+      ''
+    ).trim(),
     dispatchedBy: String(row.DispatchedBy || row.dispatchedBy || row.PreparedBy || row.preparedBy || row.CreatedBy || row.createdBy || 'Operations'),
     recipient: String(row.Recipient || row.recipient || row.ReceivedBy || row.receivedBy || row.Consignee || row.consignee || ''),
     notes: String(row.Notes || row.notes || row.Remarks || row.remarks || row.Description || row.description || ''),
@@ -282,8 +397,8 @@ export function normalizeRTLine(row: any): any {
     size = extractSizeFromDescription(rawDesc);
   }
 
-  const finalShortDesc = shortDesc || rawDesc || 'Downhole Tool';
   const finalDesc = rawDesc || shortDesc || 'Downhole Tool';
+  const finalShortDesc = extractToolType(finalDesc, shortDesc);
 
   return {
     id: row.id || row.ID || row.LineID || row.itemNo || undefined,
@@ -700,6 +815,21 @@ export async function fetchLiveDatabaseData(): Promise<{
       }
 
       if (hasAnySuccess) {
+        if (jobs && jobs.length > 0 && dtBatches && dtBatches.length > 0) {
+          const jobsById = new Map<string, any>();
+          jobs.forEach((j: any) => {
+            if (j.id) jobsById.set(String(j.id).trim().toUpperCase(), j);
+            if (j.jobNumber) jobsById.set(String(j.jobNumber).trim().toUpperCase(), j);
+          });
+          dtBatches.forEach((b: any) => {
+            if (!b.contract || b.contract === '—') {
+              const j = b.jobId ? jobsById.get(String(b.jobId).trim().toUpperCase()) : null;
+              if (j) {
+                b.contract = j.contract || j.client || (j.poNumber ? `PO-${j.poNumber}` : '');
+              }
+            }
+          });
+        }
         return {
           success: true,
           source: 'data-api',
@@ -865,13 +995,30 @@ export async function fetchLiveDatabaseData(): Promise<{
 
         if (Array.isArray(rawInventory) || (Array.isArray(rawJobs) && rawJobs.length > 0)) {
           const invList = Array.isArray(rawInventory) ? rawInventory.map(normalizeInventoryItem) : undefined;
+          const parsedJobs = Array.isArray(rawJobs) ? rawJobs.map(normalizeJob) : [];
+          const parsedDTs = Array.isArray(rawDt) ? rawDt.map(normalizeDTBatch) : [];
+          if (parsedJobs.length > 0 && parsedDTs.length > 0) {
+            const jobsById = new Map<string, any>();
+            parsedJobs.forEach((j: any) => {
+              if (j.id) jobsById.set(String(j.id).trim().toUpperCase(), j);
+              if (j.jobNumber) jobsById.set(String(j.jobNumber).trim().toUpperCase(), j);
+            });
+            parsedDTs.forEach((b: any) => {
+              if (!b.contract || b.contract === '—') {
+                const j = b.jobId ? jobsById.get(String(b.jobId).trim().toUpperCase()) : null;
+                if (j) {
+                  b.contract = j.contract || j.client || (j.poNumber ? `PO-${j.poNumber}` : '');
+                }
+              }
+            });
+          }
           return {
             success: true,
             source: 'azure-function',
             data: {
               inventory: invList,
-              jobs: Array.isArray(rawJobs) ? rawJobs.map(normalizeJob) : [],
-              dtBatches: Array.isArray(rawDt) ? rawDt.map(normalizeDTBatch) : [],
+              jobs: parsedJobs,
+              dtBatches: parsedDTs,
               rtBatches: Array.isArray(rawRt) ? rawRt.map(normalizeRTBatch) : [],
             },
             message: `Connected to Azure SQL via API (${invList?.length || 0} tools, ${rawJobs?.length || 0} jobs)`,
