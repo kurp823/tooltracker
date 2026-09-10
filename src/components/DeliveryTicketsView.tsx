@@ -89,49 +89,40 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   // Helper to determine the best display Contract # for a Delivery Ticket
   const getDisplayContract = useMemo(() => {
     return (b: DTBatch): string => {
-      // 1. Direct contract on batch if non-empty and meaningful
-      const direct = (b.contract || '').trim();
-      if (direct && direct !== '—' && direct !== 'null' && direct !== 'undefined') {
-        const match = contractMap.get(direct.toUpperCase());
-        if (match) return match.contractNo || match.shortDesc || match.name || direct;
-        return direct;
-      }
+      const resolveContract = (value?: unknown): string | null => {
+        const key = String(value || '').trim();
+        if (!key || ['—', 'null', 'undefined'].includes(key.toLowerCase())) return null;
+        const match = contractMap.get(key.toUpperCase());
+        return match?.contractNo || null;
+      };
 
-      // 2. Resolve via linked Job
+      // Ignore descriptive values such as "MR FROM ..." unless they resolve
+      // to an actual master-contract key.
+      const direct = (b.contract || '').trim();
+      const directContract = resolveContract(direct);
+      if (directContract) return directContract;
+
+      // Resolve via linked Job or its Callout.
       if (b.jobId) {
         const job = jobMap.get(b.jobId.trim().toUpperCase());
         if (job) {
-          const jContract = (job.contract || '').trim();
-          if (jContract && jContract !== '—' && jContract !== 'null' && jContract !== 'undefined') {
-            const match = contractMap.get(jContract.toUpperCase());
-            if (match) return match.contractNo || match.shortDesc || match.name || jContract;
-            return jContract;
-          }
+          const jobContract = resolveContract(job.contract);
+          if (jobContract) return jobContract;
 
-          // 3. Resolve via Job's Callout
           if (job.calloutId) {
             const cal = calloutMap.get(job.calloutId.trim().toUpperCase());
-            if (cal && cal.contract && cal.contract.trim() && cal.contract.trim() !== '—') {
-              const match = contractMap.get(cal.contract.trim().toUpperCase());
-              if (match) return match.contractNo || match.shortDesc || match.name || cal.contract.trim();
-              return cal.contract.trim();
-            }
+            const calloutContract = resolveContract(cal?.contract);
+            if (calloutContract) return calloutContract;
           }
 
-          // 4. Fallback to Job's client or clientRef or poNumber
-          if (job.client && job.client.trim()) return job.client.trim();
-          if (job.clientRef && job.clientRef.trim()) return job.clientRef.trim();
-          if (job.poNumber && job.poNumber.trim()) return `PO-${job.poNumber.trim()}`;
+          // A client is only safe when it has one master contract.
+          const clientContracts = contracts?.filter(
+            (c: any) => c.client?.trim().toUpperCase() === job.client?.trim().toUpperCase()
+          ) || [];
+          if (clientContracts.length === 1 && clientContracts[0].contractNo) {
+            return clientContracts[0].contractNo;
+          }
         }
-      }
-
-      // 5. Fallback check: match rig/well with contracts
-      if (b.rig && contracts && contracts.length > 0) {
-        const match = contracts.find((c: any) =>
-          (c.client && b.rig.toLowerCase().includes(c.client.toLowerCase())) ||
-          (c.notes && c.notes.toLowerCase().includes(b.rig.toLowerCase()))
-        );
-        if (match) return match.contractNo || match.shortDesc || match.name;
       }
 
       return '—';
