@@ -1233,6 +1233,7 @@ export const App: React.FC = () => {
               jobs={jobs}
               callouts={callouts}
               inventory={inventory}
+              contracts={contracts}
               onSaveDTBatch={handleSaveDTBatch}
               onUpdateDTBatch={handleUpdateDTBatch}
               isNewDTOpen={isNewDTOpen}
