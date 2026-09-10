@@ -88,6 +88,8 @@ function normalizeJob(row: any): any {
       row.contractNumber ||
       row.ContractRef ||
       row.contractRef ||
+      row.ContractID ||
+      row.contractId ||
       row.Contract ||
       row.contract ||
       ''
@@ -343,10 +345,10 @@ export function normalizeDTBatch(row: any): any {
       row.contract_no ||
       row.Contract_Ref ||
       row.contract_ref ||
-      row.Contract ||
-      row.contract ||
       row.ContractID ||
       row.contractId ||
+      row.Contract ||
+      row.contract ||
       row.ContractName ||
       row.contractName ||
       row.Client ||
