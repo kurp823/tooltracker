@@ -18,26 +18,30 @@ export interface DbConnectionStatus {
   };
 }
 
+export const DEFAULT_AZURE_FUNCTION_URL =
+  'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
+
 export function getApiEndpoint(): string {
   const custom = localStorage.getItem('azure_api_endpoint');
   if (custom && custom.trim()) {
     const trimmed = custom.trim();
-    // If the custom endpoint is the direct Azure URL that gets blocked by browser CORS, route through proxy
-    if (trimmed.includes('tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker')) {
-      return '/api/ToolTracker';
+    // Only in local dev container on Cloud Run, use the server proxy to avoid cross-domain issues
+    if (typeof window !== 'undefined' && window.location.hostname.includes('run.app')) {
+      if (trimmed.includes('tooltracker-api-dyath8gehaavcdah')) {
+        return '/api/ToolTracker';
+      }
     }
     return trimmed;
   }
-  // By default, if deployed on Azure Static Web Apps with Database Connection,
-  // the relative path /data-api/rest is used.
+  // On Azure Static Web Apps, connect directly to the live Azure Function (CORS is allowed)
   if (typeof window !== 'undefined' && window.location.hostname.includes('azurestaticapps.net')) {
-    return '/data-api/rest';
+    return DEFAULT_AZURE_FUNCTION_URL;
   }
-  // In web environment, use relative proxy /api/ToolTracker to avoid cross-origin CORS blocks
-  if (typeof window !== 'undefined') {
+  // In Cloud Run container dev environment, route through local proxy
+  if (typeof window !== 'undefined' && window.location.hostname.includes('run.app')) {
     return '/api/ToolTracker';
   }
-  return 'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
+  return DEFAULT_AZURE_FUNCTION_URL;
 }
 
 export function getApiKey(): string {
@@ -903,14 +907,20 @@ export async function fetchLiveDatabaseData(): Promise<{
       }
     }
 
+    // Determine function base endpoint
+    const fnEndpoint =
+      endpoint.includes('/data-api/rest') || endpoint.endsWith('/rest')
+        ? DEFAULT_AZURE_FUNCTION_URL
+        : endpoint;
+
     // The Azure Function responds to 'GET_ALL_DATA'
     const attempts = [
-      { method: 'GET', url: buildUrl(endpoint, 'GET_ALL_DATA'), body: undefined },
-      { method: 'POST', url: buildUrl(endpoint, 'GET_ALL_DATA'), body: JSON.stringify({ action: 'GET_ALL_DATA', env: 'live' }) },
-      { method: 'GET', url: buildUrl(endpoint, 'getInventory'), body: undefined },
-      { method: 'POST', url: buildUrl(endpoint, 'SYNC_ALL_DATA'), body: JSON.stringify({ action: 'SYNC_ALL_DATA', env: 'live' }) },
-      { method: 'GET', url: buildUrl(endpoint, 'SYNC_ALL_DATA'), body: undefined },
-      { method: 'GET', url: buildUrl(endpoint, ''), body: undefined },
+      { method: 'GET', url: buildUrl(fnEndpoint, 'GET_ALL_DATA'), body: undefined },
+      { method: 'POST', url: buildUrl(fnEndpoint, 'GET_ALL_DATA'), body: JSON.stringify({ action: 'GET_ALL_DATA', env: 'live' }) },
+      { method: 'GET', url: buildUrl(fnEndpoint, 'getInventory'), body: undefined },
+      { method: 'POST', url: buildUrl(fnEndpoint, 'SYNC_ALL_DATA'), body: JSON.stringify({ action: 'SYNC_ALL_DATA', env: 'live' }) },
+      { method: 'GET', url: buildUrl(fnEndpoint, 'SYNC_ALL_DATA'), body: undefined },
+      { method: 'GET', url: buildUrl(DEFAULT_AZURE_FUNCTION_URL, 'GET_ALL_DATA'), body: undefined },
     ];
 
     let lastError = '';

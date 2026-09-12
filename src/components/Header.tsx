@@ -24,7 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
   onClearDemoData,
 }) => {
   const syncing = isSyncing || syncStatus === 'syncing';
-  const handleRefresh = onSync || onRefresh || (() => {});
+  const handleRefresh = onRefresh || onSync || (() => {});
 
   return (
     <header className="bg-[#1a3055] text-white px-5 py-2.5 flex items-center justify-between shadow-md border-b border-[#0f1f38] no-print sticky top-0 z-40">
