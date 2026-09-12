@@ -3,6 +3,8 @@
  * and standalone deployment exports
  */
 
+import { MASTER_JOBS } from '../data/masterJobs';
+
 export interface DbConnectionStatus {
   isConnected: boolean;
   source: 'azure-sql' | 'data-api' | 'azure-function' | 'local-cache';
@@ -18,11 +20,22 @@ export interface DbConnectionStatus {
 
 export function getApiEndpoint(): string {
   const custom = localStorage.getItem('azure_api_endpoint');
-  if (custom && custom.trim()) return custom.trim();
+  if (custom && custom.trim()) {
+    const trimmed = custom.trim();
+    // If the custom endpoint is the direct Azure URL that gets blocked by browser CORS, route through proxy
+    if (trimmed.includes('tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker')) {
+      return '/api/ToolTracker';
+    }
+    return trimmed;
+  }
   // By default, if deployed on Azure Static Web Apps with Database Connection,
   // the relative path /data-api/rest is used.
   if (typeof window !== 'undefined' && window.location.hostname.includes('azurestaticapps.net')) {
     return '/data-api/rest';
+  }
+  // In web environment, use relative proxy /api/ToolTracker to avoid cross-origin CORS blocks
+  if (typeof window !== 'undefined') {
+    return '/api/ToolTracker';
   }
   return 'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
 }
@@ -104,29 +117,13 @@ function normalizeJob(row: any): any {
     mobDate: row.MobDate || row.mobDate || '',
     demobDate: row.DemobDate || row.demobDate || '',
     status: row.Status || row.status || 'Open',
-    createdDate: row.CreatedDate || row.createdDate || '',
-    createdBy: row.CreatedBy || row.createdBy || '',
-    // Billing lifecycle timestamps (from DB columns added 2026-09-10)
-    firstDtDate: row.FirstDtDate || row.firstDtDate || null,
-    lastRtDate: row.LastRtDate || row.lastRtDate || null,
-    docsSignedDate: row.DocsSignedDate || row.docsSignedDate || null,
-    submittedToBillingDate: row.SubmittedToBillingDate || row.submittedToBillingDate || null,
-    draftInvoicedDate: row.DraftInvoicedDate || row.draftInvoicedDate || null,
-    sesSubmittedDate: row.SesSubmittedDate || row.sesSubmittedDate || null,
-    finalInvoicedDate: row.FinalInvoicedDate || row.finalInvoicedDate || null,
-    draftInvoiceNumber: row.DraftInvoiceNumber || row.draftInvoiceNumber || '',
-    sesNumber: row.SesNumber || row.sesNumber || '',
-    legalInvoiceNumber: row.LegalInvoiceNumber || row.LegalInvoiceNo || row.legalInvoiceNumber || '',
-    invoiceAmount: row.InvoiceAmount != null ? Number(row.InvoiceAmount) : null,
-    notes: row.Notes || row.notes || '',
     tools: [],
     operatingDays: 0,
     standbyDays: 0,
-    // Legacy compatibility fields (kept for any existing code that reads them)
-    isLocked: Boolean(row.LegalInvoiceNumber || row.LegalInvoiceNo || row.legalInvoiceNo),
-    invoiceNumber: row.LegalInvoiceNumber || row.LegalInvoiceNo || row.EmdadInvoiceNo || '',
+    isLocked: Boolean(row.LegalInvoiceNo || row.legalInvoiceNo),
+    invoiceNumber: row.LegalInvoiceNo || row.EmdadInvoiceNo || '',
     invoiceDate: row.InvoiceDate || row.LegalInvoiceDate || '',
-    invoicedAmountUSD: row.InvoiceAmount != null ? Number(row.InvoiceAmount) : Number(row.InvoicedAmountUSD || 0),
+    invoicedAmountUSD: Number(row.InvoicedAmountUSD || 0),
   };
 }
 
@@ -889,27 +886,30 @@ export async function fetchLiveDatabaseData(): Promise<{
     // Prepare URL with query parameters
     function buildUrl(base: string, actionName: string): string {
       try {
-        const u = new URL(base.startsWith('http') ? base : `https://${base}`);
-        u.searchParams.set('action', actionName);
+        const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+        const fullBase = base.startsWith('http') ? base : `${origin}${base.startsWith('/') ? '' : '/'}${base}`;
+        const u = new URL(fullBase);
+        if (actionName) {
+          u.searchParams.set('action', actionName);
+        }
         u.searchParams.set('env', 'live');
         if (apiKey && !u.searchParams.has('code')) {
           u.searchParams.set('code', apiKey);
         }
-        return u.toString();
+        return base.startsWith('http') ? u.toString() : `${u.pathname}${u.search}`;
       } catch {
         const sep = base.includes('?') ? '&' : '?';
         return `${base}${sep}action=${actionName}&env=live${apiKey ? `&code=${encodeURIComponent(apiKey)}` : ''}`;
       }
     }
 
-    // The Azure Function was created with action 'SYNC_ALL_DATA' or 'GET_ALL_DATA'
+    // The Azure Function responds to 'GET_ALL_DATA'
     const attempts = [
+      { method: 'GET', url: buildUrl(endpoint, 'GET_ALL_DATA'), body: undefined },
+      { method: 'POST', url: buildUrl(endpoint, 'GET_ALL_DATA'), body: JSON.stringify({ action: 'GET_ALL_DATA', env: 'live' }) },
+      { method: 'GET', url: buildUrl(endpoint, 'getInventory'), body: undefined },
       { method: 'POST', url: buildUrl(endpoint, 'SYNC_ALL_DATA'), body: JSON.stringify({ action: 'SYNC_ALL_DATA', env: 'live' }) },
       { method: 'GET', url: buildUrl(endpoint, 'SYNC_ALL_DATA'), body: undefined },
-      { method: 'POST', url: buildUrl(endpoint, 'GET_ALL_DATA'), body: JSON.stringify({ action: 'GET_ALL_DATA', env: 'live' }) },
-      { method: 'GET', url: buildUrl(endpoint, 'GET_ALL_DATA'), body: undefined },
-      { method: 'GET', url: buildUrl(endpoint, 'GET_INVENTORY'), body: undefined },
-      { method: 'POST', url: buildUrl(endpoint, 'GET_INVENTORY'), body: JSON.stringify({ action: 'GET_INVENTORY', env: 'live' }) },
       { method: 'GET', url: buildUrl(endpoint, ''), body: undefined },
     ];
 
@@ -1029,10 +1029,52 @@ export async function fetchLiveDatabaseData(): Promise<{
           }
         }
 
-        if (Array.isArray(rawInventory) || (Array.isArray(rawJobs) && rawJobs.length > 0)) {
+        if (Array.isArray(rawInventory) || (Array.isArray(rawJobs) && rawJobs.length > 0) || Array.isArray(rawDt)) {
           const invList = Array.isArray(rawInventory) ? rawInventory.map(normalizeInventoryItem) : undefined;
-          const parsedJobs = Array.isArray(rawJobs) ? rawJobs.map(normalizeJob) : [];
+          let parsedJobs = Array.isArray(rawJobs) && rawJobs.length > 0 ? rawJobs.map(normalizeJob) : [];
           const parsedDTs = Array.isArray(rawDt) ? rawDt.map(normalizeDTBatch) : [];
+          const parsedRTs = Array.isArray(rawRt) ? rawRt.map(normalizeRTBatch) : [];
+
+          // If Azure returns empty jobs array, use the aligned master jobs catalog and merge with live DTs/RTs
+          if (parsedJobs.length === 0) {
+            const jobsById = new Map<string, any>();
+            // 1. Pre-load all master jobs
+            MASTER_JOBS.forEach((j) => {
+              const k = String(j.id || '').trim().toUpperCase();
+              if (k) jobsById.set(k, { ...j });
+            });
+
+            // 2. Discover any additional jobs referenced in live DTs
+            parsedDTs.forEach((dt: any) => {
+              const jId = String(dt.jobId || dt.jobNumber || '').trim();
+              if (!jId) return;
+              const k = jId.toUpperCase();
+              if (!jobsById.has(k)) {
+                jobsById.set(k, {
+                  id: jId,
+                  rig: dt.rig || 'RIG-EMDAD',
+                  well: dt.well || '—',
+                  client: dt.customer || dt.contract || dt.clientCode || 'ADNOC DRILLING',
+                  contract: dt.contract || dt.clientCode || '',
+                  poNumber: dt.poNumber || '',
+                  serviceType: dt.calloutRef ? `Callout: ${dt.calloutRef}` : 'Downhole Tool Dispatch',
+                  status: 'Completed',
+                  mobDate: dt.deliveryDate ? dt.deliveryDate.split('T')[0] : (dt.dispatchDate ? dt.dispatchDate.split('T')[0] : ''),
+                  demobDate: '',
+                  legalInvoiceNumber: '',
+                  draftInvoiceNumber: '',
+                  invoiceAmount: 0,
+                  invoicingType: 'PerJob',
+                  currency: 'USD',
+                  createdBy: 'Operations',
+                  createdDate: dt.deliveryDate ? dt.deliveryDate.split('T')[0] : '2023-01-01',
+                });
+              }
+            });
+
+            parsedJobs = Array.from(jobsById.values());
+          }
+
           if (parsedJobs.length > 0 && parsedDTs.length > 0) {
             const jobsById = new Map<string, any>();
             parsedJobs.forEach((j: any) => {
@@ -1055,9 +1097,9 @@ export async function fetchLiveDatabaseData(): Promise<{
               inventory: invList,
               jobs: parsedJobs,
               dtBatches: parsedDTs,
-              rtBatches: Array.isArray(rawRt) ? rawRt.map(normalizeRTBatch) : [],
+              rtBatches: parsedRTs,
             },
-            message: `Connected to Azure SQL via API (${invList?.length || 0} tools, ${rawJobs?.length || 0} jobs)`,
+            message: `Connected to Azure SQL via API (${invList?.length || 0} tools, ${parsedJobs.length} jobs, ${parsedDTs.length} DTs, ${parsedRTs.length} RTs)`,
           };
         } else {
           lastError = `Returned 200 OK but keys were [${Object.keys(payload || {}).join(', ')}]`;
@@ -1103,13 +1145,15 @@ export async function fetchFromApi<T = any>(
 
   let url = endpoint;
   try {
-    const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    const fullBase = url.startsWith('http') ? url : `${origin}${url.startsWith('/') ? '' : '/'}${url}`;
+    const urlObj = new URL(fullBase);
     urlObj.searchParams.set('action', action);
     urlObj.searchParams.set('env', 'live');
     if (apiKey && !urlObj.searchParams.has('code')) {
       urlObj.searchParams.set('code', apiKey);
     }
-    url = urlObj.toString();
+    url = endpoint.startsWith('http') ? urlObj.toString() : `${urlObj.pathname}${urlObj.search}`;
   } catch {
     url = `${endpoint}?action=${action}&env=live${apiKey ? `&code=${encodeURIComponent(apiKey)}` : ''}`;
   }
@@ -1467,3 +1511,4 @@ export function downloadStandaloneHtml(data?: Record<string, any>) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+

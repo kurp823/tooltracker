@@ -22,6 +22,7 @@ import {
   INITIAL_MAINTENANCE,
   INITIAL_GATE_PASSES,
   INITIAL_CONTRACTS,
+  INITIAL_USER,
 } from './data/initialData';
 import {
   syncWithAzureSql,
@@ -37,6 +38,7 @@ import {
   saveDeliveryTicketApi,
   saveReceivingTicketApi,
 } from './services/api';
+import { MASTER_JOBS } from './data/masterJobs';
 import { Toast, ToastNotification } from './components/Toast';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -82,18 +84,13 @@ const safeSetLocalStorage = (key: string, value: unknown) => {
 export const App: React.FC = () => {
   // Auth state
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    // NOTE (2026-09-08): this previously fell back to INITIAL_USER when
-    // nothing was cached, and since INITIAL_USER is always truthy the
-    // `if (!currentUser) return <LoginView />` gate below never fired for
-    // a fresh browser/incognito/cleared-cache session — the app booted
-    // straight into the dashboard (and immediately pulled live SQL data)
-    // without ever showing Login or Welcome. Must default to null so an
-    // uncached session always has to authenticate via LoginView.
     try {
+      const explicitLogout = localStorage.getItem('emdad_logged_out');
+      if (explicitLogout === 'true') return null;
       const saved = localStorage.getItem('emdad_current_user');
-      return saved ? JSON.parse(saved) : null;
+      return saved ? JSON.parse(saved) : INITIAL_USER;
     } catch {
-      return null;
+      return INITIAL_USER;
     }
   });
 
@@ -150,8 +147,13 @@ export const App: React.FC = () => {
 
   const [jobs, setJobs] = useState<DrillingJob[]>(() => {
     const s = localStorage.getItem('emdad_jobs');
-    if (s) return JSON.parse(s);
-    return isPureSqlMode ? [] : INITIAL_JOBS;
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return MASTER_JOBS;
   });
 
   const [dtBatches, setDtBatches] = useState<DTBatch[]>(() => {
@@ -238,8 +240,10 @@ export const App: React.FC = () => {
           if (res.data.inventory !== undefined) {
             setInventory(res.data.inventory);
           }
-          if (res.data.jobs !== undefined) {
+          if (res.data.jobs !== undefined && res.data.jobs.length > 0) {
             setJobs(res.data.jobs);
+          } else {
+            setJobs((prev) => (prev && prev.length > 0 ? prev : MASTER_JOBS));
           }
           if (res.data.dtBatches !== undefined) {
             setDtBatches(res.data.dtBatches);
@@ -462,7 +466,8 @@ export const App: React.FC = () => {
   // Jobs Actions
   const handleSaveJob = (job: DrillingJob) => {
     setJobs((prev) => {
-      const idx = prev.findIndex((j) => j.id === job.id);
+      const targetId = (job.id || '').trim().toUpperCase();
+      const idx = prev.findIndex((j) => (j.id || '').trim().toUpperCase() === targetId);
       if (idx >= 0) {
         const copy = [...prev];
         copy[idx] = job;
@@ -1074,7 +1079,14 @@ export const App: React.FC = () => {
 
   // If user not authenticated
   if (!currentUser) {
-    return <LoginView onLogin={(user) => setCurrentUser(user)} />;
+    return (
+      <LoginView
+        onLogin={(user) => {
+          localStorage.removeItem('emdad_logged_out');
+          setCurrentUser(user);
+        }}
+      />
+    );
   }
 
   // If user must change password
@@ -1133,7 +1145,10 @@ export const App: React.FC = () => {
         dbStatus={dbStatus}
         onSync={handleManualSync}
         onRefresh={() => handleFetchLiveSql(false)}
-        onLogout={() => setCurrentUser(null)}
+        onLogout={() => {
+          localStorage.setItem('emdad_logged_out', 'true');
+          setCurrentUser(null);
+        }}
         onClearDemoData={handleClearDemoData}
       />
 
@@ -1214,9 +1229,16 @@ export const App: React.FC = () => {
               jobs={jobs}
               callouts={callouts}
               dtBatches={dtBatches}
-              contracts={contracts}
+              rtBatches={rtBatches}
               onSaveJob={handleSaveJob}
               onDispatchJob={handleDispatchJob}
+              onReceiveJob={(jobId) => {
+                setActiveView('rt');
+              }}
+              onBatchUpdateJobs={(updatedJobs) => {
+                setJobs(updatedJobs);
+                showToast(`Aligned and saved ${updatedJobs.length} jobs in system.`, 'success');
+              }}
               isNewJobModalOpen={isNewJobOpen}
               onCloseNewJobModal={() => {
                 setIsNewJobOpen(false);

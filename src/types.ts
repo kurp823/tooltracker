@@ -80,6 +80,10 @@ export interface Callout {
 export type JobLifecycleStatus =
   | 'Open'
   | 'Ongoing'
+  | 'Waiting on Signed Docs'
+  | 'Submitted to Billing Team'
+  | 'SES Submitted'
+  | 'Completed'
   | 'Job completed and waiting signed docs'
   | 'Job completed'
   | 'Tickets submitted to billing team'
@@ -87,6 +91,18 @@ export type JobLifecycleStatus =
   | 'Under SES approval'
   | 'Final invoiced'
   | 'Closed';
+
+export interface JobStatusTransition {
+  id: string;
+  fromStatus: string;
+  toStatus: string;
+  date: string; // YYYY-MM-DD
+  daysInStage: number; // How many days were spent in the previous status
+  changedBy: string;
+  notes?: string;
+  docRef?: string; // e.g. signed ticket transmittal, draft inv #, SES #, legal inv #
+  signedDocsConfirmed?: boolean;
+}
 
 export interface DrillingJob {
   id: string;           // JOB-YY-NNNNN
@@ -109,19 +125,32 @@ export interface DrillingJob {
   status: JobLifecycleStatus;
   createdDate?: string;
   createdBy?: string;
-  // Lifecycle timestamps & details
-  firstDtDate?: string | null;
-  lastRtDate?: string | null;
-  docsSignedDate?: string | null;
+  firstDtDate?: string;
+  lastRtDate?: string;
+  // Lifecycle timestamps & stage tracking
+  openedDate?: string;
+  ongoingDate?: string;
+  waitingSignedDocsDate?: string;
   submittedToBillingDate?: string | null;
   draftInvoicedDate?: string | null;
   sesSubmittedDate?: string | null;
   finalInvoicedDate?: string | null;
+  completedDate?: string | null;
+  statusHistory?: JobStatusTransition[];
+  // Mandatory verification flags
+  signedDtAttached?: boolean;
+  signedRtAttached?: boolean;
+  signedUtilizationAttached?: boolean;
+  billingTransmittalRef?: string;
   draftInvoiceNumber?: string;
   sesNumber?: string;
   legalInvoiceNumber?: string;
   invoiceAmount?: number | null;
   notes?: string;
+  dtToolsCount?: number;
+  rtToolsCount?: number;
+  toolsOnRig?: number;
+  cost?: string | number;
 }
 
 export interface DTLine {
@@ -147,9 +176,11 @@ export interface DTBatch {
   DTBatchID?: string;
   dtNumber: string;     // DT-YY-NNNNN
   jobId: string;
+  jobNumber?: string;
   rmDate: string;
   rmRef: string;
   dispatchDate: string;
+  deliveryDate?: string;
   rig: string;
   well: string;
   contract?: string;
@@ -190,6 +221,7 @@ export interface RTBatch {
   RTBatchID?: string;
   rtNumber: string;     // RT-YY-NNNNN
   jobId: string;
+  jobNumber?: string;
   rtDate: string;
   backloadRmDate?: string;
   contract?: string;
