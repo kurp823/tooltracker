@@ -102,7 +102,7 @@ export const JobLifecycleStepper: React.FC<JobLifecycleStepperProps> = ({
                 key={sKey}
                 className={`p-2.5 rounded-lg border flex flex-col justify-between transition-all ${
                   isCurrent
-                    ? 'border-amber-400 bg-amber-50/60 ring-2 ring-amber-300/50 shadow-xs'
+                    ? 'border-amber-500/70 bg-amber-50/70 ring-1 ring-amber-400/40 shadow-xs'
                     : isCompleted
                     ? 'border-emerald-200 bg-emerald-50/40'
                     : 'border-slate-200 bg-white opacity-70'
@@ -113,7 +113,7 @@ export const JobLifecycleStepper: React.FC<JobLifecycleStepperProps> = ({
                     <span
                       className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] ${
                         isCurrent
-                          ? 'bg-amber-500 text-white animate-pulse'
+                          ? 'bg-amber-600 text-white font-mono'
                           : isCompleted
                           ? 'bg-emerald-600 text-white'
                           : 'bg-slate-200 text-slate-500'
@@ -124,7 +124,7 @@ export const JobLifecycleStepper: React.FC<JobLifecycleStepperProps> = ({
                     <span
                       className={`text-[9px] font-bold uppercase tracking-wider ${
                         isCurrent
-                          ? 'text-amber-700'
+                          ? 'text-amber-800'
                           : isCompleted
                           ? 'text-emerald-700'
                           : 'text-slate-400'
@@ -146,7 +146,7 @@ export const JobLifecycleStepper: React.FC<JobLifecycleStepperProps> = ({
                   <span
                     className={`font-mono font-bold ${
                       isCurrent
-                        ? 'text-amber-900 bg-amber-200/70 px-1 rounded'
+                        ? 'text-amber-900 bg-amber-100/80 px-1 rounded'
                         : isCompleted
                         ? 'text-emerald-900'
                         : 'text-slate-400'

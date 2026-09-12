@@ -128,6 +128,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   const [tab, setTab] = useState<'all' | JobStageKey>('all');
   const [search, setSearch] = useState('');
   const [selectedRigFilter, setSelectedRigFilter] = useState<string>('all');
+  const [selectedClientFilter, setSelectedClientFilter] = useState<string>('all');
   const [density, setDensity] = useState<'compact' | 'comfortable'>('compact');
   const [selectedJobDetail, setSelectedJobDetail] = useState<DrillingJob | null>(null);
 
@@ -247,6 +248,15 @@ export const JobsView: React.FC<JobsViewProps> = ({
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [jobs]);
 
+  // Distinct clients for combo filter
+  const uniqueClients = useMemo(() => {
+    const set = new Set<string>();
+    jobs.forEach((j) => {
+      if (j.client && j.client.trim()) set.add(j.client.trim());
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [jobs]);
+
   // Overall metric totals for ribbon across the 6 discrete lifecycle stages
   const metrics = useMemo(() => {
     const counts: Record<JobStageKey, number> = {
@@ -287,6 +297,10 @@ export const JobsView: React.FC<JobsViewProps> = ({
       if (tab !== 'all' && stage !== tab) return false;
 
       if (selectedRigFilter !== 'all' && (j.rig || '').trim().toUpperCase() !== selectedRigFilter.toUpperCase()) {
+        return false;
+      }
+
+      if (selectedClientFilter !== 'all' && (j.client || '').trim().toUpperCase() !== selectedClientFilter.toUpperCase()) {
         return false;
       }
 
@@ -674,34 +688,38 @@ export const JobsView: React.FC<JobsViewProps> = ({
   };
 
   return (
-    <div className="space-y-2.5 w-full">
-      {/* Enterprise Ribbon & Metric Strip */}
-      <div className="bg-white border border-slate-200 rounded-md p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-3 w-full">
+      {/* Executive Command Header */}
+      <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-md bg-[#1a3055] text-white flex items-center justify-center flex-shrink-0 shadow-2xs">
+          <div className="w-9 h-9 rounded-lg bg-[#1a3055] text-white flex items-center justify-center flex-shrink-0 shadow-2xs">
             <Activity className="w-5 h-5 text-amber-400" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-[#1a3055] tracking-tight">
-                Drilling Jobs Management
+              <h1 className="text-sm sm:text-base font-bold text-[#1a3055] tracking-tight">
+                Drilling Jobs Management Register
               </h1>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                Master Register
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                {metrics.total.toLocaleString()} Total Jobs
+              </span>
+              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                {metrics.totalToolsOnRigs.toLocaleString()} Tools On Rigs
               </span>
             </div>
-            <div className="text-xs text-slate-500">
-              Active rig operations, downhole tool balance on rigs (DT vs RT), and work order tracking.
+            <div className="text-[11px] text-slate-500 mt-0.5">
+              Unified 6-stage operational pipeline, pending document verification, and downhole tool balances.
             </div>
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {/* Global Action Buttons */}
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={handleExportJobsCsv}
-            className="h-8 px-3 rounded bg-white text-slate-700 border border-slate-300 font-semibold text-xs hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            className="h-7.5 px-3 rounded bg-white text-slate-700 border border-slate-300 font-semibold text-xs hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
             title="Download CSV of current jobs with aligned DT/RT counts"
           >
             <Download className="w-3.5 h-3.5 text-slate-600" />
@@ -717,7 +735,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                 setCsvFileName('');
                 setIsImportModalOpen(true);
               }}
-              className="h-8 px-3 rounded bg-emerald-700 text-white font-semibold text-xs hover:bg-emerald-800 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              className="h-7.5 px-3 rounded bg-emerald-700 text-white font-semibold text-xs hover:bg-emerald-800 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
               title="Upload and synchronize Jobs CSV"
             >
               <Upload className="w-3.5 h-3.5 text-emerald-100" />
@@ -728,7 +746,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
           {user?.role !== 'Viewer' && (
             <button
               onClick={onOpenNewJobModal}
-              className="h-8 px-3.5 rounded bg-[#1a3055] text-white font-semibold text-xs hover:bg-[#24426d] transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+              className="h-7.5 px-3.5 rounded bg-[#1a3055] text-white font-semibold text-xs hover:bg-[#24426d] transition cursor-pointer flex items-center gap-1.5 shadow-xs"
             >
               <Plus className="w-3.5 h-3.5 text-amber-400" />
               <span>New Drilling Job</span>
@@ -737,227 +755,242 @@ export const JobsView: React.FC<JobsViewProps> = ({
         </div>
       </div>
 
-      {/* Operational KPI Micro-cards aligned with the 6 lifecycle stages */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-        <div className="bg-white border border-slate-200 rounded-md p-2 flex items-center justify-between shadow-2xs">
-          <div>
-            <div className="text-[10px] uppercase font-bold text-slate-400">1. Open</div>
-            <div className="text-sm font-extrabold text-slate-800 font-mono">{(metrics.counts['1_open'] || 0).toLocaleString()}</div>
-            <div className="text-[9px] text-slate-400">No DT generated</div>
+      {/* MASTER LIFECYCLE COMMAND CARD: Unified Card with 6 Sub-Cards to Display Pending Stages & Combo Selector */}
+      <div className="bg-gradient-to-br from-[#0e1d35] via-[#132644] to-[#1a3359] text-white rounded-xl p-3.5 border border-[#213f6e] shadow-md relative overflow-hidden">
+        {/* Subtle decorative glow */}
+        <div className="absolute top-0 right-0 w-80 h-32 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Master Card Header Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3 pb-2.5 border-b border-white/10 relative z-10">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-bold text-xs uppercase tracking-wider text-slate-200">
+              Operational &amp; Commercial Lifecycle Pipeline
+            </span>
+            <span className="text-[10px] text-slate-400 hidden sm:inline">
+              (Select a stage sub-card or use combo dropdown)
+            </span>
           </div>
-          <Clock className="w-4 h-4 text-slate-400" />
+
+          {/* Combo Selector for Stage */}
+          <div className="flex items-center gap-2">
+            <label htmlFor="stage-combo-select" className="text-[11px] font-medium text-slate-300 whitespace-nowrap">
+              Stage Combo:
+            </label>
+            <select
+              id="stage-combo-select"
+              value={tab}
+              onChange={(e) => {
+                setTab(e.target.value as any);
+                setCurrentPage(1);
+              }}
+              className="bg-[#1b345b] text-white border border-[#345990] rounded px-2.5 py-1 text-xs font-semibold outline-none cursor-pointer hover:bg-[#22406d] transition focus:ring-1 focus:ring-amber-400"
+            >
+              <option value="all">All Stages ({metrics.total.toLocaleString()} Jobs)</option>
+              <option value="1_open">1. Open — No DT Generated ({metrics.counts['1_open'] || 0})</option>
+              <option value="2_ongoing">2. Ongoing — Tools On Rig ({metrics.counts['2_ongoing'] || 0})</option>
+              <option value="3_waiting_signed_docs">3. Waiting Docs — Pending Signed DT/RT ({metrics.counts['3_waiting_signed_docs'] || 0})</option>
+              <option value="4_submitted_billing">4. In Billing — Commercial Queue ({metrics.counts['4_submitted_billing'] || 0})</option>
+              <option value="5_ses_submitted">5. SES Submitted — Portal Review ({metrics.counts['5_ses_submitted'] || 0})</option>
+              <option value="6_completed">6. Completed — Invoiced &amp; Closed ({metrics.counts['6_completed'] || 0})</option>
+            </select>
+
+            {tab !== 'all' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTab('all');
+                  setCurrentPage(1);
+                }}
+                className="text-[11px] px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-semibold transition cursor-pointer"
+                title="Reset stage filter to view all jobs"
+              >
+                Reset (Show All)
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="bg-white border border-blue-200 bg-blue-50/20 rounded-md p-2 flex items-center justify-between shadow-2xs">
-          <div>
-            <div className="text-[10px] uppercase font-bold text-blue-700">2. Ongoing</div>
-            <div className="text-sm font-extrabold text-blue-800 font-mono">{(metrics.counts['2_ongoing'] || 0).toLocaleString()}</div>
-            <div className="text-[9px] text-blue-600">Tools on site</div>
-          </div>
-          <Truck className="w-4 h-4 text-blue-500" />
-        </div>
+        {/* 6 High-Tech Sub-Cards: Clickable Stage Tiles with Pending Highlights */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 relative z-10">
+          {/* Sub-Card 1: Open */}
+          <button
+            type="button"
+            onClick={() => {
+              setTab(tab === '1_open' ? 'all' : '1_open');
+              setCurrentPage(1);
+            }}
+            className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer relative overflow-hidden group ${
+              tab === '1_open'
+                ? 'bg-slate-800/90 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
+                : 'bg-[#152a4a]/80 border-[#234370]/70 hover:bg-[#1a345c] hover:border-slate-400/50'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-mono font-bold text-slate-300">01. STAGE</span>
+              <span className="w-2 h-2 rounded-full bg-slate-400" />
+            </div>
+            <div className="text-[11px] font-bold text-slate-200 leading-tight">Open</div>
+            <div className="text-xl font-extrabold text-white font-mono mt-0.5">
+              {(metrics.counts['1_open'] || 0).toLocaleString()}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+              <span>No DT generated</span>
+              {tab === '1_open' && <span className="text-[9px] text-amber-400 font-bold">ACTIVE</span>}
+            </div>
+          </button>
 
-        <div className="bg-white border border-amber-200 bg-amber-50/20 rounded-md p-2 flex items-center justify-between shadow-2xs">
-          <div>
-            <div className="text-[10px] uppercase font-bold text-amber-800">Tools On Rig</div>
-            <div className="text-sm font-extrabold text-amber-900 font-mono">{metrics.totalToolsOnRigs.toLocaleString()}</div>
-            <div className="text-[9px] text-amber-700">Field tool balance</div>
-          </div>
-          <Activity className="w-4 h-4 text-amber-600" />
-        </div>
+          {/* Sub-Card 2: Ongoing */}
+          <button
+            type="button"
+            onClick={() => {
+              setTab(tab === '2_ongoing' ? 'all' : '2_ongoing');
+              setCurrentPage(1);
+            }}
+            className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer relative overflow-hidden group ${
+              tab === '2_ongoing'
+                ? 'bg-blue-900/80 border-blue-400 ring-2 ring-blue-400/50 shadow-md'
+                : 'bg-[#152a4a]/80 border-[#234370]/70 hover:bg-[#1a345c] hover:border-blue-400/50'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-mono font-bold text-blue-300">02. STAGE</span>
+              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+            </div>
+            <div className="text-[11px] font-bold text-blue-200 leading-tight">Ongoing</div>
+            <div className="text-xl font-extrabold text-blue-100 font-mono mt-0.5">
+              {(metrics.counts['2_ongoing'] || 0).toLocaleString()}
+            </div>
+            <div className="text-[10px] text-blue-300/80 mt-1 flex items-center justify-between">
+              <span>Tools on site</span>
+              {tab === '2_ongoing' && <span className="text-[9px] text-blue-300 font-bold">ACTIVE</span>}
+            </div>
+          </button>
 
-        <div className="bg-white border border-amber-300 bg-amber-50/40 rounded-md p-2 flex items-center justify-between shadow-2xs">
-          <div>
-            <div className="text-[10px] uppercase font-bold text-amber-900">3. Waiting Docs</div>
-            <div className="text-sm font-extrabold text-amber-900 font-mono">{(metrics.counts['3_waiting_signed_docs'] || 0).toLocaleString()}</div>
-            <div className="text-[9px] text-amber-700">Pending signed DT/RT</div>
-          </div>
-          <Clock className="w-4 h-4 text-amber-600" />
-        </div>
+          {/* Sub-Card 3: Waiting Docs (PENDING FOCUS) */}
+          <button
+            type="button"
+            onClick={() => {
+              setTab(tab === '3_waiting_signed_docs' ? 'all' : '3_waiting_signed_docs');
+              setCurrentPage(1);
+            }}
+            className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer relative overflow-hidden group ${
+              tab === '3_waiting_signed_docs'
+                ? 'bg-amber-950/80 border-amber-400 ring-2 ring-amber-400/60 shadow-md'
+                : 'bg-[#1b2b46]/90 border-amber-500/40 hover:bg-[#203454] hover:border-amber-400'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-mono font-bold text-amber-300">03. STAGE</span>
+              <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-500 text-slate-950 uppercase tracking-tight">
+                Pending
+              </span>
+            </div>
+            <div className="text-[11px] font-bold text-amber-200 leading-tight">Waiting Docs</div>
+            <div className="text-xl font-extrabold text-amber-300 font-mono mt-0.5">
+              {(metrics.counts['3_waiting_signed_docs'] || 0).toLocaleString()}
+            </div>
+            <div className="text-[10px] text-amber-300/90 mt-1 flex items-center justify-between">
+              <span>Pending Signed DT/RT</span>
+              {tab === '3_waiting_signed_docs' && <span className="text-[9px] text-amber-400 font-bold">ACTIVE</span>}
+            </div>
+          </button>
 
-        <div className="bg-white border border-indigo-200 bg-indigo-50/20 rounded-md p-2 flex items-center justify-between shadow-2xs">
-          <div>
-            <div className="text-[10px] uppercase font-bold text-indigo-700">4. In Billing</div>
-            <div className="text-sm font-extrabold text-indigo-900 font-mono">{(metrics.counts['4_submitted_billing'] || 0).toLocaleString()}</div>
-            <div className="text-[9px] text-indigo-600">Docs submitted</div>
-          </div>
-          <Send className="w-4 h-4 text-indigo-600" />
-        </div>
+          {/* Sub-Card 4: In Billing */}
+          <button
+            type="button"
+            onClick={() => {
+              setTab(tab === '4_submitted_billing' ? 'all' : '4_submitted_billing');
+              setCurrentPage(1);
+            }}
+            className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer relative overflow-hidden group ${
+              tab === '4_submitted_billing'
+                ? 'bg-indigo-950/80 border-indigo-400 ring-2 ring-indigo-400/50 shadow-md'
+                : 'bg-[#152a4a]/80 border-[#234370]/70 hover:bg-[#1a345c] hover:border-indigo-400/50'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-mono font-bold text-indigo-300">04. STAGE</span>
+              <span className="w-2 h-2 rounded-full bg-indigo-400" />
+            </div>
+            <div className="text-[11px] font-bold text-indigo-200 leading-tight">In Billing</div>
+            <div className="text-xl font-extrabold text-indigo-100 font-mono mt-0.5">
+              {(metrics.counts['4_submitted_billing'] || 0).toLocaleString()}
+            </div>
+            <div className="text-[10px] text-indigo-300/80 mt-1 flex items-center justify-between">
+              <span>Commercial queue</span>
+              {tab === '4_submitted_billing' && <span className="text-[9px] text-indigo-300 font-bold">ACTIVE</span>}
+            </div>
+          </button>
 
-        <div className="bg-white border border-purple-200 bg-purple-50/20 rounded-md p-2 flex items-center justify-between shadow-2xs">
-          <div>
-            <div className="text-[10px] uppercase font-bold text-purple-700">5. SES Submitted</div>
-            <div className="text-sm font-extrabold text-purple-900 font-mono">{(metrics.counts['5_ses_submitted'] || 0).toLocaleString()}</div>
-            <div className="text-[9px] text-purple-600">Draft / SES in review</div>
-          </div>
-          <Receipt className="w-4 h-4 text-purple-600" />
-        </div>
+          {/* Sub-Card 5: SES Submitted (PENDING REVIEW) */}
+          <button
+            type="button"
+            onClick={() => {
+              setTab(tab === '5_ses_submitted' ? 'all' : '5_ses_submitted');
+              setCurrentPage(1);
+            }}
+            className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer relative overflow-hidden group ${
+              tab === '5_ses_submitted'
+                ? 'bg-purple-950/80 border-purple-400 ring-2 ring-purple-400/50 shadow-md'
+                : 'bg-[#1b2546]/90 border-purple-500/40 hover:bg-[#213054] hover:border-purple-400'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-mono font-bold text-purple-300">05. STAGE</span>
+              {(metrics.counts['5_ses_submitted'] || 0) > 0 ? (
+                <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-purple-400 text-slate-950 uppercase tracking-tight">
+                  In Review
+                </span>
+              ) : (
+                <span className="w-2 h-2 rounded-full bg-purple-400" />
+              )}
+            </div>
+            <div className="text-[11px] font-bold text-purple-200 leading-tight">SES Submitted</div>
+            <div className="text-xl font-extrabold text-purple-200 font-mono mt-0.5">
+              {(metrics.counts['5_ses_submitted'] || 0).toLocaleString()}
+            </div>
+            <div className="text-[10px] text-purple-300/80 mt-1 flex items-center justify-between">
+              <span>Portal review</span>
+              {tab === '5_ses_submitted' && <span className="text-[9px] text-purple-300 font-bold">ACTIVE</span>}
+            </div>
+          </button>
 
-        <div className="bg-white border border-emerald-200 bg-emerald-50/20 rounded-md p-2 flex items-center justify-between shadow-2xs">
-          <div>
-            <div className="text-[10px] uppercase font-bold text-emerald-700">6. Completed</div>
-            <div className="text-sm font-extrabold text-emerald-900 font-mono">{(metrics.counts['6_completed'] || 0).toLocaleString()}</div>
-            <div className="text-[9px] text-emerald-600">Legal invoiced</div>
-          </div>
-          <CheckCircle className="w-4 h-4 text-emerald-600" />
+          {/* Sub-Card 6: Completed */}
+          <button
+            type="button"
+            onClick={() => {
+              setTab(tab === '6_completed' ? 'all' : '6_completed');
+              setCurrentPage(1);
+            }}
+            className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer relative overflow-hidden group ${
+              tab === '6_completed'
+                ? 'bg-emerald-950/80 border-emerald-400 ring-2 ring-emerald-400/50 shadow-md'
+                : 'bg-[#152a4a]/80 border-[#234370]/70 hover:bg-[#1a345c] hover:border-emerald-400/50'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-mono font-bold text-emerald-300">06. STAGE</span>
+              <CheckCircle className="w-3 h-3 text-emerald-400" />
+            </div>
+            <div className="text-[11px] font-bold text-emerald-200 leading-tight">Completed</div>
+            <div className="text-xl font-extrabold text-emerald-100 font-mono mt-0.5">
+              {(metrics.counts['6_completed'] || 0).toLocaleString()}
+            </div>
+            <div className="text-[10px] text-emerald-300/80 mt-1 flex items-center justify-between">
+              <span>Legally invoiced</span>
+              {tab === '6_completed' && <span className="text-[9px] text-emerald-300 font-bold">ACTIVE</span>}
+            </div>
+          </button>
         </div>
       </div>
 
-      {/* Control Toolbar: 6-Stage Filter Tabs + Rig Filter + Search + Density Toggle */}
-      <div className="bg-white border border-slate-200 rounded-md p-2 shadow-xs flex flex-wrap items-center justify-between gap-2">
-        {/* Segmented Filter Tabs */}
-        <div className="flex bg-slate-100/90 rounded p-0.5 overflow-x-auto gap-0.5 border border-slate-200/80 max-w-full">
-          <button
-            onClick={() => {
-              setTab('all');
-              setCurrentPage(1);
-            }}
-            className={`h-7 px-2.5 rounded text-xs font-semibold transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              tab === 'all'
-                ? 'bg-white text-[#1a3055] shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
-          >
-            <span>All Jobs</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${tab === 'all' ? 'bg-[#1a3055] text-white' : 'bg-slate-200 text-slate-600'}`}>
-              {metrics.total}
-            </span>
-          </button>
-
-          <button
-            onClick={() => {
-              setTab('1_open');
-              setCurrentPage(1);
-            }}
-            className={`h-7 px-2.5 rounded text-xs font-semibold transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              tab === '1_open'
-                ? 'bg-white text-slate-900 shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-            <span>1. Open</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${tab === '1_open' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
-              {metrics.counts['1_open'] || 0}
-            </span>
-          </button>
-
-          <button
-            onClick={() => {
-              setTab('2_ongoing');
-              setCurrentPage(1);
-            }}
-            className={`h-7 px-2.5 rounded text-xs font-semibold transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              tab === '2_ongoing'
-                ? 'bg-white text-blue-800 shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-            <span>2. Ongoing</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${tab === '2_ongoing' ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
-              {metrics.counts['2_ongoing'] || 0}
-            </span>
-          </button>
-
-          <button
-            onClick={() => {
-              setTab('3_waiting_signed_docs');
-              setCurrentPage(1);
-            }}
-            className={`h-7 px-2.5 rounded text-xs font-semibold transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              tab === '3_waiting_signed_docs'
-                ? 'bg-white text-amber-900 shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-            <span>3. Waiting Docs</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${tab === '3_waiting_signed_docs' ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
-              {metrics.counts['3_waiting_signed_docs'] || 0}
-            </span>
-          </button>
-
-          <button
-            onClick={() => {
-              setTab('4_submitted_billing');
-              setCurrentPage(1);
-            }}
-            className={`h-7 px-2.5 rounded text-xs font-semibold transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              tab === '4_submitted_billing'
-                ? 'bg-white text-indigo-900 shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-            <span>4. In Billing</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${tab === '4_submitted_billing' ? 'bg-indigo-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
-              {metrics.counts['4_submitted_billing'] || 0}
-            </span>
-          </button>
-
-          <button
-            onClick={() => {
-              setTab('5_ses_submitted');
-              setCurrentPage(1);
-            }}
-            className={`h-7 px-2.5 rounded text-xs font-semibold transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              tab === '5_ses_submitted'
-                ? 'bg-white text-purple-900 shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-            <span>5. SES Submitted</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${tab === '5_ses_submitted' ? 'bg-purple-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
-              {metrics.counts['5_ses_submitted'] || 0}
-            </span>
-          </button>
-
-          <button
-            onClick={() => {
-              setTab('6_completed');
-              setCurrentPage(1);
-            }}
-            className={`h-7 px-2.5 rounded text-xs font-semibold transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              tab === '6_completed'
-                ? 'bg-white text-emerald-900 shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-            <span>6. Completed</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${tab === '6_completed' ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
-              {metrics.counts['6_completed'] || 0}
-            </span>
-          </button>
-        </div>
-
-        {/* Right Controls: Rig Selector, Search, Density Toggle */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Rig Filter Dropdown */}
-          <div className="flex items-center gap-1 bg-white border border-slate-300 rounded px-2 h-7 text-xs">
-            <Filter className="w-3 h-3 text-slate-400" />
-            <select
-              value={selectedRigFilter}
-              onChange={(e) => {
-                setSelectedRigFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="bg-transparent text-slate-700 outline-none font-medium cursor-pointer text-xs pr-1"
-            >
-              <option value="all">All Rigs ({uniqueRigs.length})</option>
-              {uniqueRigs.map((rig) => (
-                <option key={rig} value={rig}>
-                  Rig: {rig}
-                </option>
-              ))}
-            </select>
-          </div>
-
+      {/* CONSOLIDATED EXECUTIVE TOOLBAR: Rig Combo + Client Combo + Search + Density */}
+      <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2 flex-wrap flex-1 min-w-[280px]">
           {/* Search Box */}
-          <div className="relative flex items-center">
-            <Search className="w-3.5 h-3.5 absolute left-2 text-slate-400 pointer-events-none" />
+          <div className="relative flex items-center flex-1 sm:max-w-xs min-w-[180px]">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-400 pointer-events-none" />
             <input
               type="text"
               value={search}
@@ -965,8 +998,8 @@ export const JobsView: React.FC<JobsViewProps> = ({
                 setSearch(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Filter Job #, Rig, Well, Client, PO..."
-              className="bg-white border border-slate-300 rounded pl-7 pr-6 h-7 text-xs w-56 sm:w-64 outline-none font-medium text-slate-800 placeholder:text-slate-400 focus:border-[#1a3055] focus:ring-1 focus:ring-[#1a3055] transition"
+              placeholder="Search Job #, Rig, Well, Client, PO..."
+              className="w-full bg-slate-50 border border-slate-300 rounded pl-8 pr-7 h-7.5 text-xs outline-none font-medium text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-[#1a3055] focus:ring-1 focus:ring-[#1a3055] transition"
             />
             {search && (
               <button
@@ -974,30 +1007,95 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   setSearch('');
                   setCurrentPage(1);
                 }}
-                className="absolute right-1.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="absolute right-2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
-                <X className="w-3 h-3" />
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
+          {/* Rig Combo Selector */}
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded px-2 h-7.5 text-xs">
+            <span className="text-[11px] font-semibold text-slate-500 whitespace-nowrap">Rig:</span>
+            <select
+              value={selectedRigFilter}
+              onChange={(e) => {
+                setSelectedRigFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="bg-transparent text-slate-800 font-medium outline-none cursor-pointer pr-1"
+            >
+              <option value="all">All Rigs ({uniqueRigs.length})</option>
+              {uniqueRigs.map((rig) => (
+                <option key={rig} value={rig}>
+                  {rig}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Client / Operator Combo Selector */}
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded px-2 h-7.5 text-xs">
+            <span className="text-[11px] font-semibold text-slate-500 whitespace-nowrap">Client:</span>
+            <select
+              value={selectedClientFilter}
+              onChange={(e) => {
+                setSelectedClientFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="bg-transparent text-slate-800 font-medium outline-none cursor-pointer pr-1 max-w-[140px] truncate"
+            >
+              <option value="all">All Clients ({uniqueClients.length})</option>
+              {uniqueClients.map((client) => (
+                <option key={client} value={client}>
+                  {client}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Active Filter Clear Tag */}
+          {(tab !== 'all' || selectedRigFilter !== 'all' || selectedClientFilter !== 'all' || search.trim() !== '') && (
+            <button
+              onClick={() => {
+                setTab('all');
+                setSelectedRigFilter('all');
+                setSelectedClientFilter('all');
+                setSearch('');
+                setCurrentPage(1);
+              }}
+              className="h-7.5 px-2.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[11px] transition cursor-pointer flex items-center gap-1"
+              title="Reset all active filters"
+            >
+              <X className="w-3 h-3 text-slate-500" />
+              <span>Clear Filters</span>
+            </button>
+          )}
+        </div>
+
+        {/* Right Controls: Total Result Count & Density Toggle */}
+        <div className="flex items-center gap-3">
+          <div className="text-[11px] text-slate-500 whitespace-nowrap">
+            Showing <strong className="text-slate-800">{filteredAndSortedJobs.length.toLocaleString()}</strong> jobs
+          </div>
+
           {/* Density Switcher */}
-          <div className="flex items-center border border-slate-200 rounded p-0.5 bg-slate-50 text-[11px]">
+          <div className="flex items-center border border-slate-200 rounded p-0.5 bg-slate-100 text-[11px]">
             <button
               onClick={() => setDensity('compact')}
               className={`px-2 py-0.5 rounded cursor-pointer transition font-medium ${
-                density === 'compact' ? 'bg-white text-[#1a3055] shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-900'
+                density === 'compact' ? 'bg-white text-[#1a3055] shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
               }`}
-              title="Compact rows for high-density tabular view"
+              title="Compact density (more rows on screen)"
             >
               Compact
             </button>
             <button
               onClick={() => setDensity('comfortable')}
               className={`px-2 py-0.5 rounded cursor-pointer transition font-medium ${
-                density === 'comfortable' ? 'bg-white text-[#1a3055] shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-900'
+                density === 'comfortable' ? 'bg-white text-[#1a3055] shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
               }`}
-              title="Comfortable spacing"
+              title="Comfortable density"
             >
               Comfortable
             </button>
@@ -1013,7 +1111,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
               <tr>
                 <th
                   onClick={() => handleSortToggle('id')}
-                  className="px-3 py-2 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[125px]"
+                  className="sticky left-0 z-20 bg-slate-100 px-3 py-2 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[125px] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]"
                 >
                   <div className="flex items-center gap-1">
                     <span>Job #</span>
@@ -1185,8 +1283,8 @@ export const JobsView: React.FC<JobsViewProps> = ({
                       key={job.id}
                       className="hover:bg-blue-50/40 transition-colors group"
                     >
-                      {/* Job # - Strict whitespace-nowrap, never wraps */}
-                      <td className={`px-3 ${padY} whitespace-nowrap align-middle`}>
+                      {/* Job # - Strict whitespace-nowrap, sticky left anchor */}
+                      <td className={`px-3 ${padY} whitespace-nowrap align-middle sticky left-0 bg-white group-hover:bg-blue-50/70 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]`}>
                         <button
                           onClick={() => setSelectedJobDetail(job)}
                           className="font-mono font-bold text-slate-900 group-hover:text-blue-700 text-xs tracking-tight transition cursor-pointer text-left select-all"
@@ -1303,14 +1401,14 @@ export const JobsView: React.FC<JobsViewProps> = ({
                       <td className={`px-2.5 ${padY} text-center font-mono whitespace-nowrap align-middle`}>
                         <div className="flex flex-col items-center leading-tight">
                           <span
-                            className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
-                              stage === '3_waiting_signed_docs' && lifecycleMetrics.currentStageDays > 3
-                                ? 'bg-amber-100 text-amber-900 border border-amber-300 animate-pulse'
-                                : 'text-slate-800'
+                            className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${
+                              stage === '3_waiting_signed_docs' && lifecycleMetrics.currentStageDays <= 30 && lifecycleMetrics.currentStageDays > 0
+                                ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                                : 'text-slate-700'
                             }`}
                             title={`${lifecycleMetrics.currentStageDays} days in stage: ${STAGE_DEFINITIONS[stage].label}`}
                           >
-                            {lifecycleMetrics.currentStageDays}d <span className="text-[10px] font-normal text-slate-500">in stage</span>
+                            {lifecycleMetrics.currentStageDays}d
                           </span>
                           <span className="text-[9px] text-slate-400 font-sans">
                             {lifecycleMetrics.totalCycleDays}d total
