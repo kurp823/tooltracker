@@ -686,6 +686,14 @@ export const App: React.FC = () => {
     );
   };
 
+  const handleUpdateRTBatch = (updatedBatch: RTBatch) => {
+    setRtBatches((prev) => prev.map((b) => (b.id === updatedBatch.id ? updatedBatch : b)));
+    saveReceivingTicketApi(updatedBatch).then((r) => {
+      if (!r.success) showToast(r.message, 'error');
+    });
+    showToast(`Receiving Ticket ${updatedBatch.rtNumber} updated successfully.`, 'success');
+  };
+
   // Gate Pass Actions
   const handleSaveGatePass = (gp: GatePass, removedTools: ToolItem[]) => {
     setGatePasses((prev) => [gp, ...prev]);
@@ -1182,6 +1190,8 @@ export const App: React.FC = () => {
               inspections={inspections}
               maintenance={maintenance}
               contracts={contracts}
+              dbStatus={dbStatus}
+              onRefreshSql={() => handleFetchLiveSql(false)}
               onNavigate={(v) => setActiveView(v)}
               onOpenAddAsset={() => setActiveView('inventory')}
               onOpenAddCallout={() => {
@@ -1275,7 +1285,11 @@ export const App: React.FC = () => {
               rtBatches={rtBatches}
               dtBatches={dtBatches}
               inventory={inventory}
+              jobs={jobs}
+              callouts={callouts}
+              contracts={contracts}
               onSaveRTBatch={handleSaveRTBatch}
+              onUpdateRTBatch={handleUpdateRTBatch}
             />
           )}
 
