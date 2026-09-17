@@ -12,6 +12,7 @@ interface CalloutsViewProps {
   onSaveCallout?: (callout: Callout, reservedTools?: ToolItem[]) => void;
   onCreateJob?: (callout: Callout) => void;
   onCreateJobFromCallout?: (callout: Callout) => void;
+  onLinkCalloutToJob?: (callout: Callout, job: DrillingJob) => void;
   onDispatchJob?: (jobId: string) => void;
   isNewCalloutOpen?: boolean;
   onCloseNewCallout?: () => void;
@@ -26,6 +27,7 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
   onSaveCallout,
   onCreateJob,
   onCreateJobFromCallout,
+  onLinkCalloutToJob,
   onDispatchJob,
   isNewCalloutOpen: propIsNewOpen,
   onCloseNewCallout,
@@ -36,7 +38,50 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
 
   const [tab, setTab] = useState<'active' | 'closed'>('active');
   const [search, setSearch] = useState('');
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [selectedCalloutDetail, setSelectedCalloutDetail] = useState<Callout | null>(null);
+  const [linkingCallout, setLinkingCallout] = useState<Callout | null>(null);
+  const [linkJobSearch, setLinkJobSearch] = useState('');
+
+  const ongoingJobs = useMemo(() => {
+    return jobs.filter((j) => {
+      const s = (j.status || '').toLowerCase();
+      return s === 'open' || s === 'ongoing' || s === 'active' || s === '2_ongoing';
+    });
+  }, [jobs]);
+
+  const suggestedJobs = useMemo(() => {
+    if (!linkingCallout) return [];
+    const rigNorm = (linkingCallout.rig || '').trim().toUpperCase();
+    const clientNorm = (linkingCallout.client || '').trim().toUpperCase();
+    const wellNorm = (linkingCallout.well || '').trim().toUpperCase();
+    return ongoingJobs.filter((j) => {
+      const jRig = (j.rig || '').trim().toUpperCase();
+      const jClient = (j.client || '').trim().toUpperCase();
+      const jWell = (j.well || '').trim().toUpperCase();
+      return (
+        (rigNorm && jRig === rigNorm) ||
+        (wellNorm && jWell === wellNorm) ||
+        (clientNorm && jClient.includes(clientNorm))
+      );
+    });
+  }, [linkingCallout, ongoingJobs]);
+
+  const filteredOngoingJobs = useMemo(() => {
+    if (!linkJobSearch.trim()) return ongoingJobs;
+    const q = linkJobSearch.trim().toLowerCase();
+    return ongoingJobs.filter(
+      (j) =>
+        (j.id || '').toLowerCase().includes(q) ||
+        (j.rig || '').toLowerCase().includes(q) ||
+        (j.well || '').toLowerCase().includes(q) ||
+        (j.client || '').toLowerCase().includes(q) ||
+        (j.contract || '').toLowerCase().includes(q)
+    );
+  }, [ongoingJobs, linkJobSearch]);
+
+  const handlePrintCallout = (cal: Callout) => {
+    window.print();
+  };
 
   // New Callout Modal State (local fallback if not controlled)
   const [localIsNewCalloutOpen, setLocalIsNewCalloutOpen] = useState(false);
@@ -99,24 +144,6 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
     return sizes.length > 0 ? sizes : TOOL_SIZES;
   }, [inventory, barCategory]);
 
-  const toggleGroup = (key: string) => {
-    setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const expandAll = () => {
-    const allKeys: Record<string, boolean> = {};
-    callouts.forEach((c) => {
-      const key = `${c.rig}||${c.well}`;
-      allKeys[key] = true;
-    });
-    setOpenGroups(allKeys);
-  };
-
-  const collapseAll = () => {
-    setOpenGroups({});
-  };
-
-  // Group callouts by Rig & Well
   const filteredCallouts = useMemo(() => {
     return callouts.filter((c) => {
       if (tab === 'active' && c.status === 'Closed') return false;
@@ -130,17 +157,41 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
     });
   }, [callouts, tab, search]);
 
-  const grouped = useMemo(() => {
-    const map: Record<string, { rig: string; well: string; contract?: string; client: string; list: Callout[] }> = {};
-    filteredCallouts.forEach((c) => {
-      const k = `${c.rig}||${c.well}`;
-      if (!map[k]) {
-        map[k] = { rig: c.rig, well: c.well, contract: c.contract, client: c.client, list: [] };
+  const [sortField, setSortField] = useState<'id' | 'rig' | 'date' | 'client' | 'status'>('id');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const handleSortToggle = (field: 'id' | 'rig' | 'date' | 'client' | 'status') => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const sortedCallouts = useMemo(() => {
+    return [...filteredCallouts].sort((a, b) => {
+      let valA = '';
+      let valB = '';
+      if (sortField === 'id') {
+        valA = a.id;
+        valB = b.id;
+      } else if (sortField === 'rig') {
+        valA = `${a.rig} ${a.well}`;
+        valB = `${b.rig} ${b.well}`;
+      } else if (sortField === 'client') {
+        valA = `${a.client} ${a.contract || ''}`;
+        valB = `${b.client} ${b.contract || ''}`;
+      } else if (sortField === 'date') {
+        valA = a.createdDate;
+        valB = b.createdDate;
+      } else if (sortField === 'status') {
+        valA = a.status;
+        valB = b.status;
       }
-      map[k].list.push(c);
+      return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
     });
-    return Object.values(map);
-  }, [filteredCallouts]);
+  }, [filteredCallouts, sortField, sortOrder]);
 
   const handleBarInsert = () => {
     if (!barCategory || !barSize) {
@@ -333,18 +384,6 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
           <h1 className="text-base font-bold text-[#1a3055]">Rig Callouts &amp; Mobilization Demands</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={expandAll}
-            className="px-2.5 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-300 shadow-sm cursor-pointer"
-          >
-            Expand All
-          </button>
-          <button
-            onClick={collapseAll}
-            className="px-2.5 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-300 shadow-sm cursor-pointer"
-          >
-            Collapse All
-          </button>
           {user?.role !== 'Viewer' && (
             <button
               onClick={() => {
@@ -381,207 +420,209 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              const allOpen: Record<string, boolean> = {};
-              grouped.forEach((g) => {
-                allOpen[`${g.rig}||${g.well}`] = true;
-              });
-              setOpenGroups(allOpen);
-            }}
-            className="px-2.5 py-1 text-xs font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition cursor-pointer"
-            title="Expand All Rig / Well Sections"
-          >
-            ▼ Expand All
-          </button>
-          <button
-            onClick={() => setOpenGroups({})}
-            className="px-2.5 py-1 text-xs font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition cursor-pointer"
-            title="Collapse All Rig / Well Sections"
-          >
-            ▲ Collapse All
-          </button>
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search rig, well, client, PO ref..."
-            className="bg-white border border-[#b8c9db] rounded px-3 py-1 text-xs w-60 outline-none font-medium focus:ring-1 focus:ring-amber-400"
+            placeholder="Search rig, well, client, PO ref, callout #..."
+            className="bg-white border border-[#b8c9db] rounded px-3 py-1.5 text-xs w-64 outline-none font-medium focus:ring-1 focus:ring-amber-400 shadow-2xs"
           />
         </div>
       </div>
 
-      {/* Grouped Rig / Well Cards */}
-      {grouped.length === 0 ? (
-        <div className="bg-white border border-[#b8c9db] rounded p-12 text-center text-slate-500 font-medium shadow-sm">
-          No callout records found in this view.
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {grouped.map((grp) => {
-            const grpKey = `${grp.rig}||${grp.well}`;
-            const isOpen = Boolean(openGroups[grpKey]); // default collapsed as requested
-            const allItems = grp.list.flatMap((c) => c.items || []);
-            const pendingCount = allItems.filter((it) => it.status === 'Pending').length;
-            const assignedCount = allItems.filter((it) => it.status === 'Assigned').length;
-
-            return (
-              <div key={grpKey} className="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
-                {/* Group Header */}
-                <div
-                  onClick={() => toggleGroup(grpKey)}
-                  className="px-4 py-2.5 bg-[#dbe6f1] border-b border-[#b8c9db] flex flex-wrap items-center justify-between gap-2 cursor-pointer hover:bg-[#cddaeb] transition"
+      {/* Callouts Ledger Table */}
+      <div className="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold select-none">
+              <tr>
+                <th
+                  onClick={() => handleSortToggle('id')}
+                  className="px-3 py-2.5 cursor-pointer hover:bg-slate-100"
                 >
-                  <div className="flex items-center space-x-3">
-                    <span className="font-bold text-sm text-[#1a3055]">
-                      {grp.rig} <span className="text-slate-400 font-normal">|</span> {grp.well}
-                    </span>
-                    <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded">
-                      {grp.client}
-                    </span>
-                    {pendingCount > 0 && (
-                      <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded">
-                        {pendingCount} Pending
-                      </span>
-                    )}
-                    {assignedCount > 0 && (
-                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded">
-                        {assignedCount} Assigned
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-slate-500 text-xs font-bold">
-                      {isOpen ? '▲ Collapse' : '▼ Expand'}
-                    </span>
-                  </div>
-                </div>
+                  Callout # {sortField === 'id' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
+                <th
+                  onClick={() => handleSortToggle('rig')}
+                  className="px-3 py-2.5 cursor-pointer hover:bg-slate-100"
+                >
+                  Rig / Well {sortField === 'rig' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
+                <th
+                  onClick={() => handleSortToggle('client')}
+                  className="px-3 py-2.5 cursor-pointer hover:bg-slate-100"
+                >
+                  Client / Contract {sortField === 'client' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
+                <th className="px-3 py-2.5">PO Ref</th>
+                <th
+                  onClick={() => handleSortToggle('date')}
+                  className="px-3 py-2.5 cursor-pointer hover:bg-slate-100"
+                >
+                  Date {sortField === 'date' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
+                <th className="px-3 py-2.5 text-center">Req Tools</th>
+                <th className="px-3 py-2.5 text-center">Assigned</th>
+                <th
+                  onClick={() => handleSortToggle('status')}
+                  className="px-3 py-2.5 text-center cursor-pointer hover:bg-slate-100"
+                >
+                  Status {sortField === 'status' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
+                <th className="px-3 py-2.5 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#e2e8f0]">
+              {sortedCallouts.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="p-8 text-center text-slate-500 font-medium">
+                    No rig callout records found.
+                  </td>
+                </tr>
+              ) : (
+                sortedCallouts.map((cal) => {
+                  const allItems = cal.items || [];
+                  const totalReq = allItems.reduce((sum, it) => sum + it.qty, 0);
+                  const totalAssigned = allItems.reduce((sum, it) => sum + (it.assigned || 0), 0);
+                  const linkedJob = jobs.find(
+                    (j) =>
+                      (cal.jobId && (j.id === cal.jobId || (j as any).JobID === cal.jobId)) ||
+                      (j.calloutId && j.calloutId === cal.id)
+                  );
 
-                {/* Callout items table */}
-                {isOpen && (
-                  <div className="p-3 space-y-3">
-                    {grp.list.map((cal) => {
-                      const relatedJobs = jobs.filter(
-                        (j) => j.calloutId === cal.id && ['Open', 'Ongoing', 'Active'].includes(j.status)
-                      );
-
-                      return (
-                        <div key={cal.id} className="border border-slate-200 rounded p-3 bg-slate-50/50 space-y-2">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center space-x-2">
-                              <span className="font-mono font-bold text-amber-900 text-xs">{cal.id}</span>
-                              <span className="text-slate-500 text-[11px]">
-                                Date: <strong>{formatDateDDMMYY(cal.createdDate)}</strong> &bull; PO: <strong>{cal.poRef || '—'}</strong>
-                              </span>
-                              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-200 text-slate-700">
-                                {cal.status}
-                              </span>
-                            </div>
-
-                            {user?.role !== 'Viewer' && (
-                              <div className="flex items-center space-x-2">
+                  return (
+                    <tr
+                      key={cal.id}
+                      onClick={() => setSelectedCalloutDetail(cal)}
+                      className="hover:bg-blue-50/40 transition cursor-pointer"
+                      title="Click to open full callout details window"
+                    >
+                      <td className="px-3 py-2.5 font-mono font-bold text-slate-900 hover:text-blue-700 transition">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCalloutDetail(cal)}
+                          className="font-mono font-bold text-slate-900 hover:text-blue-700 underline decoration-slate-300 cursor-pointer"
+                        >
+                          {cal.id}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-800">
+                        <span className="font-bold text-slate-900">{cal.rig}</span>{' '}
+                        <span className="text-slate-400 font-normal">|</span>{' '}
+                        <span className="font-normal text-slate-700">{cal.well}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-700">
+                        <span className="font-semibold text-slate-900">{cal.client}</span>
+                        {cal.contract && (
+                          <span className="block text-[11px] text-slate-500">{cal.contract}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-slate-700">{cal.poRef || '—'}</td>
+                      <td className="px-3 py-2.5 font-mono text-slate-700">{formatDateDDMMYY(cal.createdDate)}</td>
+                      <td className="px-3 py-2.5 font-mono font-bold text-center">
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 text-[11px] font-bold border border-slate-200">
+                          {totalReq}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono font-bold text-center">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                            totalAssigned >= totalReq && totalReq > 0
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : totalAssigned > 0
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : 'bg-rose-100 text-rose-800 border border-rose-200'
+                          }`}
+                        >
+                          {totalAssigned}/{totalReq}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            cal.status === 'Closed'
+                              ? 'bg-slate-200 text-slate-700'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}
+                        >
+                          {cal.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center space-x-1.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCalloutDetail(cal)}
+                          className="px-2.5 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-[11px] border border-blue-200 cursor-pointer transition shadow-2xs"
+                          title="Open full callout details window"
+                        >
+                          View Details
+                        </button>
+                        {user?.role !== 'Viewer' && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openAssignModalForCallout(cal)}
+                              className="px-2.5 py-1 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-[11px] hover:brightness-105 shadow-2xs transition cursor-pointer"
+                              title="Assign physical serials"
+                            >
+                              🔧 Assign
+                            </button>
+                            {!linkedJob ? (
+                              <div className="inline-flex items-center gap-1">
                                 <button
-                                  onClick={() => openAssignModalForCallout(cal)}
-                                  className="px-2.5 py-1 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-[11px] hover:brightness-105 shadow-xs transition cursor-pointer"
+                                  type="button"
+                                  onClick={() => handleCreateJob(cal)}
+                                  className="px-2.5 py-1 rounded bg-[#1a3055] text-white font-bold text-[11px] hover:bg-[#24426d] shadow-2xs transition cursor-pointer"
+                                  title="Create a new drilling job for this callout"
                                 >
-                                  🔧 Assign Serials
+                                  + New Job
                                 </button>
-                                {relatedJobs.length === 0 ? (
-                                  <button
-                                    onClick={() => handleCreateJob(cal)}
-                                    className="px-2.5 py-1 rounded bg-[#1a3055] text-white font-bold text-[11px] hover:bg-[#24426d] shadow-xs transition cursor-pointer"
-                                  >
-                                    Create Job &rarr;
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => handleDispatch(relatedJobs[0].id)}
-                                    className="px-2.5 py-1 rounded bg-emerald-600 text-white font-bold text-[11px] hover:bg-emerald-700 shadow-xs transition cursor-pointer"
-                                  >
-                                    Dispatch to {relatedJobs[0].id} &rarr;
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => setLinkingCallout(cal)}
+                                  className="px-2.5 py-1 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold text-[11px] border border-indigo-200 shadow-2xs transition cursor-pointer"
+                                  title="Link this callout to an ongoing drilling job"
+                                >
+                                  🔗 Link Job
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="inline-flex items-center gap-1">
+                                <span
+                                  className="font-mono text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 rounded"
+                                  title={`Linked to Job ${linkedJob.id}`}
+                                >
+                                  {linkedJob.id}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDispatch(linkedJob.id)}
+                                  className="px-2.5 py-1 rounded bg-emerald-600 text-white font-bold text-[11px] hover:bg-emerald-700 shadow-2xs transition cursor-pointer"
+                                  title="Issue Delivery Ticket (DT) for this job"
+                                >
+                                  Dispatch &rarr;
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setLinkingCallout(cal)}
+                                  className="text-[10px] text-slate-500 hover:text-slate-800 underline px-0.5 cursor-pointer"
+                                  title="Change linked drilling job"
+                                >
+                                  Change
+                                </button>
                               </div>
                             )}
-                          </div>
-
-                          <div className="overflow-x-auto border border-slate-200 rounded bg-white">
-                            <table className="w-full text-left text-xs border-collapse">
-                              <thead className="bg-slate-50 text-[#24476b] border-b border-slate-200 font-bold">
-                                <tr>
-                                  <th className="px-2.5 py-1.5 w-10">Seq</th>
-                                  <th className="px-2.5 py-1.5">Size</th>
-                                  <th className="px-2.5 py-1.5">Tool Type</th>
-                                  <th className="px-2.5 py-1.5 text-center">Req Qty</th>
-                                  <th className="px-2.5 py-1.5 text-center">Assigned</th>
-                                  <th className="px-2.5 py-1.5">Assigned Physical Serial(s)</th>
-                                  <th className="px-2.5 py-1.5">Status</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {cal.items.map((it) => (
-                                  <tr key={it.seq} className="hover:bg-slate-50">
-                                    <td className="px-2.5 py-1.5 text-slate-400 font-mono">{it.seq}</td>
-                                    <td className="px-2.5 py-1.5 font-mono font-bold">{it.size}</td>
-                                    <td className="px-2.5 py-1.5 font-semibold text-[#1a3055]">{it.shortDesc}</td>
-                                    <td className="px-2.5 py-1.5 font-mono font-bold text-center">{it.qty}</td>
-                                    <td
-                                      className={`px-2.5 py-1.5 font-mono font-bold text-center ${
-                                        it.assigned >= it.qty
-                                          ? 'text-emerald-700'
-                                          : it.assigned > 0
-                                          ? 'text-amber-700'
-                                          : 'text-rose-700'
-                                      }`}
-                                    >
-                                      {it.assigned}/{it.qty}
-                                    </td>
-                                    <td className="px-2.5 py-1.5 font-mono">
-                                      {it.serialNos && it.serialNos.length > 0 ? (
-                                        <div className="flex flex-wrap gap-1">
-                                          {it.serialNos.map((s) => (
-                                            <span
-                                              key={s}
-                                              className="px-1.5 py-0.2 bg-amber-50 text-amber-900 border border-amber-200 rounded text-[10px] font-bold"
-                                            >
-                                              {s}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      ) : (
-                                        <span className="text-slate-400 text-[10px]">None assigned (Shortfall)</span>
-                                      )}
-                                    </td>
-                                    <td className="px-2.5 py-1.5">
-                                      <span
-                                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                          it.status === 'Assigned'
-                                            ? 'bg-emerald-100 text-emerald-800'
-                                            : it.status === 'Partial'
-                                            ? 'bg-amber-100 text-amber-800'
-                                            : it.status === 'Released'
-                                            ? 'bg-purple-100 text-purple-800'
-                                            : 'bg-rose-100 text-rose-800'
-                                        }`}
-                                      >
-                                        {it.status}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
 
       {/* New Callout Creator Modal */}
       {isNewCalloutOpen && (
@@ -914,6 +955,505 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
                 className="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold hover:bg-amber-500 shadow-sm cursor-pointer"
               >
                 Save Assigned Serials &rarr;
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Callout Detail Window (Full Detail Modal matching Delivery Tickets) */}
+      {selectedCalloutDetail && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-6 no-print"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedCalloutDetail(null);
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="px-5 py-3.5 bg-[#1a3055] text-white flex justify-between items-center flex-shrink-0">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-base tracking-wide text-white">
+                    Rig Callout: <span className="text-amber-400 font-mono">{selectedCalloutDetail.id}</span>
+                  </h3>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      selectedCalloutDetail.status === 'Closed'
+                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50'
+                        : 'bg-amber-950 text-amber-300 border border-amber-500/50'
+                    }`}
+                  >
+                    {selectedCalloutDetail.status}
+                  </span>
+                </div>
+                <div className="text-xs text-slate-300 mt-0.5">
+                  Rig <span className="font-bold text-white">{selectedCalloutDetail.rig}</span> &bull; Well <span className="font-normal text-white">{selectedCalloutDetail.well}</span> &bull; Client <span className="font-semibold text-white">{selectedCalloutDetail.client}</span> {selectedCalloutDetail.poRef ? `• PO: ${selectedCalloutDetail.poRef}` : ''}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePrintCallout(selectedCalloutDetail)}
+                  className="px-2.5 py-1 rounded text-xs font-bold bg-white/10 text-white border border-white/20 hover:bg-white/20 cursor-pointer transition"
+                  title="Print Callout"
+                >
+                  Print Callout
+                </button>
+                <button
+                  onClick={() => setSelectedCalloutDetail(null)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 text-xl font-bold transition cursor-pointer"
+                  title="Close Window (Esc)"
+                >
+                  &times;
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="p-5 space-y-4 overflow-y-auto text-xs">
+              {/* Metadata Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Callout ID</span>
+                  <span className="font-bold text-[#1a3055] text-xs font-mono">{selectedCalloutDetail.id}</span>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Rig</span>
+                  <span className="font-bold text-slate-900 text-xs">{selectedCalloutDetail.rig}</span>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Well</span>
+                  <span className="font-normal text-slate-800 text-xs">{selectedCalloutDetail.well}</span>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Client</span>
+                  <span className="font-bold text-slate-800 text-xs">{selectedCalloutDetail.client}</span>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Order Date</span>
+                  <span className="font-mono text-slate-700 text-xs">{formatDateDDMMYY(selectedCalloutDetail.createdDate)}</span>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">PO Reference</span>
+                  <span className="font-mono text-slate-700 text-xs">{selectedCalloutDetail.poRef || '—'}</span>
+                </div>
+              </div>
+
+              {/* Tools Manifest */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-sm text-[#1a3055]">
+                    Required Tool Items &amp; Assigned Fleet ({selectedCalloutDetail.items.length} items)
+                  </h4>
+                  <div className="text-[11px] text-slate-500">
+                    Total Required: <strong className="text-slate-800">{selectedCalloutDetail.items.reduce((s, it) => s + it.qty, 0)}</strong> &bull; Total Assigned: <strong className="text-slate-800">{selectedCalloutDetail.items.reduce((s, it) => s + (it.assigned || 0), 0)}</strong>
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-50 text-[#1a3055] font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="px-3 py-2 w-12 text-center">Seq</th>
+                        <th className="px-3 py-2">Size</th>
+                        <th className="px-3 py-2">Tool Category / Type</th>
+                        <th className="px-3 py-2 text-center">Req Qty</th>
+                        <th className="px-3 py-2 text-center">Assigned</th>
+                        <th className="px-3 py-2">Assigned Physical Serial(s)</th>
+                        <th className="px-3 py-2 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selectedCalloutDetail.items.map((it) => (
+                        <tr key={it.seq} className="hover:bg-slate-50/80">
+                          <td className="px-3 py-2 text-center text-slate-400 font-mono">{it.seq}</td>
+                          <td className="px-3 py-2 font-mono font-medium">{it.size}</td>
+                          <td className="px-3 py-2 font-semibold text-slate-900">{it.shortDesc}</td>
+                          <td className="px-3 py-2 font-mono font-bold text-center">{it.qty}</td>
+                          <td
+                            className={`px-3 py-2 font-mono font-bold text-center ${
+                              it.assigned >= it.qty
+                                ? 'text-emerald-700'
+                                : it.assigned > 0
+                                ? 'text-amber-700'
+                                : 'text-rose-700'
+                            }`}
+                          >
+                            {it.assigned}/{it.qty}
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            {it.serialNos && it.serialNos.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {it.serialNos.map((s) => (
+                                  <span
+                                    key={s}
+                                    className="px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-300 rounded text-[11px] font-mono font-bold"
+                                  >
+                                    {s}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 text-xs italic">No serials assigned yet</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                it.status === 'Assigned'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : it.status === 'Partial'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : it.status === 'Released'
+                                  ? 'bg-purple-100 text-purple-800'
+                                  : 'bg-rose-100 text-rose-800'
+                              }`}
+                            >
+                              {it.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-between items-center flex-shrink-0 text-xs">
+              <div className="flex items-center gap-2">
+                {user?.role !== 'Viewer' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cal = selectedCalloutDetail;
+                      setSelectedCalloutDetail(null);
+                      openAssignModalForCallout(cal);
+                    }}
+                    className="px-3 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold hover:bg-amber-500 shadow-sm cursor-pointer transition"
+                  >
+                    🔧 Assign Serials
+                  </button>
+                )}
+                {(() => {
+                  const linkedJob = jobs.find(
+                    (j) =>
+                      (selectedCalloutDetail.jobId &&
+                        (j.id === selectedCalloutDetail.jobId || (j as any).JobID === selectedCalloutDetail.jobId)) ||
+                      (j.calloutId && j.calloutId === selectedCalloutDetail.id)
+                  );
+                  if (user?.role !== 'Viewer') {
+                    if (linkedJob) {
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 px-2.5 py-1 rounded">
+                            Linked Job: {linkedJob.id}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const jId = linkedJob.id;
+                              setSelectedCalloutDetail(null);
+                              handleDispatch(jId);
+                            }}
+                            className="px-3 py-1.5 rounded bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-sm cursor-pointer transition"
+                          >
+                            Dispatch (DT) &rarr;
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cal = selectedCalloutDetail;
+                              setSelectedCalloutDetail(null);
+                              setLinkingCallout(cal);
+                            }}
+                            className="px-2.5 py-1.5 rounded bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 text-xs border border-slate-300 cursor-pointer"
+                          >
+                            Change Job
+                          </button>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cal = selectedCalloutDetail;
+                            setSelectedCalloutDetail(null);
+                            handleCreateJob(cal);
+                          }}
+                          className="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold hover:bg-[#24426d] shadow-sm cursor-pointer transition"
+                        >
+                          + Create New Job &rarr;
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cal = selectedCalloutDetail;
+                            setSelectedCalloutDetail(null);
+                            setLinkingCallout(cal);
+                          }}
+                          className="px-3 py-1.5 rounded bg-indigo-50 text-indigo-700 font-bold hover:bg-indigo-100 border border-indigo-200 shadow-sm cursor-pointer transition"
+                        >
+                          🔗 Select Ongoing Job
+                        </button>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePrintCallout(selectedCalloutDetail)}
+                  className="px-3 py-1.5 rounded bg-slate-200 text-slate-800 font-bold hover:bg-slate-300 cursor-pointer transition"
+                >
+                  Print Document
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCalloutDetail(null)}
+                  className="px-4 py-1.5 rounded bg-slate-700 text-white font-bold hover:bg-slate-800 cursor-pointer transition"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Link Callout to Drilling Job Modal */}
+      {linkingCallout && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-6 no-print"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setLinkingCallout(null);
+              setLinkJobSearch('');
+            }
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="px-5 py-3.5 bg-[#1a3055] text-white flex justify-between items-center flex-shrink-0">
+              <div>
+                <h3 className="font-bold text-base tracking-wide text-white flex items-center gap-2">
+                  <span>🔗 Link Callout to Drilling Job</span>
+                  <span className="font-mono text-amber-400 text-sm">({linkingCallout.id})</span>
+                </h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Select an existing ongoing job or create a brand new job for this requirement.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setLinkingCallout(null);
+                  setLinkJobSearch('');
+                }}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 text-xl font-bold transition cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Callout Summary Ribbon */}
+            <div className="px-5 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-4 text-slate-700">
+                <div>
+                  <span className="text-slate-400 font-bold uppercase text-[10px]">Rig:</span>{' '}
+                  <strong className="text-slate-900">{linkingCallout.rig}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-bold uppercase text-[10px]">Well:</span>{' '}
+                  <strong className="text-slate-900">{linkingCallout.well}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-bold uppercase text-[10px]">Client:</span>{' '}
+                  <strong className="text-slate-900">{linkingCallout.client}</strong>
+                </div>
+                {linkingCallout.poRef && (
+                  <div>
+                    <span className="text-slate-400 font-bold uppercase text-[10px]">PO:</span>{' '}
+                    <strong className="font-mono text-slate-900">{linkingCallout.poRef}</strong>
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const cal = linkingCallout;
+                  setLinkingCallout(null);
+                  setLinkJobSearch('');
+                  handleCreateJob(cal);
+                }}
+                className="px-3 py-1 rounded bg-[#1a3055] text-white font-bold hover:bg-[#24426d] shadow-2xs cursor-pointer text-xs flex items-center gap-1.5"
+              >
+                <span>+</span> Create New Job Instead
+              </button>
+            </div>
+
+            {/* Search Bar */}
+            <div className="p-4 border-b border-slate-200">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search ongoing jobs by Job ID, Rig, Well, Client, or Contract..."
+                  value={linkJobSearch}
+                  onChange={(e) => setLinkJobSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoFocus
+                />
+                <span className="absolute left-3 top-2.5 text-slate-400">🔍</span>
+              </div>
+            </div>
+
+            {/* Job Selection List */}
+            <div className="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
+              {/* Suggested Jobs for this Rig/Client */}
+              {!linkJobSearch && suggestedJobs.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <h4 className="font-bold text-xs uppercase tracking-wider text-emerald-800">
+                      Suggested Active Jobs for Rig {linkingCallout.rig} / {linkingCallout.client} ({suggestedJobs.length})
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {suggestedJobs.map((j) => (
+                      <div
+                        key={j.id}
+                        className="border-2 border-emerald-200 bg-emerald-50/40 rounded-lg p-3 hover:border-emerald-500 hover:shadow-sm transition flex items-center justify-between gap-3"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-extrabold text-sm text-[#1a3055]">{j.id}</span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              {j.status}
+                            </span>
+                            {j.calloutId && (
+                              <span className="text-[10px] font-mono text-slate-500">
+                                (Prev Callout: {j.calloutId})
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-slate-600 text-[11px] flex flex-wrap gap-x-3">
+                            <span>
+                              Rig: <strong className="text-slate-900">{j.rig}</strong>
+                            </span>
+                            <span>
+                              Well: <strong className="text-slate-900">{j.well}</strong>
+                            </span>
+                            <span>
+                              Client: <strong className="text-slate-900">{j.client}</strong>
+                            </span>
+                            {j.contract && (
+                              <span>
+                                Contract: <span className="text-slate-700">{j.contract}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onLinkCalloutToJob) {
+                              onLinkCalloutToJob(linkingCallout, j);
+                            }
+                            setLinkingCallout(null);
+                            setLinkJobSearch('');
+                          }}
+                          className="px-3 py-1.5 rounded bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-sm cursor-pointer whitespace-nowrap text-xs flex items-center gap-1"
+                        >
+                          Select &amp; Link &rarr;
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* All Ongoing Jobs */}
+              <div className="space-y-2">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">
+                  {linkJobSearch
+                    ? `Matching Ongoing Jobs (${filteredOngoingJobs.length})`
+                    : `All Ongoing Drilling Jobs (${filteredOngoingJobs.length})`}
+                </h4>
+                {filteredOngoingJobs.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                    No matching ongoing drilling jobs found. You can create a new job using the button above.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2">
+                    {filteredOngoingJobs.map((j) => (
+                      <div
+                        key={j.id}
+                        className="border border-slate-200 bg-white rounded-lg p-3 hover:border-blue-400 hover:shadow-sm transition flex items-center justify-between gap-3"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-extrabold text-sm text-[#1a3055]">{j.id}</span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                              {j.status}
+                            </span>
+                          </div>
+                          <div className="text-slate-600 text-[11px] flex flex-wrap gap-x-3">
+                            <span>
+                              Rig: <strong className="text-slate-900">{j.rig}</strong>
+                            </span>
+                            <span>
+                              Well: <strong className="text-slate-900">{j.well}</strong>
+                            </span>
+                            <span>
+                              Client: <strong className="text-slate-900">{j.client}</strong>
+                            </span>
+                            {j.mobDate && (
+                              <span>
+                                Mob Date: <span className="font-mono">{j.mobDate}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onLinkCalloutToJob) {
+                              onLinkCalloutToJob(linkingCallout, j);
+                            }
+                            setLinkingCallout(null);
+                            setLinkJobSearch('');
+                          }}
+                          className="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold hover:bg-[#24426d] shadow-sm cursor-pointer whitespace-nowrap text-xs flex items-center gap-1"
+                        >
+                          Select &amp; Link &rarr;
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center flex-shrink-0 text-xs">
+              <span className="text-slate-500">
+                Linking a callout to an ongoing job associates the requirement and enables Delivery Ticket dispatch.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setLinkingCallout(null);
+                  setLinkJobSearch('');
+                }}
+                className="px-4 py-1.5 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer"
+              >
+                Cancel
               </button>
             </div>
           </div>
