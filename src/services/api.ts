@@ -5,6 +5,29 @@
 
 import { MASTER_JOBS } from '../data/masterJobs';
 
+const normalizeJobKey = (str?: string): string => {
+  if (!str) return '';
+  return str
+    .trim()
+    .toUpperCase()
+    .replace(/^JOB[-_]?/i, '')
+    .replace(/[-_]0?1$/i, '');
+};
+
+const MASTER_JOBS_MAP = new Map<string, any>();
+MASTER_JOBS.forEach((j) => {
+  if (j.id) {
+    const raw = String(j.id).trim().toUpperCase();
+    MASTER_JOBS_MAP.set(raw, j);
+    MASTER_JOBS_MAP.set(normalizeJobKey(j.id), j);
+  }
+  if ((j as any).jobNumber) {
+    const raw = String((j as any).jobNumber).trim().toUpperCase();
+    MASTER_JOBS_MAP.set(raw, j);
+    MASTER_JOBS_MAP.set(normalizeJobKey((j as any).jobNumber), j);
+  }
+});
+
 export interface DbConnectionStatus {
   isConnected: boolean;
   source: 'azure-sql' | 'data-api' | 'azure-function' | 'local-cache';
@@ -91,13 +114,76 @@ function normalizeInventoryItem(row: any): any {
 
 function normalizeJob(row: any): any {
   const jId = row.JobID || row.jobId || row.jobNumber || '';
+  const key = String(jId).trim().toUpperCase();
+  const master = MASTER_JOBS_MAP.get(key) || MASTER_JOBS_MAP.get(normalizeJobKey(jId));
+
+  // 1. Resolve Legal Invoice Number:
+  // Legal numbers MUST start with 'FSH', 'FR', or 'WHP' (e.g. FSH-02620, FR-23-881, WHP-00513)
+  const legalCandidates = [
+    String(row.LegalNumber || row.legalNumber || '').trim(),
+    String(row.LegalInvoiceNo || row.legalInvoiceNo || '').trim(),
+    String(row.ClientRef || row.clientRef || '').trim(),
+    String(master?.legalInvoiceNumber || '').trim(),
+    String(row.LegalInvoiceNumber || row.legalInvoiceNumber || '').trim(),
+    String(row.LegalInvoice || row.legalInvoice || '').trim(),
+  ];
+
+  const foundLegal = legalCandidates.find((c) => {
+    if (!c || c === '—' || c === '-' || c.toUpperCase() === 'PENDING') return false;
+    const u = c.toUpperCase();
+    return u.startsWith('FSH') || u.startsWith('FR') || u.startsWith('WHP');
+  }) || '';
+
+  const legalInvoiceNumber = foundLegal;
+
+  // 2. Resolve ERP / Draft / Emdad Invoice Number:
+  // Numbers without FSH, FR, or WHP initials (e.g. 218662, 218661, 208801) are ERP / Draft invoices under approval
+  const erpCandidates = [
+    String(row.DraftInvoiceNumber || row.draftInvoiceNumber || '').trim(),
+    String(row.DraftInvoiceNo || row.draftInvoiceNo || '').trim(),
+    String(row.EmdadInvoiceNo || row.emdadInvoiceNo || '').trim(),
+    String(master?.draftInvoiceNumber || '').trim(),
+    String(row.LegalInvoiceNumber || row.legalInvoiceNumber || '').trim(),
+    String(row.LegalInvoiceNo || row.legalInvoiceNo || '').trim(),
+    String(row.ClientRef || row.clientRef || '').trim(),
+    String(row.ERPInvoiceNo || row.erpInvoiceNo || row.ERPRef || row.erpRef || '').trim(),
+  ];
+
+  const foundErp = erpCandidates.find((c) => {
+    if (!c || c === '—' || c === '-' || c.toUpperCase() === 'PENDING' || c === legalInvoiceNumber) return false;
+    const u = c.toUpperCase();
+    return !u.startsWith('FSH') && !u.startsWith('FR') && !u.startsWith('WHP');
+  }) || '';
+
+  const draftInvoiceNumber = foundErp;
+
+  // 3. Resolve Invoiced Amount
+  const invoiceAmount =
+    row.InvoiceAmount !== undefined && row.InvoiceAmount !== null && row.InvoiceAmount !== '' ? Number(row.InvoiceAmount) :
+    row.invoiceAmount !== undefined && row.invoiceAmount !== null && row.invoiceAmount !== '' ? Number(row.invoiceAmount) :
+    master?.invoiceAmount !== undefined && master.invoiceAmount !== null ? Number(master.invoiceAmount) :
+    Number(row.InvoicedAmountUSD || 0);
+
+  const hasLegal = Boolean(legalInvoiceNumber);
+  const hasErp = Boolean(draftInvoiceNumber);
+  const rawStatus = row.Status || row.status || master?.status || 'Open';
+  
+  // Rule: Only jobs with verified FSH/FR/WHP legal invoice are Final Invoiced / Completed.
+  // Jobs with ERP invoices (e.g. 218662) without these initials are Under Approval / SES Submitted.
+  let status = rawStatus;
+  if (hasLegal) {
+    status = 'Final invoiced';
+  } else if (hasErp || String(rawStatus).toLowerCase().includes('ses') || String(rawStatus).toLowerCase().includes('approval')) {
+    status = 'SES submitted';
+  }
+
   return {
     id: jId,
     jobNumber: jId,
-    calloutId: row.CalloutID || row.calloutId || '',
-    rig: row.Rig || row.rig || '',
-    well: row.Well || row.well || '',
-    client: row.Client || row.client || '',
+    calloutId: row.CalloutID || row.calloutId || master?.calloutId || '',
+    rig: row.Rig || row.rig || master?.rig || '',
+    well: row.Well || row.well || master?.well || '',
+    client: row.Client || row.client || master?.client || '',
     contract: String(
       row.ContractNo ||
       row.contractNo ||
@@ -109,25 +195,40 @@ function normalizeJob(row: any): any {
       row.contractId ||
       row.Contract ||
       row.contract ||
+      master?.contract ||
       ''
     ).trim(),
-    poNumber: row.PONumber || row.poNumber || '',
-    clientRef: row.ClientRef || row.clientRef || '',
+    poNumber: row.PONumber || row.poNumber || master?.poNumber || '',
+    clientRef: String(row.ClientRef || row.clientRef || master?.clientRef || '').trim(),
     erpRef: row.ERPRef || row.erpRef || '',
     holeSection: row.HoleSection || row.holeSection || '',
-    serviceType: row.ServiceType || row.serviceType || 'Downhole Rental',
+    serviceType: row.ServiceType || row.serviceType || master?.serviceType || 'Downhole Rental',
     invoicingType: row.InvoicingType || row.invoicingType || 'PerJob',
     currency: row.Currency || row.currency || 'USD',
-    mobDate: row.MobDate || row.mobDate || '',
-    demobDate: row.DemobDate || row.demobDate || '',
-    status: row.Status || row.status || 'Open',
+    mobDate: row.MobDate || row.mobDate || master?.mobDate || row.FirstDtDate || (row.CreatedDate && !String(row.CreatedDate).startsWith('2026-09') ? String(row.CreatedDate).split('T')[0] : '') || '',
+    demobDate: row.DemobDate || row.demobDate || master?.demobDate || row.LastRtDate || '',
+    status: status,
     tools: [],
     operatingDays: 0,
     standbyDays: 0,
-    isLocked: Boolean(row.LegalInvoiceNo || row.legalInvoiceNo),
-    invoiceNumber: row.LegalInvoiceNo || row.EmdadInvoiceNo || '',
-    invoiceDate: row.InvoiceDate || row.LegalInvoiceDate || '',
-    invoicedAmountUSD: Number(row.InvoicedAmountUSD || 0),
+    isLocked: Boolean(hasLegal || row.LegalInvoiceNo || row.legalInvoiceNo),
+    invoiceNumber: legalInvoiceNumber || draftInvoiceNumber || row.LegalInvoiceNo || row.EmdadInvoiceNo || '',
+    legalInvoiceNumber,
+    draftInvoiceNumber,
+    invoiceAmount,
+    sesNumber: row.SesNumber || row.sesNumber || '',
+    invoiceDate: row.InvoiceDate || row.LegalInvoiceDate || (hasLegal ? (row.MobDate || '2024-01-01') : ''),
+    invoicedAmountUSD: invoiceAmount,
+    cost: row.Cost || row.cost || master?.cost || '',
+    createdDate: row.CreatedDate || row.createdDate || master?.createdDate || '',
+    createdBy: row.CreatedBy || row.createdBy || master?.createdBy || 'Operations',
+    firstDtDate: row.FirstDtDate || row.firstDtDate || '',
+    lastRtDate: row.LastRtDate || row.lastRtDate || '',
+    docsSignedDate: row.DocsSignedDate || row.docsSignedDate || '',
+    submittedToBillingDate: row.SubmittedToBillingDate || row.submittedToBillingDate || null,
+    draftInvoicedDate: row.DraftInvoicedDate || row.draftInvoicedDate || null,
+    sesSubmittedDate: row.SesSubmittedDate || row.sesSubmittedDate || null,
+    finalInvoicedDate: row.FinalInvoicedDate || row.finalInvoicedDate || (hasLegal ? (row.InvoiceDate || row.MobDate || '2024-01-01') : null),
   };
 }
 
@@ -670,6 +771,296 @@ function normalizeMaintenance(row: any): any {
 }
 
 /**
+ * Reconciles Jobs, Delivery Tickets (DTs), Receiving Tickets (RTs), and Inventory:
+ * 1) Auto-generates closure dummy RT for completed jobs with legal invoices having unreturned/missing RT tools (User Request 3)
+ * 2) Synchronizes live tool status and location with active DT dispatch ledger so tools at rigs show 'On Rig' in Inventory & Dashboard (User Request 4)
+ */
+export function reconcileJobsDTRTAndInventory(
+  jobs: any[],
+  dtBatches: any[],
+  rtBatches: any[],
+  inventory?: any[]
+): {
+  jobs: any[];
+  dtBatches: any[];
+  rtBatches: any[];
+  inventory?: any[];
+} {
+  const jobsById = new Map<string, any>();
+  jobs.forEach((j: any) => {
+    if (j.id) jobsById.set(String(j.id).trim().toUpperCase(), j);
+    if (j.jobNumber) jobsById.set(String(j.jobNumber).trim().toUpperCase(), j);
+  });
+
+  // Attach contract references to DTs if missing
+  dtBatches.forEach((b: any) => {
+    if (!b.contract || b.contract === '—') {
+      const j = b.jobId ? jobsById.get(String(b.jobId).trim().toUpperCase()) : null;
+      if (j) {
+        b.contract = j.contract || j.client || (j.poNumber ? `PO-${j.poNumber}` : '');
+      }
+    }
+  });
+
+  // Index DTs and RTs by Job ID
+  const dtsByJobId = new Map<string, any[]>();
+  dtBatches.forEach((dt) => {
+    const k = String(dt.jobId || '').trim().toUpperCase();
+    if (k) {
+      if (!dtsByJobId.has(k)) dtsByJobId.set(k, []);
+      dtsByJobId.get(k)!.push(dt);
+    }
+  });
+
+  const rtsByJobId = new Map<string, any[]>();
+  rtBatches.forEach((rt) => {
+    const k = String(rt.jobId || '').trim().toUpperCase();
+    if (k) {
+      if (!rtsByJobId.has(k)) rtsByJobId.set(k, []);
+      rtsByJobId.get(k)!.push(rt);
+    }
+  });
+
+  // 1. Auto-create dummy tickets and reconcile completed jobs with legal invoices (FSH, FR, WHP)
+  jobs.forEach((job) => {
+    // Legal invoice numbers strictly start with FSH, FR, or WHP
+    const hasLegalInvoice = Boolean(
+      (job.legalInvoiceNumber && (
+        job.legalInvoiceNumber.toUpperCase().startsWith('FSH') ||
+        job.legalInvoiceNumber.toUpperCase().startsWith('FR') ||
+        job.legalInvoiceNumber.toUpperCase().startsWith('WHP')
+      )) ||
+      (job.invoiceNumber && (
+        job.invoiceNumber.toUpperCase().startsWith('FSH') ||
+        job.invoiceNumber.toUpperCase().startsWith('FR') ||
+        job.invoiceNumber.toUpperCase().startsWith('WHP')
+      ))
+    );
+
+    const isCompleted = hasLegalInvoice;
+
+    if (isCompleted) {
+      const jobKey = String(job.id || '').trim().toUpperCase();
+      const jobDTs = dtsByJobId.get(jobKey) || [];
+      const jobRTs = rtsByJobId.get(jobKey) || [];
+
+      // Ensure all existing DTs for this completed job are locked, signed, and tool lines returned
+      jobDTs.forEach((dt) => {
+        dt.isSigned = true;
+        dt.isLocked = true;
+        (dt.toolLines || []).forEach((tl: any) => {
+          tl.status = 'Returned';
+        });
+      });
+
+      // Ensure all existing RTs for this completed job are locked and signed
+      jobRTs.forEach((rt) => {
+        rt.isSigned = true;
+        rt.isLocked = true;
+        (rt.toolLines || []).forEach((tl: any) => {
+          tl.status = 'Returned';
+        });
+      });
+
+      // Collect all tool serials dispatched in DTs
+      const dispatchedLines: any[] = [];
+      jobDTs.forEach((dt) => {
+        (dt.toolLines || []).forEach((tl: any) => {
+          dispatchedLines.push(tl);
+        });
+      });
+
+      // Collect all tool serials returned in RTs
+      const returnedLines: any[] = [];
+      const returnedSerials = new Set<string>();
+      jobRTs.forEach((rt) => {
+        (rt.toolLines || []).forEach((tl: any) => {
+          returnedLines.push(tl);
+          if (tl.serial) returnedSerials.add(String(tl.serial).trim().toUpperCase());
+        });
+      });
+
+      // Case A: Tools were dispatched on DT, but unreturned on RT -> create dummy RT
+      const unreturned = dispatchedLines.filter(
+        (tl) => tl.serial && !returnedSerials.has(String(tl.serial).trim().toUpperCase())
+      );
+
+      if (dispatchedLines.length > 0 && unreturned.length > 0) {
+        const dummyRTId = `RT-AUTO-${String(job.id).replace(/[^a-zA-Z0-9]/g, '')}`;
+        const dummyRTNum = `RT-CLS-${String(job.id).replace(/^Job[-_]?/i, '')}`;
+        const existingAuto = rtBatches.find(
+          (r) => r.id === dummyRTId || r.rtNumber === dummyRTNum
+        );
+
+        if (!existingAuto) {
+          const autoRT = {
+            id: dummyRTId,
+            rtNumber: dummyRTNum,
+            jobId: job.id,
+            rig: job.rig || 'Rig Unassigned',
+            well: job.well || '—',
+            contract: job.contract || '',
+            rtDate: job.demobDate || job.finalInvoicedDate || job.lastRtDate || '2023-12-31',
+            receivedBy: 'Operations Base (Closed)',
+            recipient: 'Emdad Base QC',
+            notes: `Auto-closure receiving clearance for completed job ${job.id} (Legal Inv #${job.legalInvoiceNumber || job.invoiceNumber})`,
+            toolLines: unreturned.map((tl: any) => ({
+              ...tl,
+              status: 'Returned',
+              used: Boolean(tl.used),
+              rtBatchId: dummyRTId,
+              routedTo: tl.routedTo || 'Emdad Base',
+            })),
+            isSigned: true,
+            isLocked: true,
+          };
+          rtBatches.push(autoRT);
+          if (!rtsByJobId.has(jobKey)) rtsByJobId.set(jobKey, []);
+          rtsByJobId.get(jobKey)!.push(autoRT);
+
+          // Update DT tool lines to link to this auto RT
+          jobDTs.forEach((dt) => {
+            (dt.toolLines || []).forEach((tl: any) => {
+              if (unreturned.some((u) => u.serial && String(u.serial).trim().toUpperCase() === String(tl.serial).trim().toUpperCase())) {
+                tl.status = 'Returned';
+                tl.rtBatchId = dummyRTId;
+              }
+            });
+          });
+
+          if (!job.lastRtDate) {
+            job.lastRtDate = autoRT.rtDate;
+          }
+        }
+      }
+
+      // Case B: RT tools exist (e.g. RT tools = 1) but DT tools = 0 -> create dummy DT to balance
+      if (returnedLines.length > 0 && dispatchedLines.length === 0) {
+        const dummyDTId = `DT-AUTO-${String(job.id).replace(/[^a-zA-Z0-9]/g, '')}`;
+        const dummyDTNum = `DT-CLS-${String(job.id).replace(/^Job[-_]?/i, '')}`;
+        const existingAutoDT = dtBatches.find(
+          (d) => d.id === dummyDTId || d.dtNumber === dummyDTNum
+        );
+
+        if (!existingAutoDT) {
+          const autoDT = {
+            id: dummyDTId,
+            dtNumber: dummyDTNum,
+            jobId: job.id,
+            rig: job.rig || 'Rig Unassigned',
+            well: job.well || '—',
+            contract: job.contract || '',
+            rmDate: job.mobDate || '2023-01-01',
+            dispatchDate: job.mobDate || '2023-01-01',
+            dispatchedBy: 'Operations Base (Closed)',
+            recipient: job.client || 'Client Representative',
+            notes: `Auto-closure dispatch record for completed job ${job.id} (Legal Inv #${job.legalInvoiceNumber || job.invoiceNumber})`,
+            toolLines: returnedLines.map((tl: any) => ({
+              ...tl,
+              status: 'Returned',
+              rtBatchId: tl.rtBatchId || (jobRTs[0] ? jobRTs[0].id : undefined),
+            })),
+            isSigned: true,
+            isLocked: true,
+          };
+          dtBatches.push(autoDT);
+          if (!dtsByJobId.has(jobKey)) dtsByJobId.set(jobKey, []);
+          dtsByJobId.get(jobKey)!.push(autoDT);
+        }
+      }
+
+      job.signedDtAttached = true;
+      job.signedRtAttached = true;
+      job.signedUtilizationAttached = true;
+      if (!job.status || job.status.toLowerCase() !== 'completed') {
+        job.status = 'Completed';
+      }
+    }
+  });
+
+  // 2. Link Inventory with DT and RT ledger (Request 4)
+  if (inventory && Array.isArray(inventory) && inventory.length > 0) {
+    const toolLatestDT = new Map<string, { dt: any; date: string; rig: string; jobId: string }>();
+    const toolLatestRT = new Map<string, { rt: any; date: string; routedTo: string }>();
+
+    dtBatches.forEach((dt) => {
+      const dtDate = String(dt.dispatchDate || dt.rmDate || '2023-01-01');
+      (dt.toolLines || []).forEach((tl: any) => {
+        const serialKey = String(tl.serial || '').trim().toUpperCase();
+        const assetKey = String(tl.assetNo || '').trim().toUpperCase();
+        const entry = { dt, date: dtDate, rig: dt.rig || 'Rig', jobId: dt.jobId };
+
+        if (serialKey) {
+          const prev = toolLatestDT.get(serialKey);
+          if (!prev || dtDate >= prev.date) toolLatestDT.set(serialKey, entry);
+        }
+        if (assetKey && assetKey !== serialKey) {
+          const prev = toolLatestDT.get(assetKey);
+          if (!prev || dtDate >= prev.date) toolLatestDT.set(assetKey, entry);
+        }
+      });
+    });
+
+    rtBatches.forEach((rt) => {
+      const rtDate = String(rt.rtDate || rt.backloadRmDate || '2023-01-01');
+      (rt.toolLines || []).forEach((tl: any) => {
+        const serialKey = String(tl.serial || '').trim().toUpperCase();
+        const assetKey = String(tl.assetNo || '').trim().toUpperCase();
+        const entry = { rt, date: rtDate, routedTo: tl.routedTo || 'Emdad Base' };
+
+        if (serialKey) {
+          const prev = toolLatestRT.get(serialKey);
+          if (!prev || rtDate >= prev.date) toolLatestRT.set(serialKey, entry);
+        }
+        if (assetKey && assetKey !== serialKey) {
+          const prev = toolLatestRT.get(assetKey);
+          if (!prev || rtDate >= prev.date) toolLatestRT.set(assetKey, entry);
+        }
+      });
+    });
+
+    inventory.forEach((tool: any) => {
+      const sKey = String(tool.serial || '').trim().toUpperCase();
+      const aKey = String(tool.assetNo || '').trim().toUpperCase();
+      const idKey = String(tool.id || '').trim().toUpperCase();
+
+      const latestDT = toolLatestDT.get(sKey) || (aKey ? toolLatestDT.get(aKey) : undefined) || (idKey ? toolLatestDT.get(idKey) : undefined);
+      const latestRT = toolLatestRT.get(sKey) || (aKey ? toolLatestRT.get(aKey) : undefined) || (idKey ? toolLatestRT.get(idKey) : undefined);
+
+      if (latestDT) {
+        const isReturned = latestRT && latestRT.date >= latestDT.date;
+        if (!isReturned) {
+          tool.status = 'On Rig';
+          const rigName = latestDT.rig.trim();
+          tool.location = rigName ? (rigName.toLowerCase().startsWith('rig') ? rigName : `Rig ${rigName}`) : 'On Rig';
+          tool.rig = rigName;
+          tool.currentJobId = latestDT.jobId;
+          tool.currentRig = rigName;
+        } else {
+          if (tool.status === 'On Rig') {
+            const dest = (latestRT.routedTo || '').toLowerCase();
+            if (dest.includes('inspection')) {
+              tool.status = 'Inspection';
+              tool.location = 'Inspection Bay';
+            } else if (dest.includes('workshop') || dest.includes('repair')) {
+              tool.status = 'Repair';
+              tool.location = 'Workshop';
+            } else {
+              tool.status = 'Good';
+              tool.location = 'Emdad Base';
+            }
+            tool.currentJobId = null;
+            tool.currentRig = null;
+          }
+        }
+      }
+    });
+  }
+
+  return { jobs, dtBatches, rtBatches, inventory };
+}
+
+/**
  * Attempts to fetch live data from Azure Static Web Apps Data API or Azure Functions
  */
 export async function fetchLiveDatabaseData(): Promise<{
@@ -852,6 +1243,16 @@ export async function fetchLiveDatabaseData(): Promise<{
       }
 
       if (hasAnySuccess) {
+        if (jobs && jobs.length > 0) {
+          const existingKeys = new Set(jobs.map((j: any) => String(j.id).trim().toUpperCase()));
+          MASTER_JOBS.forEach((mj) => {
+            const k = String(mj.id || '').trim().toUpperCase();
+            if (k && !existingKeys.has(k)) {
+              jobs!.push({ ...mj });
+              existingKeys.add(k);
+            }
+          });
+        }
         if (jobs && jobs.length > 0 && dtBatches && dtBatches.length > 0) {
           const jobsById = new Map<string, any>();
           jobs.forEach((j: any) => {
@@ -867,11 +1268,17 @@ export async function fetchLiveDatabaseData(): Promise<{
             }
           });
         }
+        const reconciled = reconcileJobsDTRTAndInventory(jobs || [], dtBatches || [], rtBatches || [], inventory);
         return {
           success: true,
           source: 'data-api',
-          data: { inventory, jobs: jobs || [], dtBatches: dtBatches || [], rtBatches: rtBatches || [] },
-          message: `Loaded live from Azure Data API (${inventory?.length ?? 0} tools, ${jobs?.length ?? 0} jobs)`,
+          data: {
+            inventory: reconciled.inventory,
+            jobs: reconciled.jobs,
+            dtBatches: reconciled.dtBatches,
+            rtBatches: reconciled.rtBatches,
+          },
+          message: `Loaded live from Azure Data API (${reconciled.inventory?.length ?? 0} tools, ${reconciled.jobs.length} jobs)`,
         };
       }
     } catch (err: any) {
@@ -1045,6 +1452,18 @@ export async function fetchLiveDatabaseData(): Promise<{
           const parsedDTs = Array.isArray(rawDt) ? rawDt.map(normalizeDTBatch) : [];
           const parsedRTs = Array.isArray(rawRt) ? rawRt.map(normalizeRTBatch) : [];
 
+          // Merge any master jobs from user's list that might not be in Azure SQL
+          if (parsedJobs.length > 0) {
+            const existingKeys = new Set(parsedJobs.map((j: any) => String(j.id).trim().toUpperCase()));
+            MASTER_JOBS.forEach((mj) => {
+              const k = String(mj.id || '').trim().toUpperCase();
+              if (k && !existingKeys.has(k)) {
+                parsedJobs.push({ ...mj });
+                existingKeys.add(k);
+              }
+            });
+          }
+
           // If Azure returns empty jobs array, use the aligned master jobs catalog and merge with live DTs/RTs
           if (parsedJobs.length === 0) {
             const jobsById = new Map<string, any>();
@@ -1100,16 +1519,17 @@ export async function fetchLiveDatabaseData(): Promise<{
               }
             });
           }
+          const reconciled = reconcileJobsDTRTAndInventory(parsedJobs, parsedDTs, parsedRTs, invList);
           return {
             success: true,
             source: 'azure-function',
             data: {
-              inventory: invList,
-              jobs: parsedJobs,
-              dtBatches: parsedDTs,
-              rtBatches: parsedRTs,
+              inventory: reconciled.inventory,
+              jobs: reconciled.jobs,
+              dtBatches: reconciled.dtBatches,
+              rtBatches: reconciled.rtBatches,
             },
-            message: `Connected to Azure SQL via API (${invList?.length || 0} tools, ${parsedJobs.length} jobs, ${parsedDTs.length} DTs, ${parsedRTs.length} RTs)`,
+            message: `Connected to Azure SQL via API (${reconciled.inventory?.length || 0} tools, ${reconciled.jobs.length} jobs, ${reconciled.dtBatches.length} DTs, ${reconciled.rtBatches.length} RTs)`,
           };
         } else {
           lastError = `Returned 200 OK but keys were [${Object.keys(payload || {}).join(', ')}]`;
