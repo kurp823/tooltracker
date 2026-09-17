@@ -6,9 +6,11 @@ import {
   ALL_STAGE_KEYS,
   resolveJobStage,
   calculateJobLifecycleMetrics,
+  isLegalInvoiceNumber,
 } from '../jobLifecycle';
 import { JobStatusModal } from './JobStatusModal';
 import { JobLifecycleStepper } from './JobLifecycleStepper';
+import { JobDetailModal } from './JobDetailModal';
 import {
   Search,
   Download,
@@ -90,8 +92,7 @@ const normalizeJobKey = (str?: string): string => {
     .trim()
     .toUpperCase()
     .replace(/^JOB[-_]?/i, '')
-    .replace(/[-_]1$/i, '')
-    .replace(/[-_]01$/i, '');
+    .replace(/[-_]0?1$/i, '');
 };
 
 // Natural sequential sorter for Job IDs (handles Job-023-00001, Job-023-00002-1, JOB-26-00001)
@@ -133,7 +134,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   const [selectedJobDetail, setSelectedJobDetail] = useState<DrillingJob | null>(null);
 
   // Sorting State
-  const [sortField, setSortField] = useState<'id' | 'client' | 'rig' | 'mobDate' | 'dtTools' | 'rtTools' | 'toolsOnRig' | 'stage' | 'stageDays'>('id');
+  const [sortField, setSortField] = useState<'id' | 'client' | 'rig' | 'mobDate' | 'dtTools' | 'rtTools' | 'toolsOnRig' | 'stage' | 'stageDays' | 'value'>('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Pagination State
@@ -174,63 +175,54 @@ export const JobsView: React.FC<JobsViewProps> = ({
   const [newCurrency, setNewCurrency] = useState('USD');
   const [newMobDate, setNewMobDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // Robust DT and RT tool count indexing with cross-normalized keys
+  // Robust DT and RT tool count indexing with cross-normalized keys (shared bucket mapping)
   const jobToolStats = useMemo(() => {
-    const stats = new Map<string, { dtCount: number; rtCount: number; dtBatches: DTBatch[]; rtBatches: RTBatch[] }>();
+    const jobBucketMap = new Map<string, { dtCount: number; rtCount: number; dtBatches: DTBatch[]; rtBatches: RTBatch[] }>();
 
-    const getBucket = (rawId?: string) => {
-      const key = (rawId || '').trim().toUpperCase();
-      if (!key) return null;
-      if (!stats.has(key)) {
-        stats.set(key, { dtCount: 0, rtCount: 0, dtBatches: [], rtBatches: [] });
+    const getJobBucket = (rawId?: string) => {
+      if (!rawId) return null;
+      const rawKey = rawId.trim().toUpperCase();
+      const normKey = normalizeJobKey(rawId);
+      let bucket = (normKey ? jobBucketMap.get(normKey) : null) || (rawKey ? jobBucketMap.get(rawKey) : null);
+      if (!bucket) {
+        bucket = { dtCount: 0, rtCount: 0, dtBatches: [], rtBatches: [] };
+        if (normKey) jobBucketMap.set(normKey, bucket);
+        if (rawKey) jobBucketMap.set(rawKey, bucket);
+      } else {
+        if (normKey && !jobBucketMap.has(normKey)) jobBucketMap.set(normKey, bucket);
+        if (rawKey && !jobBucketMap.has(rawKey)) jobBucketMap.set(rawKey, bucket);
       }
-      return stats.get(key)!;
+      return bucket;
     };
 
     dtBatches.forEach((dt) => {
       const count = dt.toolLines?.length || 0;
-      const exact1 = getBucket(dt.jobId);
-      const exact2 = dt.jobNumber ? getBucket(dt.jobNumber) : null;
-      const norm1 = getBucket(normalizeJobKey(dt.jobId));
-      const norm2 = dt.jobNumber ? getBucket(normalizeJobKey(dt.jobNumber)) : null;
-
-      const registered = new Set<any>();
-      [exact1, exact2, norm1, norm2].forEach((b) => {
-        if (b && !registered.has(b)) {
-          registered.add(b);
-          b.dtCount += count;
-          b.dtBatches.push(dt);
-        }
-      });
+      const bucket = getJobBucket(dt.jobId) || (dt.jobNumber ? getJobBucket(dt.jobNumber) : null);
+      if (bucket) {
+        bucket.dtCount += count;
+        bucket.dtBatches.push(dt);
+      }
     });
 
     rtBatches.forEach((rt) => {
       const count = rt.toolLines?.length || 0;
-      const exact1 = getBucket(rt.jobId);
-      const exact2 = rt.jobNumber ? getBucket(rt.jobNumber) : null;
-      const norm1 = getBucket(normalizeJobKey(rt.jobId));
-      const norm2 = rt.jobNumber ? getBucket(normalizeJobKey(rt.jobNumber)) : null;
-
-      const registered = new Set<any>();
-      [exact1, exact2, norm1, norm2].forEach((b) => {
-        if (b && !registered.has(b)) {
-          registered.add(b);
-          b.rtCount += count;
-          b.rtBatches.push(rt);
-        }
-      });
+      const bucket = getJobBucket(rt.jobId) || (rt.jobNumber ? getJobBucket(rt.jobNumber) : null);
+      if (bucket) {
+        bucket.rtCount += count;
+        bucket.rtBatches.push(rt);
+      }
     });
 
-    return stats;
+    return jobBucketMap;
   }, [dtBatches, rtBatches]);
 
   const getJobStats = (jobId: string) => {
     const rawKey = (jobId || '').trim().toUpperCase();
     const normKey = normalizeJobKey(jobId);
-    return jobToolStats.get(rawKey) || jobToolStats.get(normKey) || { dtCount: 0, rtCount: 0, dtBatches: [], rtBatches: [] };
+    return (normKey ? jobToolStats.get(normKey) : null) || (rawKey ? jobToolStats.get(rawKey) : null) || { dtCount: 0, rtCount: 0, dtBatches: [], rtBatches: [] };
   };
 
-  const handleSortToggle = (field: 'id' | 'client' | 'rig' | 'mobDate' | 'dtTools' | 'rtTools' | 'toolsOnRig' | 'stage' | 'stageDays') => {
+  const handleSortToggle = (field: 'id' | 'client' | 'rig' | 'mobDate' | 'dtTools' | 'rtTools' | 'toolsOnRig' | 'stage' | 'stageDays' | 'value') => {
     if (sortField === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
@@ -353,6 +345,9 @@ export const JobsView: React.FC<JobsViewProps> = ({
         const aMetrics = calculateJobLifecycleMetrics(a, aStage, aSt.dtBatches, aSt.rtBatches);
         const bMetrics = calculateJobLifecycleMetrics(b, bStage, bSt.dtBatches, bSt.rtBatches);
         comparison = aMetrics.currentStageDays - bMetrics.currentStageDays;
+      } else if (sortField === 'value') {
+        const getVal = (j: DrillingJob) => j.invoiceAmount || (typeof j.cost === 'number' ? j.cost : parseFloat(String(j.cost || '').replace(/[^0-9.-]/g, '')) || 0);
+        comparison = getVal(a) - getVal(b);
       }
       return sortOrder === 'desc' ? -comparison : comparison;
     });
@@ -451,6 +446,68 @@ export const JobsView: React.FC<JobsViewProps> = ({
       setSelectedJobDetail(updated);
     }
     setEditingJobStatus(null);
+  };
+
+  const handleStageSelectChange = (job: DrillingJob, newStage: JobStageKey) => {
+    // If the job already has a verified legal invoice, it is locked as completed
+    if (isLegalInvoiceNumber(job.legalInvoiceNumber)) {
+      alert(`Job ${job.id} is finalized and closed with verified Legal Invoice ${job.legalInvoiceNumber}. Its status cannot be changed.`);
+      return;
+    }
+
+    if (newStage === '6_completed') {
+      const enteredLegal = window.prompt(
+        `To mark Job ${job.id} as Completed, please enter a valid Legal Invoice Number (must start with FSH, FR, or WHP):`,
+        job.legalInvoiceNumber || ''
+      );
+
+      if (!enteredLegal || !isLegalInvoiceNumber(enteredLegal)) {
+        alert(
+          `A legal invoice number starting with FSH, FR, or WHP is strictly required to complete a job.\n\nWithout an FSH, FR, or WHP prefix, this invoice remains under approval (Stage 5).`
+        );
+        return;
+      }
+
+      const updatedJob: DrillingJob = {
+        ...job,
+        legalInvoiceNumber: enteredLegal.trim().toUpperCase(),
+        status: 'Final invoiced',
+        completedDate: job.completedDate || new Date().toISOString().split('T')[0],
+      };
+      onSaveJob(updatedJob);
+      return;
+    }
+
+    let newStatus: JobLifecycleStatus = 'Open';
+    const updates: Partial<DrillingJob> = {};
+
+    switch (newStage) {
+      case '1_open':
+        newStatus = 'Open';
+        break;
+      case '2_ongoing':
+        newStatus = 'Ongoing';
+        break;
+      case '3_waiting_signed_docs':
+        newStatus = 'Waiting on Signed Docs';
+        updates.waitingSignedDocsDate = job.waitingSignedDocsDate || new Date().toISOString().split('T')[0];
+        break;
+      case '4_submitted_billing':
+        newStatus = 'Submitted to Billing Team';
+        updates.submittedToBillingDate = job.submittedToBillingDate || new Date().toISOString().split('T')[0];
+        break;
+      case '5_ses_submitted':
+        newStatus = 'SES Submitted';
+        updates.sesSubmittedDate = job.sesSubmittedDate || new Date().toISOString().split('T')[0];
+        break;
+    }
+
+    const updatedJob: DrillingJob = {
+      ...job,
+      ...updates,
+      status: newStatus,
+    };
+    onSaveJob(updatedJob);
   };
 
   // CSV Parsing
@@ -663,10 +720,10 @@ export const JobsView: React.FC<JobsViewProps> = ({
       const s = jobOrStatus.toLowerCase().trim();
       if (s === 'open' || s === 'draft') stage = '1_open';
       else if (s === 'ongoing' || s === 'active') stage = '2_ongoing';
-      else if (s.includes('waiting signed docs') || s === 'completed' || s === 'job completed') stage = '3_waiting_signed_docs';
+      else if (s === 'completed' || s === 'job completed' || s.includes('final invoiced') || s === 'closed') stage = '6_completed';
+      else if (s.includes('waiting signed docs') || s.includes('waiting docs')) stage = '3_waiting_signed_docs';
       else if (s.includes('billing') || s.includes('submitted to billing')) stage = '4_submitted_billing';
       else if (s.includes('ses') || s.includes('draft invoice') || s.includes('draft invoiced')) stage = '5_ses_submitted';
-      else if (s.includes('final invoiced') || s === 'invoiced') stage = '6_completed';
       else stage = '1_open';
     } else {
       const st = dtCount !== undefined && rtCount !== undefined ? { dtCount, rtCount } : getJobStats(jobOrStatus.id);
@@ -677,11 +734,10 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
     return (
       <span
-        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold border transition-all shadow-2xs whitespace-nowrap ${def.badgeBg} ${def.badgeText} ${def.badgeBorder}`}
-        title={`Stage ${def.stepNumber}: ${def.label} — ${def.description}`}
+        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium border transition-all whitespace-nowrap ${def.badgeBg} ${def.badgeText} ${def.badgeBorder}`}
+        title={`${def.label} — ${def.description}`}
       >
         <span className={`w-1.5 h-1.5 rounded-full ${def.dotColor} ${stage === '2_ongoing' ? 'animate-pulse' : ''}`} />
-        <span className="font-mono text-[10px] opacity-80 font-bold">{def.stepNumber}.</span>
         <span>{def.shortLabel}</span>
       </span>
     );
@@ -703,13 +759,9 @@ export const JobsView: React.FC<JobsViewProps> = ({
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                 {metrics.total.toLocaleString()} Total Jobs
               </span>
-              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                {metrics.totalToolsOnRigs.toLocaleString()} Tools On Rigs
-              </span>
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">
-              Unified 6-stage operational pipeline, pending document verification, and downhole tool balances.
+              Unified 6-stage operational pipeline, pending document verification, and commercial clearance.
             </div>
           </div>
         </div>
@@ -827,7 +879,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-mono font-bold text-slate-300">01. STAGE</span>
+              <span className="text-[10px] font-medium text-slate-300">Open Status</span>
               <span className="w-2 h-2 rounded-full bg-slate-400" />
             </div>
             <div className="text-[11px] font-bold text-slate-200 leading-tight">Open</div>
@@ -854,7 +906,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-mono font-bold text-blue-300">02. STAGE</span>
+              <span className="text-[10px] font-medium text-blue-300">Active Field</span>
               <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
             </div>
             <div className="text-[11px] font-bold text-blue-200 leading-tight">Ongoing</div>
@@ -867,7 +919,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
             </div>
           </button>
 
-          {/* Sub-Card 3: Waiting Docs (PENDING FOCUS) */}
+          {/* Sub-Card 3: Waiting Docs */}
           <button
             type="button"
             onClick={() => {
@@ -881,17 +933,15 @@ export const JobsView: React.FC<JobsViewProps> = ({
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-mono font-bold text-amber-300">03. STAGE</span>
-              <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-500 text-slate-950 uppercase tracking-tight">
-                Pending
-              </span>
+              <span className="text-[10px] font-medium text-amber-300">Documentation</span>
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
             </div>
             <div className="text-[11px] font-bold text-amber-200 leading-tight">Waiting Docs</div>
             <div className="text-xl font-extrabold text-amber-300 font-mono mt-0.5">
               {(metrics.counts['3_waiting_signed_docs'] || 0).toLocaleString()}
             </div>
             <div className="text-[10px] text-amber-300/90 mt-1 flex items-center justify-between">
-              <span>Pending Signed DT/RT</span>
+              <span>Awaiting signed docs</span>
               {tab === '3_waiting_signed_docs' && <span className="text-[9px] text-amber-400 font-bold">ACTIVE</span>}
             </div>
           </button>
@@ -910,7 +960,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-mono font-bold text-indigo-300">04. STAGE</span>
+              <span className="text-[10px] font-medium text-indigo-300">Finance Queue</span>
               <span className="w-2 h-2 rounded-full bg-indigo-400" />
             </div>
             <div className="text-[11px] font-bold text-indigo-200 leading-tight">In Billing</div>
@@ -918,12 +968,12 @@ export const JobsView: React.FC<JobsViewProps> = ({
               {(metrics.counts['4_submitted_billing'] || 0).toLocaleString()}
             </div>
             <div className="text-[10px] text-indigo-300/80 mt-1 flex items-center justify-between">
-              <span>Commercial queue</span>
+              <span>Submitted tickets</span>
               {tab === '4_submitted_billing' && <span className="text-[9px] text-indigo-300 font-bold">ACTIVE</span>}
             </div>
           </button>
 
-          {/* Sub-Card 5: SES Submitted (PENDING REVIEW) */}
+          {/* Sub-Card 5: SES Submitted */}
           <button
             type="button"
             onClick={() => {
@@ -937,21 +987,15 @@ export const JobsView: React.FC<JobsViewProps> = ({
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-mono font-bold text-purple-300">05. STAGE</span>
-              {(metrics.counts['5_ses_submitted'] || 0) > 0 ? (
-                <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-purple-400 text-slate-950 uppercase tracking-tight">
-                  In Review
-                </span>
-              ) : (
-                <span className="w-2 h-2 rounded-full bg-purple-400" />
-              )}
+              <span className="text-[10px] font-medium text-purple-300">Approval Stage</span>
+              <span className="w-2 h-2 rounded-full bg-purple-400" />
             </div>
-            <div className="text-[11px] font-bold text-purple-200 leading-tight">SES Submitted</div>
+            <div className="text-[11px] font-bold text-purple-200 leading-tight">Under Approval</div>
             <div className="text-xl font-extrabold text-purple-200 font-mono mt-0.5">
               {(metrics.counts['5_ses_submitted'] || 0).toLocaleString()}
             </div>
             <div className="text-[10px] text-purple-300/80 mt-1 flex items-center justify-between">
-              <span>Portal review</span>
+              <span>ERP / SES Review</span>
               {tab === '5_ses_submitted' && <span className="text-[9px] text-purple-300 font-bold">ACTIVE</span>}
             </div>
           </button>
@@ -970,7 +1014,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-mono font-bold text-emerald-300">06. STAGE</span>
+              <span className="text-[10px] font-medium text-emerald-300">Final Invoiced</span>
               <CheckCircle className="w-3 h-3 text-emerald-400" />
             </div>
             <div className="text-[11px] font-bold text-emerald-200 leading-tight">Completed</div>
@@ -978,7 +1022,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
               {(metrics.counts['6_completed'] || 0).toLocaleString()}
             </div>
             <div className="text-[10px] text-emerald-300/80 mt-1 flex items-center justify-between">
-              <span>Legally invoiced</span>
+              <span>FSH / FR / WHP</span>
               {tab === '6_completed' && <span className="text-[9px] text-emerald-300 font-bold">ACTIVE</span>}
             </div>
           </button>
@@ -1123,10 +1167,6 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
-                <th className="px-2.5 py-2 text-center whitespace-nowrap w-20">
-                  Callout
-                </th>
-
                 <th
                   onClick={() => handleSortToggle('client')}
                   className="px-3 py-2 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[180px]"
@@ -1173,54 +1213,14 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
-                <th
-                  onClick={() => handleSortToggle('dtTools')}
-                  className="px-2 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap w-20 bg-blue-50/40"
-                  title="Total tools dispatched on Delivery Tickets"
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    <span>DT Tools</span>
-                    {sortField === 'dtTools' ? (
-                      sortOrder === 'desc' ? <ArrowDown className="w-3 h-3 text-blue-700" /> : <ArrowUp className="w-3 h-3 text-blue-700" />
-                    ) : null}
-                  </div>
-                </th>
-
-                <th
-                  onClick={() => handleSortToggle('rtTools')}
-                  className="px-2 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap w-20 bg-emerald-50/40"
-                  title="Total tools returned on Receiving Tickets"
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    <span>RT Tools</span>
-                    {sortField === 'rtTools' ? (
-                      sortOrder === 'desc' ? <ArrowDown className="w-3 h-3 text-emerald-700" /> : <ArrowUp className="w-3 h-3 text-emerald-700" />
-                    ) : null}
-                  </div>
-                </th>
-
-                <th
-                  onClick={() => handleSortToggle('toolsOnRig')}
-                  className="px-2 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap w-24 bg-amber-50/50"
-                  title="Net downhole tool balance actively on rig (DT minus RT)"
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    <span>Tools on Rig</span>
-                    {sortField === 'toolsOnRig' ? (
-                      sortOrder === 'desc' ? <ArrowDown className="w-3 h-3 text-amber-900" /> : <ArrowUp className="w-3 h-3 text-amber-900" />
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
-                    )}
-                  </div>
-                </th>
 
                 <th
                   onClick={() => handleSortToggle('stage')}
                   className="px-2.5 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[140px]"
-                  title="Click to sort by the 6 standard lifecycle stages"
+                  title="Click to sort by status"
                 >
                   <div className="flex items-center justify-center gap-1">
-                    <span>Lifecycle Stage</span>
+                    <span>Current Status</span>
                     {sortField === 'stage' ? (
                       sortOrder === 'desc' ? <ArrowDown className="w-3 h-3 text-[#1a3055]" /> : <ArrowUp className="w-3 h-3 text-[#1a3055]" />
                     ) : (
@@ -1244,6 +1244,21 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
+                <th
+                  onClick={() => handleSortToggle('value')}
+                  className="px-2.5 py-2 text-right cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[105px]"
+                  title="Job billing value / invoice amount"
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    <span>Job Value</span>
+                    {sortField === 'value' ? (
+                      sortOrder === 'desc' ? <ArrowDown className="w-3 h-3 text-[#1a3055]" /> : <ArrowUp className="w-3 h-3 text-[#1a3055]" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                    )}
+                  </div>
+                </th>
+
                 <th className="px-2.5 py-2 whitespace-nowrap min-w-[125px]">
                   Legal Invoice NO
                 </th>
@@ -1257,7 +1272,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
             <tbody className="divide-y divide-slate-100 bg-white">
               {paginatedJobs.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-slate-500 font-medium">
+                  <td colSpan={10} className="py-12 text-center text-slate-500 font-medium">
                     <div className="flex flex-col items-center justify-center gap-1">
                       <FileSpreadsheet className="w-8 h-8 text-slate-300" />
                       <div className="font-semibold text-slate-700">No drilling jobs found</div>
@@ -1294,15 +1309,6 @@ export const JobsView: React.FC<JobsViewProps> = ({
                         </button>
                       </td>
 
-                      {/* Callout Ref */}
-                      <td className={`px-2.5 ${padY} text-center font-mono text-[11px] text-slate-500 whitespace-nowrap align-middle`}>
-                        {job.calloutId ? (
-                          <span className="text-slate-700 font-medium">{job.calloutId}</span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
-
                       {/* Client / Project Code (Stacked hierarchy) */}
                       <td className={`px-3 ${padY} align-middle`}>
                         <div className="flex flex-col min-w-0 max-w-[210px]">
@@ -1323,14 +1329,14 @@ export const JobsView: React.FC<JobsViewProps> = ({
                         </div>
                       </td>
 
-                      {/* Rig / Well (Clean pill + well tag, no trailing pipes) */}
+                      {/* Rig / Well (Rig in bold, Well without bold) */}
                       <td className={`px-3 ${padY} whitespace-nowrap align-middle`}>
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-900 text-[11px] px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200/80 font-mono tracking-tight">
+                          <span className="font-bold text-slate-900 text-xs tracking-tight">
                             {job.rig || 'Rig Unassigned'}
                           </span>
                           {job.well && job.well !== '—' && job.well !== '-' && (
-                            <span className="text-slate-600 font-mono text-[11px]">
+                            <span className="text-slate-500 font-normal text-xs">
                               {job.well}
                             </span>
                           )}
@@ -1351,50 +1357,47 @@ export const JobsView: React.FC<JobsViewProps> = ({
                         {formatJobDate(job.mobDate)}
                       </td>
 
-                      {/* DT Tools Count */}
-                      <td className={`px-2 ${padY} font-mono text-center text-xs whitespace-nowrap align-middle bg-blue-50/20`}>
-                        {dtToolsCount > 0 ? (
-                          <span className="font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                            {dtToolsCount}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 font-normal">0</span>
-                        )}
-                      </td>
-
-                      {/* RT Tools Count */}
-                      <td className={`px-2 ${padY} font-mono text-center text-xs whitespace-nowrap align-middle bg-emerald-50/20`}>
-                        {rtToolsCount > 0 ? (
-                          <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                            {rtToolsCount}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 font-normal">0</span>
-                        )}
-                      </td>
-
-                      {/* Tools on Rig (Balance) */}
-                      <td className={`px-2 ${padY} text-center text-xs whitespace-nowrap align-middle bg-amber-50/30`}>
-                        {toolsOnRig > 0 ? (
-                          <span className="font-mono font-extrabold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 shadow-2xs inline-flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
-                            {toolsOnRig}
-                          </span>
-                        ) : (
-                          <span className="font-mono text-slate-300 text-xs">0</span>
-                        )}
-                      </td>
-
-                      {/* 6-Stage Lifecycle Badge (Clickable to advance) */}
+                      {/* Current Status Dropdown in all lines (disabled for jobs with legal invoice) */}
                       <td className={`px-2.5 ${padY} text-center whitespace-nowrap align-middle`}>
-                        <button
-                          type="button"
-                          onClick={() => setEditingJobStatus(job)}
-                          className="hover:scale-105 transition cursor-pointer text-left focus:outline-none"
-                          title="Click to update or advance lifecycle stage"
-                        >
-                          {renderStatusBadge(job, dtToolsCount, rtToolsCount)}
-                        </button>
+                        {isLegalInvoiceNumber(job.legalInvoiceNumber) ? (
+                          <div className="inline-flex items-center justify-center gap-1">
+                            <select
+                              disabled
+                              value="6_completed"
+                              className="h-6.5 px-2 text-[11px] font-bold rounded bg-slate-100 text-slate-700 border border-slate-300 opacity-90 cursor-not-allowed select-none"
+                              title={`Completed & Locked with verified Legal Invoice: ${job.legalInvoiceNumber}`}
+                            >
+                              <option value="6_completed">✓ Completed</option>
+                            </select>
+                            <span className="text-slate-500 font-mono text-[10px]" title="Locked with legal invoice">🔒</span>
+                          </div>
+                        ) : (
+                          <select
+                            value={stage}
+                            onChange={(e) => handleStageSelectChange(job, e.target.value as JobStageKey)}
+                            className={`h-6.5 px-2 text-[11px] font-bold rounded border transition cursor-pointer outline-none focus:ring-1 focus:ring-[#1a3055] ${
+                              stage === '1_open'
+                                ? 'bg-slate-50 text-slate-700 border-slate-300'
+                                : stage === '2_ongoing'
+                                ? 'bg-blue-50 text-blue-900 border-blue-300'
+                                : stage === '3_waiting_signed_docs'
+                                ? 'bg-amber-50 text-amber-900 border-amber-300'
+                                : stage === '4_submitted_billing'
+                                ? 'bg-indigo-50 text-indigo-900 border-indigo-300'
+                                : stage === '5_ses_submitted'
+                                ? 'bg-purple-50 text-purple-900 border-purple-300'
+                                : 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                            }`}
+                            title="Select to advance or change job status"
+                          >
+                            <option value="1_open">1. Open</option>
+                            <option value="2_ongoing">2. Ongoing</option>
+                            <option value="3_waiting_signed_docs">3. Waiting Docs</option>
+                            <option value="4_submitted_billing">4. In Billing</option>
+                            <option value="5_ses_submitted">5. Under Approval</option>
+                            <option value="6_completed">6. Completed</option>
+                          </select>
+                        )}
                       </td>
 
                       {/* Stage Aging & Cycle Duration */}
@@ -1406,7 +1409,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                                 ? 'bg-amber-50 text-amber-900 border border-amber-200'
                                 : 'text-slate-700'
                             }`}
-                            title={`${lifecycleMetrics.currentStageDays} days in stage: ${STAGE_DEFINITIONS[stage].label}`}
+                            title={`${lifecycleMetrics.currentStageDays} days in status: ${STAGE_DEFINITIONS[stage].label}`}
                           >
                             {lifecycleMetrics.currentStageDays}d
                           </span>
@@ -1416,11 +1419,25 @@ export const JobsView: React.FC<JobsViewProps> = ({
                         </div>
                       </td>
 
-                      {/* Legal Invoice NO */}
+                      {/* Job Value / Amount */}
+                      <td className={`px-2.5 ${padY} text-right font-mono whitespace-nowrap align-middle`}>
+                        {(() => {
+                          const val = job.invoiceAmount || (typeof job.cost === 'number' ? job.cost : parseFloat(String(job.cost || '').replace(/[^0-9.-]/g, '')) || 0);
+                          return val > 0 ? (
+                            <span className="font-bold text-slate-900 text-xs">
+                              ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 text-[11px]">—</span>
+                          );
+                        })()}
+                      </td>
+
+                      {/* Legal Invoice NO (Strictly displays FSH/FR/WHP; non-matching ERP invoices labeled under approval) */}
                       <td className={`px-2.5 ${padY} font-mono text-[11px] whitespace-nowrap align-middle`}>
-                        {job.legalInvoiceNumber ? (
+                        {job.legalInvoiceNumber && isLegalInvoiceNumber(job.legalInvoiceNumber) ? (
                           <div className="flex items-center gap-1">
-                            <span className="font-bold text-teal-900 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-300 text-[10px] shadow-2xs">
+                            <span className="font-medium text-slate-800 text-[11px]">
                               {job.legalInvoiceNumber.split(',')[0].trim()}
                             </span>
                             {job.legalInvoiceNumber.includes(',') && (
@@ -1429,28 +1446,32 @@ export const JobsView: React.FC<JobsViewProps> = ({
                               </span>
                             )}
                           </div>
+                        ) : job.draftInvoiceNumber || (job.legalInvoiceNumber && !isLegalInvoiceNumber(job.legalInvoiceNumber)) ? (
+                          <span className="text-slate-500 text-[10px]" title="ERP Billing Document (Under Approval)">
+                            ERP #{job.draftInvoiceNumber || job.legalInvoiceNumber}
+                          </span>
                         ) : (
                           <span className="text-slate-300">—</span>
                         )}
                       </td>
 
-                      {/* Actions */}
+                      {/* Actions (Stage advance disabled for completed jobs) */}
                       <td className={`px-3 ${padY} text-right whitespace-nowrap align-middle pr-3.5`}>
                         <div className="flex items-center justify-end gap-1">
-                          {user?.role !== 'Viewer' && (
+                          {user?.role !== 'Viewer' && stage !== '6_completed' && (
                             <button
                               onClick={() => setEditingJobStatus(job)}
                               className="h-6 px-1.5 rounded bg-[#1a3055] hover:bg-[#24426d] text-white font-semibold text-[10px] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
-                              title="Update / Advance Job Stage"
+                              title="Update / Advance Job Status"
                             >
                               <ShieldCheck className="w-3 h-3 text-amber-400" />
-                              <span>Stage</span>
+                              <span>Status</span>
                             </button>
                           )}
                           <button
                             onClick={() => setSelectedJobDetail(job)}
                             className="h-6 px-1.5 rounded bg-slate-100 hover:bg-[#1a3055] hover:text-white text-[#1a3055] font-semibold text-[10px] transition-colors border border-slate-200 cursor-pointer flex items-center gap-1"
-                            title="View Job Details, Tickets &amp; Tool Ledger"
+                            title="View Job Details, Tickets & Tool Ledger"
                           >
                             <Eye className="w-3 h-3" />
                             <span>View</span>
@@ -1842,196 +1863,16 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
       {/* Operational Job Detail Modal */}
       {selectedJobDetail && (
-        <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 no-print"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setSelectedJobDetail(null);
-          }}
-        >
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto flex flex-col animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-4 py-3 bg-[#1a3055] text-white flex justify-between items-center flex-shrink-0">
-              <div>
-                <div className="flex items-center space-x-2">
-                  <h3 className="font-bold text-sm">Job: {selectedJobDetail.id}</h3>
-                  {renderStatusBadge(selectedJobDetail.status)}
-                </div>
-                <div className="text-[11px] text-slate-300">
-                  {selectedJobDetail.rig} / {selectedJobDetail.well} &bull; {selectedJobDetail.client}
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedJobDetail(null)}
-                className="text-white/80 hover:text-amber-300 font-bold text-lg cursor-pointer"
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="p-4 space-y-4 text-xs">
-              {/* Parameter Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded border border-slate-200">
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">Client:</span>
-                  <span className="font-bold text-[#1a3055]">{selectedJobDetail.client}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">Contract:</span>
-                  <span>{selectedJobDetail.contract || '—'}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">PO Number:</span>
-                  <span className="font-mono">{selectedJobDetail.poNumber || '—'}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">Mob Date:</span>
-                  <span className="font-mono">{formatJobDate(selectedJobDetail.mobDate)}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">Demob Date:</span>
-                  <span className="font-mono">{formatJobDate(selectedJobDetail.demobDate)}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">Service Type:</span>
-                  <span>{selectedJobDetail.serviceType || 'Downhole Rental'}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">Invoiced Amount ($):</span>
-                  <span className="font-mono font-bold text-emerald-800">
-                    {selectedJobDetail.invoiceAmount ? `$${Number(selectedJobDetail.invoiceAmount).toLocaleString()}` : '—'}
-                  </span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">Legal Invoice NO:</span>
-                  <span className="font-mono font-bold text-emerald-700">
-                    {selectedJobDetail.legalInvoiceNumber || 'Pending'}
-                  </span>
-                </div>
-              </div>
-
-              {/* 6-Stage Job Lifecycle Pipeline & Aging Stepper */}
-              {(() => {
-                const st = getJobStats(selectedJobDetail.id);
-                return (
-                  <JobLifecycleStepper
-                    job={selectedJobDetail}
-                    dtBatches={st.dtBatches}
-                    rtBatches={st.rtBatches}
-                    canEdit={user?.role !== 'Viewer'}
-                    onOpenStatusModal={() => {
-                      setEditingJobStatus(selectedJobDetail);
-                    }}
-                  />
-                );
-              })()}
-
-              {/* Tool Summary Balance Box */}
-              {(() => {
-                const st = getJobStats(selectedJobDetail.id);
-                const toolsOnRig = Math.max(0, st.dtCount - st.rtCount);
-                return (
-                  <div className="grid grid-cols-3 gap-3 p-3 bg-slate-100/70 rounded border border-slate-200 text-center">
-                    <div>
-                      <div className="text-[10px] text-slate-500 uppercase font-bold">Total Dispatched</div>
-                      <div className="text-base font-extrabold text-blue-700 font-mono">{st.dtCount} tools</div>
-                      <div className="text-[10px] text-slate-500">{st.dtBatches.length} Delivery Tickets</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-slate-500 uppercase font-bold">Total Returned</div>
-                      <div className="text-base font-extrabold text-emerald-700 font-mono">{st.rtCount} tools</div>
-                      <div className="text-[10px] text-slate-500">{st.rtBatches.length} Receiving Tickets</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-slate-500 uppercase font-bold">Balance On Rig</div>
-                      <div className={`text-base font-extrabold font-mono ${toolsOnRig > 0 ? 'text-amber-900' : 'text-slate-500'}`}>
-                        {toolsOnRig} tools
-                      </div>
-                      <div className="text-[10px] text-slate-500">Active rental balance</div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Delivery Tickets Linked */}
-              <div>
-                <h4 className="font-bold text-slate-700 mb-1.5">
-                  Dispatched Delivery Tickets (DTs)
-                </h4>
-                {(() => {
-                  const st = getJobStats(selectedJobDetail.id);
-                  if (st.dtBatches.length === 0) {
-                    return (
-                      <div className="p-4 bg-slate-50 rounded border border-slate-200 text-center text-slate-400">
-                        No delivery tickets dispatched for this job yet.
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="space-y-2">
-                      {st.dtBatches.map((b) => (
-                        <div key={b.id} className="border border-slate-200 rounded p-2.5 bg-slate-50">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="font-mono font-bold text-slate-900">{b.dtNumber}</span>
-                            <span className="text-slate-500 text-[10px]">
-                              Date: <strong>{formatJobDate(b.rmDate || b.deliveryDate)}</strong> &bull; Total Tools:{' '}
-                              <strong>{b.toolLines?.length || 0}</strong>
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-slate-600 font-mono">
-                            {(b.toolLines || []).map((t) => `${t.serial} (${t.shortDesc})`).join(', ')}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Backloaded Receiving Tickets Linked */}
-              <div>
-                <h4 className="font-bold text-slate-700 mb-1.5">
-                  Backloaded Receiving Tickets (RTs)
-                </h4>
-                {(() => {
-                  const st = getJobStats(selectedJobDetail.id);
-                  if (st.rtBatches.length === 0) {
-                    return (
-                      <div className="p-4 bg-slate-50 rounded border border-slate-200 text-center text-slate-400">
-                        No tools backloaded via Receiving Tickets yet.
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="space-y-2">
-                      {st.rtBatches.map((b) => (
-                        <div key={b.id} className="border border-slate-200 rounded p-2.5 bg-emerald-50/40">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="font-mono font-bold text-emerald-900">{b.rtNumber}</span>
-                            <span className="text-slate-500 text-[10px]">
-                              Received: <strong>{formatJobDate(b.rtDate)}</strong> &bull; Returned Tools:{' '}
-                              <strong>{b.toolLines?.length || 0}</strong>
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-slate-600 font-mono">
-                            {(b.toolLines || []).map((t) => `${t.serial} (${t.shortDesc})`).join(', ')}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-
-            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex justify-end space-x-2 flex-shrink-0 text-xs">
-              <button
-                onClick={() => setSelectedJobDetail(null)}
-                className="px-3 py-1.5 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <JobDetailModal
+          job={selectedJobDetail}
+          dtBatches={getJobStats(selectedJobDetail.id).dtBatches}
+          rtBatches={getJobStats(selectedJobDetail.id).rtBatches}
+          canEdit={user?.role !== 'Viewer'}
+          formatJobDate={formatJobDate}
+          renderStatusBadge={renderStatusBadge}
+          onOpenStatusModal={() => setEditingJobStatus(selectedJobDetail)}
+          onClose={() => setSelectedJobDetail(null)}
+        />
       )}
 
       {/* 6-Stage Job Lifecycle Status Update Modal with Days Recording & Mandatory Verification */}

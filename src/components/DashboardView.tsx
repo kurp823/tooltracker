@@ -39,6 +39,8 @@ interface DashboardViewProps {
   maintenance: MaintenanceRecord[];
   contracts?: ContractRecord[];
   jobUtMap?: Record<string, JobUtData>;
+  dbStatus?: any;
+  onRefreshSql?: () => void;
   onNavigate: (mod: NavModule) => void;
   onOpenAddAsset?: () => void;
   onOpenAddCallout?: () => void;
@@ -47,6 +49,46 @@ interface DashboardViewProps {
 }
 
 const PALETTE = ['#1a3055', '#2563eb', '#0d9488', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b'];
+
+export const getCanonicalOperator = (client?: string | null): string => {
+  if (!client) return 'Other';
+  const c = client.trim();
+  const upper = c.toUpperCase().replace(/[_-]/g, ' ');
+  if (upper.includes('ADNOC') && (upper.includes('OFFSHORE') || upper.includes('OFF SHORE'))) return 'ADNOC Offshore';
+  if (upper.includes('ADNOC') && (upper.includes('ONSHORE') || upper.includes('ON SHORE'))) return 'ADNOC Onshore';
+  if (upper.includes('ADNOC') && upper.includes('DRILLING')) return 'ADNOC Drilling';
+  if (upper.includes('TURNWELL')) return 'Turnwell';
+  if (upper.includes('CHURCHILL') || upper.includes('CHRUCHILL') || upper.includes('CORETRAX')) return 'Churchill';
+  if (upper.includes('BUNDUQ')) return 'Bunduq';
+  if (upper.includes('COSMO')) return 'Cosmo';
+  if (upper.includes('NABORS') || upper.includes('ITS')) return 'ITS (Nabors)';
+  return c;
+};
+
+export const formatDateDisplay = (dateVal?: string | null): string => {
+  if (!dateVal || dateVal === '—' || dateVal === '-' || String(dateVal).toLowerCase() === 'null') return '—';
+  const str = String(dateVal).trim();
+  if (/^\d{1,2}-[A-Za-z]{3}-\d{2,4}$/.test(str)) {
+    return str;
+  }
+  try {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = months[d.getMonth()];
+      const year = d.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+  } catch {}
+  return str;
+};
+
+const isLegalInvoice = (inv?: string | null): boolean => {
+  if (!inv) return false;
+  const s = String(inv).trim().toUpperCase();
+  return s.startsWith('FSH') || s.startsWith('FR') || s.startsWith('WHP');
+};
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   user,
@@ -59,36 +101,89 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   maintenance = [],
   contracts = [],
   jobUtMap = {},
+  dbStatus,
+  onRefreshSql,
   onNavigate,
   onOpenAddAsset,
   onOpenAddCallout,
 }) => {
-  // 1. Active Jobs & Active Rigs Count
-  const activeJobs = useMemo(
-    () => jobs.filter((j) => ['Open', 'Ongoing', 'Active'].includes(j.status)),
-    [jobs]
-  );
+  // 1. Completed jobs detection (FSH, FR, WHP prefixes)
+  const completedJobIdSet = useMemo(() => {
+    const set = new Set<string>();
+    jobs.forEach((j) => {
+      const hasLegal = isLegalInvoice(j.legalInvoiceNumber) || isLegalInvoice(j.invoiceNumber);
+      if (hasLegal) {
+        if (j.id) set.add(String(j.id).trim().toUpperCase());
+        if (j.jobNumber) set.add(String(j.jobNumber).trim().toUpperCase());
+      }
+    });
+    return set;
+  }, [jobs]);
+
+  // Returned serials lookup per job and overall
+  const returnedSerialsSet = useMemo(() => {
+    const set = new Set<string>();
+    rtBatches.forEach((rt) => {
+      (rt.toolLines || []).forEach((tl) => {
+        if (tl.serial) set.add(String(tl.serial).trim().toUpperCase());
+      });
+    });
+    return set;
+  }, [rtBatches]);
+
+  // Active jobs (excluding completed jobs with legal invoices)
+  const activeJobs = useMemo(() => {
+    return jobs.filter((j) => {
+      const jKey = String(j.id || '').trim().toUpperCase();
+      if (completedJobIdSet.has(jKey)) return false;
+      const s = (j.status || '').toLowerCase().trim();
+      return s !== 'completed' && s !== 'closed';
+    });
+  }, [jobs, completedJobIdSet]);
 
   const activeRigsSet = useMemo(() => {
     const set = new Set<string>();
     activeJobs.forEach((j) => {
-      if (j.rig && j.rig.trim()) set.add(j.rig.trim());
+      if (j.rig && j.rig.trim() && j.rig !== 'Rig Unassigned') {
+        set.add(j.rig.trim());
+      }
     });
     return set;
   }, [activeJobs]);
 
   const activeRigsCount = activeRigsSet.size;
 
-  // 2. Tools on Rig Calculation
-  const totalDispatchedTools = useMemo(() => {
-    return dtBatches.reduce((acc, b) => acc + (b?.toolLines?.length || 0), 0);
-  }, [dtBatches]);
+  // 2. Tools on Rig Calculation (Live Feed: Dispatched on active jobs and not yet backloaded via RT)
+  const { toolsOnRigCount, totalDispatchedTools, totalReturnedTools } = useMemo(() => {
+    let dispatched = 0;
+    let returned = 0;
+    let onRig = 0;
 
-  const totalReturnedTools = useMemo(() => {
-    return rtBatches.reduce((acc, b) => acc + (b?.toolLines?.length || 0), 0);
-  }, [rtBatches]);
+    dtBatches.forEach((b) => {
+      const isJobCompleted = b.jobId && completedJobIdSet.has(String(b.jobId).trim().toUpperCase());
+      (b.toolLines || []).forEach((tl) => {
+        dispatched += 1;
+        const serialKey = tl.serial ? String(tl.serial).trim().toUpperCase() : '';
+        const isReturned =
+          isJobCompleted ||
+          tl.status === 'Returned' ||
+          Boolean(tl.rtBatchId) ||
+          (serialKey && returnedSerialsSet.has(serialKey));
 
-  const toolsOnRigCount = Math.max(0, totalDispatchedTools - totalReturnedTools);
+        if (isReturned) {
+          returned += 1;
+        } else {
+          onRig += 1;
+        }
+      });
+    });
+
+    return {
+      toolsOnRigCount: onRig,
+      totalDispatchedTools: dispatched,
+      totalReturnedTools: returned,
+    };
+  }, [dtBatches, completedJobIdSet, returnedSerialsSet]);
 
   // 3. Pending Signed Delivery & Receiving Tickets
   const pendingSignedDTs = useMemo(
@@ -107,39 +202,81 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const signedTicketsTotal = signedDTsCount + signedRTsCount;
   const compliancePercentage = totalTickets > 0 ? Math.round((signedTicketsTotal / totalTickets) * 100) : 100;
 
-  // 4. Client Rig & Active Tools Summary for Bar Chart
+  // 4. Client Rig & Active Tools Summary for Bar Chart (Aggregated by canonical operator without duplicates)
   const clientDeploymentData = useMemo(() => {
     const map: Record<string, { client: string; rigs: Set<string>; toolsOnRig: number; activeJobs: number }> = {};
     
-    // Seed common clients
-    ['ADNOC Drilling', 'ADNOC Onshore', 'ADNOC Offshore', 'Turnwell'].forEach((c) => {
+    // Seed standard operators
+    const standardOperators = ['ADNOC Drilling', 'ADNOC Onshore', 'ADNOC Offshore', 'Turnwell'];
+    standardOperators.forEach((c) => {
       map[c] = { client: c, rigs: new Set(), toolsOnRig: 0, activeJobs: 0 };
     });
 
-    activeJobs.forEach((job) => {
-      const c = job.client || 'Other';
-      if (!map[c]) {
-        map[c] = { client: c, rigs: new Set(), toolsOnRig: 0, activeJobs: 0 };
+    // Compute live tools on rig from DT batches
+    const dtToolsByJob = new Map<string, number>();
+    const dtToolsByRig = new Map<string, number>();
+    dtBatches.forEach((b) => {
+      const isJobCompleted = b.jobId && completedJobIdSet.has(String(b.jobId).trim().toUpperCase());
+      let count = 0;
+      (b.toolLines || []).forEach((tl) => {
+        const serialKey = tl.serial ? String(tl.serial).trim().toUpperCase() : '';
+        const isReturned =
+          isJobCompleted ||
+          tl.status === 'Returned' ||
+          Boolean(tl.rtBatchId) ||
+          (serialKey && returnedSerialsSet.has(serialKey));
+        if (!isReturned) {
+          count += 1;
+        }
+      });
+      if (b.jobId) {
+        const jKey = String(b.jobId).trim().toUpperCase();
+        dtToolsByJob.set(jKey, (dtToolsByJob.get(jKey) || 0) + count);
       }
-      if (job.rig) map[c].rigs.add(job.rig);
-      map[c].activeJobs += 1;
-
-      // Calculate tools on rig for this job
-      const jDTs = dtBatches.filter((b) => b.jobId === job.id);
-      const jRTs = rtBatches.filter((b) => b.jobId === job.id);
-      const disp = jDTs.reduce((s, b) => s + (b?.toolLines?.length || 0), 0);
-      const ret = jRTs.reduce((s, b) => s + (b?.toolLines?.length || 0), 0);
-      map[c].toolsOnRig += Math.max(0, disp - ret);
+      if (b.rig) {
+        const rKey = String(b.rig).trim().toUpperCase();
+        dtToolsByRig.set(rKey, (dtToolsByRig.get(rKey) || 0) + count);
+      }
     });
 
-    return Object.values(map).map((entry) => ({
-      name: entry.client.replace('ADNOC ', 'ADNOC-'),
-      client: entry.client,
-      rigs: entry.rigs.size,
-      tools: entry.toolsOnRig,
-      jobs: entry.activeJobs,
-    }));
-  }, [activeJobs, dtBatches, rtBatches]);
+    // Also check inventory for tools deployed on rig
+    const invToolsByRig = new Map<string, number>();
+    inventory.forEach((t) => {
+      if ((t.status === 'On Rig' || (t.location && t.location.toLowerCase().includes('rig'))) && t.rig) {
+        const rKey = String(t.rig).trim().toUpperCase();
+        invToolsByRig.set(rKey, (invToolsByRig.get(rKey) || 0) + (t.qty || 1));
+      }
+    });
+
+    activeJobs.forEach((job) => {
+      const canonicalClient = getCanonicalOperator(job.client);
+      if (!map[canonicalClient]) {
+        map[canonicalClient] = { client: canonicalClient, rigs: new Set(), toolsOnRig: 0, activeJobs: 0 };
+      }
+      if (job.rig && job.rig !== 'Rig Unassigned') {
+        map[canonicalClient].rigs.add(job.rig.trim());
+      }
+      map[canonicalClient].activeJobs += 1;
+
+      const jKey = String(job.id || '').trim().toUpperCase();
+      const rKey = String(job.rig || '').trim().toUpperCase();
+      const fromJob = dtToolsByJob.get(jKey) || 0;
+      const fromRig = rKey ? (dtToolsByRig.get(rKey) || invToolsByRig.get(rKey) || 0) : 0;
+      const toolsCount = Math.max(fromJob, fromRig, (job as any).toolsOnRig || 0);
+
+      map[canonicalClient].toolsOnRig += toolsCount;
+    });
+
+    return Object.values(map)
+      .filter((entry) => standardOperators.includes(entry.client) || entry.rigs.size > 0 || entry.toolsOnRig > 0 || entry.activeJobs > 0)
+      .map((entry) => ({
+        name: entry.client,
+        client: entry.client,
+        rigs: entry.rigs.size,
+        tools: entry.toolsOnRig,
+        jobs: entry.activeJobs,
+      }));
+  }, [activeJobs, dtBatches, returnedSerialsSet, completedJobIdSet, inventory]);
 
   // 5. Tool Fleet Categories Distribution (Donut Chart)
   const categoryDeploymentData = useMemo(() => {
@@ -153,20 +290,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return list.sort((a, b) => b.value - a.value).slice(0, 6);
   }, [inventory]);
 
-  // 6. Monthly Tool Movements (Area Chart)
+  // 6. Monthly Tool Movements (Area Chart) - Computed Dynamically from Live DT and RT Batches
   const monthlyMovementsData = useMemo(() => {
-    const monthMap: Record<string, { month: string; dispatched: number; returned: number }> = {
-      'May': { month: 'May', dispatched: 6, returned: 4 },
-      'Jun': { month: 'Jun', dispatched: 9, returned: 7 },
-      'Jul': { month: 'Jul', dispatched: 12, returned: 10 },
-      'Aug': { month: 'Aug', dispatched: 14, returned: 8 },
-      'Sep': { month: 'Sep', dispatched: dtBatches.length * 3, returned: rtBatches.length * 2 },
-    };
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const countsByMonth: Record<string, { month: string; dispatched: number; returned: number; order: number }> = {};
 
-    return Object.values(monthMap);
+    // Initialize 5 most recent calendar months including current
+    const now = new Date();
+    for (let i = 4; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const mName = months[d.getMonth()];
+      countsByMonth[mName] = { month: mName, dispatched: 0, returned: 0, order: d.getTime() };
+    }
+
+    // Populate from actual DT dispatch dates
+    dtBatches.forEach((b) => {
+      const rawDate = b.dispatchDate || b.rmDate || b.deliveryDate;
+      if (rawDate) {
+        const d = new Date(rawDate);
+        if (!isNaN(d.getTime())) {
+          const mName = months[d.getMonth()];
+          if (countsByMonth[mName]) {
+            countsByMonth[mName].dispatched += (b.toolLines || []).length;
+          }
+        }
+      }
+    });
+
+    // Populate from actual RT dates
+    rtBatches.forEach((b) => {
+      if (b.rtDate) {
+        const d = new Date(b.rtDate);
+        if (!isNaN(d.getTime())) {
+          const mName = months[d.getMonth()];
+          if (countsByMonth[mName]) {
+            countsByMonth[mName].returned += (b.toolLines || []).length;
+          }
+        }
+      }
+    });
+
+    return Object.values(countsByMonth).sort((a, b) => a.order - b.order);
   }, [dtBatches, rtBatches]);
 
-  // 7. Rig Live Operations Cards Matrix
+  // 7. Rig Live Operations Cards Matrix (Showing active rigs with tools actually on rig)
   const rigFleetCards = useMemo(() => {
     const rigMap: Record<
       string,
@@ -181,25 +348,75 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       }
     > = {};
 
+    // Collect tools on rig from inventory
+    const invToolsByRig = new Map<string, string[]>();
+    inventory.forEach((t) => {
+      if ((t.status === 'On Rig' || (t.location && t.location.toLowerCase().includes('rig'))) && t.rig) {
+        const rKey = String(t.rig).trim().toUpperCase();
+        const serial = t.serial || t.assetNo || t.id;
+        if (serial) {
+          const list = invToolsByRig.get(rKey) || [];
+          if (!list.includes(serial)) list.push(serial);
+          invToolsByRig.set(rKey, list);
+        }
+      }
+    });
+
     activeJobs.forEach((job) => {
       const rigName = job.rig || 'Rig Unassigned';
-      const jDTs = dtBatches.filter((b) => b.jobId === job.id);
-      const toolsList: string[] = [];
-      jDTs.forEach((b) => (b.toolLines || []).forEach((t) => toolsList.push(t.serial)));
+      if (rigName === 'Rig Unassigned' && !job.well) return;
+
+      const jKey = String(job.id || '').trim().toUpperCase();
+      const rKey = String(job.rig || '').trim().toUpperCase();
+      const jDTs = dtBatches.filter((b) => {
+        const bJKey = String(b.jobId || '').trim().toUpperCase();
+        const bRKey = String(b.rig || '').trim().toUpperCase();
+        return (bJKey && bJKey === jKey) || (bRKey && rKey && bRKey === rKey);
+      });
+      
+      const activeToolsOnRig = new Set<string>();
+      jDTs.forEach((b) => {
+        (b.toolLines || []).forEach((t) => {
+          const serialKey = t.serial ? String(t.serial).trim().toUpperCase() : '';
+          const isReturned = t.status === 'Returned' || Boolean(t.rtBatchId) || (serialKey && returnedSerialsSet.has(serialKey));
+          if (!isReturned && t.serial) {
+            activeToolsOnRig.add(t.serial);
+          }
+        });
+      });
+
+      // Merge tools from inventory on this rig
+      if (rKey && invToolsByRig.has(rKey)) {
+        invToolsByRig.get(rKey)!.forEach((s) => activeToolsOnRig.add(s));
+      }
+
+      const toolsArray = Array.from(activeToolsOnRig);
+      const hasTools = toolsArray.length > 0;
+
+      // When tools on rig is 0, do not display misleading "Ongoing" in green
+      let displayStatus = job.status || 'Active';
+      if (!hasTools) {
+        const sLower = displayStatus.toLowerCase();
+        if (sLower === 'ongoing' || sLower === 'active' || sLower === '2_ongoing') {
+          displayStatus = 'Mobilizing (0 Tools)';
+        }
+      } else if (displayStatus.toLowerCase() === 'open') {
+        displayStatus = 'Ongoing';
+      }
 
       rigMap[rigName] = {
         rig: rigName,
         well: job.well || 'TBD',
-        client: job.client || 'ADNOC',
+        client: getCanonicalOperator(job.client),
         jobId: job.id,
-        mobDate: job.mobDate || '2026-08-18',
-        status: job.status,
-        tools: toolsList,
+        mobDate: job.mobDate || '—',
+        status: displayStatus,
+        tools: toolsArray,
       };
     });
 
     return Object.values(rigMap);
-  }, [activeJobs, dtBatches]);
+  }, [activeJobs, dtBatches, returnedSerialsSet, inventory]);
 
   return (
     <div className="space-y-4 w-full">
@@ -217,6 +434,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {onRefreshSql && (
+            <button
+              onClick={onRefreshSql}
+              title="Refresh and sync data against live Azure SQL database"
+              className="px-2.5 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-300 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            >
+              <span>🔄</span> Refresh Live Feed
+            </button>
+          )}
           {onOpenAddCallout && user?.role !== 'Viewer' && (
             <button
               onClick={onOpenAddCallout}
@@ -250,9 +476,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Across {new Set(activeJobs.map((j) => j.client)).size} Clients
             </span>
           </div>
-          <div className="text-[10px] text-slate-500 mt-1 truncate">
-            Rigs: {Array.from(activeRigsSet).join(', ') || 'None'}
-          </div>
         </div>
 
         {/* Card 2: Tools On Rig */}
@@ -267,9 +490,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-[11px] font-semibold text-slate-500">
               {inventory.length} Total Fleet
             </span>
-          </div>
-          <div className="text-[10px] text-slate-500 mt-1">
-            {totalDispatchedTools} Dispatched &bull; {totalReturnedTools} Backloaded
           </div>
         </div>
 
@@ -291,9 +511,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               of {dtBatches.length} Total DTs
             </span>
           </div>
-          <div className="text-[10px] text-slate-500 mt-1">
-            {signedDTsCount} Signed &amp; Attached
-          </div>
         </div>
 
         {/* Card 4: Pending Signed RTs */}
@@ -308,9 +525,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-[11px] font-semibold text-slate-500">
               of {rtBatches.length} Total RTs
             </span>
-          </div>
-          <div className="text-[10px] text-slate-500 mt-1">
-            {signedRTsCount} Signed &amp; Attached
           </div>
         </div>
 
@@ -521,7 +735,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                        <span
+                          className={`w-2.5 h-2.5 rounded-full ${
+                            rc.tools.length > 0 ? 'bg-emerald-500' : 'bg-amber-500'
+                          }`}
+                        />
                         <span className="font-extrabold text-sm text-[#1a3055] font-mono">
                           Rig {rc.rig}
                         </span>
@@ -530,7 +748,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         Well: <span className="text-[#1a3055]">{rc.well}</span>
                       </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                        rc.tools.length > 0
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border-amber-200'
+                      }`}
+                    >
                       {rc.status}
                     </span>
                   </div>
@@ -546,11 +770,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10px] uppercase font-bold">Mob Date</span>
-                      <span className="font-mono text-slate-600">{rc.mobDate}</span>
+                      <span className="font-mono text-slate-600">{formatDateDisplay(rc.mobDate)}</span>
                     </div>
                     <div>
                       <span className="text-slate-400 block text-[10px] uppercase font-bold">Tools on Rig</span>
-                      <span className="font-mono font-bold text-blue-700">{rc.tools.length} Tools</span>
+                      <span
+                        className={`font-mono font-bold ${
+                          rc.tools.length > 0 ? 'text-blue-700' : 'text-slate-500'
+                        }`}
+                      >
+                        {rc.tools.length} Tools
+                      </span>
                     </div>
                   </div>
 
