@@ -463,6 +463,21 @@ export const App: React.FC = () => {
     setActiveView('jobs');
   };
 
+  const handleLinkCalloutToJob = (callout: Callout, selectedJob: DrillingJob) => {
+    const updatedJob: DrillingJob = {
+      ...selectedJob,
+      calloutId: callout.id,
+    };
+    const updatedCallout: Callout = {
+      ...callout,
+      jobId: selectedJob.id,
+      status: 'In Progress',
+    };
+    handleSaveJob(updatedJob);
+    handleSaveCallout(updatedCallout);
+    showToast(`Callout ${callout.id} successfully linked to ongoing Job ${selectedJob.id}.`, 'success');
+  };
+
   // Jobs Actions
   const handleSaveJob = (job: DrillingJob) => {
     setJobs((prev) => {
@@ -1225,8 +1240,11 @@ export const App: React.FC = () => {
               user={currentUser}
               callouts={callouts}
               inventory={inventory}
+              jobs={jobs}
               onSaveCallout={handleSaveCallout}
               onCreateJob={handleCreateJobFromCallout}
+              onLinkCalloutToJob={handleLinkCalloutToJob}
+              onDispatchJob={handleDispatchJob}
               isNewCalloutOpen={isNewCalloutOpen}
               onCloseNewCallout={() => setIsNewCalloutOpen(false)}
               onOpenNewCallout={() => setIsNewCalloutOpen(true)}
