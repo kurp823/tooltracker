@@ -85,6 +85,59 @@ export const formatJobDate = (dateStr?: string | null): string => {
   return clean.split('T')[0];
 };
 
+// Parse dates into milliseconds for chronological min/max and sorting
+export const parseDateToMs = (dStr?: string | null): number => {
+  if (!dStr || dStr.trim() === '' || dStr === '—' || dStr === '-') return 0;
+  const clean = dStr.trim();
+  const dmyMatch = clean.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    const month = months.indexOf(dmyMatch[2].toLowerCase());
+    let year = parseInt(dmyMatch[3], 10);
+    if (year < 100) year += 2000;
+    if (month >= 0) {
+      return new Date(year, month, day).getTime();
+    }
+  }
+  const t = new Date(clean).getTime();
+  return isNaN(t) ? 0 : t;
+};
+
+// Start Date is always the first (earliest) Delivery Ticket date; fallback to mobDate
+export const getJobStartDate = (job: DrillingJob, dtBatches?: DTBatch[]): string => {
+  if (dtBatches && dtBatches.length > 0) {
+    const valid = dtBatches
+      .map((dt) => {
+        const raw = dt.dispatchDate || dt.deliveryDate || dt.rmDate;
+        return { raw, ms: parseDateToMs(raw) };
+      })
+      .filter((d) => d.ms > 0)
+      .sort((a, b) => a.ms - b.ms);
+    if (valid.length > 0 && valid[0].raw) {
+      return valid[0].raw;
+    }
+  }
+  return job.mobDate || '';
+};
+
+// End Date is always the last (latest) Receiving Ticket date; fallback to demobDate
+export const getJobEndDate = (job: DrillingJob, rtBatches?: RTBatch[]): string => {
+  if (rtBatches && rtBatches.length > 0) {
+    const valid = rtBatches
+      .map((rt) => {
+        const raw = rt.rtDate || rt.backloadRmDate;
+        return { raw, ms: parseDateToMs(raw) };
+      })
+      .filter((d) => d.ms > 0)
+      .sort((a, b) => a.ms - b.ms);
+    if (valid.length > 0 && valid[valid.length - 1].raw) {
+      return valid[valid.length - 1].raw;
+    }
+  }
+  return job.demobDate || '';
+};
+
 // Normalize keys to allow cross-matching between Job-023-00002-1, Job-023-00002, and 023-00002
 const normalizeJobKey = (str?: string): string => {
   if (!str) return '';
@@ -134,7 +187,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   const [selectedJobDetail, setSelectedJobDetail] = useState<DrillingJob | null>(null);
 
   // Sorting State
-  const [sortField, setSortField] = useState<'id' | 'client' | 'rig' | 'mobDate' | 'dtTools' | 'rtTools' | 'toolsOnRig' | 'stage' | 'stageDays' | 'value'>('id');
+  const [sortField, setSortField] = useState<'id' | 'client' | 'rig' | 'startDate' | 'endDate' | 'dtTools' | 'rtTools' | 'toolsOnRig' | 'stage' | 'stageDays' | 'value'>('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Pagination State
@@ -222,7 +275,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
     return (normKey ? jobToolStats.get(normKey) : null) || (rawKey ? jobToolStats.get(rawKey) : null) || { dtCount: 0, rtCount: 0, dtBatches: [], rtBatches: [] };
   };
 
-  const handleSortToggle = (field: 'id' | 'client' | 'rig' | 'mobDate' | 'dtTools' | 'rtTools' | 'toolsOnRig' | 'stage' | 'stageDays' | 'value') => {
+  const handleSortToggle = (field: 'id' | 'client' | 'rig' | 'startDate' | 'endDate' | 'dtTools' | 'rtTools' | 'toolsOnRig' | 'stage' | 'stageDays' | 'value') => {
     if (sortField === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
@@ -315,8 +368,18 @@ export const JobsView: React.FC<JobsViewProps> = ({
         comparison = (a.client || '').localeCompare(b.client || '');
       } else if (sortField === 'rig') {
         comparison = (a.rig || '').localeCompare(b.rig || '');
-      } else if (sortField === 'mobDate') {
-        comparison = (a.mobDate || '').localeCompare(b.mobDate || '');
+      } else if (sortField === 'startDate') {
+        const aSt = getJobStats(a.id);
+        const bSt = getJobStats(b.id);
+        const aDate = getJobStartDate(a, aSt.dtBatches);
+        const bDate = getJobStartDate(b, bSt.dtBatches);
+        comparison = parseDateToMs(aDate) - parseDateToMs(bDate);
+      } else if (sortField === 'endDate') {
+        const aSt = getJobStats(a.id);
+        const bSt = getJobStats(b.id);
+        const aDate = getJobEndDate(a, aSt.rtBatches);
+        const bDate = getJobEndDate(b, bSt.rtBatches);
+        comparison = parseDateToMs(aDate) - parseDateToMs(bDate);
       } else if (sortField === 'dtTools') {
         const aSt = getJobStats(a.id);
         const bSt = getJobStats(b.id);
@@ -1153,6 +1216,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
           <table className="w-full text-left text-xs border-collapse">
             <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs text-slate-700 border-b border-slate-200 text-[11px] font-bold select-none uppercase tracking-wider">
               <tr>
+                {/* 1. Job # */}
                 <th
                   onClick={() => handleSortToggle('id')}
                   className="sticky left-0 z-20 bg-slate-100 px-3 py-2 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[125px] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]"
@@ -1167,6 +1231,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
+                {/* 2. Client / Project */}
                 <th
                   onClick={() => handleSortToggle('client')}
                   className="px-3 py-2 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[180px]"
@@ -1181,6 +1246,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
+                {/* 3. Rig / Well */}
                 <th
                   onClick={() => handleSortToggle('rig')}
                   className="px-3 py-2 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[170px]"
@@ -1195,48 +1261,20 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
+                {/* 4. PO Number */}
                 <th className="px-2.5 py-2 whitespace-nowrap min-w-[110px]">
                   PO Number
                 </th>
 
+                {/* 5. Job Start Date */}
                 <th
-                  onClick={() => handleSortToggle('mobDate')}
-                  className="px-2.5 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap w-24"
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    <span>Mob Date</span>
-                    {sortField === 'mobDate' ? (
-                      sortOrder === 'desc' ? <ArrowDown className="w-3 h-3 text-[#1a3055]" /> : <ArrowUp className="w-3 h-3 text-[#1a3055]" />
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
-                    )}
-                  </div>
-                </th>
-
-
-                <th
-                  onClick={() => handleSortToggle('stage')}
-                  className="px-2.5 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[140px]"
-                  title="Click to sort by status"
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    <span>Current Status</span>
-                    {sortField === 'stage' ? (
-                      sortOrder === 'desc' ? <ArrowDown className="w-3 h-3 text-[#1a3055]" /> : <ArrowUp className="w-3 h-3 text-[#1a3055]" />
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
-                    )}
-                  </div>
-                </th>
-
-                <th
-                  onClick={() => handleSortToggle('stageDays')}
+                  onClick={() => handleSortToggle('startDate')}
                   className="px-2.5 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[105px]"
-                  title="Recorded duration in current stage & total cycle time"
+                  title="First Delivery Ticket date (or Mob Date)"
                 >
                   <div className="flex items-center justify-center gap-1">
-                    <span>Stage Aging</span>
-                    {sortField === 'stageDays' ? (
+                    <span>Job Start Date</span>
+                    {sortField === 'startDate' ? (
                       sortOrder === 'desc' ? <ArrowDown className="w-3 h-3 text-[#1a3055]" /> : <ArrowUp className="w-3 h-3 text-[#1a3055]" />
                     ) : (
                       <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
@@ -1244,6 +1282,23 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
+                {/* 6. Job End Date */}
+                <th
+                  onClick={() => handleSortToggle('endDate')}
+                  className="px-2.5 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[105px]"
+                  title="Last Receiving Ticket date (or Demob Date)"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Job End Date</span>
+                    {sortField === 'endDate' ? (
+                      sortOrder === 'desc' ? <ArrowDown className="w-3 h-3 text-[#1a3055]" /> : <ArrowUp className="w-3 h-3 text-[#1a3055]" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                    )}
+                  </div>
+                </th>
+
+                {/* 7. Job Value */}
                 <th
                   onClick={() => handleSortToggle('value')}
                   className="px-2.5 py-2 text-right cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[105px]"
@@ -1259,12 +1314,46 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
+                {/* 8. Legal / Invoice NO */}
                 <th className="px-2.5 py-2 whitespace-nowrap min-w-[125px]">
-                  Legal Invoice NO
+                  Legal / Invoice NO
                 </th>
 
-                <th className="px-3 py-2 text-right whitespace-nowrap w-28 pr-3.5">
-                  Actions
+                {/* 9. Current Status */}
+                <th
+                  onClick={() => handleSortToggle('stage')}
+                  className="px-2.5 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[140px]"
+                  title="Click to sort by status"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Current Status</span>
+                    {sortField === 'stage' ? (
+                      sortOrder === 'desc' ? <ArrowDown className="w-3 h-3 text-[#1a3055]" /> : <ArrowUp className="w-3 h-3 text-[#1a3055]" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                    )}
+                  </div>
+                </th>
+
+                {/* 10. Stage Aging */}
+                <th
+                  onClick={() => handleSortToggle('stageDays')}
+                  className="px-2.5 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[105px]"
+                  title="Recorded duration in current stage & total cycle time"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Stage Aging</span>
+                    {sortField === 'stageDays' ? (
+                      sortOrder === 'desc' ? <ArrowDown className="w-3 h-3 text-[#1a3055]" /> : <ArrowUp className="w-3 h-3 text-[#1a3055]" />
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                    )}
+                  </div>
+                </th>
+
+                {/* 11. View */}
+                <th className="px-3 py-2 text-right whitespace-nowrap w-24 pr-3.5">
+                  View
                 </th>
               </tr>
             </thead>
@@ -1272,7 +1361,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
             <tbody className="divide-y divide-slate-100 bg-white">
               {paginatedJobs.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-500 font-medium">
+                  <td colSpan={11} className="py-12 text-center text-slate-500 font-medium">
                     <div className="flex flex-col items-center justify-center gap-1">
                       <FileSpreadsheet className="w-8 h-8 text-slate-300" />
                       <div className="font-semibold text-slate-700">No drilling jobs found</div>
@@ -1292,13 +1381,15 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   const stage = resolveJobStage(job, dtToolsCount, rtToolsCount);
                   const lifecycleMetrics = calculateJobLifecycleMetrics(job, stage, st.dtBatches, st.rtBatches);
                   const isActive = ['1_open', '2_ongoing'].includes(stage);
+                  const startDate = getJobStartDate(job, st.dtBatches);
+                  const endDate = getJobEndDate(job, st.rtBatches);
 
                   return (
                     <tr
                       key={job.id}
                       className="hover:bg-blue-50/40 transition-colors group"
                     >
-                      {/* Job # - Strict whitespace-nowrap, sticky left anchor */}
+                      {/* 1. Job # - Strict whitespace-nowrap, sticky left anchor */}
                       <td className={`px-3 ${padY} whitespace-nowrap align-middle sticky left-0 bg-white group-hover:bg-blue-50/70 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]`}>
                         <button
                           onClick={() => setSelectedJobDetail(job)}
@@ -1309,7 +1400,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                         </button>
                       </td>
 
-                      {/* Client / Project Code (Stacked hierarchy) */}
+                      {/* 2. Client / Project Code (Stacked hierarchy) */}
                       <td className={`px-3 ${padY} align-middle`}>
                         <div className="flex flex-col min-w-0 max-w-[210px]">
                           <span
@@ -1329,7 +1420,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                         </div>
                       </td>
 
-                      {/* Rig / Well (Rig in bold, Well without bold) */}
+                      {/* 3. Rig / Well (Rig in bold, Well without bold) */}
                       <td className={`px-3 ${padY} whitespace-nowrap align-middle`}>
                         <div className="flex items-center gap-1.5">
                           <span className="font-bold text-slate-900 text-xs tracking-tight">
@@ -1343,7 +1434,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                         </div>
                       </td>
 
-                      {/* PO Number */}
+                      {/* 4. PO Number */}
                       <td className={`px-2.5 ${padY} font-mono text-[11px] text-slate-600 whitespace-nowrap align-middle`}>
                         {job.poNumber ? (
                           <span className="font-medium text-slate-800">{job.poNumber}</span>
@@ -1352,12 +1443,53 @@ export const JobsView: React.FC<JobsViewProps> = ({
                         )}
                       </td>
 
-                      {/* Mob Date (Clean formatted, never wraps) */}
-                      <td className={`px-2.5 ${padY} text-center font-mono text-[11px] text-slate-600 whitespace-nowrap align-middle`}>
-                        {formatJobDate(job.mobDate)}
+                      {/* 5. Job Start Date (First DT date, fallback mobDate) */}
+                      <td className={`px-2.5 ${padY} text-center font-mono text-[11px] text-slate-700 whitespace-nowrap align-middle`}>
+                        {formatJobDate(startDate)}
                       </td>
 
-                      {/* Current Status Dropdown in all lines (disabled for jobs with legal invoice) */}
+                      {/* 6. Job End Date (Last RT date, fallback demobDate) */}
+                      <td className={`px-2.5 ${padY} text-center font-mono text-[11px] text-slate-700 whitespace-nowrap align-middle`}>
+                        {formatJobDate(endDate)}
+                      </td>
+
+                      {/* 7. Job Value / Amount */}
+                      <td className={`px-2.5 ${padY} text-right font-mono whitespace-nowrap align-middle`}>
+                        {(() => {
+                          const val = job.invoiceAmount || (typeof job.cost === 'number' ? job.cost : parseFloat(String(job.cost || '').replace(/[^0-9.-]/g, '')) || 0);
+                          return val > 0 ? (
+                            <span className="font-bold text-slate-900 text-xs">
+                              ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 text-[11px]">—</span>
+                          );
+                        })()}
+                      </td>
+
+                      {/* 8. Legal / Invoice NO (Strictly displays FSH/FR/WHP; non-matching ERP invoices labeled under approval) */}
+                      <td className={`px-2.5 ${padY} font-mono text-[11px] whitespace-nowrap align-middle`}>
+                        {job.legalInvoiceNumber && isLegalInvoiceNumber(job.legalInvoiceNumber) ? (
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium text-slate-800 text-[11px]">
+                              {job.legalInvoiceNumber.split(',')[0].trim()}
+                            </span>
+                            {job.legalInvoiceNumber.includes(',') && (
+                              <span className="text-[10px] text-slate-400 font-sans">
+                                +{job.legalInvoiceNumber.split(',').length - 1}
+                              </span>
+                            )}
+                          </div>
+                        ) : job.draftInvoiceNumber || (job.legalInvoiceNumber && !isLegalInvoiceNumber(job.legalInvoiceNumber)) ? (
+                          <span className="text-slate-500 text-[10px]" title="ERP Billing Document (Under Approval)">
+                            ERP #{job.draftInvoiceNumber || job.legalInvoiceNumber}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+
+                      {/* 9. Current Status Dropdown in all lines (disabled for jobs with legal invoice) */}
                       <td className={`px-2.5 ${padY} text-center whitespace-nowrap align-middle`}>
                         {isLegalInvoiceNumber(job.legalInvoiceNumber) ? (
                           <div className="inline-flex items-center justify-center gap-1">
@@ -1400,7 +1532,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                         )}
                       </td>
 
-                      {/* Stage Aging & Cycle Duration */}
+                      {/* 10. Stage Aging & Cycle Duration */}
                       <td className={`px-2.5 ${padY} text-center font-mono whitespace-nowrap align-middle`}>
                         <div className="flex flex-col items-center leading-tight">
                           <span
@@ -1419,58 +1551,12 @@ export const JobsView: React.FC<JobsViewProps> = ({
                         </div>
                       </td>
 
-                      {/* Job Value / Amount */}
-                      <td className={`px-2.5 ${padY} text-right font-mono whitespace-nowrap align-middle`}>
-                        {(() => {
-                          const val = job.invoiceAmount || (typeof job.cost === 'number' ? job.cost : parseFloat(String(job.cost || '').replace(/[^0-9.-]/g, '')) || 0);
-                          return val > 0 ? (
-                            <span className="font-bold text-slate-900 text-xs">
-                              ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300 text-[11px]">—</span>
-                          );
-                        })()}
-                      </td>
-
-                      {/* Legal Invoice NO (Strictly displays FSH/FR/WHP; non-matching ERP invoices labeled under approval) */}
-                      <td className={`px-2.5 ${padY} font-mono text-[11px] whitespace-nowrap align-middle`}>
-                        {job.legalInvoiceNumber && isLegalInvoiceNumber(job.legalInvoiceNumber) ? (
-                          <div className="flex items-center gap-1">
-                            <span className="font-medium text-slate-800 text-[11px]">
-                              {job.legalInvoiceNumber.split(',')[0].trim()}
-                            </span>
-                            {job.legalInvoiceNumber.includes(',') && (
-                              <span className="text-[10px] text-slate-400 font-sans">
-                                +{job.legalInvoiceNumber.split(',').length - 1}
-                              </span>
-                            )}
-                          </div>
-                        ) : job.draftInvoiceNumber || (job.legalInvoiceNumber && !isLegalInvoiceNumber(job.legalInvoiceNumber)) ? (
-                          <span className="text-slate-500 text-[10px]" title="ERP Billing Document (Under Approval)">
-                            ERP #{job.draftInvoiceNumber || job.legalInvoiceNumber}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
-
-                      {/* Actions (Stage advance disabled for completed jobs) */}
+                      {/* 11. View & Actions (Redundant Status badge button removed) */}
                       <td className={`px-3 ${padY} text-right whitespace-nowrap align-middle pr-3.5`}>
                         <div className="flex items-center justify-end gap-1">
-                          {user?.role !== 'Viewer' && stage !== '6_completed' && (
-                            <button
-                              onClick={() => setEditingJobStatus(job)}
-                              className="h-6 px-1.5 rounded bg-[#1a3055] hover:bg-[#24426d] text-white font-semibold text-[10px] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
-                              title="Update / Advance Job Status"
-                            >
-                              <ShieldCheck className="w-3 h-3 text-amber-400" />
-                              <span>Status</span>
-                            </button>
-                          )}
                           <button
                             onClick={() => setSelectedJobDetail(job)}
-                            className="h-6 px-1.5 rounded bg-slate-100 hover:bg-[#1a3055] hover:text-white text-[#1a3055] font-semibold text-[10px] transition-colors border border-slate-200 cursor-pointer flex items-center gap-1"
+                            className="h-6 px-1.5 rounded bg-slate-100 hover:bg-[#1a3055] hover:text-white text-[#1a3055] font-semibold text-[10px] transition-colors border border-slate-200 cursor-pointer flex items-center gap-1 shadow-2xs"
                             title="View Job Details, Tickets & Tool Ledger"
                           >
                             <Eye className="w-3 h-3" />
