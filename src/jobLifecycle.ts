@@ -24,68 +24,68 @@ export const STAGE_DEFINITIONS: Record<JobStageKey, StageDefinition> = {
   '1_open': {
     key: '1_open',
     stepNumber: 1,
-    label: '1. Open (No DT)',
+    label: 'Open',
     shortLabel: 'Open',
     description: 'Job opened, no delivery ticket (DT) generated yet',
     badgeBg: 'bg-slate-100',
-    badgeText: 'text-slate-800',
+    badgeText: 'text-slate-700',
     badgeBorder: 'border-slate-300',
     dotColor: 'bg-slate-400',
   },
   '2_ongoing': {
     key: '2_ongoing',
     stepNumber: 2,
-    label: '2. Ongoing (On Site)',
+    label: 'Ongoing',
     shortLabel: 'Ongoing',
     description: 'Tools dispatched and active on site / rig',
-    badgeBg: 'bg-blue-50',
-    badgeText: 'text-blue-800',
-    badgeBorder: 'border-blue-300',
-    dotColor: 'bg-blue-500 animate-pulse',
+    badgeBg: 'bg-blue-50/70',
+    badgeText: 'text-blue-900',
+    badgeBorder: 'border-blue-200',
+    dotColor: 'bg-blue-500',
   },
   '3_waiting_signed_docs': {
     key: '3_waiting_signed_docs',
     stepNumber: 3,
-    label: '3. Waiting on Signed Docs',
+    label: 'Waiting Docs',
     shortLabel: 'Waiting Docs',
     description: 'Tools returned from site; awaiting signed DT/RT tickets or utilization sheets',
-    badgeBg: 'bg-amber-50',
-    badgeText: 'text-amber-900',
-    badgeBorder: 'border-amber-300',
-    dotColor: 'bg-amber-500',
+    badgeBg: 'bg-slate-100',
+    badgeText: 'text-slate-800',
+    badgeBorder: 'border-slate-300',
+    dotColor: 'bg-amber-600',
   },
   '4_submitted_billing': {
     key: '4_submitted_billing',
     stepNumber: 4,
-    label: '4. Submitted to Billing Team',
+    label: 'In Billing',
     shortLabel: 'In Billing',
     description: 'All signed tickets (DT, RT, utilization) verified and submitted to billing team',
-    badgeBg: 'bg-purple-50',
-    badgeText: 'text-purple-900',
-    badgeBorder: 'border-purple-300',
-    dotColor: 'bg-purple-600',
+    badgeBg: 'bg-slate-100',
+    badgeText: 'text-slate-800',
+    badgeBorder: 'border-slate-300',
+    dotColor: 'bg-indigo-600',
   },
   '5_ses_submitted': {
     key: '5_ses_submitted',
     stepNumber: 5,
-    label: '5. SES Submitted',
-    shortLabel: 'SES Submitted',
-    description: 'Draft invoice or SES generated and submitted for client approval',
-    badgeBg: 'bg-indigo-50',
-    badgeText: 'text-indigo-900',
-    badgeBorder: 'border-indigo-300',
-    dotColor: 'bg-indigo-600',
+    label: 'Under Approval',
+    shortLabel: 'Under Approval',
+    description: 'ERP invoice / SES generated; under approval (pending legal invoice with FSH, FR, or WHP)',
+    badgeBg: 'bg-slate-100',
+    badgeText: 'text-slate-800',
+    badgeBorder: 'border-slate-300',
+    dotColor: 'bg-slate-600',
   },
   '6_completed': {
     key: '6_completed',
     stepNumber: 6,
-    label: '6. Completed (Invoiced)',
+    label: 'Completed',
     shortLabel: 'Completed',
-    description: 'Legal invoice issued and commercial lifecycle finalized',
-    badgeBg: 'bg-emerald-50',
-    badgeText: 'text-emerald-900',
-    badgeBorder: 'border-emerald-300',
-    dotColor: 'bg-emerald-600',
+    description: 'Commercial lifecycle finalized with verified legal invoice (FSH / FR / WHP)',
+    badgeBg: 'bg-slate-100',
+    badgeText: 'text-slate-800',
+    badgeBorder: 'border-slate-300',
+    dotColor: 'bg-slate-500',
   },
 };
 
@@ -99,46 +99,67 @@ export const ALL_STAGE_KEYS: JobStageKey[] = [
 ];
 
 /**
+ * Checks if an invoice string qualifies as a true legal invoice.
+ * Legal invoices MUST start with 'FSH', 'FR', or 'WHP' (case-insensitive).
+ * Purely numeric or other formats (e.g. 218662, 218661) are ERP / Draft invoices under approval.
+ */
+export function isLegalInvoiceNumber(inv?: string | null): boolean {
+  if (!inv) return false;
+  const s = String(inv).trim().toUpperCase();
+  if (!s || s === '—' || s === '-' || s === 'PENDING' || s === 'NULL' || s === 'UNDEFINED') return false;
+  return s.startsWith('FSH') || s.startsWith('FR') || s.startsWith('WHP');
+}
+
+/**
  * Standard classification logic defined by business rules:
- * 1) Open mean job is opened but no delivery ticket generated
- * 2) Ongoing means which tools are on site which means DTs are generated.
- * 3) Job completed means all tools are returned from site which means receiving ticket. When job is completed and any pending signed DTs or RTs are not attached then we need to change waiting on signed docs.
- * 4) If signed ticket of all there against each DT, RT & utilization then the status need to change to submitted to Billing team 
- * 5) If billing team generate the draft invoice then status to be SES submitted
- * 6) if legal invoice mentioned then job is completed.
+ * 1) Open: Job is opened but no delivery ticket generated
+ * 2) Ongoing: Tools dispatched to site / rig (DTs generated)
+ * 3) Waiting Docs: Tools returned, awaiting signed tickets
+ * 4) In Billing: Signed tickets verified & submitted to billing
+ * 5) Under Approval: Draft / ERP invoice (or non-FSH/FR/WHP invoice) under client/management approval
+ * 6) Completed: Verified legal invoice issued (starts with FSH, FR, or WHP)
  */
 export function resolveJobStage(job: DrillingJob, dtCount: number, rtCount: number): JobStageKey {
   const toolsOnRig = Math.max(0, dtCount - rtCount);
   const sLower = (job.status || '').toLowerCase().trim();
 
-  // Rule 6: If legal invoice mentioned then job is completed
-  const hasLegalInvoice = Boolean(
-    job.legalInvoiceNumber &&
-    job.legalInvoiceNumber.trim() !== '' &&
-    job.legalInvoiceNumber.trim() !== '—' &&
-    job.legalInvoiceNumber.trim() !== '-'
-  );
-  if (hasLegalInvoice || sLower === 'final invoiced' || (sLower === 'completed' && hasLegalInvoice)) {
+  // Rule 6: Legal invoice strictly requires prefix FSH, FR, or WHP
+  const hasVerifiedLegalInvoice =
+    isLegalInvoiceNumber(job.legalInvoiceNumber) ||
+    (isLegalInvoiceNumber(job.invoiceNumber) && !job.legalInvoiceNumber);
+
+  if (hasVerifiedLegalInvoice) {
     return '6_completed';
   }
 
-  // Explicit check if already marked completed without legal invoice
-  if (sLower === 'completed' && hasLegalInvoice) {
-    return '6_completed';
+  // Any job marked completed or final invoiced without an FSH/FR/WHP prefix is Under Approval (Stage 5)
+  if (
+    sLower === 'completed' ||
+    sLower === 'job completed' ||
+    sLower === 'closed' ||
+    sLower === 'final invoiced'
+  ) {
+    return '5_ses_submitted';
   }
 
-  // Rule 5: If billing team generate draft invoice or SES then status is SES submitted
-  const hasDraftOrSes = Boolean(
+  // Rule 5: If an ERP / Draft invoice exists (including numeric invoice numbers like 218662 that lack FSH/FR/WHP)
+  // or SES submitted date / draft invoice number, it is Under Approval (Stage 5)
+  const hasDraftOrErpInvoice = Boolean(
+    (job.legalInvoiceNumber && !isLegalInvoiceNumber(job.legalInvoiceNumber)) ||
     (job.draftInvoiceNumber && job.draftInvoiceNumber.trim() !== '' && job.draftInvoiceNumber.trim() !== '—') ||
+    (job.invoiceNumber && !isLegalInvoiceNumber(job.invoiceNumber)) ||
+    (job.erpRef && job.erpRef.trim() !== '') ||
     (job.sesNumber && job.sesNumber.trim() !== '' && job.sesNumber.trim() !== '—') ||
     job.sesSubmittedDate ||
     job.draftInvoicedDate
   );
+
   if (
     sLower === 'ses submitted' ||
     sLower === 'under ses approval' ||
+    sLower === 'under approval' ||
     sLower === 'draft invoiced' ||
-    hasDraftOrSes
+    hasDraftOrErpInvoice
   ) {
     return '5_ses_submitted';
   }
@@ -147,24 +168,23 @@ export function resolveJobStage(job: DrillingJob, dtCount: number, rtCount: numb
   if (
     sLower === 'submitted to billing team' ||
     sLower === 'tickets submitted to billing team' ||
+    sLower === 'in billing' ||
     Boolean(job.submittedToBillingDate)
   ) {
     return '4_submitted_billing';
   }
 
-  // Rule 3: Job completed / all tools returned from site (RT generated or demob recorded), waiting signed docs
+  // Rule 3: Tools returned from site, awaiting signed docs (strictly for non-completed jobs)
   if (
     sLower === 'waiting on signed docs' ||
     sLower === 'job completed and waiting signed docs' ||
-    sLower === 'job completed' ||
-    sLower === 'completed' ||
     Boolean(job.waitingSignedDocsDate) ||
     (dtCount > 0 && toolsOnRig === 0 && (rtCount > 0 || Boolean(job.demobDate)))
   ) {
     return '3_waiting_signed_docs';
   }
 
-  // Rule 2: Ongoing means tools are on site (DTs generated)
+  // Rule 2: Ongoing means tools are on site (DTs generated and balance > 0)
   if (sLower === 'ongoing' || sLower === 'active' || (dtCount > 0 && toolsOnRig > 0)) {
     return '2_ongoing';
   }
