@@ -66,25 +66,30 @@ export const JobLifecycleStepper: React.FC<JobLifecycleStepperProps> = ({
           <div className="flex items-center space-x-2">
             <span className="font-bold text-slate-800 text-xs flex items-center space-x-1.5">
               <Layers className="w-4 h-4 text-[#1a3055]" />
-              <span>Job Operational &amp; Commercial Lifecycle Pipeline</span>
+              <span>Current Status &amp; Milestone Pipeline</span>
             </span>
             <span
-              className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${STAGE_DEFINITIONS[currentStage].badgeBg} ${STAGE_DEFINITIONS[currentStage].badgeText} ${STAGE_DEFINITIONS[currentStage].badgeBorder}`}
+              className={`text-[10px] font-bold px-2 py-0.5 rounded border ${STAGE_DEFINITIONS[currentStage].badgeBg} ${STAGE_DEFINITIONS[currentStage].badgeText} ${STAGE_DEFINITIONS[currentStage].badgeBorder}`}
             >
-              Stage {currentStepNum} of 6: {STAGE_DEFINITIONS[currentStage].shortLabel}
+              {STAGE_DEFINITIONS[currentStage].shortLabel}
             </span>
           </div>
 
-          {canEdit && (
+          {currentStage === '6_completed' ? (
+            <span className="px-2.5 py-1 rounded bg-slate-100 text-slate-700 font-bold text-[11px] border border-slate-300 inline-flex items-center space-x-1 select-none">
+              <CheckCircle2 className="w-3.5 h-3.5 text-slate-600" />
+              <span>Job Completed &amp; Closed</span>
+            </span>
+          ) : canEdit ? (
             <button
               type="button"
               onClick={onOpenStatusModal}
               className="px-2.5 py-1 rounded bg-[#1a3055] text-white hover:bg-[#24426d] font-bold text-[11px] shadow-xs flex items-center space-x-1 cursor-pointer"
             >
-              <span>Update Lifecycle Stage</span>
+              <span>Update Current Status</span>
               <ArrowRight className="w-3 h-3" />
             </button>
-          )}
+          ) : null}
         </div>
 
         {/* Pipeline Step Grid */}
@@ -163,44 +168,44 @@ export const JobLifecycleStepper: React.FC<JobLifecycleStepperProps> = ({
 
       {/* Days Metrics Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-3 bg-blue-50/60 rounded-lg border border-blue-200 text-center">
-          <div className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">
+        <div className="p-3 bg-slate-50/80 rounded-lg border border-slate-200 text-center">
+          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
             Days on Site (Ongoing)
           </div>
-          <div className="text-lg font-extrabold text-blue-900 font-mono mt-0.5">
+          <div className="text-base font-extrabold text-slate-800 font-mono mt-0.5">
             {metrics.ongoingDays} days
           </div>
-          <div className="text-[10px] text-blue-600">Mob to Return</div>
+          <div className="text-[10px] text-slate-400">Mob to Return</div>
         </div>
 
-        <div className="p-3 bg-amber-50/60 rounded-lg border border-amber-200 text-center">
-          <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">
+        <div className="p-3 bg-slate-50/80 rounded-lg border border-slate-200 text-center">
+          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
             Waiting Signed Docs
           </div>
-          <div className="text-lg font-extrabold text-amber-900 font-mono mt-0.5">
+          <div className="text-base font-extrabold text-slate-800 font-mono mt-0.5">
             {metrics.waitingDocsDays} days
           </div>
-          <div className="text-[10px] text-amber-600">Return to Billing</div>
+          <div className="text-[10px] text-slate-400">Return to Billing</div>
         </div>
 
-        <div className="p-3 bg-purple-50/60 rounded-lg border border-purple-200 text-center">
-          <div className="text-[10px] font-bold text-purple-700 uppercase tracking-wider">
-            In Billing &amp; SES
+        <div className="p-3 bg-slate-50/80 rounded-lg border border-slate-200 text-center">
+          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+            In Billing &amp; Approval
           </div>
-          <div className="text-lg font-extrabold text-purple-900 font-mono mt-0.5">
+          <div className="text-base font-extrabold text-slate-800 font-mono mt-0.5">
             {metrics.billingDays + metrics.sesDays} days
           </div>
-          <div className="text-[10px] text-purple-600">Billing to Legal Inv</div>
+          <div className="text-[10px] text-slate-400">Billing to Legal Inv</div>
         </div>
 
-        <div className="p-3 bg-emerald-50/60 rounded-lg border border-emerald-200 text-center">
-          <div className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">
-            Total Operational Cycle
+        <div className="p-3 bg-slate-50/80 rounded-lg border border-slate-200 text-center">
+          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+            Total Cycle Duration
           </div>
-          <div className="text-lg font-extrabold text-emerald-900 font-mono mt-0.5">
+          <div className="text-base font-extrabold text-slate-900 font-mono mt-0.5">
             {metrics.totalCycleDays} days
           </div>
-          <div className="text-[10px] text-emerald-600">Open to Completion</div>
+          <div className="text-[10px] text-slate-400">Open to Completion</div>
         </div>
       </div>
 
