@@ -1869,6 +1869,15 @@ export async function saveMaintenanceApi(maintenance: any): Promise<{ success: b
   }
 }
 
+export async function saveInventoryApi(tool: any): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetchFromApi('savetool', { tool });
+    return { success: res !== null, message: res ? 'Tool saved to Azure SQL' : 'Saved locally' };
+  } catch {
+    return { success: true, message: 'Saved locally' };
+  }
+}
+
 export async function saveJobApi(job: any): Promise<{ success: boolean; message: string }> {
   try {
     const res = await fetchFromApi('savejob', { job });
