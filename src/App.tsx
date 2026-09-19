@@ -57,6 +57,7 @@ import { MaintenanceView } from './components/MaintenanceView';
 import { UtilizationView } from './components/UtilizationView';
 import { ContractsView } from './components/ContractsView';
 import { SettingsView } from './components/SettingsView';
+import { DataManagementView, TableEntityKey } from './components/DataManagementView';
 import { InventoryDashboardView } from './components/InventoryDashboardView';
 import { MaintenanceDashboardView } from './components/MaintenanceDashboardView';
 import { BillingDashboardView } from './components/BillingDashboardView';
@@ -1402,6 +1403,56 @@ export const App: React.FC = () => {
                 } else {
                   showToast('Contracts master register up to date.', 'info');
                 }
+              }}
+            />
+          )}
+
+          {activeView === 'data-management' && (
+            <DataManagementView
+              user={currentUser}
+              jobs={jobs}
+              inventory={inventory}
+              dtBatches={dtBatches}
+              rtBatches={rtBatches}
+              callouts={callouts}
+              gatePasses={gatePasses}
+              inspections={inspections}
+              maintenance={maintenance}
+              contracts={contracts}
+              onUpdateState={(tableKey: TableEntityKey, updater: (prev: any[]) => any[]) => {
+                switch (tableKey) {
+                  case 'jobs':
+                    setJobs((prev) => updater(prev));
+                    break;
+                  case 'inventory':
+                    setInventory((prev) => updater(prev));
+                    break;
+                  case 'dtBatches':
+                    setDtBatches((prev) => updater(prev));
+                    break;
+                  case 'rtBatches':
+                    setRtBatches((prev) => updater(prev));
+                    break;
+                  case 'callouts':
+                    setCallouts((prev) => updater(prev));
+                    break;
+                  case 'gatePasses':
+                    setGatePasses((prev) => updater(prev));
+                    break;
+                  case 'inspections':
+                    setInspections((prev) => updater(prev));
+                    break;
+                  case 'maintenance':
+                    setMaintenance((prev) => updater(prev));
+                    break;
+                  case 'contracts':
+                    setContracts((prev) => updater(prev));
+                    break;
+                }
+              }}
+              showToast={showToast}
+              onRefreshAllData={async () => {
+                await handleFetchLiveSql(false);
               }}
             />
           )}

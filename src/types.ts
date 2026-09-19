@@ -28,6 +28,7 @@ export type NavModule =
   | 'maintenance'        // Maintenance Orders
   | 'billing-dash'       // Billing Dashboard
   | 'contracts'          // Master Contracts
+  | 'data-management'   // Data Management Tool (DMT)
   | 'settings';          // System & Azure SQL
 
 export type ViewKey = NavModule;
@@ -145,6 +146,8 @@ export interface DrillingJob {
   draftInvoiceNumber?: string;
   sesNumber?: string;
   legalInvoiceNumber?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
   invoiceAmount?: number | null;
   notes?: string;
   dtToolsCount?: number;
