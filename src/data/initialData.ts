@@ -46,6 +46,7 @@ export const MODULE_PERMISSIONS: Record<UserRole, NavModule[]> = {
     'maintenance',
     'billing-dash',
     'contracts',
+    'data-management',
     'settings',
   ],
   Operations: [
