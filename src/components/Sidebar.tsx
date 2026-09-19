@@ -142,6 +142,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: '🔒',
       adminOnly: true,
       items: [
+        { id: 'data-management', label: 'Data Management', icon: '💾' },
         { id: 'settings', label: 'System & Azure SQL', icon: '⚙️' },
       ],
     },
