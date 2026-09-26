@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   User,
   ToolItem,
@@ -61,6 +61,7 @@ import { DataManagementView, TableEntityKey } from './components/DataManagementV
 import { InventoryDashboardView } from './components/InventoryDashboardView';
 import { MaintenanceDashboardView } from './components/MaintenanceDashboardView';
 import { BillingDashboardView } from './components/BillingDashboardView';
+import { InvoicePackageView } from './components/InvoicePackageView';
 
 // Safe localStorage write — never lets a quota failure crash the app.
 //
@@ -104,6 +105,7 @@ export const App: React.FC = () => {
   const [isNewDTOpen, setIsNewDTOpen] = useState(false);
   const [selectedCalloutForJob, setSelectedCalloutForJob] = useState<Callout | null>(null);
   const [preSelectedJobIdForDT, setPreSelectedJobIdForDT] = useState<string | null>(null);
+  const [selectedJobIdForBillingPackage, setSelectedJobIdForBillingPackage] = useState<string | null>(null);
 
   // Sync state
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('saved');
@@ -1101,6 +1103,40 @@ export const App: React.FC = () => {
     }
   };
 
+  // Completed jobs detection (legal invoice numbers starting with FSH, FR, WHP)
+  const completedJobIdSet = useMemo(() => {
+    const set = new Set<string>();
+    jobs.forEach((j) => {
+      const isLegal = (num?: string) => {
+        if (!num) return false;
+        const s = num.trim().toUpperCase();
+        return s.startsWith('FSH') || s.startsWith('FR') || s.startsWith('WHP');
+      };
+      if (isLegal(j.legalInvoiceNumber) || isLegal(j.invoiceNumber)) {
+        if (j.id) set.add(String(j.id).trim().toUpperCase());
+        if (j.jobNumber) set.add(String(j.jobNumber).trim().toUpperCase());
+      }
+    });
+    return set;
+  }, [jobs]);
+
+  // Active counts for badges
+  const pendingCalloutsCount = callouts.filter((c) => c.status === 'Pending').length;
+
+  // Pending signed DTs for active jobs only
+  const pendingSignedDTsCount = dtBatches.filter((b) => {
+    const isJobCompleted = b.jobId && completedJobIdSet.has(String(b.jobId).trim().toUpperCase());
+    return !isJobCompleted && !b.isSigned && !b.signedDocUrl;
+  }).length;
+
+  const onRigToolsCount = inventory.filter((t) => {
+    if ((t.location !== 'On Rig' && t.status !== 'On Rig') || t.status === 'Removed') return false;
+    if (t.currentJobId && completedJobIdSet.has(String(t.currentJobId).trim().toUpperCase())) return false;
+    return true;
+  }).length;
+  const pendingInspectionsCount = inspections.filter((i) => i.status === 'Pending').length;
+  const pendingMaintenanceCount = maintenance.filter((m) => m.status === 'In Progress').length;
+
   // If user not authenticated
   if (!currentUser) {
     return (
@@ -1149,14 +1185,6 @@ export const App: React.FC = () => {
     );
   }
 
-  // Active counts for badges
-  const pendingCalloutsCount = callouts.filter((c) => c.status === 'Pending').length;
-  const onRigToolsCount = inventory.filter(
-    (t) => (t.location === 'On Rig' || t.status === 'On Rig') && t.status !== 'Removed'
-  ).length;
-  const pendingInspectionsCount = inspections.filter((i) => i.status === 'Pending').length;
-  const pendingMaintenanceCount = maintenance.filter((m) => m.status === 'In Progress').length;
-
   return (
     <div className="min-h-screen bg-[#c8d8e8] text-[#1e293b] font-sans flex flex-col antialiased selection:bg-amber-200">
       {/* Toast Notifications */}
@@ -1174,6 +1202,10 @@ export const App: React.FC = () => {
           setCurrentUser(null);
         }}
         onClearDemoData={handleClearDemoData}
+        onNavigate={(v) => {
+          setActiveView(v);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
       />
 
       {/* Main Workspace Layout */}
@@ -1187,6 +1219,7 @@ export const App: React.FC = () => {
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
           pendingCalloutsCount={pendingCalloutsCount}
+          pendingSignedDTsCount={pendingSignedDTsCount}
           onRigToolsCount={onRigToolsCount}
           pendingInspectionsCount={pendingInspectionsCount}
           pendingMaintenanceCount={pendingMaintenanceCount}
@@ -1361,8 +1394,29 @@ export const App: React.FC = () => {
               jobs={jobs}
               dtBatches={dtBatches}
               rtBatches={rtBatches}
-              onNavigate={(mod) => setActiveView(mod)}
+              onNavigate={(mod, jobId) => {
+                if (jobId) {
+                  setSelectedJobIdForBillingPackage(jobId);
+                }
+                setActiveView(mod);
+              }}
               onUpdateJob={handleSaveJob}
+            />
+          )}
+
+          {activeView === 'billing-package' && (
+            <InvoicePackageView
+              user={currentUser}
+              jobs={jobs}
+              dtBatches={dtBatches}
+              rtBatches={rtBatches}
+              contracts={contracts}
+              initialJobId={selectedJobIdForBillingPackage}
+              onBackToBilling={() => setActiveView('billing-dash')}
+              onUpdateJob={handleSaveJob}
+              onUpdateDTBatch={handleUpdateDTBatch}
+              onUpdateRTBatch={handleUpdateRTBatch}
+              onShowToast={showToast}
             />
           )}
 
@@ -1374,6 +1428,7 @@ export const App: React.FC = () => {
               dtBatches={dtBatches}
               rtBatches={rtBatches}
               onUpdateJob={handleSaveJob}
+              onNavigate={(mod) => setActiveView(mod as ViewKey)}
             />
           )}
 
