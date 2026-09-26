@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { DrillingJob, DTBatch, RTBatch, ToolItem, User } from '../types';
 import { formatDateDDMMYY, formatQty } from '../utils';
+import { DocumentAttachmentModal } from './DocumentAttachmentModal';
 import * as XLSX from 'xlsx';
 
 interface UtilizationViewProps {
@@ -10,6 +11,7 @@ interface UtilizationViewProps {
   dtBatches: DTBatch[];
   rtBatches?: RTBatch[];
   onUpdateJob?: (job: DrillingJob) => void;
+  onNavigate?: (module: string) => void;
 }
 
 interface ClientRateConfig {
@@ -85,6 +87,7 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
   dtBatches,
   rtBatches = [],
   onUpdateJob,
+  onNavigate,
 }) => {
   // 1. Active Job
   const [selectedJobId, setSelectedJobId] = useState<string>(jobs[0]?.id || 'JOB-26-00001');
@@ -143,6 +146,9 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
 
   // 2. Active Tab (Header, Tools, Man Power, Inventory) - Default to Header
   const [activeTab, setActiveTab] = useState<EpicorTab>('Header');
+
+  // Document attachment modal for Rig Daily Log / Utilization sign-offs
+  const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
 
   // 3. Year and Month selector (matching Epicor ERP Screenshot 3: Year: 2026, Month: September)
   const [selectedYear, setSelectedYear] = useState<number>(2026);
@@ -1099,38 +1105,25 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
 
   if (!currentJob) {
     return (
-      <div className="space-y-4 text-xs select-none w-full">
-        <div className="bg-white border border-[#b8c9db] rounded p-6 shadow-2xs">
-          <div className="flex items-center gap-3 border-b border-slate-200 pb-3 mb-4">
-            <div className="w-9 h-9 rounded bg-[#1a3055] text-white flex items-center justify-center font-bold text-base shadow-2xs">
+      <div className="space-y-3 text-xs select-none w-full">
+        <div className="bg-white border border-[#b8c9db] rounded p-4 shadow-2xs">
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-2 mb-3">
+            <div className="w-7 h-7 rounded bg-[#1a3055] text-white flex items-center justify-center font-bold text-xs">
               📊
             </div>
-            <div>
-              <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                Operations &bull; Upstream Resource Accounting
-              </div>
-              <h1 className="text-base font-extrabold text-[#1a3055] tracking-tight">
-                Utilization Master
-              </h1>
-            </div>
+            <h1 className="text-sm font-bold text-[#1a3055] tracking-tight">
+              Utilization
+            </h1>
           </div>
 
-          <div className="py-12 px-4 text-center max-w-lg mx-auto">
-            <div className="w-16 h-16 bg-blue-50 text-[#1a3055] rounded-full flex items-center justify-center mx-auto mb-4 text-2xl border border-blue-200 shadow-xs">
+          <div className="py-8 px-4 text-center max-w-lg mx-auto">
+            <div className="w-12 h-12 bg-blue-50 text-[#1a3055] rounded-full flex items-center justify-center mx-auto mb-3 text-xl border border-blue-200 shadow-xs">
               ⚡
             </div>
-            <h3 className="text-sm font-extrabold text-slate-800 mb-1">No Active Drilling Jobs Available</h3>
-            <p className="text-slate-500 text-xs mb-4 leading-relaxed">
+            <h3 className="text-xs font-bold text-slate-800 mb-1">No Active Drilling Jobs Available</h3>
+            <p className="text-slate-500 text-xs mb-3 leading-relaxed">
               Equipment utilization and monthly billing are tracked against specific drilling jobs.
-              Currently, there are no drilling jobs in your local environment (demo records cleared, or waiting for live SQL sync).
             </p>
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-900 text-xs text-left mb-5">
-              <strong>Next Steps:</strong>
-              <ul className="list-disc list-inside mt-1 space-y-0.5 text-[11px] text-amber-800">
-                <li>Create a new Drilling Job from the <strong>Drilling Jobs</strong> section on the left sidebar.</li>
-                <li>Or click <strong>🔄 Refresh SQL</strong> in the top header to pull live jobs from your Azure SQL database.</li>
-              </ul>
-            </div>
           </div>
         </div>
       </div>
@@ -1138,27 +1131,22 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
   }
 
   return (
-    <div className="space-y-3 text-xs select-none w-full">
+    <div className="space-y-2.5 text-xs select-none w-full">
       {/* Header Ribbon & Active Job Switcher */}
-      <div className="bg-white border border-[#b8c9db] rounded p-3.5 shadow-2xs">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-2.5 mb-2.5">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-[#1a3055] text-white flex items-center justify-center font-bold text-sm shadow-2xs">
+      <div className="bg-white border border-[#b8c9db] rounded p-2.5 shadow-2xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2 mb-2">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded bg-[#1a3055] text-white flex items-center justify-center font-bold text-xs shadow-2xs">
               📊
             </div>
-            <div>
-              <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                Operations &bull; Upstream Resource Accounting
-              </div>
-              <h1 className="text-base font-extrabold text-[#1a3055] tracking-tight">
-                Utilization Master
-              </h1>
-            </div>
+            <h1 className="text-sm font-bold text-[#1a3055] tracking-tight">
+              Utilization
+            </h1>
           </div>
 
           {/* Type-to-Search Job Selector & Actions */}
-          <div className="flex items-center gap-2.5">
-            <label className="font-bold text-slate-700 text-xs whitespace-nowrap">Active Job:</label>
+          <div className="flex items-center gap-2">
+            <label className="font-bold text-slate-700 text-xs whitespace-nowrap">Job:</label>
             
             {/* Custom Searchable Combo */}
             <div className="relative" ref={jobDropdownRef}>
@@ -1170,7 +1158,7 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                     setIsJobDropdownOpen(!isJobDropdownOpen);
                     setJobSearchQuery('');
                   }}
-                  className="border border-[#1a3055] rounded px-3 py-1.5 font-mono font-bold text-xs bg-slate-50 text-[#1a3055] hover:bg-slate-100 flex items-center justify-between gap-2 shadow-2xs cursor-pointer min-w-[260px] md:min-w-[300px]"
+                  className="border border-[#1a3055] rounded px-2.5 py-1 font-mono font-bold text-xs bg-slate-50 text-[#1a3055] hover:bg-slate-100 flex items-center justify-between gap-2 shadow-2xs cursor-pointer min-w-[240px] md:min-w-[280px]"
                 >
                   <span className="truncate">
                     {currentJob.id} &mdash; {currentJob.client} ({currentJob.rig})
@@ -1190,8 +1178,8 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                         autoFocus
                         value={jobSearchQuery}
                         onChange={(e) => setJobSearchQuery(e.target.value)}
-                        placeholder="Type to search (e.g. 00003, ADNOC, AD-45)..."
-                        className="w-full bg-white border border-slate-300 rounded px-2.5 py-1 text-xs outline-none focus:border-[#1a3055] focus:ring-1 focus:ring-[#1a3055]"
+                        placeholder="Search job ID, client, rig..."
+                        className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs outline-none focus:border-[#1a3055] focus:ring-1 focus:ring-[#1a3055]"
                       />
                       {jobSearchQuery && (
                         <button
@@ -1220,7 +1208,7 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                             setIsJobDropdownOpen(false);
                             setJobSearchQuery('');
                           }}
-                          className={`p-2.5 hover:bg-blue-50 cursor-pointer transition flex items-center justify-between gap-2 ${
+                          className={`p-2 hover:bg-blue-50 cursor-pointer transition flex items-center justify-between gap-2 ${
                             j.id === selectedJobId ? 'bg-blue-50/80 font-bold border-l-4 border-l-[#1a3055]' : ''
                           }`}
                         >
@@ -1250,10 +1238,30 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
             </div>
 
             <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="px-3 py-1.5 rounded bg-[#1a3055] text-white hover:bg-[#24426d] font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1.5"
+              type="button"
+              onClick={() => setIsAttachModalOpen(true)}
+              className={`px-2.5 py-1 rounded font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1.5 transition ${
+                (currentJob.utilizationAttachments && currentJob.utilizationAttachments.length > 0) || currentJob.signedUtilizationAttached
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
+                  : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+              }`}
+              title="Attach Dual-Signed Rig Daily Log or Utilization Documents"
             >
-              <span>+</span> Add Line Item
+              <span>📎</span>
+              <span>
+                {(currentJob.utilizationAttachments && currentJob.utilizationAttachments.length > 0)
+                  ? `${currentJob.utilizationAttachments.length} Doc(s) Attached`
+                  : currentJob.signedUtilizationAttached
+                  ? 'Signed Log Attached'
+                  : 'Attach Signed Rig Log'}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="px-2.5 py-1 rounded bg-[#1a3055] text-white hover:bg-[#24426d] font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1"
+            >
+              <span>+</span> Add Line
             </button>
           </div>
         </div>
@@ -1291,18 +1299,17 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
         </div>
       </div>
 
-      {/* Epicor ERP Window Tabs: Header | Tools | Man Power | Inventory (NO Consumables) */}
+      {/* Main Work Area Container */}
       <div className="bg-white border border-[#b8c9db] rounded shadow-2xs overflow-hidden">
         {/* Main Tab Navigation Bar */}
-        <div className="bg-[#e4eef8] border-b border-[#b8c9db] px-2 pt-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="bg-[#e4eef8] border-b border-[#b8c9db] px-2 pt-1.5 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center space-x-1">
             {(['Header', 'Tools', 'Man Power', 'Inventory'] as EpicorTab[]).map((tab) => {
-              const count = tab === 'Header' ? null : lineItems.filter((i) => i.category === tab).length;
               return (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-2 font-bold text-xs rounded-t transition cursor-pointer border-t border-x flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 font-bold text-xs rounded-t transition cursor-pointer border-t border-x flex items-center gap-1.5 ${
                     activeTab === tab
                       ? 'bg-white text-[#1a3055] border-[#b8c9db] -mb-[1px] shadow-2xs font-extrabold'
                       : 'bg-transparent text-slate-600 border-transparent hover:bg-slate-200/60'
@@ -1315,15 +1322,6 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                     {tab === 'Inventory' && '📦'}
                   </span>
                   <span>{tab}</span>
-                  {count !== null && (
-                    <span
-                      className={`ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                        activeTab === tab ? 'bg-blue-100 text-blue-900' : 'bg-slate-200 text-slate-700'
-                      }`}
-                    >
-                      {count}
-                    </span>
-                  )}
                 </button>
               );
             })}
@@ -1332,155 +1330,132 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
 
         {/* Tab Content 1: HEADER (Job Details, Commercial Terms, Monthly Invoicing Summary) */}
         {activeTab === 'Header' && (
-          <div className="p-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-3 space-y-2.5 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               {/* Job & Rig Specifications */}
-              <div className="border border-slate-200 rounded p-3 bg-slate-50/50 space-y-2">
+              <div className="border border-slate-200 rounded p-2 bg-slate-50/50 space-y-1.5">
                 <h3 className="font-bold text-[#1a3055] text-xs uppercase tracking-wide border-b pb-1">
-                  1. Operational Assignment &amp; Rig Wellsite
+                  Assignment
                 </h3>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="text-slate-500 block">Job Number:</span>
+                    <span className="text-slate-500 block text-[11px]">Job:</span>
                     <strong className="font-mono text-slate-900">{currentJob.id}</strong>
                   </div>
                   <div>
-                    <span className="text-slate-500 block">Client Operator:</span>
+                    <span className="text-slate-500 block text-[11px]">Client:</span>
                     <strong className="text-[#1a3055]">{currentJob.client}</strong>
                   </div>
                   <div>
-                    <span className="text-slate-500 block">Rig ID:</span>
+                    <span className="text-slate-500 block text-[11px]">Rig:</span>
                     <strong className="text-slate-900">{currentJob.rig}</strong>
                   </div>
                   <div>
-                    <span className="text-slate-500 block">Well Name:</span>
+                    <span className="text-slate-500 block text-[11px]">Well:</span>
                     <strong className="text-slate-900">{currentJob.well}</strong>
                   </div>
                   <div>
-                    <span className="text-slate-500 block">Purchase Order (PO):</span>
-                    <strong className="font-mono text-slate-800">{currentJob.poNumber || 'PO-ADD-88910'}</strong>
+                    <span className="text-slate-500 block text-[11px]">PO Number:</span>
+                    <strong className="font-mono text-slate-800">{currentJob.poNumber || '—'}</strong>
                   </div>
                   <div>
-                    <span className="text-slate-500 block">Hole Section:</span>
+                    <span className="text-slate-500 block text-[11px]">Hole Section:</span>
                     <strong className="font-mono text-slate-800">{currentJob.holeSection || '12-1/4"'}</strong>
                   </div>
                 </div>
               </div>
 
               {/* Contract Terms & Commercial Agreement */}
-              <div className="border border-slate-200 rounded p-3 bg-slate-50/50 space-y-2">
+              <div className="border border-slate-200 rounded p-2 bg-slate-50/50 space-y-1.5">
                 <h3 className="font-bold text-[#1a3055] text-xs uppercase tracking-wide border-b pb-1">
-                  2. Contract Commercial Agreement
+                  Contract Terms
                 </h3>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="text-slate-500 block">Master Contract:</span>
+                    <span className="text-slate-500 block text-[11px]">Contract:</span>
                     <strong className="text-slate-900">{currentJob.contract || currentJob.client}</strong>
                   </div>
                   <div>
-                    <span className="text-slate-500 block">Billing Currency:</span>
+                    <span className="text-slate-500 block text-[11px]">Currency:</span>
                     <strong className="font-mono text-slate-900">{rateConfig.currency}</strong>
                   </div>
                   <div className="col-span-2">
-                    <span className="text-slate-500 block">Pricing Tariff:</span>
+                    <span className="text-slate-500 block text-[11px]">Pricing Tariff:</span>
                     <span className="text-slate-700 font-semibold">
-                      Contract Schedule Tariff (Line-by-line pricing governed by selected contract)
+                      Contract Schedule Tariff
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block">Standby Terms:</span>
+                    <span className="text-slate-500 block text-[11px]">Standby Terms:</span>
                     <strong className="text-slate-800">
-                      {rateConfig.cap !== null ? `Max ${rateConfig.cap} Standby Days / month` : 'Uncapped Standard Standby'}
+                      {rateConfig.cap !== null ? `Max ${rateConfig.cap} Standby Days / month` : 'Standard Standby'}
                     </strong>
                   </div>
                   <div>
-                    <span className="text-slate-500 block">Billing Basis:</span>
-                    <strong className="text-emerald-800">Monthly Accrual / Delivery Reconciliation</strong>
+                    <span className="text-slate-500 block text-[11px]">Billing Basis:</span>
+                    <strong className="text-emerald-800">Monthly Accrual</strong>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Overall Resource Allotment Breakdown */}
-            <div className="border border-slate-200 rounded p-3 bg-white space-y-3">
+            <div className="border border-slate-200 rounded p-2 bg-white space-y-1.5">
               <h3 className="font-bold text-[#1a3055] text-xs uppercase tracking-wide">
-                3. Mobilized Line Item Summary by Tab
+                Resources
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div
                   onClick={() => setActiveTab('Tools')}
-                  className="p-3 bg-blue-50/50 border border-blue-200 rounded cursor-pointer hover:bg-blue-100/60 transition"
+                  className="px-2.5 py-1.5 bg-blue-50/50 border border-blue-200 rounded cursor-pointer hover:bg-blue-100/60 transition flex justify-between items-center"
                 >
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-blue-950">🛠️ Downhole Tools Tab</span>
-                    <span className="text-lg font-extrabold font-mono text-blue-900">
-                      {lineItems.filter((i) => i.category === 'Tools').length}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-blue-800 mt-1">
-                    Jars, shock tools, stabilizers &amp; fishing assemblies
-                  </div>
+                  <span className="font-bold text-blue-950 text-xs">🛠️ Downhole Tools</span>
+                  <span className="text-xs font-bold text-blue-900 bg-white/80 px-2 py-0.5 rounded border border-blue-200">
+                    View &rarr;
+                  </span>
                 </div>
 
                 <div
                   onClick={() => setActiveTab('Man Power')}
-                  className="p-3 bg-purple-50/50 border border-purple-200 rounded cursor-pointer hover:bg-purple-100/60 transition"
+                  className="px-2.5 py-1.5 bg-purple-50/50 border border-purple-200 rounded cursor-pointer hover:bg-purple-100/60 transition flex justify-between items-center"
                 >
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-purple-950">👷 Man Power Tab</span>
-                    <span className="text-lg font-extrabold font-mono text-purple-900">
-                      {lineItems.filter((i) => i.category === 'Man Power').length}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-purple-800 mt-1">
-                    Field drilling engineers, MWD specialists &amp; crew
-                  </div>
+                  <span className="font-bold text-purple-950 text-xs">👷 Man Power</span>
+                  <span className="text-xs font-bold text-purple-900 bg-white/80 px-2 py-0.5 rounded border border-purple-200">
+                    View &rarr;
+                  </span>
                 </div>
 
                 <div
                   onClick={() => setActiveTab('Inventory')}
-                  className="p-3 bg-amber-50/50 border border-amber-200 rounded cursor-pointer hover:bg-amber-100/60 transition"
+                  className="px-2.5 py-1.5 bg-amber-50/50 border border-amber-200 rounded cursor-pointer hover:bg-amber-100/60 transition flex justify-between items-center"
                 >
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-amber-950">📦 Inventory Assets Tab</span>
-                    <span className="text-lg font-extrabold font-mono text-amber-900">
-                      {lineItems.filter((i) => i.category === 'Inventory').length}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-amber-800 mt-1">
-                    Certified cargo baskets, pup joints &amp; crossovers
-                  </div>
+                  <span className="font-bold text-amber-950 text-xs">📦 Inventory Assets</span>
+                  <span className="text-xs font-bold text-amber-900 bg-white/80 px-2 py-0.5 rounded border border-amber-200">
+                    View &rarr;
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Estimated Commercial Financial Total */}
-            <div className="p-3 bg-[#1a3055] text-white rounded flex items-center justify-between">
-              <div>
-                <div className="font-bold text-sm">Active Period Estimated Billing ({MONTH_NAMES[selectedMonthIdx]} {selectedYear})</div>
-                <div className="text-xs text-slate-300">
-                  Total Standby ({overallCommercialTotal.grandSb} Days) + Total Ops ({overallCommercialTotal.grandOps} Days)
-                </div>
+            <div className="px-3 py-1.5 bg-[#1a3055] text-white rounded flex items-center justify-between">
+              <div className="text-xs font-bold">
+                Period Billing
               </div>
-              <div className="text-xl font-mono font-extrabold bg-[#ffd875] text-[#4a2e00] px-4 py-1.5 rounded border border-[#c8860d]">
+              <div className="text-sm font-mono font-extrabold bg-[#ffd875] text-[#4a2e00] px-2.5 py-0.5 rounded border border-[#c8860d]">
                 {rateConfig.currency} {overallCommercialTotal.grandRev.toLocaleString()}
               </div>
             </div>
 
-            {/* Monthly Invoicing Summary for this Job (August, September, etc. with Total Invoice for the job) */}
+            {/* Monthly Invoicing Summary for this Job */}
             <div className="border border-slate-200 rounded overflow-hidden bg-white shadow-2xs">
-              <div className="bg-[#e4eef8] px-3.5 py-2.5 border-b border-[#b8c9db] flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h3 className="font-bold text-xs uppercase tracking-wide text-[#1a3055] flex items-center gap-1.5">
-                    <span>🧾</span> 4. Monthly Invoicing Summary for Job ({currentJob.id})
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    High-level commercial values for months performed on this job with total invoice summary
-                  </p>
-                </div>
+              <div className="bg-[#e4eef8] px-2.5 py-1.5 border-b border-[#b8c9db] flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-bold text-xs uppercase tracking-wide text-[#1a3055] flex items-center gap-1.5">
+                  <span>🧾</span> Monthly Invoicing
+                </h3>
                 <button
                   onClick={() => setIsSubmitInvoiceModalOpen(true)}
-                  className="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1.5"
+                  className="px-2 py-0.5 rounded bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1"
                 >
                   <span>🧾</span> Submit for Invoice
                 </button>
@@ -1490,12 +1465,12 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                      <th className="py-2.5 px-3">Billing Month</th>
-                      <th className="py-2.5 px-3 text-center">Standby Days</th>
-                      <th className="py-2.5 px-3 text-center">Operating Days</th>
-                      <th className="py-2.5 px-3 text-right">Invoiced Net Amount</th>
-                      <th className="py-2.5 px-3 text-center">Invoice Status</th>
-                      <th className="py-2.5 px-3 text-center">Action</th>
+                      <th className="py-1.5 px-2.5">Billing Month</th>
+                      <th className="py-1.5 px-2.5 text-center">Standby Days</th>
+                      <th className="py-1.5 px-2.5 text-center">Operating Days</th>
+                      <th className="py-1.5 px-2.5 text-right">Invoiced Net Amount</th>
+                      <th className="py-1.5 px-2.5 text-center">Invoice Status</th>
+                      <th className="py-1.5 px-2.5 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -1506,28 +1481,28 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                           ms.isCurrentPeriod ? 'bg-amber-50/50 font-medium' : ''
                         }`}
                       >
-                        <td className="py-2.5 px-3">
-                          <div className="flex items-center gap-2">
+                        <td className="py-1.5 px-2.5">
+                          <div className="flex items-center gap-1.5">
                             <span className="font-bold text-slate-900 text-xs">
                               {ms.monthName} {ms.year}
                             </span>
                             {ms.isCurrentPeriod && (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-blue-100 text-blue-900 border border-blue-200">
-                                Active Period
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-blue-100 text-blue-900 border border-blue-200">
+                                Active
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="py-2.5 px-3 text-center font-mono text-blue-900 font-semibold">
+                        <td className="py-1.5 px-2.5 text-center font-mono text-blue-900 font-semibold">
                           {ms.standbyDays} Days
                         </td>
-                        <td className="py-2.5 px-3 text-center font-mono text-emerald-900 font-semibold">
+                        <td className="py-1.5 px-2.5 text-center font-mono text-emerald-900 font-semibold">
                           {ms.opsDays} Days
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 text-xs">
+                        <td className="py-1.5 px-2.5 text-right font-mono font-bold text-slate-900 text-xs">
                           {rateConfig.currency} {ms.invoicedAmount.toLocaleString()}
                         </td>
-                        <td className="py-2.5 px-3 text-center">
+                        <td className="py-1.5 px-2.5 text-center">
                           {ms.invoiceNumber ? (
                             <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-block">
                               {ms.invoiceNumber}
@@ -1538,14 +1513,14 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                             </span>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 text-center">
+                        <td className="py-1.5 px-2.5 text-center">
                           <button
                             onClick={() => {
                               setSelectedYear(ms.year);
                               setSelectedMonthIdx(ms.monthIdx);
                               setActiveTab('Tools');
                             }}
-                            className="px-2.5 py-1 text-[11px] font-bold text-[#1a3055] hover:text-blue-700 hover:underline cursor-pointer"
+                            className="px-2 py-0.5 text-[11px] font-bold text-[#1a3055] hover:text-blue-700 hover:underline cursor-pointer"
                           >
                             View Grid &rarr;
                           </button>
@@ -1555,20 +1530,20 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                   </tbody>
                   <tfoot>
                     <tr className="bg-[#1a3055] text-white font-bold border-t-2 border-[#c8860d]">
-                      <td className="py-2.5 px-3 text-xs uppercase tracking-wide">
-                        Total Invoice for Job ({currentJob.id})
+                      <td className="py-1.5 px-2.5 text-xs uppercase tracking-wide">
+                        Total Invoiced
                       </td>
-                      <td className="py-2.5 px-3 text-center font-mono text-blue-200">
+                      <td className="py-1.5 px-2.5 text-center font-mono text-blue-200">
                         {jobGrandTotal.totalSb} Days SB
                       </td>
-                      <td className="py-2.5 px-3 text-center font-mono text-emerald-200">
+                      <td className="py-1.5 px-2.5 text-center font-mono text-emerald-200">
                         {jobGrandTotal.totalOps} Days Ops
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-sm font-extrabold text-[#ffd875]">
+                      <td className="py-1.5 px-2.5 text-right font-mono text-xs font-extrabold text-[#ffd875]">
                         {rateConfig.currency} {jobGrandTotal.grandTotal.toLocaleString()}
                       </td>
-                      <td colSpan={2} className="py-2.5 px-3 text-right text-[11px] text-slate-300 font-normal">
-                        Accumulated across {jobMonthlySummaries.length} job billing periods
+                      <td colSpan={2} className="py-1.5 px-2.5 text-right text-[10px] text-slate-300 font-normal">
+                        Summary
                       </td>
                     </tr>
                   </tfoot>
@@ -1580,17 +1555,17 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
 
         {/* Tab Content 2: GRID FOR TOOLS, MAN POWER, OR INVENTORY */}
         {activeTab !== 'Header' && (
-          <div className="p-3 space-y-3">
-            {/* Epicor Controls & Parameters Bar (Matching Screenshot 3) */}
-            <div className="bg-[#f8fafc] border border-slate-200 rounded p-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
-              {/* Year & Month Selection matching Epicor */}
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <label className="font-bold text-slate-700">Year :</label>
+          <div className="p-2.5 space-y-2">
+            {/* Controls & Parameters Bar */}
+            <div className="bg-[#f8fafc] border border-slate-200 rounded p-2 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+              {/* Year & Month Selection */}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <label className="font-bold text-slate-700">Year:</label>
                   <select
                     value={selectedYear}
                     onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
-                    className="border border-slate-300 rounded px-2.5 py-1 bg-white font-mono font-bold text-slate-800 outline-none"
+                    className="border border-slate-300 rounded px-2 py-0.5 bg-white font-mono font-bold text-slate-800 outline-none"
                   >
                     <option value={2026}>2026</option>
                     <option value={2025}>2025</option>
@@ -1598,12 +1573,12 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                   </select>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <label className="font-bold text-slate-700">Month :</label>
+                <div className="flex items-center gap-1.5">
+                  <label className="font-bold text-slate-700">Month:</label>
                   <select
                     value={selectedMonthIdx}
                     onChange={(e) => setSelectedMonthIdx(parseInt(e.target.value, 10))}
-                    className="border border-slate-300 rounded px-2.5 py-1 bg-white font-bold text-slate-800 outline-none"
+                    className="border border-slate-300 rounded px-2 py-0.5 bg-white font-bold text-slate-800 outline-none"
                   >
                     {MONTH_NAMES.map((m, idx) => (
                       <option key={m} value={idx}>
@@ -1619,8 +1594,8 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search 100+ lines..."
-                    className="border border-slate-300 rounded px-2.5 py-1 bg-white w-48 outline-none text-xs"
+                    placeholder="Search lines..."
+                    className="border border-slate-300 rounded px-2 py-0.5 bg-white w-40 outline-none text-xs"
                   />
                   {searchQuery && (
                     <button onClick={() => setSearchQuery('')} className="text-slate-400 hover:text-slate-600 font-bold">
@@ -1630,70 +1605,82 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                 </div>
               </div>
 
-              {/* Exact Epicor Operational Guide Notice (as shown in Screenshot 3) */}
-              <div className="bg-white border border-blue-200 px-3 py-1 rounded shadow-2xs font-mono text-[11px] text-right">
-                <div className="font-bold text-emerald-800">Enter 1 for Operation</div>
-                <div className="font-bold text-blue-800">Enter S for Standby</div>
+              {/* Compact Legend */}
+              <div className="bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] font-mono text-slate-600">
+                <span className="font-bold text-emerald-800">1</span> = Ops &bull; <span className="font-bold text-blue-800">S</span> = Standby
               </div>
             </div>
 
-            {/* Epicor Action Buttons Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
-              <div className="flex flex-wrap items-center gap-1.5">
+            {/* Action Buttons Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-1.5">
+              <div className="flex flex-wrap items-center gap-1">
                 <button
                   onClick={handleCopy}
                   title="Copy active row or entire grid formatted for Excel (Ctrl+C)"
-                  className="px-3 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs border border-slate-300 cursor-pointer shadow-2xs flex items-center gap-1"
+                  className="px-2.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs border border-slate-300 cursor-pointer shadow-2xs flex items-center gap-1"
                 >
                   <span>📋</span> Copy
                 </button>
                 <button
                   onClick={handlePaste}
                   title="Paste values copied from Excel (Ctrl+V)"
-                  className="px-3 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs border border-slate-300 cursor-pointer shadow-2xs flex items-center gap-1"
+                  className="px-2.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs border border-slate-300 cursor-pointer shadow-2xs flex items-center gap-1"
                 >
                   <span>📥</span> Paste
                 </button>
                 <button
                   onClick={handleClearSelection}
                   title="Clear values from selected cells or active row"
-                  className="px-2.5 py-1 rounded bg-slate-50 text-slate-600 font-bold text-xs border border-slate-300 hover:bg-slate-100 cursor-pointer"
+                  className="px-2 py-0.5 rounded bg-slate-50 text-slate-600 font-bold text-xs border border-slate-300 hover:bg-slate-100 cursor-pointer"
                 >
-                  Clear Selection
+                  Clear
                 </button>
               </div>
 
               {/* Invoicing, Export & Scroller Navigators */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {/* Horizontal side scroller controls */}
-                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded border border-slate-300">
+                <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded border border-slate-300">
                   <button
                     onClick={() => handleScrollDays('left')}
                     title="Scroll Days Left"
-                    className="px-2 py-0.5 rounded bg-white hover:bg-slate-200 text-slate-700 font-bold cursor-pointer text-xs"
+                    className="px-1.5 py-0.5 rounded bg-white hover:bg-slate-200 text-slate-700 font-bold cursor-pointer text-xs"
                   >
-                    &larr; Days
+                    &larr;
                   </button>
                   <button
                     onClick={() => handleScrollDays('right')}
                     title="Scroll Days Right"
-                    className="px-2 py-0.5 rounded bg-white hover:bg-slate-200 text-slate-700 font-bold cursor-pointer text-xs"
+                    className="px-1.5 py-0.5 rounded bg-white hover:bg-slate-200 text-slate-700 font-bold cursor-pointer text-xs"
                   >
-                    Days &rarr;
+                    &rarr;
                   </button>
                 </div>
 
                 <button
                   onClick={handleExportXLSX}
-                  className="px-3 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-2xs cursor-pointer"
+                  className="px-2.5 py-0.5 rounded bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-2xs cursor-pointer"
                 >
-                  📥 Export XLSX
+                  Export XLSX
+                </button>
+                <button
+                  onClick={() => {
+                    if (onNavigate) {
+                      onNavigate('billing-package');
+                    } else {
+                      showToast(`Opening Invoice Package for ${selectedJobId}`, 'ok');
+                    }
+                  }}
+                  className="px-2.5 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1"
+                  title="Generate/View Draft Tax Invoice & Rental Calculation Ticket Package"
+                >
+                  <span>📑</span> Invoice Package &rarr;
                 </button>
                 <button
                   onClick={() => {
                     showToast(`Utilization submitted for invoice generation (${rateConfig.currency} ${monthTotals.totalRev.toLocaleString()})`, 'ok');
                   }}
-                  className="px-3 py-1 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-2xs cursor-pointer"
+                  className="px-2.5 py-0.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-2xs cursor-pointer"
                 >
                   Submit for Invoice
                 </button>
@@ -2447,6 +2434,34 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Document Attachment Modal for Rig Daily Log / Utilization */}
+      {isAttachModalOpen && currentJob && (
+        <DocumentAttachmentModal
+          title="Rig Daily Log &amp; Utilization Attachments"
+          subtitle={`Rig: ${currentJob.rig} | Well: ${currentJob.well} | Job: ${currentJob.id}`}
+          referenceNumber={`Rig ${currentJob.rig} Daily Sign-Off`}
+          sourceType="Utilization"
+          existingAttachments={currentJob.utilizationAttachments}
+          isSigned={currentJob.signedUtilizationAttached}
+          onSaveAttachments={(attachments) => {
+            const updatedJob: DrillingJob = {
+              ...currentJob,
+              signedUtilizationAttached: attachments.length > 0,
+              utilizationAttachments: attachments,
+              notes: currentJob.notes
+                ? `${currentJob.notes}\n[${attachments.length} Rig Log/Utilization Document(s) attached: ${attachments.map((a) => a.name).join(', ')}]`
+                : `[${attachments.length} Rig Log/Utilization Document(s) attached: ${attachments.map((a) => a.name).join(', ')}]`,
+            };
+            if (onUpdateJob) {
+              onUpdateJob(updatedJob);
+            }
+            setIsAttachModalOpen(false);
+            showToast(`Saved ${attachments.length} signed rig document(s) for Job ${currentJob.id}.`, 'ok');
+          }}
+          onClose={() => setIsAttachModalOpen(false)}
+        />
       )}
 
       {/* Floating Toast Notification */}

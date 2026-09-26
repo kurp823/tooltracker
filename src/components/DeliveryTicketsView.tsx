@@ -545,12 +545,22 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Ribbon */}
-      <div className="bg-white border border-[#b8c9db] rounded p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-        <div>
-          <div className="text-[11px] text-slate-500 font-medium">Logistics &amp; Dispatch</div>
-          <h1 className="text-base font-bold text-[#1a3055]">Delivery Tickets (DT) Manifests</h1>
+      <div className="bg-white border border-[#b8c9db] rounded-lg px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+        <div className="flex items-center gap-3">
+          <div>
+            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Logistics &amp; Dispatch</div>
+            <h1 className="text-sm font-bold text-[#1a3055]">Delivery Tickets (DT) Manifests</h1>
+          </div>
+          <div className="hidden sm:flex items-center gap-1.5 pl-3 border-l border-slate-200">
+            <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px] font-semibold">
+              Total: {dtBatches.length}
+            </span>
+            <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 text-[11px] font-semibold border border-blue-200">
+              On Rig: {dtBatches.filter((b) => (b.toolLines || []).some((t) => (t.status || (t.rtBatchId ? 'Returned' : 'OnRig')) === 'OnRig')).length}
+            </span>
+          </div>
         </div>
         {user?.role !== 'Viewer' && (
           <button
@@ -559,31 +569,32 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
               setCheckedToolIds([]);
               onOpenNewDT();
             }}
-            className="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-sm transition cursor-pointer"
+            className="h-7 px-3 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-2xs transition cursor-pointer flex items-center gap-1.5"
           >
-            + New Delivery Ticket
+            <span>+</span>
+            <span>New Delivery Ticket</span>
           </button>
         )}
       </div>
 
-      {/* Tabs & Search & Expand/Collapse All (Request #7) */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex bg-white rounded border border-[#b8c9db] p-0.5">
+      {/* Tabs & Search & Filters */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex bg-slate-100 rounded-md border border-[#b8c9db] p-0.5">
           <button
             onClick={() => setTab('onrig')}
-            className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
-              tab === 'onrig' ? 'bg-[#1a3055] text-white' : 'text-slate-600 hover:text-slate-900'
+            className={`px-2.5 py-1 rounded text-xs font-bold transition cursor-pointer ${
+              tab === 'onrig' ? 'bg-[#1a3055] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            🛢 Tools On Rig ({dtBatches.filter((b) => (b.toolLines || []).some((t) => (t.status || (t.rtBatchId ? 'Returned' : 'OnRig')) === 'OnRig')).length})
+            Tools On Rig ({dtBatches.filter((b) => (b.toolLines || []).some((t) => (t.status || (t.rtBatchId ? 'Returned' : 'OnRig')) === 'OnRig')).length})
           </button>
           <button
             onClick={() => setTab('all')}
-            className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
-              tab === 'all' ? 'bg-[#1a3055] text-white' : 'text-slate-600 hover:text-slate-900'
+            className={`px-2.5 py-1 rounded text-xs font-bold transition cursor-pointer ${
+              tab === 'all' ? 'bg-[#1a3055] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            📋 All Tickets ({dtBatches.length})
+            All Tickets ({dtBatches.length})
           </button>
         </div>
 
@@ -593,56 +604,64 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search DT #, job, rig, well, RM ref, serial..."
-            className="bg-white border border-[#b8c9db] rounded px-3 py-1.5 text-xs w-64 outline-none font-medium focus:ring-1 focus:ring-amber-400 shadow-2xs"
+            className="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs w-64 outline-none font-medium focus:ring-1 focus:ring-amber-400 shadow-2xs"
           />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="text-xs text-slate-500 hover:text-slate-800 font-bold underline cursor-pointer"
+            >
+              Clear
+            </button>
+          )}
         </div>
       </div>
 
       {/* DT List (Clean, Professional, Compact Ledger) */}
-      <div className="bg-white border border-[#b8c9db] rounded overflow-hidden shadow-sm">
+      <div className="bg-white border border-[#b8c9db] rounded-lg overflow-hidden shadow-2xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold select-none">
+            <thead className="bg-slate-100/80 text-[#1a3055] border-b border-[#b8c9db] font-bold select-none text-[11px]">
               <tr>
                 <th
                   onClick={() => handleSortToggle('dtNumber')}
-                  className="px-3 py-2.5 cursor-pointer hover:bg-slate-100"
+                  className="px-2.5 py-1.5 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap"
                 >
                   DT Number {sortField === 'dtNumber' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
                 </th>
                 <th
                   onClick={() => handleSortToggle('jobId')}
-                  className="px-3 py-2.5 cursor-pointer hover:bg-slate-100"
+                  className="px-2.5 py-1.5 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap"
                 >
                   Job # {sortField === 'jobId' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
                 </th>
                 <th
                   onClick={() => handleSortToggle('rig')}
-                  className="px-3 py-2.5 cursor-pointer hover:bg-slate-100"
+                  className="px-2.5 py-1.5 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap"
                 >
                   Rig / Well {sortField === 'rig' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
                 </th>
                 <th
                   onClick={() => handleSortToggle('contract')}
-                  className="px-3 py-2.5 cursor-pointer hover:bg-slate-100"
+                  className="px-2.5 py-1.5 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap"
                 >
                   Contract # {sortField === 'contract' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
                 </th>
-                <th className="px-3 py-2.5">RM Ref</th>
+                <th className="px-2.5 py-1.5 whitespace-nowrap">RM Ref</th>
                 <th
                   onClick={() => handleSortToggle('date')}
-                  className="px-3 py-2.5 cursor-pointer hover:bg-slate-100"
+                  className="px-2.5 py-1.5 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap"
                 >
                   Dispatch Date {sortField === 'date' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
                 </th>
-                <th className="px-3 py-2.5 text-center">Signed Copy</th>
-                <th className="px-3 py-2.5 text-center">Total Tools</th>
-                <th className="px-3 py-2.5 text-center">On Rig</th>
-                <th className="px-3 py-2.5 text-center">Returned</th>
-                <th className="px-3 py-2.5 text-center">Actions</th>
+                <th className="px-2.5 py-1.5 text-center whitespace-nowrap">Signed Copy</th>
+                <th className="px-2.5 py-1.5 text-center whitespace-nowrap">Total Tools</th>
+                <th className="px-2.5 py-1.5 text-center whitespace-nowrap">On Rig</th>
+                <th className="px-2.5 py-1.5 text-center whitespace-nowrap">Returned</th>
+                <th className="px-2.5 py-1.5 text-center whitespace-nowrap">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#e2e8f0]">
+            <tbody className="divide-y divide-slate-100">
               {filteredDTs.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="p-8 text-center text-slate-500 font-medium">
@@ -672,36 +691,34 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                       }`}
                       title="Click to view full ticket details and mobilized tools"
                     >
-                      <td className="px-3 py-2.5">
-                        <span className="inline-flex items-center gap-1.5 font-mono font-bold text-amber-900 group hover:text-blue-700">
-                          <span className="text-blue-600 text-[12px]">📄</span>
-                          <span className="underline decoration-amber-300 group-hover:decoration-blue-500 font-bold">
-                            {b.dtNumber}
-                          </span>
+                      <td className="px-2.5 py-1.5 whitespace-nowrap">
+                        <span className="font-mono font-bold text-slate-900 group-hover:text-blue-700 transition">
+                          {b.dtNumber}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-[11px] text-blue-700 font-semibold">{b.jobId}</td>
-                      <td className="px-3 py-2.5 font-medium text-slate-800">
-                        {b.rig} <span className="text-slate-400">|</span> {b.well}
+                      <td className="px-2.5 py-1.5 font-mono text-[11px] text-blue-700 font-semibold whitespace-nowrap">{b.jobId}</td>
+                      <td className="px-2.5 py-1.5 text-slate-800 whitespace-nowrap">
+                        <span className="font-bold text-slate-900">{b.rig}</span>{' '}
+                        <span className="text-slate-400 font-normal">|</span>{' '}
+                        <span className="font-normal text-slate-700">{b.well}</span>
                       </td>
-                      <td className="px-3 py-2.5 font-medium text-slate-800">
+                      <td className="px-2.5 py-1.5 text-slate-800 whitespace-nowrap">
                         {displayContract !== '—' ? (
-                          <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-[#1a3055] bg-slate-100/90 px-2 py-0.5 rounded border border-slate-200">
-                            <span className="text-slate-400 text-[10px]">📋</span>
+                          <span className="inline-flex items-center font-mono text-[11px] font-medium text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
                             {displayContract}
                           </span>
                         ) : (
                           <span className="text-slate-400 font-mono text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-slate-500 text-[11px]">{b.rmRef || '—'}</td>
-                      <td className="px-3 py-2.5 font-mono text-slate-700">{b.rmDate}</td>
-                      <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-2.5 py-1.5 font-mono text-slate-500 text-[11px] whitespace-nowrap">{b.rmRef || '—'}</td>
+                      <td className="px-2.5 py-1.5 font-mono text-slate-700 whitespace-nowrap">{b.rmDate}</td>
+                      <td className="px-2.5 py-1.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         {b.isSigned || b.signedDocUrl ? (
                           <button
                             type="button"
                             onClick={() => setAttachTargetDT(b)}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200 cursor-pointer shadow-2xs"
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200 cursor-pointer shadow-2xs"
                             title="Click to view or replace signed ticket"
                           >
                             <span>✓</span> Signed Copy
@@ -710,55 +727,55 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                           <button
                             type="button"
                             onClick={() => setAttachTargetDT(b)}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 cursor-pointer shadow-2xs"
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 cursor-pointer shadow-2xs"
                             title="Click to attach signed and stamped ticket"
                           >
                             <span>📎</span> Attach Signed
                           </button>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 font-mono font-bold text-center">
-                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 text-[11px] font-bold border border-slate-200">
+                      <td className="px-2.5 py-1.5 font-mono font-bold text-center whitespace-nowrap">
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 text-[11px] font-bold border border-slate-200">
                           {b.toolLines?.length || 0}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 font-mono font-bold text-center">
+                      <td className="px-2.5 py-1.5 font-mono font-bold text-center whitespace-nowrap">
                         {onRig > 0 ? (
-                          <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[11px] font-bold border border-blue-200">
+                          <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[11px] font-bold border border-blue-200">
                             {onRig}
                           </span>
                         ) : (
                           <span className="text-slate-400 font-normal">0</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-center">
+                      <td className="px-2.5 py-1.5 font-mono text-center whitespace-nowrap">
                         {ret > 0 ? (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-200">
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-200">
                             {ret}
                           </span>
                         ) : (
                           <span className="text-slate-400 font-normal">0</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-center space-x-1.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-2.5 py-1.5 text-center space-x-1 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
                           onClick={() => {
                             setSelectedDTId(b.id);
                             setModalToolSearch('');
                           }}
-                          className="px-2 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-[11px] border border-blue-200 cursor-pointer transition shadow-2xs"
+                          className="h-6 px-2 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-[11px] border border-blue-200 cursor-pointer transition shadow-2xs"
                           title="Open full ticket details window"
                         >
-                          View Details
+                          Details
                         </button>
                         <button
                           type="button"
                           onClick={() => handlePrintDT(b)}
-                          className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold border border-slate-300 cursor-pointer transition shadow-2xs"
+                          className="h-6 px-2 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-medium border border-slate-300 cursor-pointer transition shadow-2xs"
                           title="Print Delivery Ticket"
                         >
-                          🖨 Print
+                          Print
                         </button>
                       </td>
                     </tr>
@@ -1327,9 +1344,6 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
               return (
                 <div className="px-5 py-3.5 bg-[#1a3055] text-white flex justify-between items-center flex-shrink-0">
                   <div className="flex items-center gap-3">
-                    <span className="p-2 rounded-lg bg-blue-500/20 text-amber-300 text-base">
-                      📄
-                    </span>
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-base tracking-wide text-white">
@@ -1685,13 +1699,33 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
       {/* Document Attachment Modal */}
       {attachTargetDT && (
         <DocumentAttachmentModal
-          title="Delivery Ticket Attachment"
+          title="Delivery Ticket & Manifest Attachments"
           subtitle={`Rig: ${attachTargetDT.rig} | Well: ${attachTargetDT.well} | Job: ${attachTargetDT.jobId}`}
           referenceNumber={attachTargetDT.dtNumber}
+          sourceType="DT"
+          existingAttachments={attachTargetDT.attachments}
           currentDocUrl={attachTargetDT.signedDocUrl}
           currentDocName={attachTargetDT.signedDocName}
           currentSignedDate={attachTargetDT.signedDate}
           isSigned={attachTargetDT.isSigned}
+          onSaveAttachments={(attachments) => {
+            const primary = attachments[0];
+            const updated: DTBatch = {
+              ...attachTargetDT,
+              isSigned: attachments.length > 0,
+              signedDocUrl: primary?.url || '',
+              signedDocName: primary?.name || '',
+              signedDate: primary?.uploadDate || attachTargetDT.signedDate,
+              attachments,
+              notes: attachTargetDT.notes
+                ? `${attachTargetDT.notes}\n[${attachments.length} Document(s) attached by ${user?.name || 'User'}: ${attachments.map(a => a.name).join(', ')}]`
+                : `[${attachments.length} Document(s) attached by ${user?.name || 'User'}: ${attachments.map(a => a.name).join(', ')}]`,
+            };
+            if (onUpdateDTBatch) {
+              onUpdateDTBatch(updated);
+            }
+            setAttachTargetDT(null);
+          }}
           onSave={({ docUrl, docName, signedDate }) => {
             const updated: DTBatch = {
               ...attachTargetDT,

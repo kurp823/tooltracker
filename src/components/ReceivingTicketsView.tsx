@@ -1301,13 +1301,35 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
       {/* Document Attachment Modal */}
       {attachTargetRT && (
         <DocumentAttachmentModal
-          title="Receiving Ticket Attachment"
+          title="Receiving Ticket & Demob Attachments"
           subtitle={`Rig: ${attachTargetRT.rig} | Well: ${attachTargetRT.well} | Job: ${attachTargetRT.jobId}`}
           referenceNumber={attachTargetRT.rtNumber}
+          sourceType="RT"
+          existingAttachments={attachTargetRT.attachments}
           currentDocUrl={attachTargetRT.signedDocUrl}
           currentDocName={attachTargetRT.signedDocName}
           currentSignedDate={attachTargetRT.signedDate}
           isSigned={attachTargetRT.isSigned}
+          onSaveAttachments={(attachments) => {
+            const primary = attachments[0];
+            const updated: RTBatch = {
+              ...attachTargetRT,
+              isSigned: attachments.length > 0,
+              signedDocUrl: primary?.url || '',
+              signedDocName: primary?.name || '',
+              signedDate: primary?.uploadDate || attachTargetRT.signedDate || new Date().toISOString().split('T')[0],
+              attachments,
+              notes: attachTargetRT.notes
+                ? `${attachTargetRT.notes}\n[${attachments.length} Document(s) attached: ${attachments.map(a => a.name).join(', ')}]`
+                : `[${attachments.length} Document(s) attached: ${attachments.map(a => a.name).join(', ')}]`,
+            };
+            if (onUpdateRTBatch) {
+              onUpdateRTBatch(updated);
+            } else {
+              onSaveRTBatch(updated);
+            }
+            setAttachTargetRT(null);
+          }}
           onSave={({ docUrl, docName, signedDate }) => {
             const updated: RTBatch = {
               ...attachTargetRT,
