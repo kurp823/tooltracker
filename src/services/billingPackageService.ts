@@ -1,36 +1,4 @@
-import { CalculationTicketLine, DraftInvoicePackageData, DrillingJob, ContractRecord, DTBatch, RTBatch, AttachedDoc, ContractRateItem } from '../types';
-import { getToolRate } from './toolRates';
-import { getEpicorLine } from './epicorHistoricalLines';
-
-/**
- * Match a tool line to a contract rate row using ShortDesc + Size + HoleSection.
- * Falls back to ShortDesc+Size, then ShortDesc only.
- */
-function findContractRate(
-  shortDesc: string,
-  size: string,
-  holeSection: string,
-  rates: ContractRateItem[]
-): ContractRateItem | undefined {
-  if (!rates || rates.length === 0) return undefined;
-  const sd = (shortDesc || '').toLowerCase().trim();
-  const sz = (size || '').toLowerCase().trim();
-  const hs = (holeSection || '').toLowerCase().trim();
-  return (
-    rates.find(
-      (r) =>
-        (r.shortDesc || '').toLowerCase().trim() === sd &&
-        (r.size || '').toLowerCase().trim() === sz &&
-        (r.holeSection || '').toLowerCase().trim() === hs
-    ) ||
-    rates.find(
-      (r) =>
-        (r.shortDesc || '').toLowerCase().trim() === sd &&
-        (r.size || '').toLowerCase().trim() === sz
-    ) ||
-    rates.find((r) => (r.shortDesc || '').toLowerCase().trim() === sd)
-  );
-}
+import { CalculationTicketLine, DraftInvoicePackageData, DrillingJob, ContractRecord, DTBatch, RTBatch, AttachedDoc } from '../types';
 
 /**
  * Standard fixed conversion rate applied by EMDAD for UAE tax invoices
@@ -205,8 +173,6 @@ export function generateInvoicePackageForJob(
     invoiceDate?: string;
     dateOfSupply?: string;
     poNo?: string;
-    /** Live contract rates fetched from tbl_ContractRates for this job's contract */
-    contractRates?: ContractRateItem[];
   }
 ): DraftInvoicePackageData {
   // Normalize job keys
@@ -355,32 +321,12 @@ export function generateInvoicePackageForJob(
         const serial = tl.serial || tl.assetNo;
         if (!serial) return;
 
-        // Rate priority:
-        // 1. CONTRACT_444558_RATES[serial] — exact serial match (preserves schedule refs)
-        // 2. tbl_ContractRates match by ShortDesc+Size — live DB contract schedule (ongoing jobs)
-        // 3. toolRates.ts CSV-derived rate — historical Epicor fallback
-        // 4. Hardcoded fallback
-        const dbRate = findContractRate(
-          tl.ShortDesc || tl.shortDesc || tl.toolDescription || '',
-          tl.Size || tl.size || '',
-          job.holeSection || '',
-          options?.contractRates || []
-        );
-        const csvRate = getToolRate(serial);
-        const rateLookup = CONTRACT_444558_RATES[serial] ||
-          (dbRate
-            ? {
-                contractRefOper: dbRate.contractRef || 'A.4.1',
-                contractRefStandby: dbRate.contractRef || 'A.4.1',
-                operRate: dbRate.opsRate,
-                standbyRate: dbRate.standbyRate,
-              }
-            : {
-                contractRefOper: 'A.4.1',
-                contractRefStandby: 'A.4.1',
-                operRate: csvRate.operRate,
-                standbyRate: csvRate.standbyRate > 0 ? csvRate.standbyRate : 25.0,
-              });
+        const rateLookup = CONTRACT_444558_RATES[serial] || {
+          contractRefOper: 'A.4.1',
+          contractRefStandby: 'A.4.1',
+          operRate: 0,
+          standbyRate: 25.0,
+        };
 
         const rtBatch = jobRTs.find((rt) =>
           (rt.toolLines || []).some((rtl) => rtl.serial === serial)
@@ -390,18 +336,8 @@ export function generateInvoicePackageForJob(
         const returnDate = formatJobDisplayDate(rtBatch?.rtDate || demobDateRaw);
 
         const isOper = tl.used === true;
-
-        // Use Epicor historical oper/standby day split when available (exact ERP data).
-        // Fall back to: 25% of rental days as oper if marked used, else 0.
-        const historicalLine = getEpicorLine(job.id, serial);
-        const operDays = historicalLine
-          ? historicalLine.o
-          : isOper
-            ? Math.max(1, Math.round(rentalDays * 0.25))
-            : 0;
-        const standbyDays = historicalLine
-          ? historicalLine.s
-          : Math.max(0, rentalDays - operDays);
+        const operDays = isOper ? 2 : 0;
+        const standbyDays = Math.max(0, rentalDays - operDays);
         const operTotalUSD = operDays * rateLookup.operRate;
         const standbyTotalUSD = Math.round(standbyDays * rateLookup.standbyRate * 100) / 100;
         const totalChargesUSD = Math.round((operTotalUSD + standbyTotalUSD) * 100) / 100;
