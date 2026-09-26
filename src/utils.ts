@@ -51,6 +51,50 @@ export function formatDateDDMMYY(value?: string | Date | null): string {
 }
 
 /**
+ * Formats any date string or Date object into standard dd/mm/yyyy format (e.g., 01/09/2026)
+ */
+export function formatDateDDMMYYYY(value?: string | Date | null): string {
+  if (!value) return '';
+  
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return '';
+    const d = String(value.getDate()).padStart(2, '0');
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const yyyy = String(value.getFullYear());
+    return `${d}/${m}/${yyyy}`;
+  }
+
+  const str = String(value).trim();
+  if (!str || str === 'null' || str === 'undefined') return '';
+
+  // If already formatted like DD/MM/YYYY
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
+    const parts = str.split('/');
+    return `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[2]}`;
+  }
+
+  // Handle YYYY-MM-DD or ISO strings like 2026-09-01T... or 2024-02-01T00:00:00.000Z
+  const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    const y = isoMatch[1];
+    const m = isoMatch[2].padStart(2, '0');
+    const d = isoMatch[3].padStart(2, '0');
+    return `${d}/${m}/${y}`;
+  }
+
+  // Fallback try standard Date parsing
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    const d = String(parsed.getDate()).padStart(2, '0');
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const yyyy = String(parsed.getFullYear());
+    return `${d}/${m}/${yyyy}`;
+  }
+
+  return str;
+}
+
+/**
  * Format quantity as clean whole number or stripped decimals (e.g. 1 instead of 1.000000)
  */
 export function formatQty(val?: number | string | null): string {
