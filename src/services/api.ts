@@ -402,7 +402,13 @@ export function normalizeDTLine(row: any): any {
     status,
     ownership,
     isEmdad,
-    used: row.used ?? null,
+    used: row.used != null
+      ? Boolean(row.used)
+      : row.usedStatus === 'used'
+        ? true
+        : row.usedStatus === 'not used'
+          ? false
+          : null,
     rtBatchId: row.rtBatchId || row.RTBatchID || null,
   };
 }
@@ -539,8 +545,16 @@ export function normalizeRTLine(row: any): any {
     desc: finalDesc,
     toolDescription: finalDesc,
     size,
-    used: Boolean(row.used ?? row.Used ?? false),
-    routedTo: String(row.routedTo || row.RoutedTo || (row.used ? 'Inspection Bay' : 'Base Stock')),
+    used: row.used != null
+      ? Boolean(row.used)
+      : row.Used != null
+        ? Boolean(row.Used)
+        : row.usedStatus === 'used'
+          ? true
+          : row.usedStatus === 'not used'
+            ? false
+            : false,
+    routedTo: String(row.routedTo || row.RoutedTo || (row.used || row.Used || row.usedStatus === 'used' ? 'Inspection Bay' : 'Base Stock')),
     condition: String(row.condition || row.Condition || 'Good condition'),
     ownership: String(row.ownership || row.Ownership || 'EMDAD'),
     remarks: String(row.remarks || row.Remarks || ''),
@@ -1832,6 +1846,42 @@ export async function saveGatePassApi(gatePass: any): Promise<{ success: boolean
   } catch {
     return { success: true, message: 'Saved locally' };
   }
+}
+
+/**
+ * Maps a job's client/contract fields to the ContractCode used in tbl_ContractRates.
+ */
+export function jobToContractCode(job: { client?: string; contract?: string }): string {
+  const client = (job.client || '').toUpperCase();
+  const contract = (job.contract || '').toUpperCase();
+  if (client.includes('OFFSHORE') || contract === '444558') return 'AOF';
+  if (client.includes('ONSHORE') || client.includes('ADCO')) return 'AON';
+  if (client.includes('DRILLING')) return 'ADD';
+  if (contract.startsWith('TW-') || client.includes('TURNWELL')) return 'TWL';
+  return 'AON'; // safe default
+}
+
+/**
+ * Fetches contract rates from tbl_ContractRates for the given ContractCode
+ * (AOF / AON / ADD / TWL / ADF-UZ / ADF-UDR).
+ */
+export async function fetchContractRates(contractCode: string): Promise<import('../types').ContractRateItem[]> {
+  const res = await fetchFromApi<any[]>('getcontractrates', { code: contractCode });
+  if (!res || !Array.isArray(res)) return [];
+  return res.map((r: any) => ({
+    no: r.RateID || '',
+    contractRef: r.Notes || '',
+    category: r.Category || '',
+    shortDesc: r.EMDADShortDesc || '',
+    size: r.Size || '',
+    holeSection: r.HoleSection || '',
+    opsRate: Number(r.OpsRate) || 0,
+    standbyRate: Number(r.StandbyRate) || 0,
+    runCharges: r.RunCharges ?? null,
+    monthlyCharges: null,
+    redress: r.Redress ?? null,
+    currency: r.Currency || 'USD',
+  }));
 }
 
 export async function saveContractApi(contract: any): Promise<{ success: boolean; message: string }> {
