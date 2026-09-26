@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ContractRecord, ContractRateItem, User } from '../types';
+import { fetchContractRates } from '../services/api';
 import { 
   X, 
   Plus, 
@@ -29,9 +30,34 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
   onClose,
 }) => {
   const [rates, setRates] = useState<ContractRateItem[]>(contract.rates || []);
+  const [loadingRates, setLoadingRates] = useState(false);
+  const [ratesLoadError, setRatesLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selectedHoleSection, setSelectedHoleSection] = useState<string>('ALL');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+
+  // Load rates from tbl_ContractRates on open if not already populated
+  useEffect(() => {
+    const code = contract.client; // e.g. "AON", "AOF", "ADD", "TWL"
+    if (!code) return;
+    setLoadingRates(true);
+    setRatesLoadError(null);
+    fetchContractRates(code)
+      .then((dbRates) => {
+        if (dbRates && dbRates.length > 0) {
+          setRates(dbRates);
+        } else if (!contract.rates?.length) {
+          setRatesLoadError(`No rates found in DB for ${code}. You can add them manually below.`);
+        }
+      })
+      .catch(() => {
+        if (!contract.rates?.length) {
+          setRatesLoadError('Could not load rates from database. Check connection or add manually.');
+        }
+      })
+      .finally(() => setLoadingRates(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contract.id]);
   
   // Modals / forms state
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -306,6 +332,22 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
             <span>Standby Discount: <strong className="text-white">{contract.standbyDiscountPct ?? 50}%</strong></span>
           </div>
         </div>
+
+        {/* DB load status banner */}
+        {loadingRates && (
+          <div className="bg-blue-50 border-b border-blue-200 px-6 py-2 text-xs text-blue-800 flex items-center gap-2">
+            <svg className="animate-spin h-3.5 w-3.5 text-blue-600" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+            </svg>
+            Loading rates from database for <strong className="ml-1">{contract.client}</strong>…
+          </div>
+        )}
+        {ratesLoadError && !loadingRates && (
+          <div className="bg-amber-50 border-b border-amber-200 px-6 py-2 text-xs text-amber-800 flex items-center gap-2">
+            ⚠️ {ratesLoadError}
+          </div>
+        )}
 
         {/* TOOLBAR & CONTROLS */}
         <div className="bg-slate-50 p-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
