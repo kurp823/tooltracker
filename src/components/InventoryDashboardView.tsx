@@ -268,42 +268,42 @@ export const InventoryDashboardView: React.FC<InventoryDashboardViewProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* 1. Executive Operations Header */}
-      <div className="bg-gradient-to-r from-[#0f1e36] via-[#1a3055] to-[#24426d] text-white rounded-lg p-4 shadow-md border border-slate-700">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Fleet Telemetry Live
-              </span>
-              <span className="text-slate-400 text-xs">&bull;</span>
-              <span className="text-[11px] font-mono text-slate-300">
-                Base: Mussafah Industrial Hub &bull; Abu Dhabi
-              </span>
+      {/* 1. Executive Operations Header - Clean & Compact */}
+      <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-2xs space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="p-1.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+              <Boxes className="w-4 h-4" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-bold text-slate-900">
+                  Downhole Assets &amp; Inventory Command Center
+                </h1>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Operational readiness &bull; Mussafah Industrial Hub, Abu Dhabi
+              </p>
             </div>
-            <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-              <Boxes className="w-5 h-5 text-amber-400" />
-              Downhole Assets &amp; Inventory Command Center
-            </h1>
-            <p className="text-xs text-slate-300 max-w-2xl">
-              Real-time operational readiness, downhole fleet run-life, rig site deployments, and certified workshop turnover.
-            </p>
           </div>
 
           {/* Action Hub */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             {onOpenAddAsset && user?.role !== 'Viewer' && (
               <button
                 onClick={onOpenAddAsset}
-                className="px-3.5 py-1.5 rounded-md bg-[#ffd875] text-[#3a2500] font-bold text-xs hover:bg-[#ffe399] transition shadow cursor-pointer flex items-center gap-1.5"
+                className="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs transition shadow-2xs cursor-pointer flex items-center gap-1"
               >
                 <span>+</span> Add New Asset
               </button>
             )}
             <button
               onClick={() => onNavigate('inventory')}
-              className="px-3.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition cursor-pointer flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-300 transition cursor-pointer flex items-center gap-1 shadow-2xs"
             >
               <span>Browse Catalog</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
@@ -312,13 +312,13 @@ export const InventoryDashboardView: React.FC<InventoryDashboardViewProps> = ({
         </div>
 
         {/* View Mode Switcher Tabs */}
-        <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-white/10 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 text-xs">
           <button
             onClick={() => setActiveTab('analytics')}
-            className={`px-3 py-1.5 rounded font-bold transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1 rounded font-semibold transition cursor-pointer flex items-center gap-1.5 text-xs ${
               activeTab === 'analytics'
-                ? 'bg-amber-400 text-slate-950 shadow-sm'
-                : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
             }`}
           >
             <Activity className="w-3.5 h-3.5" />
@@ -326,10 +326,10 @@ export const InventoryDashboardView: React.FC<InventoryDashboardViewProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('rigs')}
-            className={`px-3 py-1.5 rounded font-bold transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1 rounded font-semibold transition cursor-pointer flex items-center gap-1.5 text-xs ${
               activeTab === 'rigs'
-                ? 'bg-amber-400 text-slate-950 shadow-sm'
-                : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
             }`}
           >
             <Truck className="w-3.5 h-3.5" />
@@ -337,10 +337,10 @@ export const InventoryDashboardView: React.FC<InventoryDashboardViewProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('pipeline')}
-            className={`px-3 py-1.5 rounded font-bold transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1 rounded font-semibold transition cursor-pointer flex items-center gap-1.5 text-xs ${
               activeTab === 'pipeline'
-                ? 'bg-amber-400 text-slate-950 shadow-sm'
-                : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
             }`}
           >
             <Wrench className="w-3.5 h-3.5" />
@@ -348,10 +348,10 @@ export const InventoryDashboardView: React.FC<InventoryDashboardViewProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('categories')}
-            className={`px-3 py-1.5 rounded font-bold transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1 rounded font-semibold transition cursor-pointer flex items-center gap-1.5 text-xs ${
               activeTab === 'categories'
-                ? 'bg-amber-400 text-slate-950 shadow-sm'
-                : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />

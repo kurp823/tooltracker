@@ -311,7 +311,6 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold select-none">
               <tr>
-                <th className="px-2 py-2 w-8 text-center"></th>
                 <th
                   onClick={() => handleSortToggle('gpNumber')}
                   className="px-3 py-2 cursor-pointer hover:bg-slate-100"
@@ -339,99 +338,55 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
             <tbody className="divide-y divide-[#e2e8f0]">
               {filteredGatePasses.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500 font-medium">
+                  <td colSpan={7} className="p-8 text-center text-slate-500 font-medium">
                     No security gate passes issued yet.
                   </td>
                 </tr>
               ) : (
                 filteredGatePasses.map((gp) => {
-                  const isOpen = Boolean(openGPKeys[gp.id]);
-
                   return (
-                    <React.Fragment key={gp.id}>
-                      <tr
-                        className={`transition cursor-pointer ${
-                          isOpen ? 'bg-[#edf4fb]' : 'hover:bg-[#f3f7fb]'
-                        }`}
-                        onClick={() =>
-                          setOpenGPKeys((prev) => ({
-                            ...prev,
-                            [gp.id]: !prev[gp.id],
-                          }))
-                        }
-                      >
-                        <td className="px-2 py-2 text-center text-slate-400 font-bold">
-                          {isOpen ? '▲' : '▼'}
-                        </td>
-                        <td className="px-3 py-2 font-mono font-bold text-amber-900">{gp.gpNumber}</td>
-                        <td className="px-3 py-2 font-bold text-[#1a3055]">{gp.supplier}</td>
-                        <td className="px-3 py-2 font-mono">{formatDateDDMMYY(gp.gpDate)}</td>
-                        <td className="px-3 py-2 font-mono font-bold text-center">{gp.toolLines?.length || 0}</td>
-                        <td className="px-3 py-2">{gp.preparedBy}</td>
-                        <td className="px-3 py-2">{gp.authorizedBy || '—'}</td>
-                        <td className="px-3 py-2 text-center space-x-2" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={() => setSelectedGPDetail(gp)}
-                            className="text-blue-700 hover:underline font-bold text-[11px] cursor-pointer"
-                          >
-                            View
-                          </button>
-                          <button
-                            onClick={() => handlePrintGP(gp)}
-                            className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[10px] font-bold border border-slate-300 cursor-pointer"
-                          >
-                            🖨 Print
-                          </button>
-                        </td>
-                      </tr>
-
-                      {isOpen && (
-                        <tr className="bg-slate-50/80">
-                          <td colSpan={8} className="p-4 border-t border-b border-slate-200">
-                            <div className="space-y-2">
-                              <div className="font-bold text-[#1a3055] text-xs">
-                                Returned Tools to {gp.supplier} under {gp.gpNumber}
-                              </div>
-                              <div className="border border-[#b8c9db] rounded overflow-hidden bg-white">
-                                <table className="w-full text-left text-xs border-collapse">
-                                  <thead className="bg-[#eef3f9] text-[#1a3055] font-bold border-b border-[#b8c9db]">
-                                    <tr>
-                                      <th className="px-3 py-1.5 w-10">#</th>
-                                      <th className="px-3 py-1.5">Serial / ID</th>
-                                      <th className="px-3 py-1.5">Size</th>
-                                      <th className="px-3 py-1.5">Tool Category</th>
-                                      <th className="px-3 py-1.5">Owner Vendor</th>
-                                      <th className="px-3 py-1.5 text-center">Status</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-200">
-                                    {gp.toolLines.map((t, i) => (
-                                      <tr key={i} className="hover:bg-slate-50">
-                                        <td className="px-3 py-1.5 text-slate-400 font-mono">{i + 1}</td>
-                                        <td className="px-3 py-1.5 font-mono font-bold text-amber-900">{t.serial}</td>
-                                        <td className="px-3 py-1.5 font-mono">{t.size}</td>
-                                        <td className="px-3 py-1.5 font-semibold text-slate-800">{t.shortDesc}</td>
-                                        <td className="px-3 py-1.5 text-slate-600 font-bold">{t.ownership}</td>
-                                        <td className="px-3 py-1.5 text-center">
-                                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">
-                                            Returned &amp; De-inventoried
-                                          </span>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                              {gp.notes && (
-                                <div className="text-[11px] text-slate-600 p-2 bg-slate-100 rounded border border-slate-200">
-                                  <strong>Gate Pass Remarks:</strong> {gp.notes}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
+                    <tr
+                      key={gp.id}
+                      className="hover:bg-blue-50/40 transition cursor-pointer"
+                      onClick={() => setSelectedGPDetail(gp)}
+                      title="Click to view full Gate Pass window and released tools"
+                    >
+                      <td className="px-3 py-2 font-mono font-bold text-slate-900 hover:text-blue-700 transition">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedGPDetail(gp)}
+                          className="font-mono font-bold text-slate-900 hover:text-blue-700 underline decoration-slate-300 cursor-pointer"
+                        >
+                          {gp.gpNumber}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2 font-bold text-slate-900">{gp.supplier}</td>
+                      <td className="px-3 py-2 font-mono text-slate-700">{formatDateDDMMYY(gp.gpDate)}</td>
+                      <td className="px-3 py-2 font-mono font-bold text-center">
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 text-[11px] font-bold border border-slate-200">
+                          {gp.toolLines?.length || 0}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-700">{gp.preparedBy}</td>
+                      <td className="px-3 py-2 text-slate-700">{gp.authorizedBy || '—'}</td>
+                      <td className="px-3 py-2 text-center space-x-2" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedGPDetail(gp)}
+                          className="px-2.5 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-[11px] border border-blue-200 cursor-pointer transition shadow-2xs"
+                          title="Open full gate pass details window"
+                        >
+                          View Details
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePrintGP(gp)}
+                          className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-medium border border-slate-300 cursor-pointer transition"
+                        >
+                          Print
+                        </button>
+                      </td>
+                    </tr>
                   );
                 })
               )}
@@ -619,86 +574,140 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
         </div>
       )}
 
-      {/* GP Detail Modal */}
+      {/* GP Detail Window (Full Detail Modal matching Delivery Tickets) */}
       {selectedGPDetail && (
         <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 no-print"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-6 no-print"
           onClick={(e) => {
             if (e.target === e.currentTarget) setSelectedGPDetail(null);
           }}
         >
-          <div className="bg-white rounded shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-4 py-3 bg-[#1a3055] text-white flex justify-between items-center flex-shrink-0">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="px-5 py-3.5 bg-[#1a3055] text-white flex justify-between items-center flex-shrink-0">
               <div>
-                <h3 className="font-bold text-sm">Gate Pass: {selectedGPDetail.gpNumber}</h3>
-                <div className="text-[11px] text-slate-300">
-                  {selectedGPDetail.supplier} &bull; Date {selectedGPDetail.gpDate}
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-base tracking-wide text-white">
+                    Security Gate Pass: <span className="text-amber-400 font-mono">{selectedGPDetail.gpNumber}</span>
+                  </h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/50">
+                    ✓ Released &amp; Dispatched
+                  </span>
+                </div>
+                <div className="text-xs text-slate-300 mt-0.5">
+                  Supplier <span className="font-bold text-white">{selectedGPDetail.supplier}</span> &bull; Release Date <span className="font-mono text-white">{formatDateDDMMYY(selectedGPDetail.gpDate)}</span> &bull; Prepared by <span className="font-medium text-white">{selectedGPDetail.preparedBy}</span>
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedGPDetail(null)}
-                className="text-white/80 hover:text-amber-300 font-bold text-lg cursor-pointer"
-              >
-                &times;
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePrintGP(selectedGPDetail)}
+                  className="px-2.5 py-1 rounded text-xs font-bold bg-white/10 text-white border border-white/20 hover:bg-white/20 cursor-pointer transition"
+                  title="Print Security Gate Pass"
+                >
+                  Print Gate Pass
+                </button>
+                <button
+                  onClick={() => setSelectedGPDetail(null)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 text-xl font-bold transition cursor-pointer"
+                  title="Close Window (Esc)"
+                >
+                  &times;
+                </button>
+              </div>
             </div>
 
-            <div className="p-4 space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded border border-slate-200">
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">Supplier:</span>
-                  <span className="font-bold text-[#1a3055]">{selectedGPDetail.supplier}</span>
+            {/* Scrollable Body */}
+            <div className="p-5 space-y-4 overflow-y-auto text-xs">
+              {/* Metadata Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Gate Pass #</span>
+                  <span className="font-bold text-[#1a3055] text-xs font-mono">{selectedGPDetail.gpNumber}</span>
                 </div>
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">Release Date:</span>
-                  <span>{selectedGPDetail.gpDate}</span>
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Supplier / Vendor</span>
+                  <span className="font-bold text-slate-900 text-xs">{selectedGPDetail.supplier}</span>
                 </div>
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">Prepared By:</span>
-                  <span>{selectedGPDetail.preparedBy}</span>
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Release Date</span>
+                  <span className="font-mono text-slate-700 text-xs">{formatDateDDMMYY(selectedGPDetail.gpDate)}</span>
                 </div>
-                <div>
-                  <span className="font-bold text-slate-500 block text-[10px]">Authorized By:</span>
-                  <span>{selectedGPDetail.authorizedBy || '—'}</span>
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Prepared By</span>
+                  <span className="font-medium text-slate-800 text-xs">{selectedGPDetail.preparedBy}</span>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Authorized By</span>
+                  <span className="font-medium text-slate-800 text-xs">{selectedGPDetail.authorizedBy || '—'}</span>
                 </div>
               </div>
 
-              <div className="border border-slate-200 rounded overflow-hidden">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-50 text-[#24476b] border-b border-slate-200 font-bold">
-                    <tr>
-                      <th className="px-2.5 py-1.5 w-10">#</th>
-                      <th className="px-2.5 py-1.5">Supplier Serial</th>
-                      <th className="px-2.5 py-1.5">Size</th>
-                      <th className="px-2.5 py-1.5">Tool Category</th>
-                      <th className="px-2.5 py-1.5">Condition</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {selectedGPDetail.toolLines.map((t, i) => (
-                      <tr key={i} className="hover:bg-slate-50">
-                        <td className="px-2.5 py-1.5 text-slate-400 font-mono">{i + 1}</td>
-                        <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">{t.serial}</td>
-                        <td className="px-2.5 py-1.5 font-mono">{t.size}</td>
-                        <td className="px-2.5 py-1.5 font-semibold text-[#1a3055]">{t.shortDesc}</td>
-                        <td className="px-2.5 py-1.5 text-slate-600">{t.condition || 'Good'}</td>
+              {/* Tools Manifest */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-sm text-[#1a3055]">
+                    Released Rental Tools ({selectedGPDetail.toolLines?.length || 0} Tools)
+                  </h4>
+                  <div className="text-[11px] text-slate-500">
+                    Destination: <strong className="text-slate-800">{selectedGPDetail.supplier} Facility</strong> &bull; Status: <strong className="text-rose-700">De-inventoried</strong>
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-50 text-[#1a3055] font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="px-3 py-2 w-12 text-center">#</th>
+                        <th className="px-3 py-2">Supplier Serial / ID</th>
+                        <th className="px-3 py-2">Size</th>
+                        <th className="px-3 py-2">Tool Category / Description</th>
+                        <th className="px-3 py-2">Condition Upon Return</th>
+                        <th className="px-3 py-2 text-center">Disposition</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selectedGPDetail.toolLines.map((t, i) => (
+                        <tr key={i} className="hover:bg-slate-50/80">
+                          <td className="px-3 py-2 text-center text-slate-400 font-mono">{i + 1}</td>
+                          <td className="px-3 py-2 font-mono font-bold text-slate-900">{t.serial}</td>
+                          <td className="px-3 py-2 font-mono font-medium">{t.size}</td>
+                          <td className="px-3 py-2 font-semibold text-slate-900">{t.shortDesc}</td>
+                          <td className="px-3 py-2 text-slate-600">{t.condition || 'Good Condition'}</td>
+                          <td className="px-3 py-2 text-center">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                              Returned &amp; Released
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Remarks / Authorization Notice */}
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs space-y-1">
+                <span className="font-bold text-slate-700 block">Gate Security Authorization Signoff:</span>
+                <p className="text-slate-600 font-normal leading-relaxed">
+                  These rental tools have been verified, released through the security checkpoint, and dispatched back to {selectedGPDetail.supplier}. No company liability remains upon physical release.
+                </p>
               </div>
             </div>
 
-            <div className="px-4 py-3 bg-slate-50 border-t border-[#b8c9db] flex justify-between items-center flex-shrink-0 text-xs">
+            {/* Footer */}
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-between items-center flex-shrink-0 text-xs">
               <button
+                type="button"
                 onClick={() => handlePrintGP(selectedGPDetail)}
-                className="px-3 py-1.5 rounded bg-slate-200 text-slate-800 font-bold hover:bg-slate-300 cursor-pointer"
+                className="px-3 py-1.5 rounded bg-slate-200 text-slate-800 font-bold hover:bg-slate-300 cursor-pointer transition"
               >
-                🖨 Print Gate Pass
+                Print Gate Pass
               </button>
               <button
+                type="button"
                 onClick={() => setSelectedGPDetail(null)}
-                className="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold hover:bg-[#24426d] cursor-pointer"
+                className="px-4 py-1.5 rounded bg-slate-700 text-white font-bold hover:bg-slate-800 cursor-pointer transition"
               >
                 Close
               </button>

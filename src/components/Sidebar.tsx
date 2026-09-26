@@ -6,6 +6,7 @@ interface SidebarProps {
   activeView?: NavModule;
   onNavigate?: (mod: NavModule) => void;
   pendingCalloutsCount?: number;
+  pendingSignedDTsCount?: number;
   onRigToolsCount?: number;
   pendingInspectionsCount?: number;
   pendingMaintenanceCount?: number;
@@ -28,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeView,
   onNavigate,
   pendingCalloutsCount = 0,
+  pendingSignedDTsCount = 0,
   onRigToolsCount = 0,
   pendingInspectionsCount = 0,
   pendingMaintenanceCount = 0,
@@ -81,8 +83,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'dt',
           label: 'Delivery Tickets (DT)',
           icon: '🚚',
-          badge: onRigToolsCount > 0 ? onRigToolsCount : null,
-          badgeColor: 'bg-blue-300 text-blue-950',
+          badge: pendingSignedDTsCount > 0 ? pendingSignedDTsCount : null,
+          badgeColor: 'bg-amber-400 text-amber-950',
         },
         { id: 'rt', label: 'Receiving Tickets (RT)', icon: '📥' },
         { id: 'gatepass', label: 'Security Gate Pass', icon: '🛡️' },
@@ -126,6 +128,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: '💳',
       items: [
         { id: 'billing-dash', label: 'Billing Dashboard', icon: '📊' },
+        { id: 'billing-package', label: 'Draft Invoice Package', icon: '📑' },
       ],
     },
     {
@@ -148,12 +151,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
-  // Collapsible section state: by default, all collapsed except the one holding the current active view
+  // Collapsible section state: by default, all collapsed except the one holding the current active view or billing
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
+    const initial: Record<string, boolean> = {
+      billing: true, // Always keep Billing & Commercial open so Draft Invoice Package is visible
+      operations: true,
+    };
     navSections.forEach((sec) => {
       const hasActive = sec.items.some((item) => item.id === current);
-      initial[sec.id] = hasActive; // Only active section open initially
+      if (hasActive) initial[sec.id] = true;
     });
     return initial;
   });

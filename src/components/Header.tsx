@@ -11,6 +11,7 @@ interface HeaderProps {
   onRefresh?: () => void;
   onLogout: () => void;
   onClearDemoData?: (includeInventory?: boolean) => void;
+  onNavigate?: (module: any) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -22,6 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
   onRefresh,
   onLogout,
   onClearDemoData,
+  onNavigate,
 }) => {
   const syncing = isSyncing || syncStatus === 'syncing';
   const handleRefresh = onRefresh || onSync || (() => {});
@@ -63,6 +65,17 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
             <span className="text-[11px] font-bold text-slate-200">Syncing Azure…</span>
           </div>
+        )}
+
+        {onNavigate && (
+          <button
+            onClick={() => onNavigate('billing-package')}
+            className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded border border-blue-400/50 text-[11px] font-bold flex items-center space-x-1 transition cursor-pointer shadow-xs"
+            title="Generate & View Client Submission Package & Draft Invoice"
+          >
+            <span>📑</span>
+            <span>Draft Invoice Package</span>
+          </button>
         )}
 
         <button

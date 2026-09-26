@@ -185,20 +185,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
   }, [dtBatches, completedJobIdSet, returnedSerialsSet]);
 
-  // 3. Pending Signed Delivery & Receiving Tickets
+  // 3. Pending Signed Delivery & Receiving Tickets (Excluding completed jobs with legal invoice numbers)
   const pendingSignedDTs = useMemo(
-    () => dtBatches.filter((b) => !b.isSigned && !b.signedDocUrl),
-    [dtBatches]
+    () =>
+      dtBatches.filter((b) => {
+        const isJobCompleted = b.jobId && completedJobIdSet.has(String(b.jobId).trim().toUpperCase());
+        if (isJobCompleted) return false;
+        return !b.isSigned && !b.signedDocUrl;
+      }),
+    [dtBatches, completedJobIdSet]
   );
-  const signedDTsCount = dtBatches.length - pendingSignedDTs.length;
+  const activeDTsCount = useMemo(
+    () =>
+      dtBatches.filter((b) => {
+        const isJobCompleted = b.jobId && completedJobIdSet.has(String(b.jobId).trim().toUpperCase());
+        return !isJobCompleted;
+      }).length,
+    [dtBatches, completedJobIdSet]
+  );
+  const signedDTsCount = activeDTsCount - pendingSignedDTs.length;
 
   const pendingSignedRTs = useMemo(
-    () => rtBatches.filter((b) => !b.isSigned && !b.signedDocUrl),
-    [rtBatches]
+    () =>
+      rtBatches.filter((b) => {
+        const isJobCompleted = b.jobId && completedJobIdSet.has(String(b.jobId).trim().toUpperCase());
+        if (isJobCompleted) return false;
+        return !b.isSigned && !b.signedDocUrl;
+      }),
+    [rtBatches, completedJobIdSet]
   );
-  const signedRTsCount = rtBatches.length - pendingSignedRTs.length;
+  const activeRTsCount = useMemo(
+    () =>
+      rtBatches.filter((b) => {
+        const isJobCompleted = b.jobId && completedJobIdSet.has(String(b.jobId).trim().toUpperCase());
+        return !isJobCompleted;
+      }).length,
+    [rtBatches, completedJobIdSet]
+  );
+  const signedRTsCount = activeRTsCount - pendingSignedRTs.length;
 
-  const totalTickets = dtBatches.length + rtBatches.length;
+  const totalTickets = activeDTsCount + activeRTsCount;
   const signedTicketsTotal = signedDTsCount + signedRTsCount;
   const compliancePercentage = totalTickets > 0 ? Math.round((signedTicketsTotal / totalTickets) * 100) : 100;
 
@@ -508,7 +534,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {pendingSignedDTs.length}
             </span>
             <span className="text-[11px] font-semibold text-slate-500">
-              of {dtBatches.length} Total DTs
+              of {activeDTsCount} Active DTs
             </span>
           </div>
         </div>
@@ -523,7 +549,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {pendingSignedRTs.length}
             </span>
             <span className="text-[11px] font-semibold text-slate-500">
-              of {rtBatches.length} Total RTs
+              of {activeRTsCount} Active RTs
             </span>
           </div>
         </div>

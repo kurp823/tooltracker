@@ -870,27 +870,20 @@ export const JobsView: React.FC<JobsViewProps> = ({
         </div>
       </div>
 
-      {/* MASTER LIFECYCLE COMMAND CARD: Unified Card with 6 Sub-Cards to Display Pending Stages & Combo Selector */}
-      <div className="bg-gradient-to-br from-[#0e1d35] via-[#132644] to-[#1a3359] text-white rounded-xl p-3.5 border border-[#213f6e] shadow-md relative overflow-hidden">
-        {/* Subtle decorative glow */}
-        <div className="absolute top-0 right-0 w-80 h-32 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        {/* Master Card Header Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3 pb-2.5 border-b border-white/10 relative z-10">
+      {/* LIFECYCLE STAGES PIPELINE: Clean & Compact Stage Selector */}
+      <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-2xs space-y-2">
+        {/* Header Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-bold text-xs uppercase tracking-wider text-slate-200">
+            <span className="font-bold text-xs uppercase tracking-wider text-slate-700">
               Operational &amp; Commercial Lifecycle Pipeline
-            </span>
-            <span className="text-[10px] text-slate-400 hidden sm:inline">
-              (Select a stage sub-card or use combo dropdown)
             </span>
           </div>
 
           {/* Combo Selector for Stage */}
           <div className="flex items-center gap-2">
-            <label htmlFor="stage-combo-select" className="text-[11px] font-medium text-slate-300 whitespace-nowrap">
-              Stage Combo:
+            <label htmlFor="stage-combo-select" className="text-[11px] font-medium text-slate-600 whitespace-nowrap">
+              Stage:
             </label>
             <select
               id="stage-combo-select"
@@ -899,7 +892,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                 setTab(e.target.value as any);
                 setCurrentPage(1);
               }}
-              className="bg-[#1b345b] text-white border border-[#345990] rounded px-2.5 py-1 text-xs font-semibold outline-none cursor-pointer hover:bg-[#22406d] transition focus:ring-1 focus:ring-amber-400"
+              className="bg-white text-slate-800 border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold outline-none cursor-pointer hover:border-slate-400 transition"
             >
               <option value="all">All Stages ({metrics.total.toLocaleString()} Jobs)</option>
               <option value="1_open">1. Open — No DT Generated ({metrics.counts['1_open'] || 0})</option>
@@ -917,7 +910,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   setTab('all');
                   setCurrentPage(1);
                 }}
-                className="text-[11px] px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 font-semibold transition cursor-pointer"
+                className="text-[11px] px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition cursor-pointer"
                 title="Reset stage filter to view all jobs"
               >
                 Reset (Show All)
@@ -926,8 +919,8 @@ export const JobsView: React.FC<JobsViewProps> = ({
           </div>
         </div>
 
-        {/* 6 High-Tech Sub-Cards: Clickable Stage Tiles with Pending Highlights */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 relative z-10">
+        {/* 6 Stage Buttons: Clean, Compact Tiles */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
           {/* Sub-Card 1: Open */}
           <button
             type="button"
@@ -935,23 +928,21 @@ export const JobsView: React.FC<JobsViewProps> = ({
               setTab(tab === '1_open' ? 'all' : '1_open');
               setCurrentPage(1);
             }}
-            className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer relative overflow-hidden group ${
+            className={`text-left p-2 rounded-md border transition cursor-pointer ${
               tab === '1_open'
-                ? 'bg-slate-800/90 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
-                : 'bg-[#152a4a]/80 border-[#234370]/70 hover:bg-[#1a345c] hover:border-slate-400/50'
+                ? 'bg-slate-900 text-white border-slate-900 ring-2 ring-slate-400 shadow-2xs'
+                : 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100'
             }`}
           >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-slate-300">Open Status</span>
-              <span className="w-2 h-2 rounded-full bg-slate-400" />
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] font-semibold ${tab === '1_open' ? 'text-slate-300' : 'text-slate-500'}`}>Open</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
             </div>
-            <div className="text-[11px] font-bold text-slate-200 leading-tight">Open</div>
-            <div className="text-xl font-extrabold text-white font-mono mt-0.5">
+            <div className={`text-base font-extrabold font-mono mt-0.5 ${tab === '1_open' ? 'text-white' : 'text-slate-900'}`}>
               {(metrics.counts['1_open'] || 0).toLocaleString()}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
-              <span>No DT generated</span>
-              {tab === '1_open' && <span className="text-[9px] text-amber-400 font-bold">ACTIVE</span>}
+            <div className={`text-[9px] truncate ${tab === '1_open' ? 'text-slate-300' : 'text-slate-500'}`}>
+              No DT generated
             </div>
           </button>
 
@@ -962,23 +953,21 @@ export const JobsView: React.FC<JobsViewProps> = ({
               setTab(tab === '2_ongoing' ? 'all' : '2_ongoing');
               setCurrentPage(1);
             }}
-            className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer relative overflow-hidden group ${
+            className={`text-left p-2 rounded-md border transition cursor-pointer ${
               tab === '2_ongoing'
-                ? 'bg-blue-900/80 border-blue-400 ring-2 ring-blue-400/50 shadow-md'
-                : 'bg-[#152a4a]/80 border-[#234370]/70 hover:bg-[#1a345c] hover:border-blue-400/50'
+                ? 'bg-blue-900 text-white border-blue-900 ring-2 ring-blue-400 shadow-2xs'
+                : 'bg-blue-50/50 border-blue-200 text-slate-800 hover:bg-blue-50'
             }`}
           >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-blue-300">Active Field</span>
-              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] font-semibold ${tab === '2_ongoing' ? 'text-blue-200' : 'text-blue-700'}`}>Ongoing</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
             </div>
-            <div className="text-[11px] font-bold text-blue-200 leading-tight">Ongoing</div>
-            <div className="text-xl font-extrabold text-blue-100 font-mono mt-0.5">
+            <div className={`text-base font-extrabold font-mono mt-0.5 ${tab === '2_ongoing' ? 'text-white' : 'text-blue-900'}`}>
               {(metrics.counts['2_ongoing'] || 0).toLocaleString()}
             </div>
-            <div className="text-[10px] text-blue-300/80 mt-1 flex items-center justify-between">
-              <span>Tools on site</span>
-              {tab === '2_ongoing' && <span className="text-[9px] text-blue-300 font-bold">ACTIVE</span>}
+            <div className={`text-[9px] truncate ${tab === '2_ongoing' ? 'text-blue-200' : 'text-slate-500'}`}>
+              Tools on site
             </div>
           </button>
 
@@ -989,23 +978,21 @@ export const JobsView: React.FC<JobsViewProps> = ({
               setTab(tab === '3_waiting_signed_docs' ? 'all' : '3_waiting_signed_docs');
               setCurrentPage(1);
             }}
-            className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer relative overflow-hidden group ${
+            className={`text-left p-2 rounded-md border transition cursor-pointer ${
               tab === '3_waiting_signed_docs'
-                ? 'bg-amber-950/80 border-amber-400 ring-2 ring-amber-400/60 shadow-md'
-                : 'bg-[#1b2b46]/90 border-amber-500/40 hover:bg-[#203454] hover:border-amber-400'
+                ? 'bg-rose-900 text-white border-rose-900 ring-2 ring-rose-400 shadow-2xs'
+                : 'bg-rose-50/50 border-rose-200 text-slate-800 hover:bg-rose-50'
             }`}
           >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-amber-300">Documentation</span>
-              <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] font-semibold ${tab === '3_waiting_signed_docs' ? 'text-rose-200' : 'text-rose-700'}`}>Waiting Docs</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
             </div>
-            <div className="text-[11px] font-bold text-amber-200 leading-tight">Waiting Docs</div>
-            <div className="text-xl font-extrabold text-amber-300 font-mono mt-0.5">
+            <div className={`text-base font-extrabold font-mono mt-0.5 ${tab === '3_waiting_signed_docs' ? 'text-white' : 'text-rose-900'}`}>
               {(metrics.counts['3_waiting_signed_docs'] || 0).toLocaleString()}
             </div>
-            <div className="text-[10px] text-amber-300/90 mt-1 flex items-center justify-between">
-              <span>Awaiting signed docs</span>
-              {tab === '3_waiting_signed_docs' && <span className="text-[9px] text-amber-400 font-bold">ACTIVE</span>}
+            <div className={`text-[9px] truncate ${tab === '3_waiting_signed_docs' ? 'text-rose-200' : 'text-slate-500'}`}>
+              Pending signed scans
             </div>
           </button>
 
@@ -1016,23 +1003,21 @@ export const JobsView: React.FC<JobsViewProps> = ({
               setTab(tab === '4_submitted_billing' ? 'all' : '4_submitted_billing');
               setCurrentPage(1);
             }}
-            className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer relative overflow-hidden group ${
+            className={`text-left p-2 rounded-md border transition cursor-pointer ${
               tab === '4_submitted_billing'
-                ? 'bg-indigo-950/80 border-indigo-400 ring-2 ring-indigo-400/50 shadow-md'
-                : 'bg-[#152a4a]/80 border-[#234370]/70 hover:bg-[#1a345c] hover:border-indigo-400/50'
+                ? 'bg-amber-800 text-white border-amber-800 ring-2 ring-amber-400 shadow-2xs'
+                : 'bg-amber-50/50 border-amber-200 text-slate-800 hover:bg-amber-50'
             }`}
           >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-indigo-300">Finance Queue</span>
-              <span className="w-2 h-2 rounded-full bg-indigo-400" />
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] font-semibold ${tab === '4_submitted_billing' ? 'text-amber-200' : 'text-amber-800'}`}>In Billing</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
             </div>
-            <div className="text-[11px] font-bold text-indigo-200 leading-tight">In Billing</div>
-            <div className="text-xl font-extrabold text-indigo-100 font-mono mt-0.5">
+            <div className={`text-base font-extrabold font-mono mt-0.5 ${tab === '4_submitted_billing' ? 'text-white' : 'text-amber-900'}`}>
               {(metrics.counts['4_submitted_billing'] || 0).toLocaleString()}
             </div>
-            <div className="text-[10px] text-indigo-300/80 mt-1 flex items-center justify-between">
-              <span>Submitted tickets</span>
-              {tab === '4_submitted_billing' && <span className="text-[9px] text-indigo-300 font-bold">ACTIVE</span>}
+            <div className={`text-[9px] truncate ${tab === '4_submitted_billing' ? 'text-amber-200' : 'text-slate-500'}`}>
+              Ready for invoice
             </div>
           </button>
 
@@ -1043,23 +1028,21 @@ export const JobsView: React.FC<JobsViewProps> = ({
               setTab(tab === '5_ses_submitted' ? 'all' : '5_ses_submitted');
               setCurrentPage(1);
             }}
-            className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer relative overflow-hidden group ${
+            className={`text-left p-2 rounded-md border transition cursor-pointer ${
               tab === '5_ses_submitted'
-                ? 'bg-purple-950/80 border-purple-400 ring-2 ring-purple-400/50 shadow-md'
-                : 'bg-[#1b2546]/90 border-purple-500/40 hover:bg-[#213054] hover:border-purple-400'
+                ? 'bg-purple-900 text-white border-purple-900 ring-2 ring-purple-400 shadow-2xs'
+                : 'bg-purple-50/50 border-purple-200 text-slate-800 hover:bg-purple-50'
             }`}
           >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-purple-300">Approval Stage</span>
-              <span className="w-2 h-2 rounded-full bg-purple-400" />
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] font-semibold ${tab === '5_ses_submitted' ? 'text-purple-200' : 'text-purple-700'}`}>Under SES</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
             </div>
-            <div className="text-[11px] font-bold text-purple-200 leading-tight">Under Approval</div>
-            <div className="text-xl font-extrabold text-purple-200 font-mono mt-0.5">
+            <div className={`text-base font-extrabold font-mono mt-0.5 ${tab === '5_ses_submitted' ? 'text-white' : 'text-purple-900'}`}>
               {(metrics.counts['5_ses_submitted'] || 0).toLocaleString()}
             </div>
-            <div className="text-[10px] text-purple-300/80 mt-1 flex items-center justify-between">
-              <span>ERP / SES Review</span>
-              {tab === '5_ses_submitted' && <span className="text-[9px] text-purple-300 font-bold">ACTIVE</span>}
+            <div className={`text-[9px] truncate ${tab === '5_ses_submitted' ? 'text-purple-200' : 'text-slate-500'}`}>
+              SES approval
             </div>
           </button>
 
@@ -1070,23 +1053,21 @@ export const JobsView: React.FC<JobsViewProps> = ({
               setTab(tab === '6_completed' ? 'all' : '6_completed');
               setCurrentPage(1);
             }}
-            className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer relative overflow-hidden group ${
+            className={`text-left p-2 rounded-md border transition cursor-pointer ${
               tab === '6_completed'
-                ? 'bg-emerald-950/80 border-emerald-400 ring-2 ring-emerald-400/50 shadow-md'
-                : 'bg-[#152a4a]/80 border-[#234370]/70 hover:bg-[#1a345c] hover:border-emerald-400/50'
+                ? 'bg-emerald-900 text-white border-emerald-900 ring-2 ring-emerald-400 shadow-2xs'
+                : 'bg-emerald-50/50 border-emerald-200 text-slate-800 hover:bg-emerald-50'
             }`}
           >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-emerald-300">Final Invoiced</span>
-              <CheckCircle className="w-3 h-3 text-emerald-400" />
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] font-semibold ${tab === '6_completed' ? 'text-emerald-200' : 'text-emerald-700'}`}>Completed</span>
+              <CheckCircle className="w-3 h-3 text-emerald-500" />
             </div>
-            <div className="text-[11px] font-bold text-emerald-200 leading-tight">Completed</div>
-            <div className="text-xl font-extrabold text-emerald-100 font-mono mt-0.5">
+            <div className={`text-base font-extrabold font-mono mt-0.5 ${tab === '6_completed' ? 'text-white' : 'text-emerald-900'}`}>
               {(metrics.counts['6_completed'] || 0).toLocaleString()}
             </div>
-            <div className="text-[10px] text-emerald-300/80 mt-1 flex items-center justify-between">
-              <span>FSH / FR / WHP</span>
-              {tab === '6_completed' && <span className="text-[9px] text-emerald-300 font-bold">ACTIVE</span>}
+            <div className={`text-[9px] truncate ${tab === '6_completed' ? 'text-emerald-200' : 'text-slate-500'}`}>
+              Final Invoiced
             </div>
           </button>
         </div>
