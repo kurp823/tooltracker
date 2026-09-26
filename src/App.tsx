@@ -1266,6 +1266,7 @@ export const App: React.FC = () => {
               user={currentUser}
               inventory={inventory}
               onSaveInventory={handleSaveInventory}
+              showToast={showToast}
             />
           )}
 
