@@ -7,6 +7,7 @@ import {
   ContractRecord,
   DraftInvoicePackageData,
   CalculationTicketLine,
+  ContractRateItem,
 } from '../types';
 import {
   generateInvoicePackageForJob,
@@ -14,6 +15,7 @@ import {
   UAE_VAT_PERCENTAGE,
   convertAmountToWords,
 } from '../services/billingPackageService';
+import { fetchContractRates, jobToContractCode } from '../services/api';
 import {
   FileText,
   Printer,
@@ -150,6 +152,16 @@ export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
     }
   }, [initialJobId]);
 
+  // Contract rates from tbl_ContractRates — fetched live when job changes
+  const [contractRates, setContractRates] = useState<ContractRateItem[]>([]);
+  useEffect(() => {
+    if (!currentJob) return;
+    const code = jobToContractCode(currentJob);
+    fetchContractRates(code).then((rates) => {
+      if (rates && rates.length > 0) setContractRates(rates);
+    }).catch(() => { /* silently use fallback rates */ });
+  }, [currentJob?.id]);
+
   // Generate the full invoice package dataset
   const packageData: DraftInvoicePackageData = useMemo(() => {
     if (!currentJob) {
@@ -158,7 +170,7 @@ export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
         dtBatches,
         rtBatches,
         currentContract,
-        { invoiceNo: invoiceNumber, invoiceDate, dateOfSupply, poNo: poNumber }
+        { invoiceNo: invoiceNumber, invoiceDate, dateOfSupply, poNo: poNumber, contractRates }
       );
     }
     return generateInvoicePackageForJob(currentJob, dtBatches, rtBatches, currentContract, {
@@ -166,8 +178,9 @@ export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
       invoiceDate,
       dateOfSupply,
       poNo: poNumber,
+      contractRates,
     });
-  }, [currentJob, dtBatches, rtBatches, currentContract, invoiceNumber, invoiceDate, dateOfSupply, poNumber]);
+  }, [currentJob, dtBatches, rtBatches, currentContract, invoiceNumber, invoiceDate, dateOfSupply, poNumber, contractRates]);
 
   // Two-step confirmation modal state
   const [confirmModal, setConfirmModal] = useState<{
