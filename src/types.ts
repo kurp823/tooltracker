@@ -27,6 +27,7 @@ export type NavModule =
   | 'inspection'         // QC Inspection Bay
   | 'maintenance'        // Maintenance Orders
   | 'billing-dash'       // Billing Dashboard
+  | 'billing-package'    // Invoice & Billing Package Generator (Calculation Ticket + Draft Invoice)
   | 'contracts'          // Master Contracts
   | 'data-management'   // Data Management Tool (DMT)
   | 'settings';          // System & Azure SQL
@@ -105,6 +106,31 @@ export interface JobStatusTransition {
   signedDocsConfirmed?: boolean;
 }
 
+export type AttachmentCategory =
+  | 'Signed Delivery Ticket'
+  | 'Combined DT & Manifest'
+  | 'Client Mobilization Manifest'
+  | 'Signed Receiving Ticket'
+  | 'Combined RT & Demob Manifest'
+  | 'Client Demobilization Manifest'
+  | 'Dual-Signed Rig Daily Log'
+  | 'Utilization Sign-off'
+  | 'Inspection / MPI Certificate'
+  | 'Other Supporting Document';
+
+export interface AttachedDoc {
+  id: string;
+  name: string;
+  url: string;
+  category: AttachmentCategory;
+  sourceType: 'DT' | 'RT' | 'Utilization' | 'Job';
+  sourceRef: string; // e.g. "DT-02171", "RT-02214", "Rig AD-63 Daily Log"
+  uploadDate: string;
+  uploadedBy?: string;
+  fileSize?: string;
+  notes?: string;
+}
+
 export interface DrillingJob {
   id: string;           // JOB-YY-NNNNN
   JobID?: string;
@@ -142,6 +168,7 @@ export interface DrillingJob {
   signedDtAttached?: boolean;
   signedRtAttached?: boolean;
   signedUtilizationAttached?: boolean;
+  utilizationAttachments?: AttachedDoc[];
   billingTransmittalRef?: string;
   draftInvoiceNumber?: string;
   sesNumber?: string;
@@ -194,11 +221,12 @@ export interface DTBatch {
   isLocked?: boolean;
   lockedBy?: string;
   lockedDate?: string;
-  // Document attachment
+  // Document attachments (supports multiple attachments and combined documents)
   signedDocUrl?: string;
   signedDocName?: string;
   signedDate?: string;
   isSigned?: boolean;
+  attachments?: AttachedDoc[];
 }
 
 export interface RTLine {
@@ -234,11 +262,12 @@ export interface RTBatch {
   toolLines: RTLine[];
   condition?: string;
   notes?: string;
-  // Document attachment
+  // Document attachments (supports multiple attachments and combined documents)
   signedDocUrl?: string;
   signedDocName?: string;
   signedDate?: string;
   isSigned?: boolean;
+  attachments?: AttachedDoc[];
 }
 
 export interface GatePassLine {
@@ -357,6 +386,7 @@ export interface JobUtData {
   signedDocName?: string;
   signedDate?: string;
   isSigned?: boolean;
+  attachments?: AttachedDoc[];
 }
 
 export interface ContractRateItem {
@@ -438,3 +468,117 @@ export interface SubmittedInvoiceRecord {
   status: 'Submitted' | 'Draft' | 'Final';
   notes?: string;
 }
+
+export interface CalculationTicketLine {
+  itemNo: number;
+  serialNumber: string;
+  toolDescription: string;
+  qty: number;
+  deliveryTicketNo: string;
+  deliveryDate: string;
+  returnDate: string;
+  rentalDays: number;
+  rgtNo: string; // RT No or RGT No
+  contractRefOper: string;
+  contractRefStandby: string;
+  operDays: number;
+  operRateUSD: number;
+  standbyDays: number;
+  standbyRateUSD: number;
+  operTotalUSD: number;
+  standbyTotalUSD: number;
+  totalChargesUSD: number;
+}
+
+export interface VerificationPackageDoc {
+  deliveryTickets: Array<{
+    ticketNo: string;
+    date: string;
+    toolsCount: number;
+    description: string;
+    signedBy?: string;
+  }>;
+  totalToolsMobilized: number;
+  totalCrewMobilized: number;
+  mobManifest: {
+    manifestRef: string;
+    receivedDate: string;
+    rigName: string;
+    verifiedBy: string;
+    transportMode: string;
+  };
+  receivingTickets: Array<{
+    ticketNo: string;
+    date: string;
+    toolsReturned: number;
+    backloadStatus: string;
+    routedTo: string;
+  }>;
+  demobManifest: {
+    manifestRef: string;
+    releaseDate: string;
+    rigName: string;
+    vesselOrTruck: string;
+    destination: string;
+  };
+  rigSignoff: {
+    engineerName: string;
+    mobDate: string;
+    demobDate: string;
+    operationalDays: number;
+    standbyDays: number;
+    operationSummary: string;
+    approvalRef: string;
+    supervisorName: string;
+  };
+}
+
+export interface DraftInvoicePackageData {
+  jobId: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  dateOfSupply: string;
+  customerCode: string;
+  customerName: string;
+  customerAddress: string;
+  customerTrn: string;
+  contractNo: string;
+  poNo: string;
+  rig: string;
+  well: string;
+  serviceOrderNo: string; // Job ID
+  deliveryTicketRefs: string; // e.g. "DT-02171, DT-02311"
+  returnLoadingNoteNo: string; // e.g. "RT-02214"
+  lines: CalculationTicketLine[];
+  crewChargeUSD: number;
+  crewDays: number;
+  crewDailyRateUSD: number;
+  operDays: number;
+  standbyDays: number;
+  operDaysSummary: string;
+  operationalChargeUSD: number;
+  standbyChargeUSD: number;
+  grossValueUSD: number;
+  vatPercentage: number; // 5.000%
+  vatAmountUSD: number;
+  grandTotalUSD: number;
+  exchangeRateUSDToAED: number; // 3.6725
+  crewChargeAED: number;
+  operationalChargeAED: number;
+  standbyChargeAED: number;
+  taxableAmountTotalAED: number;
+  vatTotalAED: number;
+  grandTotalAED: number;
+  amountInWords: string;
+  standbyNotes: string;
+  operNotes: string;
+  verificationPackage: VerificationPackageDoc;
+  attachedDocuments?: AttachedDoc[];
+  bankDetails: {
+    remitTo: string;
+    accountAddress: string;
+    usdIban: string;
+    swift: string;
+  };
+}
+
