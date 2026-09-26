@@ -720,38 +720,38 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
                 <div className="flex flex-wrap items-end gap-2">
                   <div className="flex-1 min-w-[160px]">
                     <label className="block text-[10px] font-bold text-slate-500 mb-1">Tool Category</label>
-                    <select
+                    <input
+                      type="text"
+                      list="callout-cat-list"
+                      placeholder="Select or type category..."
                       value={barCategory}
-                      onChange={(e) => {
-                        setBarCategory(e.target.value);
-                        setBarSize('');
-                      }}
-                      className="w-full border rounded px-2 py-1.5 bg-white font-medium"
-                    >
-                      <option value="">Select category...</option>
+                      onChange={(e) => setBarCategory(e.target.value.toUpperCase())}
+                      className="w-full border rounded px-2 py-1.5 bg-white font-medium uppercase text-xs"
+                    />
+                    <datalist id="callout-cat-list">
                       {categories.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
+                        <option key={c} value={c} />
                       ))}
-                    </select>
+                    </datalist>
                   </div>
 
-                  <div className="w-32">
-                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Size</label>
-                    <select
+                  <div className="w-36">
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Size (OD)</label>
+                    <input
+                      type="text"
+                      list="callout-size-list"
+                      placeholder="Select or type size..."
                       value={barSize}
-                      disabled={!barCategory}
                       onChange={(e) => setBarSize(e.target.value)}
-                      className="w-full border rounded px-2 py-1.5 bg-white font-mono disabled:opacity-50"
-                    >
-                      <option value="">Select size...</option>
+                      className="w-full border rounded px-2 py-1.5 bg-white font-mono text-xs"
+                    />
+                    <datalist id="callout-size-list">
                       {availableSizesForCategory.map((s) => (
                         <option key={s} value={s}>
                           {s}
                         </option>
                       ))}
-                    </select>
+                    </datalist>
                   </div>
 
                   <div className="w-16">

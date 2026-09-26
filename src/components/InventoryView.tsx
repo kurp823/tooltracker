@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { ToolItem, User } from '../types';
 import { TOOL_SIZES } from '../data/initialData';
 
@@ -11,6 +11,7 @@ interface InventoryViewProps {
   isAddModalOpen?: boolean;
   onCloseAddModal?: () => void;
   onOpenAddModal?: () => void;
+  showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export const InventoryView: React.FC<InventoryViewProps> = ({
@@ -22,17 +23,83 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   isAddModalOpen: propIsAddOpen,
   onCloseAddModal,
   onOpenAddModal,
+  showToast: propShowToast,
 }) => {
+  const showToast = useCallback(
+    (msg: string, type: 'success' | 'error' | 'info' = 'info') => {
+      if (propShowToast) {
+        propShowToast(msg, type);
+      } else {
+        console.log(`[Toast ${type}]: ${msg}`);
+      }
+    },
+    [propShowToast]
+  );
+
   const [localIsAddOpen, setLocalIsAddOpen] = useState(false);
   const isAddModalOpen = propIsAddOpen !== undefined ? propIsAddOpen : localIsAddOpen;
   const handleOpenAddModal = onOpenAddModal || (() => setLocalIsAddOpen(true));
-  const handleCloseAddModal = onCloseAddModal || (() => setLocalIsAddOpen(false));
+  const handleCloseAddModal = () => {
+    setIsAddingNewCat(false);
+    setIsAddingNewSize(false);
+    setNewCatInput('');
+    setNewSizeInput('');
+    if (onCloseAddModal) {
+      onCloseAddModal();
+    } else {
+      setLocalIsAddOpen(false);
+    }
+  };
+
   const [fleetTab, setFleetTab] = useState<'active' | 'all' | 'sub' | 'released'>('active');
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
+  const [selectedOwner, setSelectedOwner] = useState('ALL');
   const [page, setPage] = useState(1);
-  const pageSize = 50;
+  const pageSize = 48;
+
+  const renderToolStatusBadge = (status: ToolItem['status']) => {
+    switch (status) {
+      case 'Good':
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+            Available / Good
+          </span>
+        );
+      case 'Repair':
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
+            Under Repair
+          </span>
+        );
+      case 'Inspection':
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+            Inspection
+          </span>
+        );
+      case 'Redress':
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-orange-50 text-orange-800 border border-orange-200">
+            Redress
+          </span>
+        );
+      case 'Removed':
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+            De-inventoried
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+            {status}
+          </span>
+        );
+    }
+  };
 
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState<ToolItem['status']>('Good');
@@ -49,9 +116,99 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [newLocation, setNewLocation] = useState('Emdad Base');
   const [newStatus, setNewStatus] = useState<ToolItem['status']>('Good');
 
-  // Compute categories from inventory
+  // Inline add state for new categories and sizes in modal
+  const [isAddingNewCat, setIsAddingNewCat] = useState(false);
+  const [newCatInput, setNewCatInput] = useState('');
+  const [isAddingNewSize, setIsAddingNewSize] = useState(false);
+  const [newSizeInput, setNewSizeInput] = useState('');
+
+  // Custom categories & sizes stored locally
+  const [customCategories, setCustomCategories] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('emdad_custom_categories');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [customSizes, setCustomSizes] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('emdad_custom_sizes');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Compute categories from inventory + custom additions
   const categories = useMemo(() => {
-    return Array.from(new Set(inventory.map((t) => t.shortDesc).filter(Boolean))).sort();
+    const set = new Set<string>();
+    inventory.forEach((t) => {
+      if (t.shortDesc) set.add(t.shortDesc.trim());
+    });
+    customCategories.forEach((c) => {
+      if (c && c.trim()) set.add(c.trim());
+    });
+    return Array.from(set).sort();
+  }, [inventory, customCategories]);
+
+  // Compute tool sizes from API standards + inventory + custom additions
+  const standardSizes = useMemo(() => {
+    const list = new Set(TOOL_SIZES);
+    inventory.forEach((t) => {
+      if (t.size) list.add(t.size.trim());
+    });
+    customSizes.forEach((s) => {
+      if (s && s.trim()) list.add(s.trim());
+    });
+    return Array.from(list);
+  }, [inventory, customSizes]);
+
+  const handleSaveNewCategory = () => {
+    const val = newCatInput.trim().toUpperCase();
+    if (!val) return;
+    if (!customCategories.includes(val)) {
+      const updated = [...customCategories, val];
+      setCustomCategories(updated);
+      try {
+        localStorage.setItem('emdad_custom_categories', JSON.stringify(updated));
+      } catch (e) {}
+    }
+    setNewType(val);
+    setNewCatInput('');
+    setIsAddingNewCat(false);
+    showToast(`Category "${val}" added and selected.`, 'success');
+  };
+
+  const handleSaveNewSize = () => {
+    let val = newSizeInput.trim();
+    if (!val) return;
+    if (!val.includes('"') && !val.toLowerCase().includes('mm')) {
+      val = `${val}"`;
+    }
+    if (!customSizes.includes(val)) {
+      const updated = [...customSizes, val];
+      setCustomSizes(updated);
+      try {
+        localStorage.setItem('emdad_custom_sizes', JSON.stringify(updated));
+      } catch (e) {}
+    }
+    setNewSize(val);
+    setNewSizeInput('');
+    setIsAddingNewSize(false);
+    showToast(`Size "${val}" added and selected.`, 'success');
+  };
+
+  // Compute distinct owners from inventory
+  const owners = useMemo(() => {
+    return Array.from(
+      new Set(
+        inventory
+          .map((t) => t.ownership?.trim() || t.supplier?.trim() || (t.isEmdad ? 'EMDAD' : 'Sub-contractor'))
+          .filter(Boolean)
+      )
+    ).sort();
   }, [inventory]);
 
   // Compute next EMDAD ID
@@ -80,6 +237,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
       if (selectedStatus !== 'ALL' && t.status !== selectedStatus) return false;
       if (selectedCategory !== 'ALL' && t.shortDesc !== selectedCategory) return false;
+      if (selectedOwner !== 'ALL') {
+        const toolOwner = t.ownership?.trim() || t.supplier?.trim() || (t.isEmdad ? 'EMDAD' : 'Sub-contractor');
+        if (toolOwner !== selectedOwner) return false;
+      }
       if (search.trim()) {
         const q = search.toLowerCase();
         const fullTxt = `${t.id} ${t.assetNo} ${t.size} ${t.shortDesc} ${t.desc} ${t.ownership} ${t.location}`.toLowerCase();
@@ -87,7 +248,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       }
       return true;
     });
-  }, [inventory, fleetTab, selectedStatus, selectedCategory, search]);
+  }, [inventory, fleetTab, selectedStatus, selectedCategory, selectedOwner, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(Math.max(1, page), totalPages);
@@ -122,8 +283,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     const id = isEmd ? nextEmdadId : newSerial.trim();
     const ownership = isEmd ? 'EMDAD' : newSupplier.trim();
 
-    if (!id || !newType || !newSize) {
-      alert('Please fill in tool type, size, and ID/supplier.');
+    if (!id || !newType.trim() || !newSize.trim()) {
+      showToast('Please fill in tool type, size, and ID/supplier.', 'error');
       return;
     }
 
@@ -131,9 +292,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       id,
       serial: id,
       assetNo: isEmd ? newAssetNo.trim() : (newAssetNo.trim() || id),
-      size: newSize,
-      shortDesc: newType,
-      desc: newDesc.trim() || `${newSize} ${newType}`,
+      size: newSize.trim(),
+      shortDesc: newType.trim().toUpperCase(),
+      desc: newDesc.trim() || `${newSize.trim()} ${newType.trim().toUpperCase()}`,
       qty: 1,
       location: newLocation,
       status: newStatus,
@@ -148,6 +309,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     } else if (onSaveInventory) {
       onSaveInventory([newTool, ...inventory]);
     }
+    showToast(`Asset ${id} registered successfully.`, 'success');
     handleCloseAddModal();
     // Reset
     setNewSerial('');
@@ -255,11 +417,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             }}
             className={`px-3 py-1.5 rounded-t font-bold transition cursor-pointer border-t border-x ${
               fleetTab === 'released'
-                ? 'bg-white text-amber-900 border-[#b8c9db] -mb-[1px] shadow-xs'
+                ? 'bg-white text-slate-900 border-[#b8c9db] -mb-[1px] shadow-xs'
                 : 'bg-transparent text-slate-600 border-transparent hover:text-slate-900'
             }`}
           >
-            🚪 Released to Suppliers ({inventory.filter((t) => t.status === 'Removed' || t.location === 'Returned to Supplier').length})
+            Released to Suppliers ({inventory.filter((t) => t.status === 'Removed' || t.location === 'Returned to Supplier').length})
           </button>
         </div>
 
@@ -299,19 +461,37 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               className="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-medium outline-none"
             >
               <option value="ALL">All Statuses</option>
-              <option value="Good">🟢 Good</option>
-              <option value="Repair">🔴 Repair</option>
-              <option value="Inspection">🟡 Inspection</option>
-              <option value="Redress">🟠 Redress</option>
-              <option value="Removed">⚪ Removed</option>
+              <option value="Good">Good / Ready</option>
+              <option value="Repair">Under Repair</option>
+              <option value="Inspection">Inspection</option>
+              <option value="Redress">Redress</option>
+              <option value="Removed">Removed / Released</option>
             </select>
 
-            {(search || selectedCategory !== 'ALL' || selectedStatus !== 'ALL') && (
+            <select
+              value={selectedOwner}
+              onChange={(e) => {
+                setSelectedOwner(e.target.value);
+                setPage(1);
+              }}
+              className="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-medium outline-none"
+              title="Filter assets by tool owner / supplier"
+            >
+              <option value="ALL">All Owners ({owners.length})</option>
+              {owners.map((o) => (
+                <option key={o} value={o}>
+                  {o} ({inventory.filter((t) => (t.ownership?.trim() || t.supplier?.trim() || (t.isEmdad ? 'EMDAD' : 'Sub-contractor')) === o).length})
+                </option>
+              ))}
+            </select>
+
+            {(search || selectedCategory !== 'ALL' || selectedStatus !== 'ALL' || selectedOwner !== 'ALL') && (
               <button
                 onClick={() => {
                   setSearch('');
                   setSelectedCategory('ALL');
                   setSelectedStatus('ALL');
+                  setSelectedOwner('ALL');
                   setPage(1);
                 }}
                 className="text-xs text-slate-600 hover:text-slate-900 font-semibold underline px-2 cursor-pointer"
@@ -320,83 +500,163 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               </button>
             )}
           </div>
-          <div className="text-xs font-bold text-slate-700">
-            Showing {filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}-
-            {Math.min(currentPage * pageSize, filtered.length)} of {filtered.length.toLocaleString()} tools
+
+          <div className="flex items-center gap-3">
+            {/* View Mode Switcher */}
+            <div className="inline-flex rounded-lg border border-slate-300 p-0.5 bg-white shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
+                  viewMode === 'cards'
+                    ? 'bg-[#1a3055] text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Cards View
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-[#1a3055] text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Table View
+              </button>
+            </div>
+
+            <div className="text-xs font-bold text-slate-700">
+              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}-
+              {Math.min(currentPage * pageSize, filtered.length)} of {filtered.length.toLocaleString()} tools
+            </div>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
-              <tr>
-                <th className="px-3 py-2">Serial #</th>
-                <th className="px-3 py-2">Asset No</th>
-                <th className="px-3 py-2">Size</th>
-                <th className="px-3 py-2">Tool Type</th>
-                <th className="px-3 py-2">Description</th>
-                <th className="px-3 py-2">Owner</th>
-                <th className="px-3 py-2">Location</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2 text-center">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#e2e8f0]">
-              {pagedList.length === 0 ? (
+        {/* View content: Cards or Table */}
+        {viewMode === 'cards' ? (
+          <div className="p-4 bg-slate-50/60 min-h-[300px]">
+            {pagedList.length === 0 ? (
+              <div className="p-12 text-center text-slate-500 font-medium bg-white rounded-xl border border-slate-200">
+                No tool assets found matching the selected criteria.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
+                {pagedList.map((t) => (
+                  <div
+                    key={t.id}
+                    className="bg-white rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-md p-4 transition flex flex-col justify-between"
+                  >
+                    <div>
+                      {/* Card Top Row: Serial & Status */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div>
+                          <span className="font-mono font-bold text-slate-900 text-sm block">
+                            {t.serial}
+                          </span>
+                          <span className="font-mono text-slate-500 text-[11px] block">
+                            {t.assetNo ? `Asset: ${t.assetNo}` : '—'}
+                          </span>
+                        </div>
+                        <div>{renderToolStatusBadge(t.status)}</div>
+                      </div>
+
+                      {/* Tool Category & Size */}
+                      <div className="space-y-1 mb-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-slate-900">{t.shortDesc}</span>
+                          <span className="font-mono text-slate-600 font-medium">{t.size || '—'}</span>
+                        </div>
+                        <p className="text-xs text-slate-600 font-normal line-clamp-2 leading-relaxed" title={t.desc}>
+                          {t.desc}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Card Footer: Location, Ownership, Action */}
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs mt-2">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+                          Location
+                        </span>
+                        <span className="font-medium text-slate-700 text-[11px]">{t.location}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          {t.ownership}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => startEditTool(t)}
+                          className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold border border-slate-300 cursor-pointer transition"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-slate-50 text-[#1a3055] border-b border-slate-200 font-bold">
                 <tr>
-                  <td colSpan={9} className="p-8 text-center text-slate-500 font-medium">
-                    No tool assets found matching the selected criteria.
-                  </td>
+                  <th className="px-3 py-2">Serial #</th>
+                  <th className="px-3 py-2">Asset No</th>
+                  <th className="px-3 py-2">Size</th>
+                  <th className="px-3 py-2">Tool Type</th>
+                  <th className="px-3 py-2">Description</th>
+                  <th className="px-3 py-2">Owner</th>
+                  <th className="px-3 py-2">Location</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2 text-center">Action</th>
                 </tr>
-              ) : (
-                pagedList.map((t) => (
-                  <tr key={t.id} className="hover:bg-[#e4eef8] transition">
-                    <td className="px-3 py-2 font-mono font-bold text-amber-900">{t.serial}</td>
-                    <td className="px-3 py-2 font-mono text-slate-500 text-[10px]">{t.assetNo || '—'}</td>
-                    <td className="px-3 py-2 font-mono font-semibold">{t.size}</td>
-                    <td className="px-3 py-2 font-bold text-[#1a3055]">{t.shortDesc}</td>
-                    <td className="px-3 py-2 text-slate-600 text-[10px] max-w-xs truncate" title={t.desc}>
-                      {t.desc}
-                    </td>
-                    <td
-                      className={`px-3 py-2 font-bold ${
-                        t.isEmdad ? 'text-amber-800' : 'text-slate-600'
-                      }`}
-                    >
-                      {t.ownership}
-                    </td>
-                    <td className="px-3 py-2 text-slate-700">{t.location}</td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                          t.status === 'Good'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : t.status === 'Repair'
-                            ? 'bg-rose-100 text-rose-800'
-                            : t.status === 'Inspection'
-                            ? 'bg-amber-100 text-amber-800'
-                            : t.status === 'Redress'
-                            ? 'bg-orange-100 text-orange-800'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
-                      >
-                        {t.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <button
-                        onClick={() => startEditTool(t)}
-                        className="text-blue-700 hover:underline font-bold text-[11px] cursor-pointer"
-                      >
-                        Edit
-                      </button>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {pagedList.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="p-8 text-center text-slate-500 font-medium">
+                      No tool assets found matching the selected criteria.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  pagedList.map((t) => (
+                    <tr key={t.id} className="hover:bg-slate-50 transition">
+                      <td className="px-3 py-2 font-mono font-bold text-slate-900">{t.serial}</td>
+                      <td className="px-3 py-2 font-mono text-slate-500 text-[11px]">{t.assetNo || '—'}</td>
+                      <td className="px-3 py-2 font-mono text-slate-700 font-medium">{t.size}</td>
+                      <td className="px-3 py-2 font-semibold text-slate-900">{t.shortDesc}</td>
+                      <td className="px-3 py-2 text-slate-600 text-xs max-w-xs truncate font-normal" title={t.desc}>
+                        {t.desc}
+                      </td>
+                      <td className="px-3 py-2 font-medium text-slate-700">
+                        {t.ownership}
+                      </td>
+                      <td className="px-3 py-2 text-slate-700 font-medium">{t.location}</td>
+                      <td className="px-3 py-2">
+                        {renderToolStatusBadge(t.status)}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => startEditTool(t)}
+                          className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold border border-slate-300 cursor-pointer transition"
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Pagination footer */}
         <div className="px-4 py-3 bg-[#f8fafc] border-t border-[#b8c9db] flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -518,38 +778,138 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               )}
 
               <div className="grid grid-cols-2 gap-3">
+                {/* Tool Category */}
                 <div>
-                  <label className="block font-bold mb-1">Tool Category / Type *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. HYD DRILLING JAR, SHOCK TOOL"
-                    value={newType}
-                    onChange={(e) => setNewType(e.target.value)}
-                    className="w-full border rounded px-2.5 py-1.5"
-                    list="cat-suggestions"
-                  />
-                  <datalist id="cat-suggestions">
-                    {categories.map((c) => (
-                      <option key={c} value={c} />
-                    ))}
-                  </datalist>
-                </div>
-                <div>
-                  <label className="block font-bold mb-1">Tool Size *</label>
-                  <select
-                    required
-                    value={newSize}
-                    onChange={(e) => setNewSize(e.target.value)}
-                    className="w-full border rounded px-2.5 py-1.5 font-mono"
-                  >
-                    <option value="">Select size...</option>
-                    {TOOL_SIZES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">Tool Category / Type *</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingNewCat(!isAddingNewCat);
+                        setNewCatInput('');
+                      }}
+                      className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer"
+                    >
+                      {isAddingNewCat ? '✕ Cancel' : '+ Add New Category'}
+                    </button>
+                  </div>
+
+                  {!isAddingNewCat ? (
+                    <select
+                      required
+                      value={newType}
+                      onChange={(e) => {
+                        if (e.target.value === '__NEW__') {
+                          setIsAddingNewCat(true);
+                          setNewCatInput('');
+                        } else {
+                          setNewType(e.target.value);
+                        }
+                      }}
+                      className="w-full border rounded px-2.5 py-1.5 bg-white font-medium text-slate-800 text-xs"
+                    >
+                      <option value="">Select category...</option>
+                      <option value="__NEW__" className="font-bold text-blue-700 bg-blue-50">
+                        + Add New Category...
                       </option>
-                    ))}
-                  </select>
+                      {categories.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="Enter new category name..."
+                        value={newCatInput}
+                        onChange={(e) => setNewCatInput(e.target.value.toUpperCase())}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveNewCategory();
+                          }
+                        }}
+                        className="flex-1 border-2 border-blue-400 rounded px-2 py-1 uppercase font-bold text-slate-800 text-xs focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveNewCategory}
+                        className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded font-bold text-xs cursor-pointer shadow-xs"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Tool Size */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">Tool Size (OD) *</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingNewSize(!isAddingNewSize);
+                        setNewSizeInput('');
+                      }}
+                      className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer"
+                    >
+                      {isAddingNewSize ? '✕ Cancel' : '+ Add New Size'}
+                    </button>
+                  </div>
+
+                  {!isAddingNewSize ? (
+                    <select
+                      required
+                      value={newSize}
+                      onChange={(e) => {
+                        if (e.target.value === '__NEW__') {
+                          setIsAddingNewSize(true);
+                          setNewSizeInput('');
+                        } else {
+                          setNewSize(e.target.value);
+                        }
+                      }}
+                      className="w-full border rounded px-2.5 py-1.5 bg-white font-mono font-medium text-slate-800 text-xs"
+                    >
+                      <option value="">Select size...</option>
+                      <option value="__NEW__" className="font-bold text-blue-700 bg-blue-50">
+                        + Add New Size...
+                      </option>
+                      {standardSizes.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="e.g. 7-1/4&quot; or 178mm..."
+                        value={newSizeInput}
+                        onChange={(e) => setNewSizeInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveNewSize();
+                          }
+                        }}
+                        className="flex-1 border-2 border-blue-400 rounded px-2 py-1 font-mono font-bold text-slate-800 text-xs focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveNewSize}
+                        className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded font-bold text-xs cursor-pointer shadow-xs"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
