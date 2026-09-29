@@ -1201,7 +1201,6 @@ export const App: React.FC = () => {
           localStorage.setItem('emdad_logged_out', 'true');
           setCurrentUser(null);
         }}
-        onClearDemoData={handleClearDemoData}
         onNavigate={(v) => {
           setActiveView(v);
           window.scrollTo({ top: 0, behavior: 'smooth' });

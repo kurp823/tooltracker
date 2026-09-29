@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "vite build && node -e \"try{require('esbuild').buildSync({entryPoints:['./server.ts'],bundle:true,platform:'node',format:'cjs',external:['express','vite'],sourcemap:true,outfile:'dist/server.cjs'})}catch(e){}\"",
-    "start": "node dist/server.cjs",
+    "dev": "vite",
+    "build": "vite build",
+    "start": "vite preview",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"

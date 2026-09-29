@@ -446,45 +446,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-4 w-full">
-      {/* Top Banner Ribbon */}
-      <div className="bg-white border border-[#b8c9db] rounded p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-        <div>
-          <div className="text-[11px] text-slate-500 font-semibold tracking-wide uppercase">
-            Operations &amp; Rig Fleet Command
-          </div>
-          <h1 className="text-lg font-extrabold text-[#1a3055] tracking-tight">
-            Downhole Tool Operations &amp; Rig Intelligence
-          </h1>
-          <div className="text-xs text-slate-600 mt-0.5">
-            Real-time rig deployment analytics, fleet velocity, operator breakdown, and ticket compliance monitoring.
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {onRefreshSql && (
-            <button
-              onClick={onRefreshSql}
-              title="Refresh and sync data against live Azure SQL database"
-              className="px-2.5 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-300 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
-            >
-              <span>🔄</span> Refresh Live Feed
-            </button>
-          )}
-          {onOpenAddCallout && user?.role !== 'Viewer' && (
-            <button
-              onClick={onOpenAddCallout}
-              className="px-3 py-1.5 rounded bg-[#1a3055] text-white hover:bg-[#24426d] font-bold text-xs shadow-sm transition cursor-pointer flex items-center gap-1.5"
-            >
-              <span>+</span> Rig Callout
-            </button>
-          )}
-          <button
-            onClick={() => onNavigate('jobs')}
-            className="px-3 py-1.5 rounded bg-amber-400 hover:bg-amber-500 text-slate-900 font-bold text-xs shadow-sm transition cursor-pointer"
-          >
-            Drilling Jobs &rarr;
-          </button>
-        </div>
-      </div>
 
       {/* 5 Primary Operational KPI Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">

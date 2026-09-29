@@ -1,6 +1,6 @@
 import React from 'react';
 import { User } from '../types';
-import { downloadStandaloneHtml, DbConnectionStatus } from '../services/api';
+import { DbConnectionStatus } from '../services/api';
 
 interface HeaderProps {
   user?: User | null;
@@ -10,7 +10,6 @@ interface HeaderProps {
   onSync?: () => void;
   onRefresh?: () => void;
   onLogout: () => void;
-  onClearDemoData?: (includeInventory?: boolean) => void;
   onNavigate?: (module: any) => void;
 }
 
@@ -22,7 +21,6 @@ export const Header: React.FC<HeaderProps> = ({
   onSync,
   onRefresh,
   onLogout,
-  onClearDemoData,
   onNavigate,
 }) => {
   const syncing = isSyncing || syncStatus === 'syncing';
@@ -86,50 +84,6 @@ export const Header: React.FC<HeaderProps> = ({
           <span>🔄 Refresh SQL</span>
         </button>
 
-        {onClearDemoData && (
-          <button
-            onClick={() => {
-              const choice = window.confirm(
-                'Clear Demo Operations:\n\n' +
-                '• Click [OK] to clear demo Jobs, Delivery Tickets, and Callouts (keeps the tool catalog, but returns all tools to Base with 0 on rig).\n\n' +
-                '• Click [Cancel] if you want to wipe EVERYTHING (including the 48 tools down to 0 for pure Azure SQL).'
-              );
-              if (choice) {
-                onClearDemoData(false);
-              } else {
-                const wipeAll = window.confirm(
-                  'Wipe Complete Inventory Catalog (0 Tools)?\n\n' +
-                  'Click [OK] to delete all 48 tools and set inventory to 0 for a completely clean Azure SQL state.'
-                );
-                if (wipeAll) {
-                  onClearDemoData(true);
-                }
-              }
-            }}
-            className="px-2 py-1 bg-rose-900/60 hover:bg-rose-800 text-rose-200 rounded border border-rose-500/50 text-[11px] font-semibold flex items-center space-x-1 transition cursor-pointer"
-            title="Clear demo data and activate clean Pure SQL State"
-          >
-            <span>🗑️ Clear Demo Data</span>
-          </button>
-        )}
-
-        {/* Protected Download: Admin clearance required */}
-        {user?.role === 'Admin' && (
-          <button
-            onClick={() => {
-              const ok = window.confirm(
-                'Admin Clearance Required:\n\nDo you confirm exporting the complete self-contained index.html standalone package with all operational data bundled?'
-              );
-              if (ok) {
-                downloadStandaloneHtml();
-              }
-            }}
-            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded border border-amber-600 text-[11px] font-bold flex items-center space-x-1 shadow-xs cursor-pointer transition"
-            title="Administrator Export: Download single-file index.html for deployment"
-          >
-            <span>💾 Download index.html</span>
-          </button>
-        )}
 
         <div className="flex items-center space-x-1.5 bg-[#24426d] px-2.5 py-1 rounded border border-[#3b5d8f]">
           <span className="text-slate-300 text-[11px]">Role:</span>
