@@ -1841,7 +1841,7 @@ export async function saveCalloutApi(callout: any): Promise<{ success: boolean; 
 
 export async function saveGatePassApi(gatePass: any): Promise<{ success: boolean; message: string }> {
   try {
-    const res = await fetchFromApi('savegatepass', { gatePass });
+    const res = await fetchFromApi('savegatepass', { gatepass: gatePass, gatePass });
     return { success: res !== null, message: res ? 'Gate pass saved to Azure SQL' : 'Saved locally' };
   } catch {
     return { success: true, message: 'Saved locally' };
@@ -1921,7 +1921,11 @@ export async function saveMaintenanceApi(maintenance: any): Promise<{ success: b
 
 export async function saveInventoryApi(tool: any): Promise<{ success: boolean; message: string }> {
   try {
-    const res = await fetchFromApi('savetool', { tool });
+    // The Azure Function supports 'updatetool' for existing tools and 'addtool' for new entries
+    let res = await fetchFromApi('updatetool', { tool });
+    if (!res) {
+      res = await fetchFromApi('addtool', { tool });
+    }
     return { success: res !== null, message: res ? 'Tool saved to Azure SQL' : 'Saved locally' };
   } catch {
     return { success: true, message: 'Saved locally' };
@@ -1939,7 +1943,8 @@ export async function saveJobApi(job: any): Promise<{ success: boolean; message:
 
 export async function saveDeliveryTicketApi(dtBatch: any): Promise<{ success: boolean; message: string }> {
   try {
-    const res = await fetchFromApi('savedeliveryticket', { dtBatch });
+    // Azure Function requires 'batch' payload key (checking batch.dtNumber)
+    const res = await fetchFromApi('savedeliveryticket', { batch: dtBatch, dtBatch });
     return { success: res !== null, message: res ? 'Delivery Ticket saved to Azure SQL' : 'Saved locally' };
   } catch {
     return { success: true, message: 'Saved locally' };
@@ -1948,7 +1953,8 @@ export async function saveDeliveryTicketApi(dtBatch: any): Promise<{ success: bo
 
 export async function saveReceivingTicketApi(rtBatch: any): Promise<{ success: boolean; message: string }> {
   try {
-    const res = await fetchFromApi('savereceivingticket', { rtBatch });
+    // Azure Function requires 'batch' payload key (checking batch.rtNumber)
+    const res = await fetchFromApi('savereceivingticket', { batch: rtBatch, rtBatch });
     return { success: res !== null, message: res ? 'Receiving Ticket saved to Azure SQL' : 'Saved locally' };
   } catch {
     return { success: true, message: 'Saved locally' };

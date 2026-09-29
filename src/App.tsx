@@ -37,6 +37,7 @@ import {
   saveJobApi,
   saveDeliveryTicketApi,
   saveReceivingTicketApi,
+  saveInventoryApi,
 } from './services/api';
 import { MASTER_JOBS } from './data/masterJobs';
 import { Toast, ToastNotification } from './components/Toast';
@@ -442,6 +443,26 @@ export const App: React.FC = () => {
   // Inventory Save
   const handleSaveInventory = (updated: ToolItem[]) => {
     setInventory(updated);
+    const currentMap = new Map(inventory.map((t) => [t.id || t.serial, t]));
+    const changedTools = updated.filter((item) => {
+      const prev = currentMap.get(item.id || item.serial);
+      if (!prev) return true;
+      return (
+        prev.status !== item.status ||
+        prev.location !== item.location ||
+        prev.currentJobId !== item.currentJobId ||
+        prev.assetNo !== item.assetNo ||
+        prev.shortDesc !== item.shortDesc ||
+        prev.size !== item.size
+      );
+    });
+    if (changedTools.length > 0) {
+      changedTools.forEach((tool) => {
+        saveInventoryApi(tool).then((r) => {
+          if (!r.success) console.warn('Could not save tool to SQL:', r.message);
+        });
+      });
+    }
     showToast('Inventory catalog updated.', 'success');
   };
 
@@ -531,19 +552,26 @@ export const App: React.FC = () => {
 
     // Update tool statuses in inventory to 'On Rig'
     const dispatchedSerials = batch.toolLines.map((t) => t.serial);
+    const updatedDispatchedTools: ToolItem[] = [];
     setInventory((prev) =>
       prev.map((tool) => {
         if (dispatchedSerials.includes(tool.serial)) {
-          return {
+          const updated: ToolItem = {
             ...tool,
             status: 'On Rig',
             location: 'On Rig',
             currentJobId: batch.jobId,
           };
+          updatedDispatchedTools.push(updated);
+          return updated;
         }
         return tool;
       })
     );
+    // Cascade to Azure SQL so all users see tool is on rig
+    updatedDispatchedTools.forEach((tool) => {
+      saveInventoryApi(tool);
+    });
 
     // If job has linked callout, check if all items are dispatched and mark Closed/Mobilized
     const job = jobs.find((j) => j.id === batch.jobId);
@@ -573,22 +601,28 @@ export const App: React.FC = () => {
     if (addedTools && addedTools.length > 0) {
       const addedSerials = new Set(addedTools.map((t) => t.serial));
       setInventory((prev) =>
-        prev.map((t) =>
-          addedSerials.has(t.serial)
-            ? { ...t, status: 'On Rig', location: 'On Rig', currentJobId: updatedBatch.jobId }
-            : t
-        )
+        prev.map((t) => {
+          if (addedSerials.has(t.serial)) {
+            const updated: ToolItem = { ...t, status: 'On Rig', location: 'On Rig', currentJobId: updatedBatch.jobId };
+            saveInventoryApi(updated);
+            return updated;
+          }
+          return t;
+        })
       );
     }
 
     if (removedTools && removedTools.length > 0) {
       const removedSerials = new Set(removedTools.map((t) => t.serial));
       setInventory((prev) =>
-        prev.map((t) =>
-          removedSerials.has(t.serial)
-            ? { ...t, status: 'Good', location: 'Emdad Base', currentJobId: null }
-            : t
-        )
+        prev.map((t) => {
+          if (removedSerials.has(t.serial)) {
+            const updated: ToolItem = { ...t, status: 'Good', location: 'Emdad Base', currentJobId: null };
+            saveInventoryApi(updated);
+            return updated;
+          }
+          return t;
+        })
       );
     }
 
@@ -675,28 +709,33 @@ export const App: React.FC = () => {
       });
     }
 
+    const updatedRtTools: ToolItem[] = [];
     setInventory((prev) =>
       prev.map((tool) => {
         const line = batch.toolLines.find((l) => l.serial === tool.serial);
         if (!line) return tool;
 
-        if (line.used) {
-          return {
-            ...tool,
-            status: 'Inspection',
-            location: 'Inspection Bay',
-            currentJobId: null,
-          };
-        } else {
-          return {
-            ...tool,
-            status: 'Good',
-            location: 'Emdad Base',
-            currentJobId: null,
-          };
-        }
+        const updated: ToolItem = line.used
+          ? {
+              ...tool,
+              status: 'Inspection',
+              location: 'Inspection Bay',
+              currentJobId: null,
+            }
+          : {
+              ...tool,
+              status: 'Good',
+              location: 'Emdad Base',
+              currentJobId: null,
+            };
+        updatedRtTools.push(updated);
+        return updated;
       })
     );
+    // Cascade tool status changes to Azure SQL
+    updatedRtTools.forEach((tool) => {
+      saveInventoryApi(tool);
+    });
 
     showToast(
       `Receiving Ticket ${batch.rtNumber} processed. ${newInspections.length} used tool(s) sent to QC Inspection Bay.`,
@@ -722,11 +761,13 @@ export const App: React.FC = () => {
     setInventory((prev) =>
       prev.map((t) => {
         if (removedIds.has(t.id)) {
-          return {
+          const updated: ToolItem = {
             ...t,
             status: 'Removed',
             location: 'Returned to Supplier',
           };
+          saveInventoryApi(updated);
+          return updated;
         }
         return t;
       })
@@ -753,11 +794,14 @@ export const App: React.FC = () => {
 
     if (updates.status === 'Pass') {
       setInventory((prev) =>
-        prev.map((t) =>
-          t.serial === ins.serial
-            ? { ...t, status: 'Good', location: 'Emdad Base' }
-            : t
-        )
+        prev.map((t) => {
+          if (t.serial === ins.serial) {
+            const updated: ToolItem = { ...t, status: 'Good', location: 'Emdad Base' };
+            saveInventoryApi(updated);
+            return updated;
+          }
+          return t;
+        })
       );
       showToast(`Tool ${ins.serial} passed QC and returned to Base ready stock.`, 'success');
     } else if (updates.status === 'Fail') {
@@ -768,11 +812,14 @@ export const App: React.FC = () => {
         });
       }
       setInventory((prev) =>
-        prev.map((t) =>
-          t.serial === ins.serial
-            ? { ...t, status: 'Redress', location: 'Workshop' }
-            : t
-        )
+        prev.map((t) => {
+          if (t.serial === ins.serial) {
+            const updated: ToolItem = { ...t, status: 'Redress', location: 'Workshop' };
+            saveInventoryApi(updated);
+            return updated;
+          }
+          return t;
+        })
       );
       showToast(
         `Tool ${ins.serial} failed QC. Maintenance Work Order ${newMaintenanceWO?.woNumber || ''} created.`,
@@ -788,15 +835,18 @@ export const App: React.FC = () => {
       if (!r.success) showToast(r.message, 'error');
     });
     setInventory((prev) =>
-      prev.map((t) =>
-        t.serial === record.serial
-          ? {
-              ...t,
-              status: 'Redress',
-              location: record.type === 'Vendor' ? `Vendor Workshop (${record.vendor || '3rd Party'})` : 'Workshop',
-            }
-          : t
-      )
+      prev.map((t) => {
+        if (t.serial === record.serial) {
+          const updated: ToolItem = {
+            ...t,
+            status: 'Redress',
+            location: record.type === 'Vendor' ? `Vendor Workshop (${record.vendor || '3rd Party'})` : 'Workshop',
+          };
+          saveInventoryApi(updated);
+          return updated;
+        }
+        return t;
+      })
     );
     showToast(`Maintenance Work Order ${record.woNumber} created.`, 'success');
   };
@@ -833,15 +883,18 @@ export const App: React.FC = () => {
     });
 
     setInventory((prev) =>
-      prev.map((t) =>
-        t.serial === mnt.serial
-          ? {
-              ...t,
-              status: 'Repair',
-              location: `Vendor Workshop (${vendorName})`,
-            }
-          : t
-      )
+      prev.map((t) => {
+        if (t.serial === mnt.serial) {
+          const updated: ToolItem = {
+            ...t,
+            status: 'Repair',
+            location: `Vendor Workshop (${vendorName})`,
+          };
+          saveInventoryApi(updated);
+          return updated;
+        }
+        return t;
+      })
     );
 
     showToast(`Tool ${mnt.serial} dispatched to vendor ${vendorName} under PO ${vendorPoRef || 'N/A'}.`, 'success');
@@ -874,15 +927,18 @@ export const App: React.FC = () => {
     });
 
     setInventory((prev) =>
-      prev.map((t) =>
-        t.serial === mnt.serial
-          ? {
-              ...t,
-              status: 'Redress',
-              location: 'Workshop QC Bay',
-            }
-          : t
-      )
+      prev.map((t) => {
+        if (t.serial === mnt.serial) {
+          const updated: ToolItem = {
+            ...t,
+            status: 'Redress',
+            location: 'Workshop QC Bay',
+          };
+          saveInventoryApi(updated);
+          return updated;
+        }
+        return t;
+      })
     );
 
     showToast(`Tool ${mnt.serial} received back from vendor. Ready for inspection.`, 'success');
@@ -939,15 +995,18 @@ export const App: React.FC = () => {
     });
 
     setInventory((prev) =>
-      prev.map((t) =>
-        t.serial === mnt.serial
-          ? {
-              ...t,
-              status: 'Inspection',
-              location: 'Inspection Bay',
-            }
-          : t
-      )
+      prev.map((t) => {
+        if (t.serial === mnt.serial) {
+          const updated: ToolItem = {
+            ...t,
+            status: 'Inspection',
+            location: 'Inspection Bay',
+          };
+          saveInventoryApi(updated);
+          return updated;
+        }
+        return t;
+      })
     );
 
     showToast(`Tool ${mnt.serial} routed to QC Inspection Bay. Work Order ${woNum} generated.`, 'success');
@@ -1010,21 +1069,27 @@ export const App: React.FC = () => {
       });
 
       setInventory((prev) =>
-        prev.map((t) =>
-          t.serial === mnt.serial
-            ? { ...t, status: 'Inspection', location: 'Inspection Bay' }
-            : t
-        )
+        prev.map((t) => {
+          if (t.serial === mnt.serial) {
+            const updated: ToolItem = { ...t, status: 'Inspection', location: 'Inspection Bay' };
+            saveInventoryApi(updated);
+            return updated;
+          }
+          return t;
+        })
       );
 
       showToast(`Maintenance WO ${mnt.woNumber} completed. Routed to Inspection Bay (${woNum}).`, 'success');
     } else {
       setInventory((prev) =>
-        prev.map((t) =>
-          t.serial === mnt.serial
-            ? { ...t, status: 'Good', location: 'Emdad Base' }
-            : t
-        )
+        prev.map((t) => {
+          if (t.serial === mnt.serial) {
+            const updated: ToolItem = { ...t, status: 'Good', location: 'Emdad Base' };
+            saveInventoryApi(updated);
+            return updated;
+          }
+          return t;
+        })
       );
 
       showToast(`Maintenance WO ${mnt.woNumber} completed. Tool returned to Base as Good ready stock.`, 'success');
