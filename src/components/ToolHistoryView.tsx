@@ -46,25 +46,26 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
     });
   }, [inventory, toolDeploymentCounts]);
 
-  // Default selected tool: preSelectedSerial or first tool with deployments
+  // Default selected tool: preSelectedSerial or first tool with deployments or empty
   const [selectedSerial, setSelectedSerial] = useState<string>(() => {
     if (preSelectedSerial) return preSelectedSerial;
     const firstWithDeployments = sortedInventory.find((t) => {
       const s = (t.serial || t.assetNo || '').trim().toUpperCase();
       return (toolDeploymentCounts.get(s) || 0) > 0;
     });
-    return firstWithDeployments?.serial || sortedInventory[0]?.serial || '';
+    return firstWithDeployments?.serial || '';
   });
 
-  // Filters
-  const [toolSearchText, setToolSearchText] = useState('');
-  const [onlyToolsWithDeployments, setOnlyToolsWithDeployments] = useState(true);
+  // Table filters & pagination
   const [tableSearchFilter, setTableSearchFilter] = useState('');
   const [remarkFilter, setRemarkFilter] = useState<'All' | 'Used' | 'Not Used' | 'On Rig'>('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
+
+  // 3-dots action menu
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close 3-dots menu on outside click
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
@@ -79,27 +80,14 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
   useEffect(() => {
     if (preSelectedSerial) {
       setSelectedSerial(preSelectedSerial);
+      setCurrentPage(1);
     }
   }, [preSelectedSerial]);
 
-  // Filtered tools for the dropdown
-  const selectableTools = useMemo(() => {
-    return sortedInventory.filter((t) => {
-      const s = (t.serial || t.assetNo || '').trim().toUpperCase();
-      const count = toolDeploymentCounts.get(s) || 0;
-
-      if (onlyToolsWithDeployments && count === 0) return false;
-
-      if (!toolSearchText.trim()) return true;
-      const q = toolSearchText.toLowerCase();
-      return (
-        t.serial.toLowerCase().includes(q) ||
-        (t.shortDesc && t.shortDesc.toLowerCase().includes(q)) ||
-        (t.desc && t.desc.toLowerCase().includes(q)) ||
-        (t.size && t.size.toLowerCase().includes(q))
-      );
-    });
-  }, [sortedInventory, toolDeploymentCounts, onlyToolsWithDeployments, toolSearchText]);
+  // Reset page when tool selection or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedSerial, tableSearchFilter, remarkFilter]);
 
   // Currently selected tool master record
   const currentTool = useMemo(() => {
@@ -130,12 +118,11 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
     return map;
   }, [jobs]);
 
-  // Build the complete historical movement audit trail for this tool
+  // Build movement records: if a tool is selected, show that tool's history; if empty, show all tool movements
   const historyRows = useMemo(() => {
-    if (!selectedSerial) return [];
-    const target = selectedSerial.trim().toUpperCase();
+    const target = selectedSerial ? selectedSerial.trim().toUpperCase() : '';
 
-    // Map all RT tool lines for this serial
+    // Map all RT tool lines
     const rtLinesByTicket = new Map<
       string,
       { rtNumber: string; rtDate: string; used: boolean; condition?: string }
@@ -144,8 +131,9 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
     rtBatches.forEach((rt) => {
       (rt.toolLines || []).forEach((rtl) => {
         const lineSerial = (rtl.serial || rtl.assetNo || '').trim().toUpperCase();
-        if (lineSerial === target) {
-          rtLinesByTicket.set(rt.rtNumber.trim().toUpperCase(), {
+        if (!target || lineSerial === target) {
+          const key = `${lineSerial}_${rt.rtNumber.trim().toUpperCase()}`;
+          rtLinesByTicket.set(key, {
             rtNumber: rt.rtNumber,
             rtDate: rt.rtDate || '',
             used: Boolean(rtl.used),
@@ -153,7 +141,7 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
           });
           const normJob = normalizeJobKey(rt.jobId || rt.jobNumber || '');
           if (normJob) {
-            rtLinesByTicket.set(`JOB_${normJob}`, {
+            rtLinesByTicket.set(`${lineSerial}_JOB_${normJob}`, {
               rtNumber: rt.rtNumber,
               rtDate: rt.rtDate || '',
               used: Boolean(rtl.used),
@@ -166,12 +154,12 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
 
     const rows: JobToolReconRow[] = [];
 
-    // Find all DTs that included this tool
+    // Find all DTs that included this tool (or all tools if empty)
     dtBatches.forEach((dt) => {
       const lines = dt.toolLines || [];
       lines.forEach((line, idx) => {
         const lineSerial = (line.serial || line.assetNo || '').trim().toUpperCase();
-        if (lineSerial !== target) return;
+        if (target && lineSerial !== target) return;
 
         const jobKey = (dt.jobId || dt.jobNumber || '').trim().toUpperCase();
         const normJob = normalizeJobKey(jobKey);
@@ -181,7 +169,7 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
         let retDate = '';
         let remark: 'Used' | 'Not Used' | 'On Rig' = 'On Rig';
 
-        const matchedByJob = rtLinesByTicket.get(`JOB_${normJob}`);
+        const matchedByJob = rtLinesByTicket.get(`${lineSerial}_JOB_${normJob}`);
         if (matchedByJob) {
           retNum = matchedByJob.rtNumber;
           retDate = matchedByJob.rtDate;
@@ -196,15 +184,15 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
           deliveryTicketNum: dt.dtNumber,
           deliveryDate: dt.deliveryDate || dt.rmDate || '',
           sNo: idx + 1,
-          partNum: line.serial || line.assetNo || selectedSerial,
-          partDescription: line.desc || line.shortDesc || currentTool?.desc || currentTool?.shortDesc || 'Drilling Tool',
+          partNum: line.serial || line.assetNo || (target || '—'),
+          partDescription: line.desc || line.shortDesc || (target === lineSerial && currentTool?.desc) || 'Drilling Tool',
           returnTicketNum: retNum,
           returnDate: retDate,
           remark,
           rigNum: linkedJob?.rig || dt.rig || '—',
           wellNumber: linkedJob?.well || dt.well || '—',
-          toolType: line.shortDesc || currentTool?.shortDesc,
-          size: line.size || currentTool?.size,
+          toolType: line.shortDesc,
+          size: line.size,
         });
       });
     });
@@ -221,17 +209,25 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
       if (!tableSearchFilter.trim()) return true;
       const q = tableSearchFilter.toLowerCase();
       return (
+        r.partNum.toLowerCase().includes(q) ||
+        r.partDescription.toLowerCase().includes(q) ||
         r.jobNum.toLowerCase().includes(q) ||
         r.deliveryTicketNum.toLowerCase().includes(q) ||
         r.returnTicketNum.toLowerCase().includes(q) ||
         r.rigNum.toLowerCase().includes(q) ||
-        r.wellNumber.toLowerCase().includes(q) ||
-        r.partDescription.toLowerCase().includes(q)
+        r.wellNumber.toLowerCase().includes(q)
       );
     });
   }, [historyRows, remarkFilter, tableSearchFilter]);
 
-  // Metrics
+  // Paged rows
+  const totalPages = Math.ceil(filteredRows.length / pageSize) || 1;
+  const pagedRows = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, currentPage, pageSize]);
+
+  // Summary Metrics
   const totalDeployments = historyRows.length;
   const usedRuns = historyRows.filter((r) => r.remark === 'Used').length;
   const notUsedRuns = historyRows.filter((r) => r.remark === 'Not Used').length;
@@ -262,11 +258,14 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Tool_History');
 
-    const cleanSerial = selectedSerial.replace(/[^a-zA-Z0-9_-]/g, '_');
-    XLSX.writeFile(wb, `ToolHistory_${cleanSerial}.xlsx`);
+    const fileName = selectedSerial
+      ? `ToolHistory_${selectedSerial.replace(/[^a-zA-Z0-9_-]/g, '_')}.xlsx`
+      : 'AllTools_MovementHistory.xlsx';
+
+    XLSX.writeFile(wb, fileName);
 
     if (showToast) {
-      showToast(`Exported ${filteredRows.length} movement records to ToolHistory_${cleanSerial}.xlsx`, 'success');
+      showToast(`Exported ${filteredRows.length} movement records to ${fileName}`, 'success');
     }
     setIsActionMenuOpen(false);
   };
@@ -308,6 +307,7 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  setSelectedSerial('');
                   setRemarkFilter('All');
                   setTableSearchFilter('');
                   setIsActionMenuOpen(false);
@@ -315,79 +315,64 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
                 className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-500 flex items-center gap-2 cursor-pointer border-t border-slate-100"
               >
                 <span>🔄</span>
-                <span>Reset Table Filters</span>
+                <span>Reset All Filters</span>
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Parameter Control Panel: Tool Selector & Search */}
+      {/* Control Panel: Tool Selector & Search */}
       <div className="bg-white rounded-lg border border-slate-200/90 p-3 shadow-xs space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Tool Dropdown Selector */}
-          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
+          {/* Tool Dropdown Selector with clear button */}
+          <div className="flex items-center gap-2 flex-1 min-w-[320px]">
             <label className="text-xs font-bold text-slate-700 shrink-0">
               Select Tool (PartNum / Serial):
             </label>
 
-            <select
-              value={selectedSerial}
-              onChange={(e) => setSelectedSerial(e.target.value)}
-              className="flex-1 min-w-[240px] max-w-xl text-xs font-mono font-bold bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-900 cursor-pointer"
-            >
-              {selectableTools.map((t) => {
-                const s = (t.serial || t.assetNo || '').trim().toUpperCase();
-                const count = toolDeploymentCounts.get(s) || 0;
-                return (
-                  <option key={t.id || t.serial} value={t.serial}>
-                    {t.serial} — {t.shortDesc} ({t.size || '—'}) [{count} Runs]
-                  </option>
-                );
-              })}
-            </select>
+            <div className="flex items-center gap-1.5 flex-1 max-w-xl">
+              <select
+                value={selectedSerial}
+                onChange={(e) => setSelectedSerial(e.target.value)}
+                className="w-full text-xs font-mono font-bold bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-900 cursor-pointer"
+              >
+                <option value="">-- All Tools (Show All Fleet Movements) --</option>
+                {sortedInventory.map((t) => {
+                  const s = (t.serial || t.assetNo || '').trim().toUpperCase();
+                  const count = toolDeploymentCounts.get(s) || 0;
+                  return (
+                    <option key={t.id || t.serial} value={t.serial}>
+                      {t.serial} — {t.shortDesc} ({t.size || '—'}) [{count} Runs]
+                    </option>
+                  );
+                })}
+              </select>
 
-            {/* Quick search input to find any tool */}
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Find serial/category..."
-                value={toolSearchText}
-                onChange={(e) => setToolSearchText(e.target.value)}
-                className="w-36 sm:w-44 text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-amber-400 pr-5"
-              />
-              {toolSearchText && (
+              {/* Clear button to reset back to All Tools */}
+              {selectedSerial && (
                 <button
                   type="button"
-                  onClick={() => setToolSearchText('')}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold cursor-pointer"
+                  onClick={() => setSelectedSerial('')}
+                  title="Clear selected tool (Show all tools)"
+                  className="px-2 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-300 text-xs font-bold transition cursor-pointer shrink-0 flex items-center gap-1"
                 >
-                  ✕
+                  <span>✕</span>
+                  <span className="hidden sm:inline">All Tools</span>
                 </button>
               )}
             </div>
-
-            {/* Only tools with deployments toggle */}
-            <label className="flex items-center space-x-1.5 text-[11px] text-slate-600 font-medium cursor-pointer ml-1 select-none">
-              <input
-                type="checkbox"
-                checked={onlyToolsWithDeployments}
-                onChange={(e) => setOnlyToolsWithDeployments(e.target.checked)}
-                className="rounded border-slate-300 text-amber-600 focus:ring-0 cursor-pointer"
-              />
-              <span>With Runs Only</span>
-            </label>
           </div>
 
-          {/* Table in-grid search and status filter chips */}
+          {/* Unified search bar and status chips */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search job, rig, ticket..."
+                placeholder="Search serial, part, job, rig, ticket..."
                 value={tableSearchFilter}
                 onChange={(e) => setTableSearchFilter(e.target.value)}
-                className="w-40 sm:w-52 text-xs bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 pr-5"
+                className="w-52 sm:w-64 text-xs bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 pr-6"
               />
               {tableSearchFilter && (
                 <button
@@ -423,24 +408,33 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
         {/* Selected Tool Metadata & KPI Strip */}
         <div className="bg-[#0b192c] rounded-lg p-3 text-white text-xs flex flex-wrap items-center justify-between gap-3 shadow-xs">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-            <div>
-              <span className="text-[10px] text-slate-400 block uppercase font-bold">SERIAL / PARTNUM</span>
-              <span className="font-mono font-bold text-amber-300 text-sm">{selectedSerial}</span>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-400 block uppercase font-bold">TOOL DESCRIPTION</span>
-              <span className="font-semibold text-slate-100">{currentTool?.shortDesc || 'Downhole Tool'}</span>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-400 block uppercase font-bold">SIZE & OWNERSHIP</span>
-              <span className="font-semibold text-slate-100">
-                {currentTool?.size || '—'} · {currentTool?.ownership || 'EMDAD'}
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-400 block uppercase font-bold">CURRENT LOCATION</span>
-              <span className="font-semibold text-emerald-400">{currentTool?.location || 'Emdad Base'}</span>
-            </div>
+            {currentTool ? (
+              <>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">SERIAL / PARTNUM</span>
+                  <span className="font-mono font-bold text-amber-300 text-sm">{selectedSerial}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">TOOL DESCRIPTION</span>
+                  <span className="font-semibold text-slate-100">{currentTool.shortDesc || 'Downhole Tool'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">SIZE & OWNERSHIP</span>
+                  <span className="font-semibold text-slate-100">
+                    {currentTool.size || '—'} · {currentTool.ownership || 'EMDAD'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">CURRENT LOCATION</span>
+                  <span className="font-semibold text-emerald-400">{currentTool.location || 'Emdad Base'}</span>
+                </div>
+              </>
+            ) : (
+              <div>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">VIEW SCOPE</span>
+                <span className="font-mono font-bold text-amber-300 text-sm">ALL FLEET TOOLS</span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center space-x-4 border-t sm:border-t-0 sm:border-l border-white/15 pt-2 sm:pt-0 sm:pl-4 text-center">
@@ -465,12 +459,14 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
 
       {/* Main Movement History Table */}
       <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-xs">
-        <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
+        <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="font-bold text-slate-700">
-            Historical Movement Records ({filteredRows.length} deployments)
+            Historical Movement Records ({filteredRows.length.toLocaleString()} deployments)
           </div>
           <div className="text-slate-500 font-mono text-[11px]">
-            Chronological audit across all jobs and delivery tickets
+            {selectedSerial
+              ? `Chronological audit for tool ${selectedSerial}`
+              : 'Chronological audit across all fleet equipment'}
           </div>
         </div>
 
@@ -492,27 +488,26 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-800">
-              {filteredRows.length === 0 ? (
+              {pagedRows.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="py-12 text-center text-slate-500">
                     <div className="max-w-md mx-auto space-y-2">
                       <div className="text-sm font-bold text-slate-700">
-                        No movement records found for tool serial {selectedSerial}.
+                        No movement records found for this selection.
                       </div>
                       <div className="text-xs text-slate-500">
-                        {totalDeployments === 0
+                        {selectedSerial
                           ? `Tool ${selectedSerial} has not been dispatched on any Delivery Tickets yet.`
                           : 'Try clearing the search or status filters.'}
                       </div>
-                      {totalDeployments === 0 && selectableTools.length > 0 && (
+                      {selectedSerial && (
                         <div className="pt-2">
                           <button
                             type="button"
-                            onClick={() => setSelectedSerial(selectableTools[0].serial)}
+                            onClick={() => setSelectedSerial('')}
                             className="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-xs cursor-pointer transition"
                           >
-                            Switch to Active Tool: {selectableTools[0].serial} (
-                            {toolDeploymentCounts.get((selectableTools[0].serial || '').trim().toUpperCase()) || 0} Runs)
+                            Show All Tools (All Fleet Movements)
                           </button>
                         </div>
                       )}
@@ -520,7 +515,7 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredRows.map((r, idx) => (
+                pagedRows.map((r, idx) => (
                   <tr key={`${r.jobNum}-${r.deliveryTicketNum}-${r.sNo}-${idx}`} className="hover:bg-slate-50/80 transition">
                     <td className="px-3 py-2 font-mono font-bold text-blue-800 whitespace-nowrap">
                       {r.jobNum}
@@ -575,6 +570,36 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination controls */}
+        {totalPages > 1 && (
+          <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
+            <div>
+              Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredRows.length)} of {filteredRows.length.toLocaleString()} records
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-2.5 py-1 rounded border border-slate-300 bg-white hover:bg-slate-100 font-bold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                &larr; Prev
+              </button>
+              <span className="font-mono font-bold text-slate-800 px-2">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-2.5 py-1 rounded border border-slate-300 bg-white hover:bg-slate-100 font-bold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Next &rarr;
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

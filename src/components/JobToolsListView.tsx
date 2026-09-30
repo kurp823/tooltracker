@@ -36,7 +36,23 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
   preSelectedJobId,
   showToast,
 }) => {
-  // Precompute total tool dispatch counts per job key
+  // Map of Job ID / normalized key to job object for fast metadata lookups
+  const jobsMap = useMemo(() => {
+    const map = new Map<string, DrillingJob>();
+    jobs.forEach((j) => {
+      if (j.id) {
+        map.set(j.id.trim().toUpperCase(), j);
+        map.set(normalizeJobKey(j.id), j);
+      }
+      if (j.jobNumber) {
+        map.set(j.jobNumber.trim().toUpperCase(), j);
+        map.set(normalizeJobKey(j.jobNumber), j);
+      }
+    });
+    return map;
+  }, [jobs]);
+
+  // Precompute tool counts per job
   const jobToolCounts = useMemo(() => {
     const counts = new Map<string, number>();
     dtBatches.forEach((dt) => {
@@ -49,7 +65,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
     return counts;
   }, [dtBatches]);
 
-  // Sort jobs: Jobs with dispatched tools first (highest count descending), then alphabetical
+  // Sort jobs: jobs with tools first (highest count descending), then alphabetical
   const sortedJobs = useMemo(() => {
     return [...jobs].sort((a, b) => {
       const aRaw = a.id.trim().toUpperCase();
@@ -61,7 +77,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
     });
   }, [jobs, jobToolCounts]);
 
-  // Default selection: preSelectedJobId, or first job with tools, or sortedJobs[0]
+  // Selected job: defaults to preSelectedJobId, or first job with tools, or empty ("All Jobs")
   const [selectedJobId, setSelectedJobId] = useState<string>(() => {
     if (preSelectedJobId) return preSelectedJobId;
     const firstWithTools = sortedJobs.find((j) => {
@@ -71,18 +87,19 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
         0;
       return count > 0;
     });
-    return firstWithTools?.id || sortedJobs[0]?.id || '';
+    return firstWithTools?.id || '';
   });
 
-  // Filters
-  const [jobSearchText, setJobSearchText] = useState('');
-  const [onlyJobsWithTools, setOnlyJobsWithTools] = useState(true);
+  // Table filters & pagination
   const [tableSearchFilter, setTableSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'On Rig' | 'Returned' | 'Used' | 'Not Used'>('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
+
+  // Action menu state (3-vertical-dots)
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close 3-dots dropdown on outside click
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
@@ -97,31 +114,16 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
   useEffect(() => {
     if (preSelectedJobId) {
       setSelectedJobId(preSelectedJobId);
+      setCurrentPage(1);
     }
   }, [preSelectedJobId]);
 
-  // Filtered job choices for the selector dropdown
-  const selectableJobs = useMemo(() => {
-    return sortedJobs.filter((j) => {
-      const count =
-        jobToolCounts.get(j.id.trim().toUpperCase()) ||
-        jobToolCounts.get(normalizeJobKey(j.id)) ||
-        0;
+  // Reset page when job or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedJobId, tableSearchFilter, statusFilter]);
 
-      if (onlyJobsWithTools && count === 0) return false;
-
-      if (!jobSearchText.trim()) return true;
-      const q = jobSearchText.toLowerCase();
-      return (
-        j.id.toLowerCase().includes(q) ||
-        (j.rig && j.rig.toLowerCase().includes(q)) ||
-        (j.well && j.well.toLowerCase().includes(q)) ||
-        (j.client && j.client.toLowerCase().includes(q))
-      );
-    });
-  }, [sortedJobs, jobToolCounts, onlyJobsWithTools, jobSearchText]);
-
-  // Currently selected job object
+  // Currently selected job object (null if "All Jobs" is selected)
   const currentJob = useMemo(() => {
     if (!selectedJobId) return null;
     const norm = normalizeJobKey(selectedJobId);
@@ -129,55 +131,65 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
     return jobs.find((j) => j.id.trim().toUpperCase() === raw || normalizeJobKey(j.id) === norm) || null;
   }, [selectedJobId, jobs]);
 
-  // Reconciled tool rows for the selected job
+  // Reconciled tool rows: if a job is selected, show that job's tools; if empty, show all dispatched tools
   const reconRows = useMemo(() => {
-    if (!currentJob) return [];
+    const norm = selectedJobId ? normalizeJobKey(selectedJobId) : '';
+    const raw = selectedJobId ? selectedJobId.trim().toUpperCase() : '';
 
-    const norm = normalizeJobKey(currentJob.id);
-    const raw = currentJob.id.trim().toUpperCase();
+    // Filter DTs & RTs
+    const targetDTs = selectedJobId
+      ? dtBatches.filter((dt) => {
+          const dtJobRaw = (dt.jobId || dt.jobNumber || '').trim().toUpperCase();
+          const dtJobNorm = normalizeJobKey(dt.jobId || dt.jobNumber || '');
+          return dtJobRaw === raw || (dtJobNorm && dtJobNorm === norm);
+        })
+      : dtBatches;
 
-    // 1. Gather all DTs for this job
-    const jobDTs = dtBatches.filter((dt) => {
-      const dtJobRaw = (dt.jobId || dt.jobNumber || '').trim().toUpperCase();
-      const dtJobNorm = normalizeJobKey(dt.jobId || dt.jobNumber || '');
-      return dtJobRaw === raw || (dtJobNorm && dtJobNorm === norm);
-    });
+    const targetRTs = selectedJobId
+      ? rtBatches.filter((rt) => {
+          const rtJobRaw = (rt.jobId || rt.jobNumber || '').trim().toUpperCase();
+          const rtJobNorm = normalizeJobKey(rt.jobId || rt.jobNumber || '');
+          return rtJobRaw === raw || (rtJobNorm && rtJobNorm === norm);
+        })
+      : rtBatches;
 
-    // 2. Gather all RTs for this job
-    const jobRTs = rtBatches.filter((rt) => {
-      const rtJobRaw = (rt.jobId || rt.jobNumber || '').trim().toUpperCase();
-      const rtJobNorm = normalizeJobKey(rt.jobId || rt.jobNumber || '');
-      return rtJobRaw === raw || (rtJobNorm && rtJobNorm === norm);
-    });
-
-    // Flatten RT lines with ticket metadata for fast serial lookup
+    // Map RT lines by serial and ticket number for rapid matching
     const rtLineLookups: {
       serial: string;
       rtNumber: string;
       rtDate: string;
       used: boolean;
-      condition?: string;
+      jobKey: string;
     }[] = [];
 
-    jobRTs.forEach((rt) => {
+    targetRTs.forEach((rt) => {
+      const rtJob = (rt.jobId || rt.jobNumber || '').trim().toUpperCase();
       (rt.toolLines || []).forEach((rtl) => {
         rtLineLookups.push({
-          serial: (rtl.serial || '').trim(),
+          serial: (rtl.serial || rtl.assetNo || '').trim().toUpperCase(),
           rtNumber: rt.rtNumber,
           rtDate: rt.rtDate || '',
           used: Boolean(rtl.used),
-          condition: rtl.condition,
+          jobKey: rtJob,
         });
       });
     });
 
     const rows: JobToolReconRow[] = [];
 
-    jobDTs.forEach((dt) => {
+    targetDTs.forEach((dt) => {
+      const dtJobKey = (dt.jobId || dt.jobNumber || '').trim().toUpperCase();
+      const normJob = normalizeJobKey(dtJobKey);
+      const linkedJob = jobsMap.get(dtJobKey) || jobsMap.get(normJob);
+
       const lines = dt.toolLines || [];
       lines.forEach((line, idx) => {
-        const lineSerial = (line.serial || '').trim();
-        const matchedRT = rtLineLookups.find((r) => r.serial === lineSerial);
+        const lineSerial = (line.serial || line.assetNo || '').trim().toUpperCase();
+
+        // Match return ticket
+        const matchedRT = rtLineLookups.find(
+          (r) => r.serial === lineSerial && (!selectedJobId || r.jobKey === dtJobKey)
+        );
 
         let remark: 'Used' | 'Not Used' | 'On Rig' = 'On Rig';
         let retNum = '';
@@ -193,7 +205,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
         }
 
         rows.push({
-          jobNum: currentJob.id,
+          jobNum: linkedJob?.id || dt.jobId || dt.jobNumber || '—',
           deliveryTicketNum: dt.dtNumber,
           deliveryDate: dt.deliveryDate || dt.rmDate || '',
           sNo: idx + 1,
@@ -202,8 +214,8 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
           returnTicketNum: retNum,
           returnDate: retDate,
           remark,
-          rigNum: currentJob.rig || dt.rig || '—',
-          wellNumber: currentJob.well || dt.well || '—',
+          rigNum: linkedJob?.rig || dt.rig || '—',
+          wellNumber: linkedJob?.well || dt.well || '—',
           toolType: line.shortDesc,
           size: line.size,
         });
@@ -211,9 +223,9 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
     });
 
     return rows;
-  }, [currentJob, dtBatches, rtBatches]);
+  }, [selectedJobId, dtBatches, rtBatches, jobsMap]);
 
-  // Filtered rows
+  // Filtered rows based on status chip and search bar
   const filteredRows = useMemo(() => {
     return reconRows.filter((r) => {
       if (statusFilter === 'On Rig' && r.remark !== 'On Rig') return false;
@@ -224,6 +236,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
       if (!tableSearchFilter.trim()) return true;
       const q = tableSearchFilter.toLowerCase();
       return (
+        r.jobNum.toLowerCase().includes(q) ||
         r.partNum.toLowerCase().includes(q) ||
         r.partDescription.toLowerCase().includes(q) ||
         r.deliveryTicketNum.toLowerCase().includes(q) ||
@@ -234,13 +247,20 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
     });
   }, [reconRows, statusFilter, tableSearchFilter]);
 
-  // KPI counters
+  // Paged rows for performance
+  const totalPages = Math.ceil(filteredRows.length / pageSize) || 1;
+  const pagedRows = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, currentPage, pageSize]);
+
+  // Summary Metrics
   const totalDispatched = reconRows.length;
   const returnedUsed = reconRows.filter((r) => r.remark === 'Used').length;
   const returnedNotUsed = reconRows.filter((r) => r.remark === 'Not Used').length;
   const activeOnRig = reconRows.filter((r) => r.remark === 'On Rig').length;
 
-  // Export to Excel function
+  // Export to Excel
   const handleExportExcel = () => {
     if (filteredRows.length === 0) {
       if (showToast) showToast('No tool records available to export.', 'info');
@@ -265,16 +285,19 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Job_ToolsList');
 
-    const jobName = currentJob?.id ? currentJob.id.replace(/[^a-zA-Z0-9_-]/g, '_') : 'Job';
-    XLSX.writeFile(wb, `${jobName}_ToolsList.xlsx`);
+    const fileName = currentJob?.id
+      ? `${currentJob.id.replace(/[^a-zA-Z0-9_-]/g, '_')}_ToolsList.xlsx`
+      : 'AllJobs_ToolsList.xlsx';
+
+    XLSX.writeFile(wb, fileName);
 
     if (showToast) {
-      showToast(`Exported ${filteredRows.length} tools to ${jobName}_ToolsList.xlsx`, 'success');
+      showToast(`Exported ${filteredRows.length} tools to ${fileName}`, 'success');
     }
     setIsActionMenuOpen(false);
   };
 
-  // Copy table to clipboard
+  // Copy data to clipboard
   const handleCopyClipboard = () => {
     if (filteredRows.length === 0) return;
     const header = [
@@ -292,6 +315,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
     ].join('\t');
 
     const body = filteredRows
+      .slice(0, 500)
       .map((r) =>
         [
           r.jobNum,
@@ -310,7 +334,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
       .join('\n');
 
     navigator.clipboard.writeText(`${header}\n${body}`);
-    if (showToast) showToast('Table data copied to clipboard.', 'success');
+    if (showToast) showToast('Copied up to 500 records to clipboard.', 'success');
     setIsActionMenuOpen(false);
   };
 
@@ -359,6 +383,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  setSelectedJobId('');
                   setStatusFilter('All');
                   setTableSearchFilter('');
                   setIsActionMenuOpen(false);
@@ -366,81 +391,66 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
                 className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-500 flex items-center gap-2 cursor-pointer border-t border-slate-100"
               >
                 <span>🔄</span>
-                <span>Reset Table Filters</span>
+                <span>Reset All Filters</span>
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Parameter Control Panel: Job Selector & Search */}
+      {/* Control Panel: Job Selector & Search */}
       <div className="bg-white rounded-lg border border-slate-200/90 p-3 shadow-xs space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Job Dropdown Selector with quick search */}
-          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
+          {/* Job Dropdown Selector with clear button */}
+          <div className="flex items-center gap-2 flex-1 min-w-[320px]">
             <label className="text-xs font-bold text-slate-700 shrink-0">
               Select Job:
             </label>
 
-            <select
-              value={selectedJobId}
-              onChange={(e) => setSelectedJobId(e.target.value)}
-              className="flex-1 min-w-[240px] max-w-xl text-xs font-mono font-bold bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-900 cursor-pointer"
-            >
-              {selectableJobs.map((j) => {
-                const count =
-                  jobToolCounts.get(j.id.trim().toUpperCase()) ||
-                  jobToolCounts.get(normalizeJobKey(j.id)) ||
-                  0;
-                return (
-                  <option key={j.id} value={j.id}>
-                    {j.id} — Rig: {j.rig || '—'} [{count} Tools]
-                  </option>
-                );
-              })}
-            </select>
+            <div className="flex items-center gap-1.5 flex-1 max-w-xl">
+              <select
+                value={selectedJobId}
+                onChange={(e) => setSelectedJobId(e.target.value)}
+                className="w-full text-xs font-mono font-bold bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-900 cursor-pointer"
+              >
+                <option value="">-- All Jobs (Show All Dispatched Tools) --</option>
+                {sortedJobs.map((j) => {
+                  const count =
+                    jobToolCounts.get(j.id.trim().toUpperCase()) ||
+                    jobToolCounts.get(normalizeJobKey(j.id)) ||
+                    0;
+                  return (
+                    <option key={j.id} value={j.id}>
+                      {j.id} — Rig: {j.rig || '—'} [{count} Tools]
+                    </option>
+                  );
+                })}
+              </select>
 
-            {/* Quick search input to find any job */}
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Find job/rig..."
-                value={jobSearchText}
-                onChange={(e) => setJobSearchText(e.target.value)}
-                className="w-32 sm:w-40 text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-amber-400 pr-5"
-              />
-              {jobSearchText && (
+              {/* Clear button to reset back to All Jobs */}
+              {selectedJobId && (
                 <button
                   type="button"
-                  onClick={() => setJobSearchText('')}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold cursor-pointer"
+                  onClick={() => setSelectedJobId('')}
+                  title="Clear selected job (Show all jobs)"
+                  className="px-2 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-300 text-xs font-bold transition cursor-pointer shrink-0 flex items-center gap-1"
                 >
-                  ✕
+                  <span>✕</span>
+                  <span className="hidden sm:inline">All Jobs</span>
                 </button>
               )}
             </div>
-
-            {/* Only jobs with tools toggle */}
-            <label className="flex items-center space-x-1.5 text-[11px] text-slate-600 font-medium cursor-pointer ml-1 select-none">
-              <input
-                type="checkbox"
-                checked={onlyJobsWithTools}
-                onChange={(e) => setOnlyJobsWithTools(e.target.checked)}
-                className="rounded border-slate-300 text-amber-600 focus:ring-0 cursor-pointer"
-              />
-              <span>With Tools Only</span>
-            </label>
           </div>
 
-          {/* Table in-grid search and status filter chips */}
+          {/* Unified search bar and status chips */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search serial, part, ticket..."
+                placeholder="Search serial, part, job, rig, ticket..."
                 value={tableSearchFilter}
                 onChange={(e) => setTableSearchFilter(e.target.value)}
-                className="w-44 sm:w-56 text-xs bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 pr-5"
+                className="w-52 sm:w-64 text-xs bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 pr-6"
               />
               {tableSearchFilter && (
                 <button
@@ -474,59 +484,64 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
         </div>
 
         {/* Selected Job Metadata & KPI Strip */}
-        {currentJob && (
-          <div className="bg-[#0b192c] rounded-lg p-3 text-white text-xs flex flex-wrap items-center justify-between gap-3 shadow-xs">
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+        <div className="bg-[#0b192c] rounded-lg p-3 text-white text-xs flex flex-wrap items-center justify-between gap-3 shadow-xs">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+            {currentJob ? (
+              <>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">JOB NUMBER</span>
+                  <span className="font-mono font-bold text-amber-300 text-sm">{currentJob.id}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">RIG / ASSIGNMENT</span>
+                  <span className="font-semibold text-slate-100">{currentJob.rig || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">WELLBORE</span>
+                  <span className="font-semibold text-slate-100">{currentJob.well || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">CLIENT OPERATOR</span>
+                  <span className="font-semibold text-slate-100">{currentJob.client || '—'}</span>
+                </div>
+              </>
+            ) : (
               <div>
-                <span className="text-[10px] text-slate-400 block uppercase font-bold">JOB NUMBER</span>
-                <span className="font-mono font-bold text-amber-300 text-sm">{currentJob.id}</span>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">VIEW SCOPE</span>
+                <span className="font-mono font-bold text-amber-300 text-sm">ALL DRILLING JOBS</span>
               </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block uppercase font-bold">RIG / ASSIGNMENT</span>
-                <span className="font-semibold text-slate-100">{currentJob.rig || '—'}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block uppercase font-bold">WELLBORE</span>
-                <span className="font-semibold text-slate-100">{currentJob.well || '—'}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block uppercase font-bold">CLIENT OPERATOR</span>
-                <span className="font-semibold text-slate-100">{currentJob.client || '—'}</span>
-              </div>
-            </div>
+            )}
+          </div>
 
-            <div className="flex items-center space-x-4 border-t sm:border-t-0 sm:border-l border-white/15 pt-2 sm:pt-0 sm:pl-4 text-center">
-              <div>
-                <span className="text-[10px] text-slate-400 block uppercase font-bold">DISPATCHED (DT)</span>
-                <span className="font-mono font-bold text-white text-sm">{totalDispatched}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block uppercase font-bold">RETURNED (RT)</span>
-                <span className="font-mono font-bold text-emerald-400 text-sm">
-                  {returnedUsed + returnedNotUsed}{' '}
-                  <span className="text-[10px] text-slate-300 font-normal">({returnedUsed} used)</span>
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block uppercase font-bold">ACTIVE ON RIG</span>
-                <span className="font-mono font-bold text-amber-400 text-sm">{activeOnRig}</span>
-              </div>
+          <div className="flex items-center space-x-4 border-t sm:border-t-0 sm:border-l border-white/15 pt-2 sm:pt-0 sm:pl-4 text-center">
+            <div>
+              <span className="text-[10px] text-slate-400 block uppercase font-bold">DISPATCHED (DT)</span>
+              <span className="font-mono font-bold text-white text-sm">{totalDispatched}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-400 block uppercase font-bold">RETURNED (RT)</span>
+              <span className="font-mono font-bold text-emerald-400 text-sm">
+                {returnedUsed + returnedNotUsed}{' '}
+                <span className="text-[10px] text-slate-300 font-normal">({returnedUsed} used)</span>
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-400 block uppercase font-bold">ACTIVE ON RIG</span>
+              <span className="font-mono font-bold text-amber-400 text-sm">{activeOnRig}</span>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Main Reconciliation Table */}
       <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-xs">
-        <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
+        <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="font-bold text-slate-700">
-            Reconciliation Tools ({filteredRows.length} tools)
+            Reconciliation Tools ({filteredRows.length.toLocaleString()} tools)
           </div>
-          {currentJob && (
-            <div className="text-slate-500 font-mono text-[11px]">
-              Showing tools deployed on {currentJob.id}
-            </div>
-          )}
+          <div className="text-slate-500 font-mono text-[11px]">
+            {currentJob ? `Showing tools deployed on ${currentJob.id}` : 'Showing tools across all jobs'}
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -547,30 +562,26 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-800">
-              {filteredRows.length === 0 ? (
+              {pagedRows.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="py-12 text-center text-slate-500">
                     <div className="max-w-md mx-auto space-y-2">
                       <div className="text-sm font-bold text-slate-700">
-                        No tools found for this job and filter combination.
+                        No tools found for this selection.
                       </div>
                       <div className="text-xs text-slate-500">
-                        {totalDispatched === 0
+                        {selectedJobId
                           ? `Job ${selectedJobId} has no Delivery Tickets issued yet.`
                           : 'Try clearing the search or status filters.'}
                       </div>
-                      {totalDispatched === 0 && selectableJobs.length > 0 && (
+                      {selectedJobId && (
                         <div className="pt-2">
                           <button
                             type="button"
-                            onClick={() => setSelectedJobId(selectableJobs[0].id)}
+                            onClick={() => setSelectedJobId('')}
                             className="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-xs cursor-pointer transition"
                           >
-                            Switch to Active Job: {selectableJobs[0].id} (
-                            {jobToolCounts.get(selectableJobs[0].id.trim().toUpperCase()) ||
-                              jobToolCounts.get(normalizeJobKey(selectableJobs[0].id)) ||
-                              0}{' '}
-                            Tools)
+                            Show All Jobs (All Dispatched Tools)
                           </button>
                         </div>
                       )}
@@ -578,7 +589,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredRows.map((r, idx) => (
+                pagedRows.map((r, idx) => (
                   <tr key={`${r.jobNum}-${r.deliveryTicketNum}-${r.sNo}-${idx}`} className="hover:bg-slate-50/80 transition">
                     <td className="px-3 py-2 font-mono font-bold text-slate-900 whitespace-nowrap">
                       {r.jobNum}
@@ -633,6 +644,36 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination controls */}
+        {totalPages > 1 && (
+          <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
+            <div>
+              Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredRows.length)} of {filteredRows.length.toLocaleString()} tools
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-2.5 py-1 rounded border border-slate-300 bg-white hover:bg-slate-100 font-bold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                &larr; Prev
+              </button>
+              <span className="font-mono font-bold text-slate-800 px-2">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-2.5 py-1 rounded border border-slate-300 bg-white hover:bg-slate-100 font-bold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Next &rarr;
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
