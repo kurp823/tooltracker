@@ -5,7 +5,7 @@
 
 import { MASTER_JOBS } from '../data/masterJobs';
 
-const normalizeJobKey = (str?: string): string => {
+export const normalizeJobKey = (str?: string): string => {
   if (!str) return '';
   return str
     .trim()
