@@ -63,6 +63,8 @@ import { InventoryDashboardView } from './components/InventoryDashboardView';
 import { MaintenanceDashboardView } from './components/MaintenanceDashboardView';
 import { BillingDashboardView } from './components/BillingDashboardView';
 import { InvoicePackageView } from './components/InvoicePackageView';
+import { JobToolsListView } from './components/JobToolsListView';
+import { ToolHistoryView } from './components/ToolHistoryView';
 
 // Safe localStorage write — never lets a quota failure crash the app.
 //
@@ -107,6 +109,8 @@ export const App: React.FC = () => {
   const [selectedCalloutForJob, setSelectedCalloutForJob] = useState<Callout | null>(null);
   const [preSelectedJobIdForDT, setPreSelectedJobIdForDT] = useState<string | null>(null);
   const [selectedJobIdForBillingPackage, setSelectedJobIdForBillingPackage] = useState<string | null>(null);
+  const [preSelectedJobIdForToolsList, setPreSelectedJobIdForToolsList] = useState<string | null>(null);
+  const [preSelectedSerialForToolHistory, setPreSelectedSerialForToolHistory] = useState<string | null>(null);
 
   // Sync state
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('saved');
@@ -1331,6 +1335,11 @@ export const App: React.FC = () => {
               inventory={inventory}
               onSaveInventory={handleSaveInventory}
               showToast={showToast}
+              onOpenToolHistory={(serial) => {
+                setPreSelectedSerialForToolHistory(serial);
+                setActiveView('tool-history');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
             />
           )}
 
@@ -1361,6 +1370,11 @@ export const App: React.FC = () => {
               onDispatchJob={handleDispatchJob}
               onReceiveJob={(jobId) => {
                 setActiveView('rt');
+              }}
+              onOpenJobToolsList={(jobId) => {
+                setPreSelectedJobIdForToolsList(jobId);
+                setActiveView('job-tools-list');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
               onBatchUpdateJobs={(updatedJobs) => {
                 setJobs(updatedJobs);
@@ -1407,6 +1421,36 @@ export const App: React.FC = () => {
               contracts={contracts}
               onSaveRTBatch={handleSaveRTBatch}
               onUpdateRTBatch={handleUpdateRTBatch}
+            />
+          )}
+
+          {activeView === 'job-tools-list' && (
+            <JobToolsListView
+              jobs={jobs}
+              dtBatches={dtBatches}
+              rtBatches={rtBatches}
+              inventory={inventory}
+              preSelectedJobId={preSelectedJobIdForToolsList}
+              onNavigate={(mod) => {
+                setActiveView(mod as ViewKey);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              showToast={showToast}
+            />
+          )}
+
+          {activeView === 'tool-history' && (
+            <ToolHistoryView
+              inventory={inventory}
+              jobs={jobs}
+              dtBatches={dtBatches}
+              rtBatches={rtBatches}
+              preSelectedSerial={preSelectedSerialForToolHistory}
+              onNavigate={(mod) => {
+                setActiveView(mod as ViewKey);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              showToast={showToast}
             />
           )}
 

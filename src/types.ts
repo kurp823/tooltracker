@@ -20,6 +20,8 @@ export type NavModule =
   | 'dt'                 // Delivery Tickets (DT)
   | 'rt'                 // Receiving Tickets (RT)
   | 'gatepass'           // Security Gate Pass
+  | 'job-tools-list'     // Job Tools List (JST_Job_ToolsList)
+  | 'tool-history'       // Tool Movement History (Multi-job tool trail)
   | 'utilization'        // Fleet Utilization (Moved to Operations Module)
   | 'inventory-dash'     // Inventory Dashboard
   | 'inventory'          // Tool Fleet Catalog

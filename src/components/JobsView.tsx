@@ -52,6 +52,7 @@ interface JobsViewProps {
   onCloseNewJobModal: () => void;
   onOpenNewJobModal: () => void;
   selectedCalloutForNewJob?: Callout | null;
+  onOpenJobToolsList?: (jobId: string) => void;
 }
 
 // Clean oilfield date formatter (handles ISO strings like 2023-09-09T00:00:00.000Z, YYYY-MM-DD, or DD-MMM-YY)
@@ -178,6 +179,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   onCloseNewJobModal,
   onOpenNewJobModal,
   selectedCalloutForNewJob,
+  onOpenJobToolsList,
 }) => {
   const [tab, setTab] = useState<'all' | JobStageKey>('all');
   const [search, setSearch] = useState('');
@@ -1543,6 +1545,16 @@ export const JobsView: React.FC<JobsViewProps> = ({
                             <Eye className="w-3 h-3" />
                             <span>View</span>
                           </button>
+                          {onOpenJobToolsList && (
+                            <button
+                              onClick={() => onOpenJobToolsList(job.id)}
+                              className="h-6 px-1.5 rounded bg-sky-50 hover:bg-sky-100 text-sky-800 font-semibold text-[10px] transition-colors border border-sky-300 cursor-pointer flex items-center gap-1 shadow-2xs"
+                              title="Open Job_ToolsList (Dispatched vs Returned Tools)"
+                            >
+                              <span>📋</span>
+                              <span>Tools</span>
+                            </button>
+                          )}
                           {isActive && user?.role !== 'Viewer' && (
                             <button
                               onClick={() => onDispatchJob(job.id)}
@@ -1938,6 +1950,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
           formatJobDate={formatJobDate}
           renderStatusBadge={renderStatusBadge}
           onOpenStatusModal={() => setEditingJobStatus(selectedJobDetail)}
+          onOpenJobToolsList={onOpenJobToolsList}
           onClose={() => setSelectedJobDetail(null)}
         />
       )}

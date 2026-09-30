@@ -12,6 +12,7 @@ interface InventoryViewProps {
   onCloseAddModal?: () => void;
   onOpenAddModal?: () => void;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  onOpenToolHistory?: (serial: string) => void;
 }
 
 export const InventoryView: React.FC<InventoryViewProps> = ({
@@ -24,6 +25,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   onCloseAddModal,
   onOpenAddModal,
   showToast: propShowToast,
+  onOpenToolHistory,
 }) => {
   const showToast = useCallback(
     (msg: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -583,10 +585,21 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         </span>
                         <span className="font-medium text-slate-700 text-[11px]">{t.location}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-slate-500 font-medium">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] text-slate-500 font-medium mr-1">
                           {t.ownership}
                         </span>
+                        {onOpenToolHistory && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenToolHistory(t.serial)}
+                            title="View Tool Movement History"
+                            className="px-2 py-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 text-[11px] font-bold border border-amber-300 cursor-pointer transition flex items-center gap-1 shadow-xs"
+                          >
+                            <span>⏱️</span>
+                            <span>History</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => startEditTool(t)}
@@ -641,14 +654,27 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       <td className="px-3 py-2">
                         {renderToolStatusBadge(t.status)}
                       </td>
-                      <td className="px-3 py-2 text-center">
-                        <button
-                          type="button"
-                          onClick={() => startEditTool(t)}
-                          className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold border border-slate-300 cursor-pointer transition"
-                        >
-                          Edit
-                        </button>
+                      <td className="px-3 py-2 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {onOpenToolHistory && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenToolHistory(t.serial)}
+                              title="View Tool Movement History"
+                              className="px-2 py-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 text-[11px] font-bold border border-amber-300 cursor-pointer transition flex items-center gap-1 shadow-xs"
+                            >
+                              <span>⏱️</span>
+                              <span>History</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => startEditTool(t)}
+                            className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold border border-slate-300 cursor-pointer transition"
+                          >
+                            Edit
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

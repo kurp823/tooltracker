@@ -87,6 +87,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           badgeColor: 'bg-amber-400 text-amber-950',
         },
         { id: 'rt', label: 'Receiving Tickets (RT)', icon: '📥' },
+        { id: 'job-tools-list', label: 'Job Tools List', icon: '📋' },
+        { id: 'tool-history', label: 'Tool Movement History', icon: '⏱️' },
         { id: 'gatepass', label: 'Security Gate Pass', icon: '🛡️' },
         { id: 'utilization', label: 'Utilization', icon: '📈' },
       ],

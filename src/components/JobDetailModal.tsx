@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   X,
   Printer,
@@ -24,6 +24,7 @@ interface JobDetailModalProps {
   rtBatches: RTBatch[];
   onClose: () => void;
   onOpenStatusModal?: () => void;
+  onOpenJobToolsList?: (jobId: string) => void;
   canEdit?: boolean;
   formatJobDate: (d?: string | null) => string;
   renderStatusBadge: (job: DrillingJob, dtCount?: number, rtCount?: number) => React.ReactNode;
@@ -35,11 +36,12 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
   rtBatches,
   onClose,
   onOpenStatusModal,
+  onOpenJobToolsList,
   canEdit = false,
   formatJobDate,
   renderStatusBadge,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'dts' | 'rts' | 'lifecycle'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'dts' | 'rts' | 'toolslist' | 'lifecycle'>('overview');
 
   // Compute tool counts
   const dtCount = dtBatches.reduce((acc, b) => acc + (b.toolLines?.length || 0), 0);
@@ -61,6 +63,78 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
   const handlePrint = () => {
     window.print();
   };
+
+  // Reconciled tool rows matching Epicor JST_Job_ToolsList format
+  const toolsListRows = useMemo(() => {
+    const rtLineLookups: {
+      serial: string;
+      rtNumber: string;
+      rtDate: string;
+      used: boolean;
+    }[] = [];
+
+    rtBatches.forEach((rt) => {
+      (rt.toolLines || []).forEach((rtl) => {
+        rtLineLookups.push({
+          serial: (rtl.serial || '').trim(),
+          rtNumber: rt.rtNumber,
+          rtDate: rt.rtDate || '',
+          used: Boolean(rtl.used),
+        });
+      });
+    });
+
+    const rows: {
+      jobNum: string;
+      deliveryTicketNum: string;
+      deliveryDate: string;
+      sNo: number;
+      partNum: string;
+      partDescription: string;
+      returnTicketNum: string;
+      returnDate: string;
+      remark: 'Used' | 'Not Used' | 'On Rig';
+      rigNum: string;
+      wellNumber: string;
+    }[] = [];
+
+    dtBatches.forEach((dt) => {
+      const lines = dt.toolLines || [];
+      lines.forEach((line, idx) => {
+        const lineSerial = (line.serial || '').trim();
+        const matchedRT = rtLineLookups.find((r) => r.serial === lineSerial);
+
+        let remark: 'Used' | 'Not Used' | 'On Rig' = 'On Rig';
+        let retNum = '';
+        let retDate = '';
+
+        if (matchedRT) {
+          retNum = matchedRT.rtNumber;
+          retDate = matchedRT.rtDate;
+          remark = matchedRT.used ? 'Used' : 'Not Used';
+        } else if (line.status === 'Returned' || line.rtBatchId) {
+          retNum = line.rtBatchId || 'Returned';
+          remark = line.used ? 'Used' : 'Not Used';
+        }
+
+        rows.push({
+          jobNum: job.id,
+          deliveryTicketNum: dt.dtNumber,
+          deliveryDate: dt.deliveryDate || dt.rmDate || '',
+          sNo: idx + 1,
+          partNum: line.serial || line.assetNo || '—',
+          partDescription: line.desc || line.shortDesc || 'Drilling Tool',
+          returnTicketNum: retNum,
+          returnDate: retDate,
+          remark,
+          rigNum: job.rig || dt.rig || '—',
+          wellNumber: job.well || dt.well || '—',
+        });
+      });
+    });
+
+    return rows;
+  }, [job, dtBatches, rtBatches]);
 
   return (
     <div
@@ -148,6 +222,18 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
           >
             <ArrowDownLeft className="w-3 h-3" />
             <span>Receiving Tickets ({rtBatches.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('toolslist')}
+            className={`py-2 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'toolslist'
+                ? 'border-[#1a3055] text-[#1a3055] font-bold bg-white'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <FileSpreadsheet className="w-3 h-3 text-emerald-700" />
+            <span>Job_ToolsList ({toolsListRows.length})</span>
           </button>
 
           <button
@@ -436,7 +522,116 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
             </div>
           )}
 
-          {/* TAB 4: MILESTONES */}
+          {/* TAB 4: JOB TOOLS LIST (EPICOR JST RECONCILIATION) */}
+          {activeTab === 'toolslist' && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <span className="text-[#1a3055] font-mono">Job_ToolsList</span>
+                  <span className="text-slate-500 font-normal">({toolsListRows.length} tools reconciled)</span>
+                </div>
+                {onOpenJobToolsList && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenJobToolsList(job.id);
+                    }}
+                    className="text-[11px] text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Open in Full Operations View</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              {toolsListRows.length === 0 ? (
+                <div className="p-6 bg-slate-50 rounded border border-slate-200 text-center text-slate-400">
+                  <div className="font-medium text-slate-600">No Dispatched Tools Recorded on this Job</div>
+                  <div className="text-[11px] mt-1">Issue a Delivery Ticket (DT) to dispatch tools to the rig.</div>
+                </div>
+              ) : (
+                <div className="border border-[#b8c9db] rounded overflow-hidden bg-white shadow-2xs">
+                  <div className="bg-[#b8d0e8] px-2.5 py-1 text-[11px] font-bold text-[#1a3055] border-b border-[#9bb8d4]">
+                    ^ Job_ToolsList
+                  </div>
+                  <div className="overflow-x-auto max-h-[360px]">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-[#cfe0f2] text-[#1a3055] font-bold border-b border-[#9bb8d4] sticky top-0 z-10 text-[10px]">
+                        <tr>
+                          <th className="p-1.5 border-r border-[#b8c9db] whitespace-nowrap">JobNum</th>
+                          <th className="p-1.5 border-r border-[#b8c9db] whitespace-nowrap">DeliveryTicketNum</th>
+                          <th className="p-1.5 border-r border-[#b8c9db] whitespace-nowrap">DeliveryDate</th>
+                          <th className="p-1.5 border-r border-[#b8c9db] text-center w-8 whitespace-nowrap">S.No</th>
+                          <th className="p-1.5 border-r border-[#b8c9db] whitespace-nowrap">PartNum</th>
+                          <th className="p-1.5 border-r border-[#b8c9db] min-w-[200px]">PartDescription</th>
+                          <th className="p-1.5 border-r border-[#b8c9db] whitespace-nowrap">ReturnTicketNum</th>
+                          <th className="p-1.5 border-r border-[#b8c9db] whitespace-nowrap">ReturnDate</th>
+                          <th className="p-1.5 border-r border-[#b8c9db] text-center whitespace-nowrap">Remark</th>
+                          <th className="p-1.5 border-r border-[#b8c9db] whitespace-nowrap">RigNum</th>
+                          <th className="p-1.5 whitespace-nowrap">Well number</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-[11px]">
+                        {toolsListRows.map((r, i) => (
+                          <tr key={`${r.deliveryTicketNum}-${r.partNum}-${i}`} className="hover:bg-sky-50/60">
+                            <td className="p-1.5 border-r border-slate-200 font-mono font-bold text-[#1a3055] whitespace-nowrap">
+                              {r.jobNum}
+                            </td>
+                            <td className="p-1.5 border-r border-slate-200 font-mono text-slate-700 whitespace-nowrap">
+                              {r.deliveryTicketNum}
+                            </td>
+                            <td className="p-1.5 border-r border-slate-200 font-mono text-slate-600 whitespace-nowrap">
+                              {formatJobDate(r.deliveryDate)}
+                            </td>
+                            <td className="p-1.5 border-r border-slate-200 text-center font-mono text-slate-500">
+                              {r.sNo}
+                            </td>
+                            <td className="p-1.5 border-r border-slate-200 font-mono font-bold text-slate-900 whitespace-nowrap">
+                              {r.partNum}
+                            </td>
+                            <td className="p-1.5 border-r border-slate-200 text-slate-700 text-[10px]">
+                              {r.partDescription}
+                            </td>
+                            <td className="p-1.5 border-r border-slate-200 font-mono whitespace-nowrap">
+                              {r.returnTicketNum || <span className="text-slate-400 italic">—</span>}
+                            </td>
+                            <td className="p-1.5 border-r border-slate-200 font-mono text-slate-600 whitespace-nowrap">
+                              {formatJobDate(r.returnDate)}
+                            </td>
+                            <td className="p-1.5 border-r border-slate-200 text-center whitespace-nowrap">
+                              {r.remark === 'Used' && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800">
+                                  Used
+                                </span>
+                              )}
+                              {r.remark === 'Not Used' && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-700">
+                                  Not Used
+                                </span>
+                              )}
+                              {r.remark === 'On Rig' && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-900">
+                                  On Rig
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-1.5 border-r border-slate-200 font-semibold text-slate-800 whitespace-nowrap">
+                              {r.rigNum}
+                            </td>
+                            <td className="p-1.5 font-mono text-slate-600 whitespace-nowrap">
+                              {r.wellNumber}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 5: MILESTONES */}
           {activeTab === 'lifecycle' && (
             <div className="space-y-3">
               <JobLifecycleStepper
