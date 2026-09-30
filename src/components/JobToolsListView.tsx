@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { DrillingJob, DTBatch, RTBatch, ToolItem } from '../types';
 import { normalizeJobKey } from '../services/api';
@@ -34,27 +34,99 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
   dtBatches,
   rtBatches,
   preSelectedJobId,
-  onNavigate,
   showToast,
 }) => {
-  // Sort jobs by most recent / active first
-  const sortedJobs = useMemo(() => {
-    return [...jobs].sort((a, b) => (b.id || '').localeCompare(a.id || ''));
-  }, [jobs]);
+  // Precompute total tool dispatch counts per job key
+  const jobToolCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    dtBatches.forEach((dt) => {
+      const raw = (dt.jobId || dt.jobNumber || '').trim().toUpperCase();
+      const norm = normalizeJobKey(raw);
+      const linesCount = (dt.toolLines || []).length;
+      if (raw) counts.set(raw, (counts.get(raw) || 0) + linesCount);
+      if (norm) counts.set(norm, (counts.get(norm) || 0) + linesCount);
+    });
+    return counts;
+  }, [dtBatches]);
 
+  // Sort jobs: Jobs with dispatched tools first (highest count descending), then alphabetical
+  const sortedJobs = useMemo(() => {
+    return [...jobs].sort((a, b) => {
+      const aRaw = a.id.trim().toUpperCase();
+      const bRaw = b.id.trim().toUpperCase();
+      const countA = jobToolCounts.get(aRaw) || jobToolCounts.get(normalizeJobKey(a.id)) || 0;
+      const countB = jobToolCounts.get(bRaw) || jobToolCounts.get(normalizeJobKey(b.id)) || 0;
+      if (countB !== countA) return countB - countA;
+      return (b.id || '').localeCompare(a.id || '');
+    });
+  }, [jobs, jobToolCounts]);
+
+  // Default selection: preSelectedJobId, or first job with tools, or sortedJobs[0]
   const [selectedJobId, setSelectedJobId] = useState<string>(() => {
     if (preSelectedJobId) return preSelectedJobId;
-    return sortedJobs[0]?.id || '';
+    const firstWithTools = sortedJobs.find((j) => {
+      const count =
+        jobToolCounts.get(j.id.trim().toUpperCase()) ||
+        jobToolCounts.get(normalizeJobKey(j.id)) ||
+        0;
+      return count > 0;
+    });
+    return firstWithTools?.id || sortedJobs[0]?.id || '';
   });
 
-  const [searchFilter, setSearchFilter] = useState('');
+  // Filters
+  const [jobSearchText, setJobSearchText] = useState('');
+  const [onlyJobsWithTools, setOnlyJobsWithTools] = useState(true);
+  const [tableSearchFilter, setTableSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'On Rig' | 'Returned' | 'Used' | 'Not Used'>('All');
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close 3-dots dropdown on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
+        setIsActionMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  // Update selected job if preSelectedJobId changes externally
+  useEffect(() => {
+    if (preSelectedJobId) {
+      setSelectedJobId(preSelectedJobId);
+    }
+  }, [preSelectedJobId]);
+
+  // Filtered job choices for the selector dropdown
+  const selectableJobs = useMemo(() => {
+    return sortedJobs.filter((j) => {
+      const count =
+        jobToolCounts.get(j.id.trim().toUpperCase()) ||
+        jobToolCounts.get(normalizeJobKey(j.id)) ||
+        0;
+
+      if (onlyJobsWithTools && count === 0) return false;
+
+      if (!jobSearchText.trim()) return true;
+      const q = jobSearchText.toLowerCase();
+      return (
+        j.id.toLowerCase().includes(q) ||
+        (j.rig && j.rig.toLowerCase().includes(q)) ||
+        (j.well && j.well.toLowerCase().includes(q)) ||
+        (j.client && j.client.toLowerCase().includes(q))
+      );
+    });
+  }, [sortedJobs, jobToolCounts, onlyJobsWithTools, jobSearchText]);
 
   // Currently selected job object
   const currentJob = useMemo(() => {
     if (!selectedJobId) return null;
     const norm = normalizeJobKey(selectedJobId);
-    return jobs.find((j) => j.id === selectedJobId || normalizeJobKey(j.id) === norm) || null;
+    const raw = selectedJobId.trim().toUpperCase();
+    return jobs.find((j) => j.id.trim().toUpperCase() === raw || normalizeJobKey(j.id) === norm) || null;
   }, [selectedJobId, jobs]);
 
   // Reconciled tool rows for the selected job
@@ -78,7 +150,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
       return rtJobRaw === raw || (rtJobNorm && rtJobNorm === norm);
     });
 
-    // Flatten RT lines with ticket metadata for quick lookup
+    // Flatten RT lines with ticket metadata for fast serial lookup
     const rtLineLookups: {
       serial: string;
       rtNumber: string;
@@ -105,7 +177,6 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
       const lines = dt.toolLines || [];
       lines.forEach((line, idx) => {
         const lineSerial = (line.serial || '').trim();
-        // Look up return ticket for this serial
         const matchedRT = rtLineLookups.find((r) => r.serial === lineSerial);
 
         let remark: 'Used' | 'Not Used' | 'On Rig' = 'On Rig';
@@ -142,7 +213,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
     return rows;
   }, [currentJob, dtBatches, rtBatches]);
 
-  // Filtered rows based on user input
+  // Filtered rows
   const filteredRows = useMemo(() => {
     return reconRows.filter((r) => {
       if (statusFilter === 'On Rig' && r.remark !== 'On Rig') return false;
@@ -150,8 +221,8 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
       if (statusFilter === 'Used' && r.remark !== 'Used') return false;
       if (statusFilter === 'Not Used' && r.remark !== 'Not Used') return false;
 
-      if (!searchFilter.trim()) return true;
-      const q = searchFilter.toLowerCase();
+      if (!tableSearchFilter.trim()) return true;
+      const q = tableSearchFilter.toLowerCase();
       return (
         r.partNum.toLowerCase().includes(q) ||
         r.partDescription.toLowerCase().includes(q) ||
@@ -161,22 +232,18 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
         r.wellNumber.toLowerCase().includes(q)
       );
     });
-  }, [reconRows, statusFilter, searchFilter]);
+  }, [reconRows, statusFilter, tableSearchFilter]);
 
-  // Statistics
-  const stats = useMemo(() => {
-    const total = reconRows.length;
-    const onRig = reconRows.filter((r) => r.remark === 'On Rig').length;
-    const returned = total - onRig;
-    const used = reconRows.filter((r) => r.remark === 'Used').length;
-    const notUsed = reconRows.filter((r) => r.remark === 'Not Used').length;
-    return { total, onRig, returned, used, notUsed };
-  }, [reconRows]);
+  // KPI counters
+  const totalDispatched = reconRows.length;
+  const returnedUsed = reconRows.filter((r) => r.remark === 'Used').length;
+  const returnedNotUsed = reconRows.filter((r) => r.remark === 'Not Used').length;
+  const activeOnRig = reconRows.filter((r) => r.remark === 'On Rig').length;
 
-  // Export to Excel (.xlsx) matching Epicor Kinetic export
+  // Export to Excel function
   const handleExportExcel = () => {
     if (filteredRows.length === 0) {
-      if (showToast) showToast('No records to export.', 'info');
+      if (showToast) showToast('No tool records available to export.', 'info');
       return;
     }
 
@@ -187,8 +254,8 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
       'S.No': r.sNo,
       PartNum: r.partNum,
       PartDescription: r.partDescription,
-      ReturnTicketNum: r.returnTicketNum || '',
-      ReturnDate: r.returnDate || '',
+      ReturnTicketNum: r.returnTicketNum || '—',
+      ReturnDate: r.returnDate || '—',
       Remark: r.remark,
       RigNum: r.rigNum,
       'Well number': r.wellNumber,
@@ -197,222 +264,367 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Job_ToolsList');
-    const safeJobId = (currentJob?.id || 'JOB').replace(/[^a-zA-Z0-9_-]/g, '_');
-    XLSX.writeFile(wb, `JST_Job_ToolsList_${safeJobId}.xlsx`);
 
-    if (showToast) showToast(`Exported ${exportData.length} records to Excel.`, 'success');
+    const jobName = currentJob?.id ? currentJob.id.replace(/[^a-zA-Z0-9_-]/g, '_') : 'Job';
+    XLSX.writeFile(wb, `${jobName}_ToolsList.xlsx`);
+
+    if (showToast) {
+      showToast(`Exported ${filteredRows.length} tools to ${jobName}_ToolsList.xlsx`, 'success');
+    }
+    setIsActionMenuOpen(false);
+  };
+
+  // Copy table to clipboard
+  const handleCopyClipboard = () => {
+    if (filteredRows.length === 0) return;
+    const header = [
+      'JobNum',
+      'DeliveryTicketNum',
+      'DeliveryDate',
+      'S.No',
+      'PartNum',
+      'PartDescription',
+      'ReturnTicketNum',
+      'ReturnDate',
+      'Remark',
+      'RigNum',
+      'Well number',
+    ].join('\t');
+
+    const body = filteredRows
+      .map((r) =>
+        [
+          r.jobNum,
+          r.deliveryTicketNum,
+          r.deliveryDate,
+          r.sNo,
+          r.partNum,
+          r.partDescription,
+          r.returnTicketNum || '—',
+          r.returnDate || '—',
+          r.remark,
+          r.rigNum,
+          r.wellNumber,
+        ].join('\t')
+      )
+      .join('\n');
+
+    navigator.clipboard.writeText(`${header}\n${body}`);
+    if (showToast) showToast('Table data copied to clipboard.', 'success');
+    setIsActionMenuOpen(false);
   };
 
   return (
-    <div className="space-y-4 w-full">
-      {/* Top Header matching ERP Kinetic Banner */}
-      <div className="bg-white border border-[#b8c9db] rounded p-4 shadow-sm flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-3.5 max-w-[1600px] mx-auto animate-fade-in text-slate-800">
+      {/* Sleek, Professional Header Banner */}
+      <div className="bg-white rounded-lg border border-slate-200/90 px-4 py-3 shadow-xs flex items-center justify-between">
         <div>
-          <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider">
-            Operations &bull; Job Reconciliation Manifest
+          <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+            OPERATIONS • EQUIPMENT RECONCILIATION
           </div>
-          <h1 className="text-lg font-extrabold text-[#1a3055] tracking-tight flex items-center gap-2">
-            <span>📋</span> JST_Job_ToolsList
+          <h1 className="text-lg font-black text-slate-900 tracking-tight">
+            Job Tools List
           </h1>
-          <p className="text-xs text-slate-600 mt-0.5">
-            Real-time job-wise equipment reconciliation. Every tool dispatched on Delivery Tickets (DT) vs. received on Backload Tickets (RT).
-          </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* 3-Vertical-Dots Action Menu */}
+        <div className="relative" ref={actionMenuRef}>
           <button
-            onClick={handleExportExcel}
-            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded border border-emerald-800 flex items-center gap-1.5 shadow-xs cursor-pointer transition"
-            title="Export Job Tools List to Excel (.xlsx)"
+            type="button"
+            onClick={() => setIsActionMenuOpen((prev) => !prev)}
+            className="p-1.5 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition cursor-pointer flex items-center justify-center"
+            title="Options & Export"
           >
-            <span>📥</span> Export to Excel
+            <span className="font-bold text-base leading-none px-1">⋮</span>
           </button>
+
+          {isActionMenuOpen && (
+            <div className="absolute right-0 mt-1.5 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-30 text-xs animate-scale-in">
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                className="w-full px-3 py-2 text-left hover:bg-slate-50 font-semibold text-slate-700 flex items-center gap-2 cursor-pointer"
+              >
+                <span>📥</span>
+                <span>Export to Excel (.xlsx)</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyClipboard}
+                className="w-full px-3 py-2 text-left hover:bg-slate-50 font-semibold text-slate-700 flex items-center gap-2 cursor-pointer border-t border-slate-100"
+              >
+                <span>📋</span>
+                <span>Copy Data to Clipboard</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter('All');
+                  setTableSearchFilter('');
+                  setIsActionMenuOpen(false);
+                }}
+                className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-500 flex items-center gap-2 cursor-pointer border-t border-slate-100"
+              >
+                <span>🔄</span>
+                <span>Reset Table Filters</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Parameter Selection Ribbon */}
-      <div className="bg-slate-50 border border-slate-300 rounded p-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-bold text-slate-700 whitespace-nowrap">
-              Select Job (JobNum):
+      {/* Parameter Control Panel: Job Selector & Search */}
+      <div className="bg-white rounded-lg border border-slate-200/90 p-3 shadow-xs space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Job Dropdown Selector with quick search */}
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
+            <label className="text-xs font-bold text-slate-700 shrink-0">
+              Select Job:
             </label>
+
             <select
               value={selectedJobId}
               onChange={(e) => setSelectedJobId(e.target.value)}
-              className="bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs font-bold text-[#1a3055] font-mono shadow-2xs focus:outline-none focus:border-[#1a3055]"
+              className="flex-1 min-w-[240px] max-w-xl text-xs font-mono font-bold bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-900 cursor-pointer"
             >
-              {sortedJobs.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.id} — Rig: {j.rig || 'Unassigned'} {j.well ? `(${j.well})` : ''} [{j.client || 'Client'}]
-                </option>
-              ))}
+              {selectableJobs.map((j) => {
+                const count =
+                  jobToolCounts.get(j.id.trim().toUpperCase()) ||
+                  jobToolCounts.get(normalizeJobKey(j.id)) ||
+                  0;
+                return (
+                  <option key={j.id} value={j.id}>
+                    {j.id} — Rig: {j.rig || '—'} [{count} Tools]
+                  </option>
+                );
+              })}
             </select>
+
+            {/* Quick search input to find any job */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Find job/rig..."
+                value={jobSearchText}
+                onChange={(e) => setJobSearchText(e.target.value)}
+                className="w-32 sm:w-40 text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-amber-400 pr-5"
+              />
+              {jobSearchText && (
+                <button
+                  type="button"
+                  onClick={() => setJobSearchText('')}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Only jobs with tools toggle */}
+            <label className="flex items-center space-x-1.5 text-[11px] text-slate-600 font-medium cursor-pointer ml-1 select-none">
+              <input
+                type="checkbox"
+                checked={onlyJobsWithTools}
+                onChange={(e) => setOnlyJobsWithTools(e.target.checked)}
+                className="rounded border-slate-300 text-amber-600 focus:ring-0 cursor-pointer"
+              />
+              <span>With Tools Only</span>
+            </label>
           </div>
 
-          {/* Quick Search inside Table */}
-          <div className="relative min-w-[200px]">
-            <input
-              type="text"
-              placeholder="Search serial, part, ticket..."
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#1a3055]"
-            />
-            {searchFilter && (
-              <button
-                onClick={() => setSearchFilter('')}
-                className="absolute right-2 top-1.5 text-slate-400 hover:text-slate-600 text-xs"
-              >
-                &times;
-              </button>
-            )}
+          {/* Table in-grid search and status filter chips */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search serial, part, ticket..."
+                value={tableSearchFilter}
+                onChange={(e) => setTableSearchFilter(e.target.value)}
+                className="w-44 sm:w-56 text-xs bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 pr-5"
+              />
+              {tableSearchFilter && (
+                <button
+                  type="button"
+                  onClick={() => setTableSearchFilter('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Status Filter Chips */}
+            <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded border border-slate-200 text-[11px] font-bold">
+              {(['All', 'On Rig', 'Returned', 'Used', 'Not Used'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setStatusFilter(mode)}
+                  className={`px-2 py-1 rounded transition cursor-pointer ${
+                    statusFilter === mode
+                      ? 'bg-[#0b192c] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Filter Chips */}
-        <div className="flex items-center gap-1 bg-white border border-slate-200 rounded p-1">
-          {(['All', 'On Rig', 'Returned', 'Used', 'Not Used'] as const).map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-2 py-0.5 rounded text-[11px] font-bold cursor-pointer transition ${
-                statusFilter === st
-                  ? 'bg-[#1a3055] text-white shadow-2xs'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              {st}
-            </button>
-          ))}
-        </div>
+        {/* Selected Job Metadata & KPI Strip */}
+        {currentJob && (
+          <div className="bg-[#0b192c] rounded-lg p-3 text-white text-xs flex flex-wrap items-center justify-between gap-3 shadow-xs">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+              <div>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">JOB NUMBER</span>
+                <span className="font-mono font-bold text-amber-300 text-sm">{currentJob.id}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">RIG / ASSIGNMENT</span>
+                <span className="font-semibold text-slate-100">{currentJob.rig || '—'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">WELLBORE</span>
+                <span className="font-semibold text-slate-100">{currentJob.well || '—'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">CLIENT OPERATOR</span>
+                <span className="font-semibold text-slate-100">{currentJob.client || '—'}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-4 border-t sm:border-t-0 sm:border-l border-white/15 pt-2 sm:pt-0 sm:pl-4 text-center">
+              <div>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">DISPATCHED (DT)</span>
+                <span className="font-mono font-bold text-white text-sm">{totalDispatched}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">RETURNED (RT)</span>
+                <span className="font-mono font-bold text-emerald-400 text-sm">
+                  {returnedUsed + returnedNotUsed}{' '}
+                  <span className="text-[10px] text-slate-300 font-normal">({returnedUsed} used)</span>
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">ACTIVE ON RIG</span>
+                <span className="font-mono font-bold text-amber-400 text-sm">{activeOnRig}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Selected Job Operational Summary Banner */}
-      {currentJob && (
-        <div className="bg-[#1a3055] text-white rounded p-3 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3 text-xs shadow-sm">
-          <div>
-            <span className="text-slate-400 text-[10px] uppercase font-semibold block">Job Number</span>
-            <span className="font-mono font-bold text-amber-300 text-sm">{currentJob.id}</span>
+      {/* Main Reconciliation Table */}
+      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-xs">
+        <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
+          <div className="font-bold text-slate-700">
+            Reconciliation Tools ({filteredRows.length} tools)
           </div>
-          <div>
-            <span className="text-slate-400 text-[10px] uppercase font-semibold block">Rig / Assignment</span>
-            <span className="font-bold text-white text-xs">{currentJob.rig || 'Unassigned'}</span>
-          </div>
-          <div>
-            <span className="text-slate-400 text-[10px] uppercase font-semibold block">Wellbore</span>
-            <span className="text-slate-200 text-xs">{currentJob.well || '—'}</span>
-          </div>
-          <div>
-            <span className="text-slate-400 text-[10px] uppercase font-semibold block">Client Operator</span>
-            <span className="text-slate-200 text-xs truncate block">{currentJob.client || '—'}</span>
-          </div>
-          <div className="text-center sm:text-left">
-            <span className="text-slate-400 text-[10px] uppercase font-semibold block">Dispatched (DT)</span>
-            <span className="font-mono font-bold text-white text-sm">{stats.total}</span>
-          </div>
-          <div className="text-center sm:text-left">
-            <span className="text-slate-400 text-[10px] uppercase font-semibold block">Returned (RT)</span>
-            <span className="font-mono font-bold text-emerald-300 text-sm">
-              {stats.returned} <span className="text-[10px] font-normal text-slate-300">({stats.used} used)</span>
-            </span>
-          </div>
-          <div className="text-center sm:text-left">
-            <span className="text-slate-400 text-[10px] uppercase font-semibold block">Active On Rig</span>
-            <span className={`font-mono font-bold text-sm ${stats.onRig > 0 ? 'text-amber-400 animate-pulse' : 'text-slate-300'}`}>
-              {stats.onRig}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Main Reconciliation Table Matching Epicor Kinetic Screenshot */}
-      <div className="bg-white border border-[#b8c9db] rounded shadow-sm overflow-hidden">
-        <div className="bg-[#b8d0e8] px-3 py-1.5 border-b border-[#9bb8d4] flex items-center justify-between">
-          <span className="font-bold text-xs text-[#1a3055] tracking-wide flex items-center gap-1.5">
-            <span>^</span> Job_ToolsList ({filteredRows.length} tools)
-          </span>
-          <span className="text-[11px] text-slate-600 font-medium">
-            Showing tools deployed on {currentJob?.id || 'selected job'}
-          </span>
+          {currentJob && (
+            <div className="text-slate-500 font-mono text-[11px]">
+              Showing tools deployed on {currentJob.id}
+            </div>
+          )}
         </div>
 
-        <div className="overflow-x-auto max-h-[600px]">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-[#cfe0f2] text-[#1a3055] font-bold border-b border-[#9bb8d4] sticky top-0 z-10 text-[11px]">
-              <tr>
-                <th className="p-2 border-r border-[#b8c9db] whitespace-nowrap">JobNum</th>
-                <th className="p-2 border-r border-[#b8c9db] whitespace-nowrap">DeliveryTicketNum</th>
-                <th className="p-2 border-r border-[#b8c9db] whitespace-nowrap">DeliveryDate</th>
-                <th className="p-2 border-r border-[#b8c9db] text-center w-12 whitespace-nowrap">S.No</th>
-                <th className="p-2 border-r border-[#b8c9db] whitespace-nowrap">PartNum</th>
-                <th className="p-2 border-r border-[#b8c9db] min-w-[240px]">PartDescription</th>
-                <th className="p-2 border-r border-[#b8c9db] whitespace-nowrap">ReturnTicketNum</th>
-                <th className="p-2 border-r border-[#b8c9db] whitespace-nowrap">ReturnDate</th>
-                <th className="p-2 border-r border-[#b8c9db] text-center whitespace-nowrap">Remark</th>
-                <th className="p-2 border-r border-[#b8c9db] whitespace-nowrap">RigNum</th>
-                <th className="p-2 whitespace-nowrap">Well number</th>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-[#14263f] text-white border-b border-slate-700 text-[11px] font-bold tracking-wider uppercase">
+                <th className="px-3 py-2 font-mono">JobNum</th>
+                <th className="px-3 py-2 font-mono">DeliveryTicketNum</th>
+                <th className="px-3 py-2 font-mono">DeliveryDate</th>
+                <th className="px-3 py-2 text-center w-12 font-mono">S.No</th>
+                <th className="px-3 py-2 font-mono">PartNum</th>
+                <th className="px-3 py-2">PartDescription</th>
+                <th className="px-3 py-2 font-mono">ReturnTicketNum</th>
+                <th className="px-3 py-2 font-mono">ReturnDate</th>
+                <th className="px-3 py-2 text-center">Remark</th>
+                <th className="px-3 py-2">RigNum</th>
+                <th className="px-3 py-2">Well number</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-slate-200 text-slate-800">
               {filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="p-10 text-center text-slate-400 bg-slate-50 font-medium">
-                    No tools found for this job and filter combination.
+                  <td colSpan={11} className="py-12 text-center text-slate-500">
+                    <div className="max-w-md mx-auto space-y-2">
+                      <div className="text-sm font-bold text-slate-700">
+                        No tools found for this job and filter combination.
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {totalDispatched === 0
+                          ? `Job ${selectedJobId} has no Delivery Tickets issued yet.`
+                          : 'Try clearing the search or status filters.'}
+                      </div>
+                      {totalDispatched === 0 && selectableJobs.length > 0 && (
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedJobId(selectableJobs[0].id)}
+                            className="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-xs cursor-pointer transition"
+                          >
+                            Switch to Active Job: {selectableJobs[0].id} (
+                            {jobToolCounts.get(selectableJobs[0].id.trim().toUpperCase()) ||
+                              jobToolCounts.get(normalizeJobKey(selectableJobs[0].id)) ||
+                              0}{' '}
+                            Tools)
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
-                filteredRows.map((r, i) => (
-                  <tr key={`${r.jobNum}-${r.deliveryTicketNum}-${r.partNum}-${i}`} className="hover:bg-sky-50/70 transition">
-                    <td className="p-2 border-r border-slate-200 font-mono font-bold text-[#1a3055] whitespace-nowrap">
+                filteredRows.map((r, idx) => (
+                  <tr key={`${r.jobNum}-${r.deliveryTicketNum}-${r.sNo}-${idx}`} className="hover:bg-slate-50/80 transition">
+                    <td className="px-3 py-2 font-mono font-bold text-slate-900 whitespace-nowrap">
                       {r.jobNum}
                     </td>
-                    <td className="p-2 border-r border-slate-200 font-mono text-slate-700 whitespace-nowrap">
+                    <td className="px-3 py-2 font-mono text-blue-700 font-semibold whitespace-nowrap">
                       {r.deliveryTicketNum}
                     </td>
-                    <td className="p-2 border-r border-slate-200 font-mono text-slate-600 whitespace-nowrap">
+                    <td className="px-3 py-2 font-mono text-slate-600 text-[11px] whitespace-nowrap">
                       {r.deliveryDate || '—'}
                     </td>
-                    <td className="p-2 border-r border-slate-200 text-center font-mono text-slate-500">
-                      {r.sNo}
-                    </td>
-                    <td className="p-2 border-r border-slate-200 font-mono font-bold text-slate-900 whitespace-nowrap">
+                    <td className="px-3 py-2 text-center font-mono text-slate-500">{r.sNo}</td>
+                    <td className="px-3 py-2 font-mono font-bold text-slate-900 whitespace-nowrap">
                       {r.partNum}
                     </td>
-                    <td className="p-2 border-r border-slate-200 text-slate-700 font-medium text-[11px]">
+                    <td className="px-3 py-2 font-medium text-slate-800 max-w-sm truncate" title={r.partDescription}>
                       {r.partDescription}
                     </td>
-                    <td className="p-2 border-r border-slate-200 font-mono whitespace-nowrap">
+                    <td className="px-3 py-2 font-mono whitespace-nowrap">
                       {r.returnTicketNum ? (
-                        <span className="text-slate-800 font-semibold">{r.returnTicketNum}</span>
+                        <span className="font-semibold text-emerald-700">{r.returnTicketNum}</span>
                       ) : (
-                        <span className="text-slate-400 font-normal italic">—</span>
+                        <span className="text-slate-400">—</span>
                       )}
                     </td>
-                    <td className="p-2 border-r border-slate-200 font-mono text-slate-600 whitespace-nowrap">
+                    <td className="px-3 py-2 font-mono text-slate-600 text-[11px] whitespace-nowrap">
                       {r.returnDate || '—'}
                     </td>
-                    <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
-                      {r.remark === 'Used' && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                      {r.remark === 'Used' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                           Used
                         </span>
-                      )}
-                      {r.remark === 'Not Used' && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                      ) : r.remark === 'Not Used' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
                           Not Used
                         </span>
-                      )}
-                      {r.remark === 'On Rig' && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
                           On Rig
                         </span>
                       )}
                     </td>
-                    <td className="p-2 border-r border-slate-200 font-semibold text-slate-800 whitespace-nowrap">
+                    <td className="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">
                       {r.rigNum}
                     </td>
-                    <td className="p-2 font-mono text-slate-600 whitespace-nowrap">
+                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap">
                       {r.wellNumber}
                     </td>
                   </tr>

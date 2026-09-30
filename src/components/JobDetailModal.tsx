@@ -233,7 +233,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
             }`}
           >
             <FileSpreadsheet className="w-3 h-3 text-emerald-700" />
-            <span>Job_ToolsList ({toolsListRows.length})</span>
+            <span>Tools List ({toolsListRows.length})</span>
           </button>
 
           <button
@@ -552,7 +552,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
               ) : (
                 <div className="border border-[#b8c9db] rounded overflow-hidden bg-white shadow-2xs">
                   <div className="bg-[#b8d0e8] px-2.5 py-1 text-[11px] font-bold text-[#1a3055] border-b border-[#9bb8d4]">
-                    ^ Job_ToolsList
+                    Tools Reconciliation Manifest
                   </div>
                   <div className="overflow-x-auto max-h-[360px]">
                     <table className="w-full text-left text-xs border-collapse">
