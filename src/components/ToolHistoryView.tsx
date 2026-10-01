@@ -271,7 +271,7 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
   };
 
   return (
-    <div className="space-y-3.5 max-w-[1600px] mx-auto animate-fade-in text-slate-800">
+    <div className="space-y-3.5 w-full animate-fade-in text-slate-800">
       {/* Sleek, Professional Header Banner */}
       <div className="bg-white rounded-lg border border-slate-200/90 px-4 py-3 shadow-xs flex items-center justify-between">
         <div>
