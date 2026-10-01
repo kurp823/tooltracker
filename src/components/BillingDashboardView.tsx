@@ -373,12 +373,12 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => onNavigate('billing-package')}
+            onClick={() => onNavigate('invoicing')}
             className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs transition cursor-pointer flex items-center gap-1.5"
-            title="Generate & View Complete Invoice Package"
+            title="Open Invoicing Screen (Audit, Verification & Invoices)"
           >
-            <span>📑</span>
-            <span>Complete Invoice Package &rarr;</span>
+            <span>📄</span>
+            <span>Invoicing Screen &rarr;</span>
           </button>
           <button
             onClick={() => onNavigate('jobs')}
@@ -679,11 +679,11 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
                         <div className="flex items-center space-x-1.5 flex-wrap gap-1">
                           <button
                             type="button"
-                            onClick={() => onNavigate('billing-package', j.id)}
+                            onClick={() => onNavigate('invoicing', j.id)}
                             className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition border border-slate-300 inline-flex items-center gap-1 cursor-pointer"
-                            title="Generate/View Draft Invoice & Client Submission Package"
+                            title="Generate/View Invoices & Rental Calculation Ticket"
                           >
-                            <span>Invoice Package</span>
+                            <span>Invoicing Screen</span>
                           </button>
                           <button
                             type="button"
@@ -832,11 +832,11 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
                           <div className="flex items-center justify-center gap-1">
                             <button
                               type="button"
-                              onClick={() => onNavigate('billing-package', j.id)}
+                              onClick={() => onNavigate('invoicing', j.id)}
                               className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs border border-slate-300 shadow-2xs cursor-pointer transition inline-flex items-center gap-1"
-                              title="Generate/View Draft Invoice & Rental Calculation Package"
+                              title="Generate/View Invoices & Rental Calculation Ticket"
                             >
-                              <span>📑 Package</span>
+                              <span>📄 Invoicing</span>
                             </button>
                             {j.status !== 'Final invoiced' && j.status !== 'Closed' && (
                               <>

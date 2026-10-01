@@ -29,6 +29,7 @@ export type NavModule =
   | 'inspection'         // QC Inspection Bay
   | 'maintenance'        // Maintenance Orders
   | 'billing-dash'       // Billing Dashboard
+  | 'invoicing'          // Invoicing Screen (Audit, Verification Ledger, Draft & Final Legal Invoices)
   | 'billing-package'    // Invoice & Billing Package Generator (Calculation Ticket + Draft Invoice)
   | 'contracts'          // Master Contracts
   | 'data-management'   // Data Management Tool (DMT)

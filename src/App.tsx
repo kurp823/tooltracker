@@ -64,6 +64,7 @@ import { InventoryDashboardView } from './components/InventoryDashboardView';
 import { MaintenanceDashboardView } from './components/MaintenanceDashboardView';
 import { BillingDashboardView } from './components/BillingDashboardView';
 import { InvoicePackageView } from './components/InvoicePackageView';
+import { InvoicingView } from './components/InvoicingView';
 import { JobToolsListView } from './components/JobToolsListView';
 import { ToolHistoryView } from './components/ToolHistoryView';
 
@@ -1515,6 +1516,23 @@ export const App: React.FC = () => {
                 setActiveView(mod);
               }}
               onUpdateJob={handleSaveJob}
+            />
+          )}
+
+          {activeView === 'invoicing' && (
+            <InvoicingView
+              user={currentUser!}
+              jobs={jobs}
+              dtBatches={dtBatches}
+              rtBatches={rtBatches}
+              contracts={contracts}
+              initialJobId={selectedJobIdForBillingPackage}
+              onUpdateJob={handleSaveJob}
+              onShowToast={showToast}
+              onNavigate={(mod, jobId) => {
+                if (jobId) setSelectedJobIdForBillingPackage(jobId);
+                setActiveView(mod);
+              }}
             />
           )}
 

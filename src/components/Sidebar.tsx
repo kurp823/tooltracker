@@ -125,7 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: '💳',
       items: [
         { id: 'billing-dash', label: 'Billing Dashboard', icon: '📊' },
-        { id: 'billing-package', label: 'Invoice Package Generator', icon: '📑' },
+        { id: 'invoicing', label: 'Invoicing', icon: '📄' },
       ],
     },
     {
