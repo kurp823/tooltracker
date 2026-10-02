@@ -55,22 +55,34 @@ interface JobsViewProps {
   onOpenJobToolsList?: (jobId: string) => void;
 }
 
-// Clean oilfield date formatter (handles ISO strings like 2023-09-09T00:00:00.000Z, YYYY-MM-DD, or DD-MMM-YY)
+// Clean oilfield date formatter (strictly formats as DD-MMM-YYYY, e.g. 28-May-2023)
 export const formatJobDate = (dateStr?: string | null): string => {
   if (!dateStr || dateStr.trim() === '' || dateStr.trim() === '—' || dateStr.trim() === '-') return '—';
   const clean = dateStr.trim();
-  if (/^\d{1,2}-[A-Za-z]{3}-\d{2,4}$/.test(clean)) return clean;
+
+  // If already DD-MMM-YYYY (4 digits year)
+  const dmy4Match = clean.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if (dmy4Match) {
+    return `${dmy4Match[1].padStart(2, '0')}-${dmy4Match[2].charAt(0).toUpperCase() + dmy4Match[2].slice(1).toLowerCase()}-${dmy4Match[3]}`;
+  }
+
+  // If DD-MMM-YY (2 digits year)
+  const dmy2Match = clean.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2})$/);
+  if (dmy2Match) {
+    const yrNum = parseInt(dmy2Match[3], 10);
+    const yr = yrNum > 50 ? `19${dmy2Match[3]}` : `20${dmy2Match[3]}`;
+    return `${dmy2Match[1].padStart(2, '0')}-${dmy2Match[2].charAt(0).toUpperCase() + dmy2Match[2].slice(1).toLowerCase()}-${yr}`;
+  }
 
   const isoMatch = clean.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (isoMatch) {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const yr = isoMatch[1].slice(-2);
+    const yr = isoMatch[1];
     const mIndex = parseInt(isoMatch[2], 10) - 1;
-    const day = isoMatch[3];
+    const day = isoMatch[3].padStart(2, '0');
     if (mIndex >= 0 && mIndex < 12) {
       return `${day}-${months[mIndex]}-${yr}`;
     }
-    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
   }
 
   try {
@@ -78,7 +90,7 @@ export const formatJobDate = (dateStr?: string | null): string => {
     if (!isNaN(d.getTime())) {
       const day = String(d.getDate()).padStart(2, '0');
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const yr = String(d.getFullYear()).slice(-2);
+      const yr = String(d.getFullYear());
       return `${day}-${months[d.getMonth()]}-${yr}`;
     }
   } catch {}
@@ -872,206 +884,184 @@ export const JobsView: React.FC<JobsViewProps> = ({
         </div>
       </div>
 
-      {/* LIFECYCLE STAGES PIPELINE: Clean & Compact Stage Selector */}
-      <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-2xs space-y-2">
-        {/* Header Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-xs uppercase tracking-wider text-slate-700">
-              Operational &amp; Commercial Lifecycle Pipeline
+      {/* EXECUTIVE LIFECYCLE KPI RIBBON */}
+      <div className="bg-white border border-slate-200/90 rounded-lg p-2 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex items-center flex-wrap gap-1.5 text-xs">
+          <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mr-1 hidden sm:inline">
+            Lifecycle:
+          </span>
+
+          {/* All Jobs */}
+          <button
+            type="button"
+            onClick={() => {
+              setTab('all');
+              setCurrentPage(1);
+            }}
+            className={`px-2.5 py-1 rounded-md font-semibold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+              tab === 'all'
+                ? 'bg-[#1a3055] text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <span>All Jobs</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              tab === 'all' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-800'
+            }`}>
+              {metrics.total.toLocaleString()}
             </span>
-          </div>
+          </button>
 
-          {/* Combo Selector for Stage */}
-          <div className="flex items-center gap-2">
-            <label htmlFor="stage-combo-select" className="text-[11px] font-medium text-slate-600 whitespace-nowrap">
-              Stage:
-            </label>
-            <select
-              id="stage-combo-select"
-              value={tab}
-              onChange={(e) => {
-                setTab(e.target.value as any);
-                setCurrentPage(1);
-              }}
-              className="bg-white text-slate-800 border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold outline-none cursor-pointer hover:border-slate-400 transition"
-            >
-              <option value="all">All Stages ({metrics.total.toLocaleString()} Jobs)</option>
-              <option value="1_open">1. Open — No DT Generated ({metrics.counts['1_open'] || 0})</option>
-              <option value="2_ongoing">2. Ongoing — Tools On Rig ({metrics.counts['2_ongoing'] || 0})</option>
-              <option value="3_waiting_signed_docs">3. Waiting Docs — Pending Signed DT/RT ({metrics.counts['3_waiting_signed_docs'] || 0})</option>
-              <option value="4_submitted_billing">4. In Billing — Commercial Queue ({metrics.counts['4_submitted_billing'] || 0})</option>
-              <option value="5_ses_submitted">5. SES Submitted — Portal Review ({metrics.counts['5_ses_submitted'] || 0})</option>
-              <option value="6_completed">6. Completed — Invoiced &amp; Closed ({metrics.counts['6_completed'] || 0})</option>
-            </select>
+          <span className="text-slate-300 text-xs hidden md:inline">➔</span>
 
-            {tab !== 'all' && (
-              <button
-                type="button"
-                onClick={() => {
-                  setTab('all');
-                  setCurrentPage(1);
-                }}
-                className="text-[11px] px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition cursor-pointer"
-                title="Reset stage filter to view all jobs"
-              >
-                Reset (Show All)
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* 6 Stage Buttons: Clean, Compact Tiles */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-          {/* Sub-Card 1: Open */}
+          {/* Stage 1: Open */}
           <button
             type="button"
             onClick={() => {
               setTab(tab === '1_open' ? 'all' : '1_open');
               setCurrentPage(1);
             }}
-            className={`text-left p-2 rounded-md border transition cursor-pointer ${
+            className={`px-2.5 py-1 rounded-md font-semibold text-xs transition cursor-pointer flex items-center gap-1.5 ${
               tab === '1_open'
-                ? 'bg-slate-900 text-white border-slate-900 ring-2 ring-slate-400 shadow-2xs'
-                : 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100'
+                ? 'bg-slate-800 text-white shadow-2xs'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className={`text-[10px] font-semibold ${tab === '1_open' ? 'text-slate-300' : 'text-slate-500'}`}>Open</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-            </div>
-            <div className={`text-base font-extrabold font-mono mt-0.5 ${tab === '1_open' ? 'text-white' : 'text-slate-900'}`}>
-              {(metrics.counts['1_open'] || 0).toLocaleString()}
-            </div>
-            <div className={`text-[9px] truncate ${tab === '1_open' ? 'text-slate-300' : 'text-slate-500'}`}>
-              No DT generated
-            </div>
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+            <span>Open</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              tab === '1_open' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+            }`}>
+              {metrics.counts['1_open'] || 0}
+            </span>
           </button>
 
-          {/* Sub-Card 2: Ongoing */}
+          <span className="text-slate-300 text-xs hidden md:inline">➔</span>
+
+          {/* Stage 2: Ongoing */}
           <button
             type="button"
             onClick={() => {
               setTab(tab === '2_ongoing' ? 'all' : '2_ongoing');
               setCurrentPage(1);
             }}
-            className={`text-left p-2 rounded-md border transition cursor-pointer ${
+            className={`px-2.5 py-1 rounded-md font-semibold text-xs transition cursor-pointer flex items-center gap-1.5 ${
               tab === '2_ongoing'
-                ? 'bg-blue-900 text-white border-blue-900 ring-2 ring-blue-400 shadow-2xs'
-                : 'bg-blue-50/50 border-blue-200 text-slate-800 hover:bg-blue-50'
+                ? 'bg-blue-600 text-white shadow-2xs'
+                : 'bg-blue-50/60 text-blue-900 hover:bg-blue-100 border border-blue-200'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className={`text-[10px] font-semibold ${tab === '2_ongoing' ? 'text-blue-200' : 'text-blue-700'}`}>Ongoing</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-            </div>
-            <div className={`text-base font-extrabold font-mono mt-0.5 ${tab === '2_ongoing' ? 'text-white' : 'text-blue-900'}`}>
-              {(metrics.counts['2_ongoing'] || 0).toLocaleString()}
-            </div>
-            <div className={`text-[9px] truncate ${tab === '2_ongoing' ? 'text-blue-200' : 'text-slate-500'}`}>
-              Tools on site
-            </div>
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+            <span>Ongoing</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+              tab === '2_ongoing' ? 'bg-white/25 text-white' : 'bg-blue-100 text-blue-800'
+            }`}>
+              {metrics.counts['2_ongoing'] || 0}
+            </span>
           </button>
 
-          {/* Sub-Card 3: Waiting Docs */}
+          <span className="text-slate-300 text-xs hidden md:inline">➔</span>
+
+          {/* Stage 3: Waiting Docs */}
           <button
             type="button"
             onClick={() => {
               setTab(tab === '3_waiting_signed_docs' ? 'all' : '3_waiting_signed_docs');
               setCurrentPage(1);
             }}
-            className={`text-left p-2 rounded-md border transition cursor-pointer ${
+            className={`px-2.5 py-1 rounded-md font-semibold text-xs transition cursor-pointer flex items-center gap-1.5 ${
               tab === '3_waiting_signed_docs'
-                ? 'bg-rose-900 text-white border-rose-900 ring-2 ring-rose-400 shadow-2xs'
-                : 'bg-rose-50/50 border-rose-200 text-slate-800 hover:bg-rose-50'
+                ? 'bg-rose-600 text-white shadow-2xs'
+                : 'bg-rose-50/60 text-rose-900 hover:bg-rose-100 border border-rose-200'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className={`text-[10px] font-semibold ${tab === '3_waiting_signed_docs' ? 'text-rose-200' : 'text-rose-700'}`}>Waiting Docs</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-            </div>
-            <div className={`text-base font-extrabold font-mono mt-0.5 ${tab === '3_waiting_signed_docs' ? 'text-white' : 'text-rose-900'}`}>
-              {(metrics.counts['3_waiting_signed_docs'] || 0).toLocaleString()}
-            </div>
-            <div className={`text-[9px] truncate ${tab === '3_waiting_signed_docs' ? 'text-rose-200' : 'text-slate-500'}`}>
-              Pending signed scans
-            </div>
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+            <span>Waiting Docs</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              tab === '3_waiting_signed_docs' ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-800'
+            }`}>
+              {metrics.counts['3_waiting_signed_docs'] || 0}
+            </span>
           </button>
 
-          {/* Sub-Card 4: In Billing */}
+          <span className="text-slate-300 text-xs hidden md:inline">➔</span>
+
+          {/* Stage 4: In Billing */}
           <button
             type="button"
             onClick={() => {
               setTab(tab === '4_submitted_billing' ? 'all' : '4_submitted_billing');
               setCurrentPage(1);
             }}
-            className={`text-left p-2 rounded-md border transition cursor-pointer ${
+            className={`px-2.5 py-1 rounded-md font-semibold text-xs transition cursor-pointer flex items-center gap-1.5 ${
               tab === '4_submitted_billing'
-                ? 'bg-amber-800 text-white border-amber-800 ring-2 ring-amber-400 shadow-2xs'
-                : 'bg-amber-50/50 border-amber-200 text-slate-800 hover:bg-amber-50'
+                ? 'bg-amber-600 text-white shadow-2xs'
+                : 'bg-amber-50/60 text-amber-900 hover:bg-amber-100 border border-amber-200'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className={`text-[10px] font-semibold ${tab === '4_submitted_billing' ? 'text-amber-200' : 'text-amber-800'}`}>In Billing</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-            </div>
-            <div className={`text-base font-extrabold font-mono mt-0.5 ${tab === '4_submitted_billing' ? 'text-white' : 'text-amber-900'}`}>
-              {(metrics.counts['4_submitted_billing'] || 0).toLocaleString()}
-            </div>
-            <div className={`text-[9px] truncate ${tab === '4_submitted_billing' ? 'text-amber-200' : 'text-slate-500'}`}>
-              Ready for invoice
-            </div>
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            <span>In Billing</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              tab === '4_submitted_billing' ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-900'
+            }`}>
+              {metrics.counts['4_submitted_billing'] || 0}
+            </span>
           </button>
 
-          {/* Sub-Card 5: SES Submitted */}
+          <span className="text-slate-300 text-xs hidden md:inline">➔</span>
+
+          {/* Stage 5: Under SES */}
           <button
             type="button"
             onClick={() => {
               setTab(tab === '5_ses_submitted' ? 'all' : '5_ses_submitted');
               setCurrentPage(1);
             }}
-            className={`text-left p-2 rounded-md border transition cursor-pointer ${
+            className={`px-2.5 py-1 rounded-md font-semibold text-xs transition cursor-pointer flex items-center gap-1.5 ${
               tab === '5_ses_submitted'
-                ? 'bg-purple-900 text-white border-purple-900 ring-2 ring-purple-400 shadow-2xs'
-                : 'bg-purple-50/50 border-purple-200 text-slate-800 hover:bg-purple-50'
+                ? 'bg-purple-600 text-white shadow-2xs'
+                : 'bg-purple-50/60 text-purple-900 hover:bg-purple-100 border border-purple-200'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className={`text-[10px] font-semibold ${tab === '5_ses_submitted' ? 'text-purple-200' : 'text-purple-700'}`}>Under SES</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-            </div>
-            <div className={`text-base font-extrabold font-mono mt-0.5 ${tab === '5_ses_submitted' ? 'text-white' : 'text-purple-900'}`}>
-              {(metrics.counts['5_ses_submitted'] || 0).toLocaleString()}
-            </div>
-            <div className={`text-[9px] truncate ${tab === '5_ses_submitted' ? 'text-purple-200' : 'text-slate-500'}`}>
-              SES approval
-            </div>
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+            <span>Under SES</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              tab === '5_ses_submitted' ? 'bg-white/25 text-white' : 'bg-purple-100 text-purple-800'
+            }`}>
+              {metrics.counts['5_ses_submitted'] || 0}
+            </span>
           </button>
 
-          {/* Sub-Card 6: Completed */}
+          <span className="text-slate-300 text-xs hidden md:inline">➔</span>
+
+          {/* Stage 6: Completed */}
           <button
             type="button"
             onClick={() => {
               setTab(tab === '6_completed' ? 'all' : '6_completed');
               setCurrentPage(1);
             }}
-            className={`text-left p-2 rounded-md border transition cursor-pointer ${
+            className={`px-2.5 py-1 rounded-md font-semibold text-xs transition cursor-pointer flex items-center gap-1.5 ${
               tab === '6_completed'
-                ? 'bg-emerald-900 text-white border-emerald-900 ring-2 ring-emerald-400 shadow-2xs'
-                : 'bg-emerald-50/50 border-emerald-200 text-slate-800 hover:bg-emerald-50'
+                ? 'bg-emerald-700 text-white shadow-2xs'
+                : 'bg-emerald-50/60 text-emerald-900 hover:bg-emerald-100 border border-emerald-200'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className={`text-[10px] font-semibold ${tab === '6_completed' ? 'text-emerald-200' : 'text-emerald-700'}`}>Completed</span>
-              <CheckCircle className="w-3 h-3 text-emerald-500" />
-            </div>
-            <div className={`text-base font-extrabold font-mono mt-0.5 ${tab === '6_completed' ? 'text-white' : 'text-emerald-900'}`}>
+            <CheckCircle className="w-3 h-3 text-emerald-500" />
+            <span>Completed</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              tab === '6_completed' ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-800'
+            }`}>
               {(metrics.counts['6_completed'] || 0).toLocaleString()}
-            </div>
-            <div className={`text-[9px] truncate ${tab === '6_completed' ? 'text-emerald-200' : 'text-slate-500'}`}>
-              Final Invoiced
-            </div>
+            </span>
           </button>
+        </div>
+
+        {/* Right side fleet metrics */}
+        <div className="flex items-center gap-2 text-xs text-slate-600 shrink-0">
+          <span className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded text-[11px] font-medium">
+            Active on Rigs: <strong className="text-blue-700 font-mono font-bold">{metrics.totalToolsOnRigs}</strong> tools
+          </span>
         </div>
       </div>
 
@@ -1472,46 +1462,38 @@ export const JobsView: React.FC<JobsViewProps> = ({
                         )}
                       </td>
 
-                      {/* 9. Current Status Dropdown in all lines (disabled for jobs with legal invoice) */}
+                      {/* 9. Current Status Badge (Sleek Executive Pill) */}
                       <td className={`px-2.5 ${padY} text-center whitespace-nowrap align-middle`}>
-                        {isLegalInvoiceNumber(job.legalInvoiceNumber) ? (
-                          <div className="inline-flex items-center justify-center gap-1">
-                            <select
-                              disabled
-                              value="6_completed"
-                              className="h-6.5 px-2 text-[11px] font-bold rounded bg-slate-100 text-slate-700 border border-slate-300 opacity-90 cursor-not-allowed select-none"
-                              title={`Completed & Locked with verified Legal Invoice: ${job.legalInvoiceNumber}`}
-                            >
-                              <option value="6_completed">✓ Completed</option>
-                            </select>
-                            <span className="text-slate-500 font-mono text-[10px]" title="Locked with legal invoice">🔒</span>
-                          </div>
-                        ) : (
-                          <select
-                            value={stage}
-                            onChange={(e) => handleStageSelectChange(job, e.target.value as JobStageKey)}
-                            className={`h-6.5 px-2 text-[11px] font-bold rounded border transition cursor-pointer outline-none focus:ring-1 focus:ring-[#1a3055] ${
-                              stage === '1_open'
-                                ? 'bg-slate-50 text-slate-700 border-slate-300'
-                                : stage === '2_ongoing'
-                                ? 'bg-blue-50 text-blue-900 border-blue-300'
-                                : stage === '3_waiting_signed_docs'
-                                ? 'bg-amber-50 text-amber-900 border-amber-300'
-                                : stage === '4_submitted_billing'
-                                ? 'bg-indigo-50 text-indigo-900 border-indigo-300'
-                                : stage === '5_ses_submitted'
-                                ? 'bg-purple-50 text-purple-900 border-purple-300'
-                                : 'bg-emerald-50 text-emerald-900 border-emerald-300'
-                            }`}
-                            title="Select to advance or change job status"
+                        {isLegalInvoiceNumber(job.legalInvoiceNumber) || stage === '6_completed' ? (
+                          <span
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs"
+                            title={`Completed & Locked with verified Legal Invoice: ${job.legalInvoiceNumber || 'Final Invoiced'}`}
                           >
-                            <option value="1_open">1. Open</option>
-                            <option value="2_ongoing">2. Ongoing</option>
-                            <option value="3_waiting_signed_docs">3. Waiting Docs</option>
-                            <option value="4_submitted_billing">4. In Billing</option>
-                            <option value="5_ses_submitted">5. Under Approval</option>
-                            <option value="6_completed">6. Completed</option>
-                          </select>
+                            <CheckCircle className="w-3 h-3 text-emerald-600" />
+                            <span>Completed</span>
+                            <span className="text-[10px] opacity-70">🔒</span>
+                          </span>
+                        ) : stage === '2_ongoing' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-300 shadow-2xs">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                            <span>Ongoing</span>
+                          </span>
+                        ) : stage === '5_ses_submitted' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-800 border border-purple-300 shadow-2xs">
+                            <span>Under SES</span>
+                          </span>
+                        ) : stage === '4_submitted_billing' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs">
+                            <span>In Billing</span>
+                          </span>
+                        ) : stage === '3_waiting_signed_docs' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-300 shadow-2xs">
+                            <span>Waiting Docs</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                            <span>Open</span>
+                          </span>
                         )}
                       </td>
 

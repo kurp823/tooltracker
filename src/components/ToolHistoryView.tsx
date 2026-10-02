@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { ToolItem, DrillingJob, DTBatch, RTBatch } from '../types';
 import { JobToolReconRow } from './JobToolsListView';
 import { normalizeJobKey } from '../services/api';
+import { formatDateDDMMYYYY } from '../utils';
 
 interface ToolHistoryViewProps {
   inventory: ToolItem[];
@@ -243,12 +244,12 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
     const exportData = filteredRows.map((r) => ({
       JobNum: r.jobNum,
       DeliveryTicketNum: r.deliveryTicketNum,
-      DeliveryDate: r.deliveryDate,
+      DeliveryDate: formatDateDDMMYYYY(r.deliveryDate) || r.deliveryDate,
       'S.No': r.sNo,
       PartNum: r.partNum,
       PartDescription: r.partDescription,
       ReturnTicketNum: r.returnTicketNum || '—',
-      ReturnDate: r.returnDate || '—',
+      ReturnDate: formatDateDDMMYYYY(r.returnDate) || r.returnDate || '—',
       Remark: r.remark,
       RigNum: r.rigNum,
       'Well number': r.wellNumber,
@@ -524,7 +525,7 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
                       {r.deliveryTicketNum}
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-600 text-[11px] whitespace-nowrap">
-                      {r.deliveryDate || '—'}
+                      {formatDateDDMMYYYY(r.deliveryDate) || r.deliveryDate || '—'}
                     </td>
                     <td className="px-3 py-2 text-center font-mono text-slate-500">{r.sNo}</td>
                     <td className="px-3 py-2 font-mono font-bold text-slate-900 whitespace-nowrap">
@@ -541,7 +542,7 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
                       )}
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-600 text-[11px] whitespace-nowrap">
-                      {r.returnDate || '—'}
+                      {formatDateDDMMYYYY(r.returnDate) || r.returnDate || '—'}
                     </td>
                     <td className="px-3 py-2 text-center whitespace-nowrap">
                       {r.remark === 'Used' ? (
