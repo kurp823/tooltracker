@@ -200,6 +200,7 @@ export interface DrillingJob {
   toolsOnRig?: number;
   cost?: string | number;
   jobDescription?: string;
+  serviceCategory?: string;
   field?: string;
   contractNo?: string;
   technicalDetails?: {

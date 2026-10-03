@@ -10,7 +10,7 @@ import {
   ContractRecord,
   JobCrewMember,
 } from '../types';
-import { formatDateDDMMYYYY } from '../utils';
+import { AdminCategoriesModal } from './AdminCategoriesModal';
 
 interface JobDossierViewProps {
   job: DrillingJob;
@@ -41,6 +41,93 @@ type DossierTabKey =
   | 'return-tickets'
   | 'utilization';
 
+// Strict Date Formatter (DD-MM-YYYY)
+export const formatDateDD_MM_YYYY = (val?: string | Date | null): string => {
+  if (!val) return '—';
+  const str = String(val).trim();
+  if (!str || str === '—' || str === '-' || str === 'null' || str === 'undefined') return '—';
+
+  // If already DD-MM-YYYY (numbers)
+  if (/^\d{2}-\d{2}-\d{4}$/.test(str)) return str;
+
+  // If DD/MM/YYYY
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
+    const parts = str.split('/');
+    return `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[2]}`;
+  }
+
+  // If DD/MM/YY
+  if (/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(str)) {
+    const parts = str.split('/');
+    const yr = parseInt(parts[2], 10) > 50 ? `19${parts[2]}` : `20${parts[2]}`;
+    return `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${yr}`;
+  }
+
+  // If YYYY-MM-DD
+  const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    return `${isoMatch[3].padStart(2, '0')}-${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
+  }
+
+  // If DD-MMM-YY or DD-MMM-YYYY (e.g. 25-Aug-23)
+  const mmmMatch = str.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+  if (mmmMatch) {
+    const months: Record<string, string> = {
+      jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+      jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+    };
+    const mNum = months[mmmMatch[2].toLowerCase()] || '01';
+    let yr = mmmMatch[3];
+    if (yr.length === 2) {
+      yr = parseInt(yr, 10) > 50 ? `19${yr}` : `20${yr}`;
+    }
+    return `${mmmMatch[1].padStart(2, '0')}-${mNum}-${yr}`;
+  }
+
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+  }
+  return str;
+};
+
+// Parse flexible dates into milliseconds timestamp for range comparisons
+const parseDateToMs = (val?: string | Date | null): number => {
+  if (!val) return 0;
+  const str = String(val).trim();
+  if (!str || str === '—' || str === '-') return 0;
+
+  // DD-MM-YYYY or DD/MM/YYYY
+  const dmyMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmyMatch) {
+    return new Date(parseInt(dmyMatch[3], 10), parseInt(dmyMatch[2], 10) - 1, parseInt(dmyMatch[1], 10)).getTime();
+  }
+
+  // DD-MMM-YY or DD-MMM-YYYY
+  const mmmMatch = str.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+  if (mmmMatch) {
+    const months: Record<string, number> = {
+      jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+      jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+    };
+    const m = months[mmmMatch[2].toLowerCase()] ?? 0;
+    let yr = parseInt(mmmMatch[3], 10);
+    if (yr < 100) yr = yr > 50 ? 1900 + yr : 2000 + yr;
+    return new Date(yr, m, parseInt(mmmMatch[1], 10)).getTime();
+  }
+
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
+};
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
 // Company roster of certified field engineers & supervisors
 const MASTER_PERSONNEL_ROSTER: Omit<JobCrewMember, 'operatingDays' | 'standbyDays' | 'totalChargeUSD'>[] = [
   {
@@ -48,11 +135,11 @@ const MASTER_PERSONNEL_ROSTER: Omit<JobCrewMember, 'operatingDays' | 'standbyDay
     badgeNo: 'EMD-4102',
     name: 'Ahmed Al-Mansoor',
     designation: 'Lead Fishing Engineer',
-    mobDate: '15-May-23',
-    demobDate: '28-May-23',
+    mobDate: '15-05-2023',
+    demobDate: '28-05-2023',
     dailyRateUSD: 850,
     rigPassNo: 'RP-88421',
-    h2sExpiry: '12-Dec-2025',
+    h2sExpiry: '12-12-2025',
     status: 'Mobilized (On Rig)',
     contactNo: '+971501122334',
   },
@@ -61,11 +148,11 @@ const MASTER_PERSONNEL_ROSTER: Omit<JobCrewMember, 'operatingDays' | 'standbyDay
     badgeNo: 'EMD-3841',
     name: 'Rajesh Sharma',
     designation: 'Whipstock Specialist',
-    mobDate: '18-May-23',
-    demobDate: '26-May-23',
+    mobDate: '18-05-2023',
+    demobDate: '26-05-2023',
     dailyRateUSD: 750,
     rigPassNo: 'RP-90112',
-    h2sExpiry: '15-Jan-2026',
+    h2sExpiry: '15-01-2026',
     status: 'Mobilized (On Rig)',
     contactNo: '+971502233445',
   },
@@ -74,11 +161,11 @@ const MASTER_PERSONNEL_ROSTER: Omit<JobCrewMember, 'operatingDays' | 'standbyDay
     badgeNo: 'EMD-5012',
     name: 'Mohamed Tariq',
     designation: 'Field Tool Supervisor',
-    mobDate: '15-May-23',
+    mobDate: '15-05-2023',
     demobDate: undefined,
     dailyRateUSD: 700,
     rigPassNo: 'RP-77231',
-    h2sExpiry: '20-Nov-2025',
+    h2sExpiry: '20-11-2025',
     status: 'Mobilized (On Rig)',
     contactNo: '+971503344556',
   },
@@ -87,11 +174,11 @@ const MASTER_PERSONNEL_ROSTER: Omit<JobCrewMember, 'operatingDays' | 'standbyDay
     badgeNo: 'EMD-2914',
     name: 'David Miller',
     designation: 'Senior Downhole Rental Tech',
-    mobDate: '16-May-23',
+    mobDate: '16-05-2023',
     demobDate: undefined,
     dailyRateUSD: 650,
     rigPassNo: 'RP-65492',
-    h2sExpiry: '05-May-2026',
+    h2sExpiry: '05-05-2026',
     status: 'Standby',
     contactNo: '+971504455667',
   },
@@ -100,11 +187,11 @@ const MASTER_PERSONNEL_ROSTER: Omit<JobCrewMember, 'operatingDays' | 'standbyDay
     badgeNo: 'EMD-4890',
     name: 'Sultan Al-Zaabi',
     designation: 'Directional & Milling Engineer',
-    mobDate: '17-May-23',
-    demobDate: '27-May-23',
+    mobDate: '17-05-2023',
+    demobDate: '27-05-2023',
     dailyRateUSD: 800,
     rigPassNo: 'RP-99120',
-    h2sExpiry: '18-Aug-2025',
+    h2sExpiry: '18-08-2025',
     status: 'Standby',
     contactNo: '+971505566778',
   },
@@ -113,11 +200,11 @@ const MASTER_PERSONNEL_ROSTER: Omit<JobCrewMember, 'operatingDays' | 'standbyDay
     badgeNo: 'EMD-3301',
     name: 'Johnathan Vance',
     designation: 'Lead BHA Specialist',
-    mobDate: '15-May-23',
+    mobDate: '15-05-2023',
     demobDate: undefined,
     dailyRateUSD: 850,
     rigPassNo: 'RP-54129',
-    h2sExpiry: '30-Oct-2026',
+    h2sExpiry: '30-10-2026',
     status: 'Mobilized (On Rig)',
     contactNo: '+971506677889',
   },
@@ -126,11 +213,11 @@ const MASTER_PERSONNEL_ROSTER: Omit<JobCrewMember, 'operatingDays' | 'standbyDay
     badgeNo: 'EMD-5120',
     name: 'Khaled Bin Rashid',
     designation: 'Rig Tool Coordinator',
-    mobDate: '15-May-23',
-    demobDate: '28-May-23',
+    mobDate: '15-05-2023',
+    demobDate: '28-05-2023',
     dailyRateUSD: 600,
     rigPassNo: 'RP-71203',
-    h2sExpiry: '14-Jul-2025',
+    h2sExpiry: '14-07-2025',
     status: 'Demobilized',
     contactNo: '+971507788990',
   },
@@ -167,11 +254,66 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Technical Details sub-tab
   const [techSubTab, setTechSubTab] = useState<'fishing' | 'whipstock' | 'rentals'>('fishing');
 
-  // Helper to normalize job numbers for robust live SQL data matching (e.g. Job-023-00039 <-> JOB-023-00039 <-> 023-00039)
+  // Helper to normalize job numbers for robust live SQL data matching (e.g. Job-026-01737 <-> 026-01737)
   const normalizeJobKey = (val?: string | null) => {
     if (!val) return '';
     return val.replace(/^JOB-?/i, '').replace(/^0+/, '').trim().toUpperCase();
   };
+
+  // LOCKED STATE RULE: If legally invoiced, draft invoiced, or submitted to billing, job is strictly read-only!
+  // Only Admin can edit (with audited mode banner)
+  const isJobInvoicedOrSubmitted = useMemo(() => {
+    const legal = (jobData.legalInvoiceNumber || jobData.invoiceNumber || '').trim();
+    const draft = (jobData.draftInvoiceNumber || '').trim();
+    const hasLegal = Boolean(legal && legal !== '—' && legal !== '-');
+    const hasDraft = Boolean(draft && draft !== '—' && draft !== '-');
+    const stage = (jobData.status || '').toLowerCase();
+    const isFinishedStage =
+      stage.includes('invoiced') ||
+      stage.includes('completed') ||
+      stage.includes('submitted to billing') ||
+      stage.includes('ses');
+    return hasLegal || hasDraft || isFinishedStage;
+  }, [jobData]);
+
+  const isAdmin = user?.role === 'Admin';
+  const isLocked = isJobInvoicedOrSubmitted && !isAdmin;
+
+  // Dynamic distinct Clients & Contracts pulled from real database records
+  const clientOptions = useMemo(() => {
+    const set = new Set<string>();
+    if (jobData.client && jobData.client.trim()) set.add(jobData.client.trim().toUpperCase());
+    jobs.forEach((j) => {
+      if (j.client && j.client.trim()) set.add(j.client.trim().toUpperCase());
+    });
+    contracts.forEach((c) => {
+      if (c.clientName && c.clientName.trim()) set.add(c.clientName.trim().toUpperCase());
+      if (c.client && c.client.trim()) set.add(c.client.trim().toUpperCase());
+    });
+    ['ADNOC ONSHORE', 'ADNOC OFFSHORE', 'ADNOC DRILLING', 'SNOC', 'SCHLUMBERGER', 'BAKER HUGHES', 'HALLIBURTON', 'WEATHERFORD'].forEach((c) => set.add(c));
+    return Array.from(set).sort();
+  }, [jobs, contracts, jobData.client]);
+
+  const contractOptions = useMemo(() => {
+    const map = new Map<string, string>(); // Name -> Contract No
+    if (jobData.contract && jobData.contract.trim()) {
+      map.set(jobData.contract.trim(), jobData.contractNo || '');
+    }
+    contracts.forEach((c) => {
+      const name = c.contractName || c.title || c.description || c.contractNumber || c.contractNo;
+      const no = c.contractNumber || c.contractNo || '';
+      if (name) map.set(name.trim(), no ? no.trim() : '');
+    });
+    jobs.forEach((j) => {
+      if (j.contract && j.contract.trim()) {
+        map.set(j.contract.trim(), j.contractNo || '');
+      }
+    });
+    if (!map.has('ADNOC ONSHORE - RENTALS')) map.set('ADNOC ONSHORE - RENTALS', '4700023861');
+    if (!map.has('ADNOC OFFSHORE - RENTALS')) map.set('ADNOC OFFSHORE - RENTALS', '4700015149');
+    if (!map.has('SCHEDULE 2 RENTALS')) map.set('SCHEDULE 2 RENTALS', '4700012465');
+    return Array.from(map.entries()).map(([name, no]) => ({ name, no }));
+  }, [contracts, jobs, jobData.contract, jobData.contractNo]);
 
   // Related real data for this specific job from live database
   const jobDTs = useMemo(() => {
@@ -232,7 +374,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     });
   }, [callouts, jobData]);
 
-  // Manpower / Crew State - Strictly based on live job data, zero hardcoded defaults!
+  // Manpower / Crew State
   const [assignedCrew, setAssignedCrew] = useState<JobCrewMember[]>(() => {
     return jobData.crewMembers || [];
   });
@@ -261,42 +403,154 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Selected Checklist within Checklist Tab
   const [selectedCalloutId, setSelectedCalloutId] = useState<string>(() => {
-    return jobCallouts[0]?.id || 'NEW';
+    return jobCallouts[0]?.id || (jobData.calloutId ? jobData.calloutId : 'NEW');
   });
+
+  // Default checklist status: closed if job is already finished/invoiced!
+  const defaultChecklistStatus = isJobInvoicedOrSubmitted ? 'Checklist - Closed / Released' : 'Checklist - Opened';
 
   // Active callout object - Guaranteed to link to this jobData.id
   const activeCallout = useMemo(() => {
-    return (
-      jobCallouts.find((c) => c.id === selectedCalloutId) ||
-      jobCallouts[0] || {
-        id: `CAL-${new Date().getFullYear().toString().slice(-2)}-${String(jobCallouts.length + 1).padStart(4, '0')}`,
-        ticketNo: jobData.clientRef || jobData.poNumber || '2266',
-        jobId: jobData.id,
-        jobNumber: jobData.id,
-        rig: jobData.rig || '',
-        well: jobData.well || '',
-        client: jobData.client || '',
-        contract: jobData.contract || '',
-        poNumber: jobData.poNumber || '',
-        projectNo: jobData.contractNo || jobData.contract || '—',
-        reqDate: formatDateDDMMYYYY(new Date().toISOString()),
-        status: 'Checklist - Opened',
-        createdDate: new Date().toISOString().split('T')[0],
-        emailRef: '',
-        items: [],
-      }
-    );
-  }, [jobCallouts, selectedCalloutId, jobData]);
+    const found = jobCallouts.find((c) => c.id === selectedCalloutId) || jobCallouts[0];
+    if (found) {
+      return {
+        ...found,
+        status: isJobInvoicedOrSubmitted && found.status.includes('Opened')
+          ? 'Checklist - Closed / Released'
+          : found.status,
+      };
+    }
+    return {
+      id: jobData.calloutId || `CAL-${jobData.id.replace(/^JOB-?/i, '')}`,
+      ticketNo: jobData.clientRef || jobData.poNumber || '2266',
+      jobId: jobData.id,
+      jobNumber: jobData.id,
+      rig: jobData.rig || '',
+      well: jobData.well || '',
+      client: jobData.client || '',
+      contract: jobData.contract || '',
+      poNumber: jobData.poNumber || '',
+      projectNo: jobData.contractNo || jobData.contract || '—',
+      reqDate: formatDateDD_MM_YYYY(jobData.mobDate || jobData.firstDtDate || new Date().toISOString()),
+      status: defaultChecklistStatus,
+      createdDate: new Date().toISOString().split('T')[0],
+      emailRef: 'Approved via ADNOC Operations',
+      items: [],
+    };
+  }, [jobCallouts, selectedCalloutId, jobData, isJobInvoicedOrSubmitted, defaultChecklistStatus]);
 
-  // Checklist Items State - Keep synced without erasing newly inserted tools
-  const [checklistItems, setChecklistItems] = useState<CalloutItem[]>(() => activeCallout.items || []);
+  // Checklist Items State
+  const [checklistItems, setChecklistItems] = useState<CalloutItem[]>(() => {
+    if (activeCallout.items && activeCallout.items.length > 0) return activeCallout.items;
+    // Auto-populate from DTs if historical/completed job
+    if (jobDTs.length > 0) {
+      return jobDTs.flatMap((d, dIdx) =>
+        (d.toolLines || []).map((t, tIdx) => ({
+          seq: dIdx * 100 + tIdx + 1,
+          size: t.size || '—',
+          shortDesc: t.shortDesc || t.desc,
+          qty: t.qty || 1,
+          assigned: t.qty || 1,
+          serialNos: [t.serial],
+          status: 'Released' as const,
+          partNo: t.assetNo || t.serial,
+          description: t.desc || t.shortDesc,
+          supplier: t.ownership || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD'),
+          qtyIn: 1,
+          insNum: `GIS-Z-${Math.floor(10000 + (tIdx * 43) % 89999)}-2023`,
+          insDate: formatDateDD_MM_YYYY(d.dispatchDate),
+          comments: 'ACCEPTED',
+          cat: t.shortDesc || 'Downhole Tool',
+          condition: 'ACCEPTED',
+        }))
+      );
+    }
+    return [];
+  });
+
   useEffect(() => {
     if (activeCallout && activeCallout.items && activeCallout.items.length > 0) {
       setChecklistItems(activeCallout.items);
+    } else if (jobDTs.length > 0 && checklistItems.length === 0) {
+      setChecklistItems(
+        jobDTs.flatMap((d, dIdx) =>
+          (d.toolLines || []).map((t, tIdx) => ({
+            seq: dIdx * 100 + tIdx + 1,
+            size: t.size || '—',
+            shortDesc: t.shortDesc || t.desc,
+            qty: t.qty || 1,
+            assigned: t.qty || 1,
+            serialNos: [t.serial],
+            status: 'Released' as const,
+            partNo: t.assetNo || t.serial,
+            description: t.desc || t.shortDesc,
+            supplier: t.ownership || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD'),
+            qtyIn: 1,
+            insNum: `GIS-Z-${Math.floor(10000 + (tIdx * 43) % 89999)}-2023`,
+            insDate: formatDateDD_MM_YYYY(d.dispatchDate),
+            comments: 'ACCEPTED',
+            cat: t.shortDesc || 'Downhole Tool',
+            condition: 'ACCEPTED',
+          }))
+        )
+      );
     }
-  }, [activeCallout]);
+  }, [activeCallout, jobDTs]);
 
-  // Tool Selection Modal (itemsselect) State - with Type-to-Search and Window Maximize
+  // Admin Categories & Sizes Modal State & Storage
+  const [isAdminCategoriesOpen, setIsAdminCategoriesOpen] = useState(false);
+  const [customCategories, setCustomCategories] = useState<string[]>(() => {
+    const s = localStorage.getItem('emdad_custom_categories');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return [
+      'BIT SUB',
+      'CARGO BASKET',
+      'CROSSOVER SUB',
+      'CUTLIP GUIDE',
+      'DRILL PIPE',
+      'DRILLING JAR',
+      'FISHING JAR',
+      'GUNDRILL REAMER',
+      'HOLE OPENER',
+      'HYD DRILLING JAR',
+      'MOTOR',
+      'OVERSHOT',
+      'ROLLER REAMER',
+      'SAFETY VALVE',
+      'STABILIZER',
+      'WHIPSTOCK',
+    ];
+  });
+
+  const [customSizes, setCustomSizes] = useState<string[]>(() => {
+    const s = localStorage.getItem('emdad_custom_sizes');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return ['3-1/2"', '4-3/4"', '5-3/4"', '6"', '6-1/2"', '6-3/4"', '8"', '8-1/8"', '8-1/2"', '9-1/2"', '11-3/4"', '12-1/4"', '17-1/2"', '26"'];
+  });
+
+  const handleUpdateCategories = (cats: string[]) => {
+    setCustomCategories(cats);
+    localStorage.setItem('emdad_custom_categories', JSON.stringify(cats));
+    showToast(`Tool categories updated (${cats.length} total).`, 'success');
+  };
+
+  const handleUpdateSizes = (sizes: string[]) => {
+    setCustomSizes(sizes);
+    localStorage.setItem('emdad_custom_sizes', JSON.stringify(sizes));
+    showToast(`Tool sizes updated (${sizes.length} total).`, 'success');
+  };
+
+  // Tool Selection Modal (itemsselect) State
   const [isToolSelectOpen, setIsToolSelectOpen] = useState(false);
   const [isToolModalMaximized, setIsToolModalMaximized] = useState(false);
   const [categorySearchQuery, setCategorySearchQuery] = useState('CUTLIP GUIDE');
@@ -305,16 +559,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const [selectedToolSize, setSelectedToolSize] = useState<string>('');
   const [checkedToolSerials, setCheckedToolSerials] = useState<string[]>([]);
 
-  // Unique categories in inventory
+  // Unique categories in inventory + custom categories
   const availableCategories = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(customCategories);
     inventory.forEach((t) => {
       if (t.shortDesc) set.add(t.shortDesc.trim());
       else if (t.desc) set.add(t.desc.split(' ')[0]);
     });
-    ['CUTLIP GUIDE', 'HYD DRILLING JAR', 'FISHING JAR', 'CROSSOVER SUB', 'OVERSHOT', 'BIT SUB', 'CARGO BASKET', 'GUNDRILL REAMER', 'SAFETY VALVE'].forEach(c => set.add(c));
     return Array.from(set).sort();
-  }, [inventory]);
+  }, [inventory, customCategories]);
 
   const filteredCategories = useMemo(() => {
     if (!categorySearchQuery || categorySearchQuery.trim() === '') {
@@ -334,15 +587,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [inventory, selectedCategory]);
 
   const availableSizes = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(customSizes);
     categoryInventory.forEach((t) => {
       if (t.size) set.add(t.size.trim());
     });
-    if (set.size === 0) {
-      ['5-3/4"', '6-3/4"', '8"', '8-1/8"', '9-1/2"', '11-3/4"'].forEach(s => set.add(s));
-    }
     return Array.from(set).sort();
-  }, [categoryInventory]);
+  }, [categoryInventory, customSizes]);
 
   const modalAvailableTools = useMemo(() => {
     return categoryInventory.filter((t) => {
@@ -379,35 +629,84 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return jobRTs.find((r) => r.rtNumber === selectedRTNumber) || jobRTs[0] || null;
   }, [jobRTs, selectedRTNumber]);
 
+  // Unreturned DT tools filter: Check if equipment has already been returned
+  const totalDispatched = jobDTs.reduce((acc, dt) => acc + (dt.toolLines?.length || 0), 0);
+  const totalReturned = jobRTs.reduce((acc, rt) => acc + (rt.toolLines?.length || 0), 0);
+  const activeOnRig = Math.max(0, totalDispatched - totalReturned);
+
+  // Return Goods: Filter DTs that actually have unreturned tools
+  const unreturnedDTs = useMemo(() => {
+    return jobDTs.filter((dt) => {
+      const lines = dt.toolLines || [];
+      const unreturned = lines.filter((line) => {
+        const isReturned = jobRTs.some((rt) =>
+          (rt.toolLines || []).some((rtl) => rtl.serial === line.serial || (line.assetNo && rtl.assetNo === line.assetNo))
+        );
+        return !isReturned;
+      });
+      return unreturned.length > 0;
+    });
+  }, [jobDTs, jobRTs]);
+
   // RGT Lower Table: Selected DT for tool backload
   const [rgtSearchDTNo, setRgtSearchDTNo] = useState<string>(() => {
-    return jobDTs[0]?.dtNumber || '';
+    return unreturnedDTs[0]?.dtNumber || jobDTs[0]?.dtNumber || '';
   });
+  useEffect(() => {
+    if (unreturnedDTs.length > 0 && !unreturnedDTs.some((d) => d.dtNumber === rgtSearchDTNo)) {
+      setRgtSearchDTNo(unreturnedDTs[0].dtNumber);
+    }
+  }, [unreturnedDTs, rgtSearchDTNo]);
+
   const [rgtCheckedSerials, setRgtCheckedSerials] = useState<string[]>([]);
 
   const rgtDTToolsToReturn = useMemo(() => {
     if (!rgtSearchDTNo) return [];
     const targetDT = jobDTs.find((d) => d.dtNumber === rgtSearchDTNo);
     if (!targetDT) return [];
-    return targetDT.toolLines || [];
-  }, [jobDTs, rgtSearchDTNo]);
+    const lines = targetDT.toolLines || [];
+    // Only show tools not yet in an RT
+    return lines.filter((line) => {
+      const isReturned = jobRTs.some((rt) =>
+        (rt.toolLines || []).some((rtl) => rtl.serial === line.serial || (line.assetNo && rtl.assetNo === line.assetNo))
+      );
+      return !isReturned;
+    });
+  }, [jobDTs, jobRTs, rgtSearchDTNo]);
 
   // Save Job Record
   const handleSaveJobHeader = () => {
+    if (isLocked) {
+      showToast('Cannot save changes: this job is invoiced and locked in read-only mode.', 'error');
+      return;
+    }
     const updated = { ...jobData, crewMembers: assignedCrew };
     onSaveJob(updated);
     showToast(`Job ${jobData.id} records updated and saved.`, 'success');
   };
 
+  // Update Callout Header Values
+  const handleUpdateCalloutHeader = (field: string, val: string) => {
+    if (isLocked) return;
+    const updatedCallout: Callout = {
+      ...activeCallout,
+      [field]: val,
+    };
+    if (onSaveCallout) {
+      onSaveCallout(updatedCallout);
+    }
+  };
+
   // Insert Personnel from Modal
   const handleInsertSelectedPersonnel = () => {
+    if (isLocked) return;
     const selectedPersons = MASTER_PERSONNEL_ROSTER.filter((p) => checkedPersonnelBadges.includes(p.badgeNo));
     const newMembers: JobCrewMember[] = selectedPersons.map((p, idx) => ({
       id: `CREW-${Date.now()}-${idx}`,
       badgeNo: p.badgeNo,
       name: p.name,
       designation: p.designation,
-      mobDate: jobData.mobDate || formatDateDDMMYYYY(new Date().toISOString()),
+      mobDate: formatDateDD_MM_YYYY(jobData.mobDate || new Date().toISOString()),
       demobDate: undefined,
       dailyRateUSD: p.dailyRateUSD,
       operatingDays: 7,
@@ -433,6 +732,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Delete Crew Member
   const handleDeleteCrewMember = (id: string) => {
+    if (isLocked) return;
     const updated = assignedCrew.filter((c) => c.id !== id);
     setAssignedCrew(updated);
     const updatedJob = { ...jobData, crewMembers: updated };
@@ -443,6 +743,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Insert tools from modal to checklist
   const handleInsertSelectedTools = () => {
+    if (isLocked) return;
     const newlySelectedTools = inventory.filter((t) => checkedToolSerials.includes(t.serial));
     const newItems: CalloutItem[] = newlySelectedTools.map((t, idx) => ({
       seq: checklistItems.length + idx + 1,
@@ -457,7 +758,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       supplier: t.supplier || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD'),
       qtyIn: 1,
       insNum: `GIS-Z-${Math.floor(10000 + Math.random() * 90000)}-2023`,
-      insDate: '09-May-23',
+      insDate: formatDateDD_MM_YYYY(new Date().toISOString()),
       comments: 'ACCEPTED',
       cat: selectedCategory,
       condition: 'ACCEPTED',
@@ -492,6 +793,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Delete row from checklist
   const handleDeleteChecklistRow = (seq: number) => {
+    if (isLocked) return;
     const updated = checklistItems.filter((item) => item.seq !== seq);
     setChecklistItems(updated);
     const calloutToSave: Callout = {
@@ -508,6 +810,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // AUTOMATED LIFECYCLE BRIDGE: Generate Delivery Ticket (DT) from Checklist
   const handleGenerateDTFromChecklist = () => {
+    if (isLocked) {
+      showToast('Action disabled: Invoiced jobs cannot generate new delivery tickets.', 'error');
+      return;
+    }
     if (checklistItems.length === 0) {
       showToast('No tools in checklist to generate Delivery Ticket from.', 'error');
       return;
@@ -521,10 +827,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       dtNumber: nextDTNum,
       jobId: jobData.id,
       jobNumber: jobData.id,
-      rmDate: formatDateDDMMYYYY(new Date().toISOString()),
+      rmDate: formatDateDD_MM_YYYY(new Date().toISOString()),
       rmRef: `MR-${jobData.id.slice(-4) || '881'}`,
-      dispatchDate: formatDateDDMMYYYY(new Date().toISOString()),
-      deliveryDate: formatDateDDMMYYYY(new Date().toISOString()),
+      dispatchDate: formatDateDD_MM_YYYY(new Date().toISOString()),
+      deliveryDate: formatDateDD_MM_YYYY(new Date().toISOString()),
       rig: jobData.rig,
       well: jobData.well,
       contract: jobData.contractNo || jobData.contract,
@@ -550,7 +856,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
     onSaveDTBatch(newDT);
 
-    // Update checklist status to Delivery Ticket - Created
     if (onSaveCallout) {
       onSaveCallout({
         ...activeCallout,
@@ -558,15 +863,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       });
     }
 
-    // Switch to Delivery Tickets tab to review logistics
     setSelectedDTNumber(newDT.dtNumber);
     setActiveTab('delivery-tickets');
-
     showToast(`Delivery Ticket ${newDT.dtNumber} generated from Checklist with ${checklistItems.length} tool(s)!`, 'success');
   };
 
   // Transfer checked tools from Lower DT to Upper RT
   const handleMoveToolsToRT = () => {
+    if (isLocked) {
+      showToast('Action disabled: Invoiced jobs cannot accept new returns.', 'error');
+      return;
+    }
     if (rgtCheckedSerials.length === 0) {
       showToast('Please check at least one tool to return.', 'error');
       return;
@@ -603,15 +910,162 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     showToast(`Moved ${newRTLines.length} tool(s) to RT ${activeRT.rtNumber}.`, 'success');
   };
 
-  // Reconciled tool counts
-  const totalDispatched = jobDTs.reduce((acc, dt) => acc + (dt.toolLines?.length || 0), 0);
-  const totalReturned = jobRTs.reduce((acc, rt) => acc + (rt.toolLines?.length || 0), 0);
-  const activeOnRig = Math.max(0, totalDispatched - totalReturned);
-
   // Print Handlers
   const handlePrintTicket = (type: 'onshore' | 'offshore' | 'report' | 'pob') => {
     window.print();
   };
+
+  // ==========================================
+  // DYNAMIC UTILIZATION SHEET SETUP & DATA
+  // ==========================================
+  // Default month and year calculated from job's first dispatch date or mob date
+  const defaultUtilMonth = useMemo(() => {
+    const rawDate = jobData.mobDate || jobDTs[0]?.dispatchDate;
+    if (rawDate) {
+      const ms = parseDateToMs(rawDate);
+      if (ms > 0) {
+        return new Date(ms).getMonth() + 1;
+      }
+    }
+    return 8; // August default
+  }, [jobData.mobDate, jobDTs]);
+
+  const defaultUtilYear = useMemo(() => {
+    const rawDate = jobData.mobDate || jobDTs[0]?.dispatchDate;
+    if (rawDate) {
+      const ms = parseDateToMs(rawDate);
+      if (ms > 0) {
+        return new Date(ms).getFullYear();
+      }
+    }
+    return 2023; // Default year
+  }, [jobData.mobDate, jobDTs]);
+
+  const [selectedUtilMonth, setSelectedUtilMonth] = useState<number>(defaultUtilMonth);
+  const [selectedUtilYear, setSelectedUtilYear] = useState<number>(defaultUtilYear);
+
+  // Number of days in the selected calendar month
+  const daysInUtilMonth = useMemo(() => {
+    return new Date(selectedUtilYear, selectedUtilMonth, 0).getDate();
+  }, [selectedUtilYear, selectedUtilMonth]);
+
+  const utilDaysList = useMemo(() => {
+    return Array.from({ length: daysInUtilMonth }, (_, i) => i + 1);
+  }, [daysInUtilMonth]);
+
+  // Compute operational days for each tool in the selected month
+  const toolUtilizationRows = useMemo(() => {
+    const allMobilizedTools = jobDTs.flatMap((d) =>
+      (d.toolLines || []).map((t) => {
+        // Find if returned
+        const returnBatch = jobRTs.find((rt) =>
+          (rt.toolLines || []).some((rtl) => rtl.serial === t.serial || (t.assetNo && rtl.assetNo === t.assetNo))
+        );
+        return {
+          ...t,
+          dtNumber: d.dtNumber,
+          dispatchDate: d.dispatchDate,
+          returnDate: returnBatch ? returnBatch.rtDate || returnBatch.backloadRmDate : null,
+          rtNumber: returnBatch ? returnBatch.rtNumber : null,
+        };
+      })
+    );
+
+    return allMobilizedTools.map((t, idx) => {
+      const dispMs = parseDateToMs(t.dispatchDate);
+      const retMs = t.returnDate ? parseDateToMs(t.returnDate) : 0;
+
+      let sbCount = 0;
+      let opsCount = 0;
+      const dayStatuses: Record<number, string> = {};
+
+      utilDaysList.forEach((dayNum) => {
+        const curDate = new Date(selectedUtilYear, selectedUtilMonth - 1, dayNum).getTime();
+        // If within operational window on rig
+        const isDispatched = dispMs > 0 ? curDate >= dispMs : true;
+        const isReturned = retMs > 0 ? curDate > retMs : false;
+
+        if (isDispatched && !isReturned) {
+          // Operational pattern: 2 days standby (S), followed by active drilling (1)
+          const daysSinceDisp = dispMs > 0 ? Math.floor((curDate - dispMs) / (1000 * 60 * 60 * 24)) : dayNum;
+          if (daysSinceDisp <= 2) {
+            dayStatuses[dayNum] = 'S';
+            sbCount += 1;
+          } else {
+            dayStatuses[dayNum] = '1';
+            opsCount += 1;
+          }
+        } else {
+          dayStatuses[dayNum] = '';
+        }
+      });
+
+      // Daily rate AED (e.g. 1,200 AED Ops, 600 AED Standby)
+      const dayRateAED = 1200;
+      const standbyRateAED = 600;
+      const totalAED = opsCount * dayRateAED + sbCount * standbyRateAED;
+
+      return {
+        ...t,
+        rowSeq: idx + 1,
+        dayStatuses,
+        sbCount,
+        opsCount,
+        dayRateAED,
+        totalAED,
+      };
+    });
+  }, [jobDTs, jobRTs, selectedUtilMonth, selectedUtilYear, utilDaysList]);
+
+  const totalToolRevenueAED = useMemo(() => {
+    return toolUtilizationRows.reduce((acc, r) => acc + r.totalAED, 0);
+  }, [toolUtilizationRows]);
+
+  // Engineer Utilization calculation
+  const engineerUtilizationRows = useMemo(() => {
+    return assignedCrew.map((eng, idx) => {
+      const mobMs = parseDateToMs(eng.mobDate);
+      const demobMs = eng.demobDate ? parseDateToMs(eng.demobDate) : 0;
+
+      let sbCount = 0;
+      let opsCount = 0;
+      const dayStatuses: Record<number, string> = {};
+
+      utilDaysList.forEach((dayNum) => {
+        const curDate = new Date(selectedUtilYear, selectedUtilMonth - 1, dayNum).getTime();
+        const isMobilized = mobMs > 0 ? curDate >= mobMs : true;
+        const isDemobilized = demobMs > 0 ? curDate > demobMs : false;
+
+        if (isMobilized && !isDemobilized) {
+          const daysSinceMob = mobMs > 0 ? Math.floor((curDate - mobMs) / (1000 * 60 * 60 * 24)) : dayNum;
+          if (daysSinceMob === 0 || eng.status === 'Standby') {
+            dayStatuses[dayNum] = 'S';
+            sbCount += 1;
+          } else {
+            dayStatuses[dayNum] = '1';
+            opsCount += 1;
+          }
+        } else {
+          dayStatuses[dayNum] = '';
+        }
+      });
+
+      const totalUSD = (opsCount + sbCount) * (eng.dailyRateUSD || 750);
+
+      return {
+        ...eng,
+        rowSeq: idx + 1,
+        dayStatuses,
+        sbCount,
+        opsCount,
+        totalUSD,
+      };
+    });
+  }, [assignedCrew, selectedUtilMonth, selectedUtilYear, utilDaysList]);
+
+  const totalCrewRevenueUSD = useMemo(() => {
+    return engineerUtilizationRows.reduce((acc, e) => acc + e.totalUSD, 0);
+  }, [engineerUtilizationRows]);
 
   return (
     <div
@@ -626,12 +1080,28 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           font-size: 9pt;
         }
       `}</style>
+
       {/* Top Access Window Bar */}
       <div className="bg-[#1a3055] text-white px-3 py-1.5 rounded-t-md flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-2 text-xs font-bold tracking-wide">
           <span>Job Dossier Workspace &bull; Job No: <span className="font-mono text-amber-300">{jobData.id}</span></span>
+          {jobData.legalInvoiceNumber && (
+            <span className="bg-emerald-500/20 text-emerald-200 border border-emerald-400/40 px-2 py-0.5 rounded text-[10px] font-mono">
+              Legal Inv: {jobData.legalInvoiceNumber}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setIsAdminCategoriesOpen(true)}
+              className="text-xs bg-amber-400 hover:bg-amber-300 text-slate-900 px-2.5 py-0.5 rounded font-bold cursor-pointer transition flex items-center gap-1 shadow-2xs"
+            >
+              <span>⚙️</span>
+              <span>Tool Categories &amp; Sizes (Admin)</span>
+            </button>
+          )}
           {onBackToRegister && (
             <button
               onClick={onBackToRegister}
@@ -674,33 +1144,100 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
       {/* Main Form Body */}
       <div className="bg-white border-x border-b border-[#9fb6cf] p-4 rounded-b-md shadow-md min-h-[620px] relative">
+        {/* INVOICED / DRAFT INVOICED LOCK BANNER */}
+        {isJobInvoicedOrSubmitted && (
+          <div
+            className={`p-2.5 mb-3 rounded border text-xs flex items-center justify-between shadow-2xs ${
+              isLocked
+                ? 'bg-amber-50 border-amber-300 text-amber-900'
+                : 'bg-blue-50 border-blue-300 text-blue-900'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-base">{isLocked ? '🔒' : '🛡️'}</span>
+              <div>
+                <strong className="uppercase font-bold">
+                  {isLocked ? 'Archived & Invoiced Record (View-Only Mode)' : 'Admin Super-User Override (Audited Mode)'}:
+                </strong>{' '}
+                {jobData.legalInvoiceNumber ? (
+                  <span>
+                    Legal Invoice: <strong className="font-mono text-red-700 font-bold">{jobData.legalInvoiceNumber}</strong> &bull;{' '}
+                  </span>
+                ) : jobData.draftInvoiceNumber ? (
+                  <span>
+                    Draft Invoice: <strong className="font-mono text-blue-700 font-bold">{jobData.draftInvoiceNumber}</strong> &bull;{' '}
+                  </span>
+                ) : null}
+                Job Status: <strong className="font-mono font-bold">{jobData.status}</strong>.
+                {isLocked
+                  ? ' This job is submitted/invoiced and locked against operational edits. Only Admin can modify audited data.'
+                  : ' Any modifications to this invoiced job will be logged in database audit ledger.'}
+              </div>
+            </div>
+            <span
+              className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                isLocked ? 'bg-amber-200 text-amber-950 border border-amber-300' : 'bg-blue-200 text-blue-950 border border-blue-300'
+              }`}
+            >
+              {isLocked ? 'Locked (View Only)' : 'Admin Override'}
+            </span>
+          </div>
+        )}
+
         {/* Persistent Anchored Job Context Box */}
         <div className="bg-[#f0f4f9] border border-[#b8cce0] rounded-md p-3 mb-4 shadow-2xs">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-xs">
-            {/* Left Column: Job No, Job Description, Rig, Well, Field */}
+            {/* Left Column: Job No, Service Category, Job Description, Rig, Well, Field */}
             <div className="space-y-1.5">
               <div className="flex items-center">
                 <label className="w-28 font-bold text-slate-700 text-right pr-3">Job No:</label>
                 <input
                   type="text"
                   value={jobData.id || ''}
+                  disabled={isLocked}
                   onChange={(e) => setJobData({ ...jobData, id: e.target.value, jobNumber: e.target.value })}
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-900 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500"
+                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-900 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
 
+              {/* Service Category */}
               <div className="flex items-center">
-                <label className="w-28 font-bold text-slate-700 text-right pr-3">Job Description:</label>
+                <label className="w-28 font-bold text-slate-700 text-right pr-3">Service Category:</label>
                 <select
-                  value={jobData.jobDescription || jobData.serviceType || 'DOWN HOLE RENTALS'}
-                  onChange={(e) => setJobData({ ...jobData, jobDescription: e.target.value, serviceType: e.target.value })}
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-64 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500"
+                  value={jobData.serviceCategory || jobData.serviceType || 'DOWN HOLE RENTALS'}
+                  disabled={isLocked}
+                  onChange={(e) =>
+                    setJobData({
+                      ...jobData,
+                      serviceCategory: e.target.value,
+                      serviceType: e.target.value,
+                    })
+                  }
+                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-64 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                 >
                   <option value="DOWN HOLE RENTALS">DOWN HOLE RENTALS</option>
-                  <option value='"DUAL COMPLETION"'>"DUAL COMPLETION"</option>
                   <option value="FISHING SERVICES">FISHING SERVICES</option>
                   <option value="WHIPSTOCK SERVICES">WHIPSTOCK SERVICES</option>
+                  <option value="CASING EXIT SERVICES">CASING EXIT SERVICES</option>
+                  <option value="THRU TUBING SERVICES">THRU TUBING SERVICES</option>
+                  <option value="MILLING & WORKOVER">MILLING &amp; WORKOVER</option>
+                  <option value="WELLBORE CLEANOUT">WELLBORE CLEANOUT</option>
+                  <option value="DRILLING TOOLS">DRILLING TOOLS</option>
+                  <option value='"DUAL COMPLETION"'>"DUAL COMPLETION"</option>
                 </select>
+              </div>
+
+              {/* Short Job Description Input */}
+              <div className="flex items-center">
+                <label className="w-28 font-bold text-slate-700 text-right pr-3">Job Description:</label>
+                <input
+                  type="text"
+                  value={jobData.jobDescription || ''}
+                  disabled={isLocked}
+                  onChange={(e) => setJobData({ ...jobData, jobDescription: e.target.value })}
+                  placeholder="e.g. 6-1/8 Hole Section Whipstock Casing Exit"
+                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-medium text-slate-800 w-64 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                />
               </div>
 
               <div className="flex items-center">
@@ -708,8 +1245,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <input
                   type="text"
                   value={jobData.rig || ''}
+                  disabled={isLocked}
                   onChange={(e) => setJobData({ ...jobData, rig: e.target.value })}
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500"
+                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -718,8 +1256,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <input
                   type="text"
                   value={jobData.well || ''}
+                  disabled={isLocked}
                   onChange={(e) => setJobData({ ...jobData, well: e.target.value })}
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500"
+                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -728,8 +1267,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <input
                   type="text"
                   value={jobData.field || 'ASAB'}
+                  disabled={isLocked}
                   onChange={(e) => setJobData({ ...jobData, field: e.target.value })}
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-medium text-slate-800 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500"
+                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-medium text-slate-800 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -740,35 +1280,49 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <div className="flex items-center flex-1">
                   <label className="w-28 font-bold text-slate-700 text-right pr-3">Client:</label>
                   <select
-                    value={jobData.client || 'ADNOC ONSHORE'}
+                    value={jobData.client || ''}
+                    disabled={isLocked}
                     onChange={(e) => setJobData({ ...jobData, client: e.target.value })}
-                    className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-64 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500"
+                    className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-64 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   >
-                    <option value="ADNOC ONSHORE">ADNOC ONSHORE</option>
-                    <option value="ADNOC OFFSHORE">ADNOC OFFSHORE</option>
-                    <option value="ADNOC DRILLING">ADNOC DRILLING</option>
+                    {clientOptions.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
                   </select>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleSaveJobHeader}
-                  className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-3.5 py-1 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>💾</span>
-                  <span>Save Record</span>
-                </button>
+                {!isLocked && (
+                  <button
+                    type="button"
+                    onClick={handleSaveJobHeader}
+                    className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-3.5 py-1 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span>💾</span>
+                    <span>Save Record</span>
+                  </button>
+                )}
               </div>
 
               <div className="flex items-center">
                 <label className="w-28 font-bold text-slate-700 text-right pr-3">Contract:</label>
                 <select
-                  value={jobData.contract || 'ADNOC ONSHORE - RENTALS'}
-                  onChange={(e) => setJobData({ ...jobData, contract: e.target.value })}
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-medium text-slate-800 w-64 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500"
+                  value={jobData.contract || ''}
+                  disabled={isLocked}
+                  onChange={(e) => {
+                    const chosen = e.target.value;
+                    const found = contractOptions.find((co) => co.name === chosen);
+                    setJobData({
+                      ...jobData,
+                      contract: chosen,
+                      contractNo: found?.no || jobData.contractNo || '',
+                    });
+                  }}
+                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-medium text-slate-800 w-64 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                 >
-                  <option value="ADNOC ONSHORE - RENTALS">ADNOC ONSHORE - RENTALS</option>
-                  <option value="ADNOC OFFSHORE - RENTALS">ADNOC OFFSHORE - RENTALS</option>
-                  <option value="SCHEDULE 2 RENTALS">SCHEDULE 2 RENTALS</option>
+                  {contractOptions.map((co) => (
+                    <option key={co.name} value={co.name}>
+                      {co.name} {co.no ? `(${co.no})` : ''}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -777,8 +1331,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <input
                   type="text"
                   value={jobData.contractNo || jobData.contract || '4700023861'}
+                  disabled={isLocked}
                   onChange={(e) => setJobData({ ...jobData, contractNo: e.target.value })}
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-64 shadow-2xs focus:ring-1 focus:ring-blue-500"
+                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-64 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -794,7 +1349,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   Active Tools: {activeOnRig}
                 </span>
                 <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-purple-50 text-purple-900 border border-purple-300">
-                  Crew on Rig: {assignedCrew.filter(c => c.status.includes('Rig')).length}
+                  Crew on Rig: {assignedCrew.filter((c) => c.status.includes('Rig')).length}
                 </span>
               </div>
             </div>
@@ -809,21 +1364,24 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               <textarea
                 rows={12}
                 value={jobData.notes || ''}
+                disabled={isLocked}
                 onChange={(e) => setJobData({ ...jobData, notes: e.target.value })}
                 placeholder="Enter job notes, instructions, well history, and operational remarks here..."
-                className="w-full bg-white border border-[#9fb6cf] rounded p-3 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full bg-white border border-[#9fb6cf] rounded p-3 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
               />
             </div>
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={handleSaveJobHeader}
-                className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
-              >
-                <span>💾</span>
-                <span>Save Job Notes</span>
-              </button>
-            </div>
+            {!isLocked && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleSaveJobHeader}
+                  className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>💾</span>
+                  <span>Save Job Notes</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -860,6 +1418,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <input
                       type="text"
                       value={jobData.technicalDetails?.casing || ''}
+                      disabled={isLocked}
                       onChange={(e) =>
                         setJobData({
                           ...jobData,
@@ -867,7 +1426,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         })
                       }
                       placeholder='e.g. 9-5/8"'
-                      className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-48 shadow-2xs"
+                      className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-48 shadow-2xs disabled:bg-slate-100"
                     />
                   </div>
                   <div className="flex items-center">
@@ -875,6 +1434,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <input
                       type="text"
                       value={jobData.technicalDetails?.csgPpf || ''}
+                      disabled={isLocked}
                       onChange={(e) =>
                         setJobData({
                           ...jobData,
@@ -882,7 +1442,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         })
                       }
                       placeholder="e.g. 47#"
-                      className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-48 shadow-2xs"
+                      className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-48 shadow-2xs disabled:bg-slate-100"
                     />
                   </div>
                 </div>
@@ -892,6 +1452,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <textarea
                     rows={8}
                     value={jobData.technicalDetails?.scopeOfWork || ''}
+                    disabled={isLocked}
                     onChange={(e) =>
                       setJobData({
                         ...jobData,
@@ -899,7 +1460,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       })
                     }
                     placeholder="Enter fishing scope of work, fish specifications, depth, and target fish description..."
-                    className="w-full bg-white border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full bg-white border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
                   />
                 </div>
               </div>
@@ -914,6 +1475,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <input
                       type="text"
                       value={jobData.technicalDetails?.casing || ''}
+                      disabled={isLocked}
                       onChange={(e) =>
                         setJobData({
                           ...jobData,
@@ -921,7 +1483,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         })
                       }
                       placeholder='e.g. 7"'
-                      className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-48 shadow-2xs"
+                      className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-48 shadow-2xs disabled:bg-slate-100"
                     />
                   </div>
                   <div className="flex items-center">
@@ -929,6 +1491,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <input
                       type="text"
                       value={jobData.technicalDetails?.csgPpf || ''}
+                      disabled={isLocked}
                       onChange={(e) =>
                         setJobData({
                           ...jobData,
@@ -936,7 +1499,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         })
                       }
                       placeholder="e.g. 29#"
-                      className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-48 shadow-2xs"
+                      className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-48 shadow-2xs disabled:bg-slate-100"
                     />
                   </div>
                   <div className="flex items-center">
@@ -944,6 +1507,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <input
                       type="text"
                       value={jobData.technicalDetails?.inclination || ''}
+                      disabled={isLocked}
                       onChange={(e) =>
                         setJobData({
                           ...jobData,
@@ -951,13 +1515,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         })
                       }
                       placeholder="e.g. 45 deg"
-                      className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-48 shadow-2xs"
+                      className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-48 shadow-2xs disabled:bg-slate-100"
                     />
                   </div>
                   <div className="flex items-center">
                     <label className="w-28 font-bold text-slate-700">Whipstock Type:</label>
                     <select
                       value={jobData.technicalDetails?.whipstockType || 'RETRIEVABLE'}
+                      disabled={isLocked}
                       onChange={(e) =>
                         setJobData({
                           ...jobData,
@@ -967,7 +1532,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           },
                         })
                       }
-                      className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold w-48 shadow-2xs cursor-pointer"
+                      className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold w-48 shadow-2xs cursor-pointer disabled:bg-slate-100"
                     >
                       <option value="RETRIEVABLE">1) RETRIEVABLE</option>
                       <option value="PERMANENT">2) PERMANENT</option>
@@ -978,6 +1543,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <input
                       type="text"
                       value={jobData.technicalDetails?.settingDepth || ''}
+                      disabled={isLocked}
                       onChange={(e) =>
                         setJobData({
                           ...jobData,
@@ -985,7 +1551,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         })
                       }
                       placeholder="e.g. 11,250 ft"
-                      className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-48 shadow-2xs"
+                      className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-48 shadow-2xs disabled:bg-slate-100"
                     />
                   </div>
                 </div>
@@ -995,6 +1561,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <textarea
                     rows={7}
                     value={jobData.technicalDetails?.scopeOfWork || ''}
+                    disabled={isLocked}
                     onChange={(e) =>
                       setJobData({
                         ...jobData,
@@ -1002,7 +1569,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       })
                     }
                     placeholder="Enter whipstock window milling, anchor setting, and orientation parameters..."
-                    className="w-full bg-white border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full bg-white border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
                   />
                 </div>
               </div>
@@ -1021,6 +1588,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <input
                           type="text"
                           value={(jobData.technicalDetails as any)?.[hsKey] || ''}
+                          disabled={isLocked}
                           onChange={(e) =>
                             setJobData({
                               ...jobData,
@@ -1031,12 +1599,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             })
                           }
                           placeholder='e.g. 12-1/4"'
-                          className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-28 shadow-2xs"
+                          className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-28 shadow-2xs disabled:bg-slate-100"
                         />
                         <label className="font-bold text-slate-600 pl-2">Casing:</label>
                         <input
                           type="text"
                           value={(jobData.technicalDetails as any)?.[csgKey] || ''}
+                          disabled={isLocked}
                           onChange={(e) =>
                             setJobData({
                               ...jobData,
@@ -1047,7 +1616,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             })
                           }
                           placeholder='e.g. 9-5/8"'
-                          className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-28 shadow-2xs"
+                          className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs w-28 shadow-2xs disabled:bg-slate-100"
                         />
                       </div>
                     );
@@ -1059,6 +1628,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <textarea
                     rows={6}
                     value={jobData.technicalDetails?.scopeOfWork || ''}
+                    disabled={isLocked}
                     onChange={(e) =>
                       setJobData({
                         ...jobData,
@@ -1066,26 +1636,28 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       })
                     }
                     placeholder="Enter rental tools scope of work, stabilizer placement, jar requirements..."
-                    className="w-full bg-white border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full bg-white border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
                   />
                 </div>
               </div>
             )}
 
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={handleSaveJobHeader}
-                className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
-              >
-                <span>💾</span>
-                <span>Save Technical Details</span>
-              </button>
-            </div>
+            {!isLocked && (
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveJobHeader}
+                  className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>💾</span>
+                  <span>Save Technical Details</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
-        {/* TAB 3: MANPOWER / CREW (NEW DEDICATED SCREEN) */}
+        {/* TAB 3: MANPOWER / CREW */}
         {activeTab === 'manpower' && (
           <div className="space-y-3">
             <div className="bg-[#f8fafc] border border-[#b8cce0] rounded p-3 text-xs flex flex-wrap items-center justify-between gap-3 shadow-2xs">
@@ -1096,14 +1668,16 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsPersonnelSelectOpen(true)}
-                  className="bg-[#107c41] hover:bg-[#0c6233] text-white font-bold text-xs px-3.5 py-1.5 rounded-full shadow-xs transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>➕</span>
-                  <span>Select Personnel / Crew</span>
-                </button>
+                {!isLocked && (
+                  <button
+                    type="button"
+                    onClick={() => setIsPersonnelSelectOpen(true)}
+                    className="bg-[#107c41] hover:bg-[#0c6233] text-white font-bold text-xs px-3.5 py-1.5 rounded-full shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span>➕</span>
+                    <span>Select Personnel / Crew</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => handlePrintTicket('pob')}
@@ -1114,7 +1688,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </div>
             </div>
 
-            {/* Crew Members Table - Pure Assignment without utilization/billing */}
+            {/* Crew Members Table */}
             <div className="border border-[#b8cce0] rounded overflow-hidden">
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
@@ -1128,14 +1702,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <th className="py-1 px-2 whitespace-nowrap">Rig Pass / Cert</th>
                     <th className="py-1 px-2 whitespace-nowrap font-mono">H2S Expiry</th>
                     <th className="py-1 px-2 whitespace-nowrap text-center">Status</th>
-                    <th className="py-1 px-2 whitespace-nowrap text-center w-16">Action</th>
+                    {!isLocked && <th className="py-1 px-2 whitespace-nowrap text-center w-16">Action</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {assignedCrew.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="p-6 text-center text-slate-500 font-medium">
-                        No field personnel assigned to this job yet. Click <strong>&quot;Select Personnel / Crew&quot;</strong> above to assign certified crew members.
+                      <td colSpan={isLocked ? 9 : 10} className="p-6 text-center text-slate-500 font-medium">
+                        No field personnel assigned to this job yet.
+                        {!isLocked && (
+                          <span> Click <strong>&quot;Select Personnel / Crew&quot;</strong> above to assign certified crew members.</span>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -1145,10 +1722,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{c.badgeNo}</td>
                         <td className="py-1 px-2 whitespace-nowrap truncate max-w-[180px] font-bold text-blue-900" title={c.name}>{c.name}</td>
                         <td className="py-1 px-2 whitespace-nowrap truncate max-w-[200px] text-slate-700" title={c.designation}>{c.designation}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px]">{c.mobDate || '—'}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-500">{c.demobDate || '— (Active)'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px]">{formatDateDD_MM_YYYY(c.mobDate)}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-500">{c.demobDate ? formatDateDD_MM_YYYY(c.demobDate) : '— (Active)'}</td>
                         <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">{c.rigPassNo || '—'}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{c.h2sExpiry || '—'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{c.h2sExpiry ? formatDateDD_MM_YYYY(c.h2sExpiry) : '—'}</td>
                         <td className="py-1 px-2 whitespace-nowrap text-center">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             c.status.includes('Rig')
@@ -1158,15 +1735,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             {c.status}
                           </span>
                         </td>
-                        <td className="py-1 px-2 whitespace-nowrap text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteCrewMember(c.id)}
-                            className="text-red-600 hover:text-red-800 font-bold text-[11px] hover:underline cursor-pointer"
-                          >
-                            Delete
-                          </button>
-                        </td>
+                        {!isLocked && (
+                          <td className="py-1 px-2 whitespace-nowrap text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCrewMember(c.id)}
+                              className="text-red-600 hover:text-red-800 font-bold text-[11px] hover:underline cursor-pointer"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}
@@ -1180,7 +1759,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 Total Assigned Personnel: <strong className="text-amber-400 font-mono font-bold">{assignedCrew.length} Engineers</strong>
               </div>
               <div>
-                Active on Rig: <strong className="text-emerald-400 font-mono font-bold">{assignedCrew.filter(c => c.status.includes('Rig')).length}</strong>
+                Active on Rig: <strong className="text-emerald-400 font-mono font-bold">{assignedCrew.filter((c) => c.status.includes('Rig')).length}</strong>
               </div>
               <div>
                 Designated Rig: <strong className="text-white font-bold">{jobData.rig}</strong>
@@ -1199,30 +1778,37 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <span className="text-xs text-slate-500 font-mono">
                     Ticket No: <strong className="text-red-600 font-bold text-sm">{activeCallout.ticketNo || '2266'}</strong>
                   </span>
-                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-100 text-blue-900 border border-blue-300">
-                    {activeCallout.status || 'Checklist - Opened'}
+                  <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                    activeCallout.status.includes('Closed') || activeCallout.status.includes('Released')
+                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                      : 'bg-blue-100 text-blue-900 border border-blue-300'
+                  }`}>
+                    {activeCallout.status || defaultChecklistStatus}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setIsToolSelectOpen(true)}
-                    className="bg-[#107c41] hover:bg-[#0c6233] text-white font-bold text-xs px-3 py-1 rounded-full shadow-xs transition cursor-pointer flex items-center gap-1.5"
-                  >
-                    <span>➕</span>
-                    <span>Select Tools</span>
-                  </button>
+                  {!isLocked && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setIsToolSelectOpen(true)}
+                        className="bg-[#107c41] hover:bg-[#0c6233] text-white font-bold text-xs px-3 py-1 rounded-full shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span>➕</span>
+                        <span>Select Tools</span>
+                      </button>
 
-                  {/* AUTOMATED BRIDGE: Generate Delivery Ticket (DT) directly from Checklist */}
-                  <button
-                    type="button"
-                    onClick={handleGenerateDTFromChecklist}
-                    className="bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
-                    title="Transfer reserved checklist tools directly into a new Delivery Ticket"
-                  >
-                    <span>🚚</span>
-                    <span>Generate DT from Checklist</span>
-                  </button>
+                      <button
+                        type="button"
+                        onClick={handleGenerateDTFromChecklist}
+                        className="bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                        title="Transfer reserved checklist tools directly into a new Delivery Ticket"
+                      >
+                        <span>🚚</span>
+                        <span>Generate DT from Checklist</span>
+                      </button>
+                    </>
+                  )}
 
                   <button
                     type="button"
@@ -1234,35 +1820,87 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </div>
               </div>
 
-              {/* Checklist Field Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                <div>
-                  <span className="font-bold text-slate-600">Req Date:</span>{' '}
-                  <span className="font-mono">{activeCallout.reqDate || '03-Oct-26'}</span>
+              {/* Checklist Field Grid - Editable inputs for new checklist header */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] bg-white p-2 rounded border border-slate-200">
+                <div className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600 w-16">Callout No:</span>
+                  <input
+                    type="text"
+                    value={activeCallout.id || ''}
+                    disabled={isLocked}
+                    onChange={(e) => handleUpdateCalloutHeader('id', e.target.value)}
+                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-blue-900 w-28 disabled:bg-slate-100"
+                  />
                 </div>
-                <div>
-                  <span className="font-bold text-slate-600">Callout No:</span>{' '}
-                  <span className="font-mono font-bold text-blue-800">{activeCallout.id}</span>
+                <div className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600 w-16">Req Date:</span>
+                  <input
+                    type="text"
+                    value={activeCallout.reqDate || ''}
+                    disabled={isLocked}
+                    placeholder="DD-MM-YYYY"
+                    onChange={(e) => handleUpdateCalloutHeader('reqDate', e.target.value)}
+                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono w-28 disabled:bg-slate-100"
+                  />
                 </div>
-                <div>
-                  <span className="font-bold text-slate-600">Project No:</span>{' '}
-                  <span className="font-mono">{activeCallout.projectNo || jobData.contractNo || '4700012465'}</span>
+                <div className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600 w-16">Project No:</span>
+                  <input
+                    type="text"
+                    value={activeCallout.projectNo || jobData.contractNo || ''}
+                    disabled={isLocked}
+                    onChange={(e) => handleUpdateCalloutHeader('projectNo', e.target.value)}
+                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono w-28 disabled:bg-slate-100"
+                  />
                 </div>
-                <div>
-                  <span className="font-bold text-slate-600">PO Number:</span>{' '}
-                  <span className="font-mono">{jobData.poNumber || '—'}</span>
+                <div className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600 w-16">PO Number:</span>
+                  <input
+                    type="text"
+                    value={activeCallout.poNumber || jobData.poNumber || ''}
+                    disabled={isLocked}
+                    onChange={(e) => handleUpdateCalloutHeader('poNumber', e.target.value)}
+                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono w-28 disabled:bg-slate-100"
+                  />
                 </div>
-                <div>
-                  <span className="font-bold text-slate-600">Rig:</span>{' '}
-                  <span className="font-bold">{jobData.rig}</span>
+                <div className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600 w-16">Rig / Well:</span>
+                  <span className="font-bold text-slate-800 font-mono">{jobData.rig} / {jobData.well}</span>
                 </div>
-                <div>
-                  <span className="font-bold text-slate-600">Well:</span>{' '}
-                  <span>{jobData.well}</span>
+                <div className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600 w-16">Email Ref:</span>
+                  <input
+                    type="text"
+                    value={activeCallout.emailRef || ''}
+                    disabled={isLocked}
+                    placeholder="Client authorization / email"
+                    onChange={(e) => handleUpdateCalloutHeader('emailRef', e.target.value)}
+                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs w-36 disabled:bg-slate-100"
+                  />
                 </div>
-                <div>
-                  <span className="font-bold text-slate-600">Email Ref:</span>{' '}
-                  <span>{activeCallout.emailRef || 'ADNOC Request'}</span>
+                <div className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600 w-16">Ticket No:</span>
+                  <input
+                    type="text"
+                    value={activeCallout.ticketNo || ''}
+                    disabled={isLocked}
+                    onChange={(e) => handleUpdateCalloutHeader('ticketNo', e.target.value)}
+                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-red-600 w-24 disabled:bg-slate-100"
+                  />
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-bold text-slate-600 w-16">Status:</span>
+                  <select
+                    value={activeCallout.status || defaultChecklistStatus}
+                    disabled={isLocked}
+                    onChange={(e) => handleUpdateCalloutHeader('status', e.target.value)}
+                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-bold text-blue-900 w-44 disabled:bg-slate-100"
+                  >
+                    <option value="Checklist - Opened">Checklist - Opened</option>
+                    <option value="Checklist - In Progress">Checklist - In Progress</option>
+                    <option value="Delivery Ticket - Created">Delivery Ticket - Created</option>
+                    <option value="Checklist - Closed / Released">Checklist - Closed / Released</option>
+                  </select>
                 </div>
               </div>
             </div>
@@ -1273,7 +1911,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
                   <tr>
                     <th className="p-1.5 text-center w-12">ItemNo</th>
-                    <th className="p-1.5">PartNo</th>
+                    <th className="p-1.5">PartNo / Serial</th>
                     <th className="p-1.5">Description</th>
                     <th className="p-1.5 text-center w-14">DTQTY</th>
                     <th className="p-1.5">Supplier</th>
@@ -1282,14 +1920,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <th className="p-1.5">INS_DATE</th>
                     <th className="p-1.5">Comments</th>
                     <th className="p-1.5">Category</th>
-                    <th className="p-1.5 text-center w-16">Action</th>
+                    {!isLocked && <th className="p-1.5 text-center w-16">Action</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {checklistItems.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="p-6 text-center text-slate-500 font-medium">
-                        No tools in checklist. Click <strong>&quot;Select Tools&quot;</strong> above to pick available tools from yard inventory.
+                      <td colSpan={isLocked ? 10 : 11} className="p-6 text-center text-slate-500 font-medium">
+                        No tools in checklist.
+                        {!isLocked && (
+                          <span> Click <strong>&quot;Select Tools&quot;</strong> above to pick available tools from yard inventory.</span>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -1302,19 +1943,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700">{item.supplier || 'EMDAD'}</td>
                         <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{item.qtyIn || 1}</td>
                         <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">{item.insNum || 'GIS-Z-01480-2023'}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{item.insDate || '09-May-23'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{formatDateDD_MM_YYYY(item.insDate)}</td>
                         <td className="py-1 px-2 whitespace-nowrap font-bold text-emerald-700">{item.comments || 'ACCEPTED'}</td>
                         <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600">{item.cat || item.shortDesc}</td>
-                        <td className="py-1 px-2 whitespace-nowrap text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteChecklistRow(item.seq)}
-                            className="text-red-600 hover:text-red-800 font-bold text-[11px] hover:underline cursor-pointer"
-                            title="Delete row and return tool to inventory"
-                          >
-                            Delete
-                          </button>
-                        </td>
+                        {!isLocked && (
+                          <td className="py-1 px-2 whitespace-nowrap text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteChecklistRow(item.seq)}
+                              className="text-red-600 hover:text-red-800 font-bold text-[11px] hover:underline cursor-pointer"
+                              title="Delete row and return tool to inventory"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}
@@ -1327,40 +1970,38 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         {/* TAB 5: DELIVERY TICKET HEADER / RENTAL TICKET */}
         {activeTab === 'delivery-tickets' && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-300 pb-2">
-              <div className="flex items-center gap-1 overflow-x-auto">
-                <span className="text-xs font-bold text-slate-600 mr-2">Dispatched Tickets:</span>
+            {/* Header: Clean Dropdown for DT selection instead of multi-row badges */}
+            <div className="flex flex-wrap items-center justify-between border-b border-slate-300 pb-2 gap-2">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-slate-700 whitespace-nowrap">Select Delivery Ticket:</label>
                 {jobDTs.length === 0 ? (
                   <span className="text-xs text-slate-400 italic">No delivery tickets yet.</span>
                 ) : (
-                  jobDTs.map((dt) => (
-                    <button
-                      key={dt.dtNumber}
-                      type="button"
-                      onClick={() => setSelectedDTNumber(dt.dtNumber)}
-                      className={`px-3 py-1 text-xs font-mono font-bold rounded transition cursor-pointer ${
-                        selectedDTNumber === dt.dtNumber
-                          ? 'bg-blue-800 text-white shadow-2xs'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      {dt.dtNumber} ({dt.toolLines?.length || 0} tools)
-                    </button>
-                  ))
+                  <select
+                    value={selectedDTNumber}
+                    onChange={(e) => setSelectedDTNumber(e.target.value)}
+                    className="bg-white border border-[#9fb6cf] rounded px-3 py-1 text-xs font-mono font-bold text-[#1a3055] shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 min-w-[240px]"
+                  >
+                    {jobDTs.map((dt) => (
+                      <option key={dt.dtNumber} value={dt.dtNumber}>
+                        {dt.dtNumber} — {dt.toolLines?.length || 0} tool(s) ({formatDateDD_MM_YYYY(dt.dispatchDate)})
+                      </option>
+                    ))}
+                  </select>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => handlePrintTicket('onshore')}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300"
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer"
                 >
                   Print Onshore Ticket
                 </button>
                 <button
                   type="button"
                   onClick={() => handlePrintTicket('offshore')}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300"
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer"
                 >
                   Print Offshore Ticket
                 </button>
@@ -1389,7 +2030,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     </div>
                     <div>
                       <span className="font-bold text-slate-600">Purpose:</span>{' '}
-                      <span>{jobData.jobDescription || 'Fishing'}</span>
+                      <span>{jobData.serviceCategory || jobData.jobDescription || 'Downhole Rentals'}</span>
                     </div>
                     <div>
                       <span className="font-bold text-slate-600">Rig:</span>{' '}
@@ -1405,11 +2046,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     </div>
                     <div>
                       <span className="font-bold text-slate-600">DateShipped:</span>{' '}
-                      <span className="font-mono">{activeDT.dispatchDate || '25-Aug-23'}</span>
+                      <span className="font-mono font-bold">{formatDateDD_MM_YYYY(activeDT.dispatchDate)}</span>
                     </div>
                     <div>
                       <span className="font-bold text-slate-600">RM Ref / Manifest:</span>{' '}
-                      <span className="font-mono">{activeDT.rmRef || 'MR'}</span>
+                      <span className="font-mono">{activeDT.rmRef || 'MR-881'}</span>
                     </div>
                   </div>
                 </div>
@@ -1420,7 +2061,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
                       <tr>
                         <th className="p-1.5 text-center w-12">ItemNo</th>
-                        <th className="p-1.5">PartNo</th>
+                        <th className="p-1.5">PartNo / Serial</th>
                         <th className="p-1.5">Description</th>
                         <th className="p-1.5 text-center w-14">DTQTY</th>
                         <th className="p-1.5">DATEOUT</th>
@@ -1438,7 +2079,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
                           <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{t.qty || 1}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{activeDT.dispatchDate || '25-Aug-23'}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{formatDateDD_MM_YYYY(activeDT.dispatchDate)}</td>
                           <td className="py-1 px-2 whitespace-nowrap font-mono text-blue-700">{jobData.id}</td>
                           <td className="py-1 px-2 whitespace-nowrap font-mono text-slate-500">{t.rtBatchId || '—'}</td>
                           <td className="py-1 px-2 whitespace-nowrap font-mono text-slate-500">—</td>
@@ -1450,79 +2091,101 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   </table>
                 </div>
 
-                {/* Bottom Logistics fields */}
-                <div className="bg-[#f8fafc] border border-slate-300 rounded p-3 text-xs grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="space-y-1.5">
-                    <div>
-                      <span className="font-bold text-slate-700">Prepared By:</span>{' '}
+                {/* Bottom Logistics fields - Balanced 3-column layout without 'Ready to Go' */}
+                <div className="bg-[#f8fafc] border border-slate-300 rounded p-3 text-xs grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Column 1: Dispatch Authority */}
+                  <div className="space-y-1.5 bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
+                    <div className="font-bold text-slate-700 border-b pb-1 text-[11px] uppercase tracking-wider text-blue-900">
+                      1. Dispatch Authority
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-600">Prepared By:</span>
                       <input
                         type="text"
-                        defaultValue={activeDT.dispatchedBy || 'RAGHUNATH'}
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 ml-1 text-xs"
+                        defaultValue={activeDT.dispatchedBy || 'Operations'}
+                        disabled={isLocked}
+                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                       />
                     </div>
-                    <div>
-                      <span className="font-bold text-slate-700">Designation:</span>{' '}
-                      <span className="font-mono text-slate-600">WORKSHOP COORDINATOR</span>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-600">Designation:</span>
+                      <input
+                        type="text"
+                        defaultValue="WORKSHOP COORDINATOR"
+                        disabled={isLocked}
+                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
+                      />
                     </div>
-                    <div className="flex items-center gap-1.5 pt-1">
-                      <input type="checkbox" defaultChecked id="readyToGo" className="rounded" />
-                      <label htmlFor="readyToGo" className="font-bold text-blue-900 cursor-pointer">
-                        Ready to Go
-                      </label>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-600">Dispatch Date:</span>
+                      <span className="font-mono font-bold text-slate-800 text-xs">{formatDateDD_MM_YYYY(activeDT.dispatchDate)}</span>
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <div>
-                      <span className="font-bold text-slate-700">Delivered To:</span>{' '}
+                  {/* Column 2: Logistics & Destination */}
+                  <div className="space-y-1.5 bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
+                    <div className="font-bold text-slate-700 border-b pb-1 text-[11px] uppercase tracking-wider text-blue-900">
+                      2. Destination &amp; Marine Logistics
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-600">Delivered To:</span>
                       <input
                         type="text"
                         defaultValue="ESNAD JETTY"
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-44 ml-1 text-xs"
+                        disabled={isLocked}
+                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                       />
                     </div>
-                    <div>
-                      <span className="font-bold text-slate-700">Vessel:</span>{' '}
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-600">Vessel / Boat:</span>
                       <input
                         type="text"
                         defaultValue="ZAKHER STAR"
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-44 ml-1 text-xs"
+                        disabled={isLocked}
+                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                       />
                     </div>
-                    <div>
-                      <span className="font-bold text-slate-700">Transport:</span>{' '}
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-600">Transport:</span>
                       <input
                         type="text"
                         defaultValue="EMDAD"
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-44 ml-1 text-xs"
+                        disabled={isLocked}
+                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <div>
-                      <span className="font-bold text-slate-700">Vehicle No:</span>{' '}
+                  {/* Column 3: Road Haulage & Driver */}
+                  <div className="space-y-1.5 bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
+                    <div className="font-bold text-slate-700 border-b pb-1 text-[11px] uppercase tracking-wider text-blue-900">
+                      3. Haulage &amp; Driver Details
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-600">Vehicle No:</span>
                       <input
                         type="text"
                         defaultValue="54912"
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-36 ml-1 text-xs"
+                        disabled={isLocked}
+                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100 font-mono"
                       />
                     </div>
-                    <div>
-                      <span className="font-bold text-slate-700">Driver Name:</span>{' '}
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-600">Driver Name:</span>
                       <input
                         type="text"
                         defaultValue="LUQMAN KHAN"
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-36 ml-1 text-xs"
+                        disabled={isLocked}
+                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                       />
                     </div>
-                    <div>
-                      <span className="font-bold text-slate-700">Contact No:</span>{' '}
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-600">Contact No:</span>
                       <input
                         type="text"
                         defaultValue="+971565256707"
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-36 ml-1 text-xs font-mono"
+                        disabled={isLocked}
+                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs font-mono disabled:bg-slate-100"
                       />
                     </div>
                   </div>
@@ -1549,14 +2212,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <button
                     type="button"
                     onClick={() => handlePrintTicket('onshore')}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300"
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer"
                   >
                     Onshore ticket
                   </button>
                   <button
                     type="button"
                     onClick={() => handlePrintTicket('offshore')}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300"
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer"
                   >
                     Offshore ticket
                   </button>
@@ -1566,7 +2229,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                 <div>
                   <span className="font-bold text-slate-600">Date:</span>{' '}
-                  <span className="font-mono">{activeRT?.rtDate || '26-Aug-23'}</span>
+                  <span className="font-mono font-bold">{formatDateDD_MM_YYYY(activeRT?.rtDate || '26-08-2023')}</span>
                 </div>
                 <div>
                   <span className="font-bold text-slate-600">Shipped Via:</span>{' '}
@@ -1574,11 +2237,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </div>
                 <div>
                   <span className="font-bold text-slate-600">L/Note Date:</span>{' '}
-                  <span className="font-mono">24-Aug-23</span>
+                  <span className="font-mono">{formatDateDD_MM_YYYY('24-08-2023')}</span>
                 </div>
                 <div>
                   <span className="font-bold text-slate-600">L/Note No:</span>{' '}
-                  <span className="font-mono">144781</span>
+                  <span className="font-mono font-bold">144781</span>
                 </div>
               </div>
             </div>
@@ -1593,7 +2256,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
                   <tr>
                     <th className="p-1.5 text-center w-12">ItemNo</th>
-                    <th className="p-1.5">PartNo</th>
+                    <th className="p-1.5">PartNo / Serial</th>
                     <th className="p-1.5">Description</th>
                     <th className="p-1.5 text-center">RGT_No</th>
                     <th className="p-1.5">Date_In</th>
@@ -1601,10 +2264,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {(!activeRT || !activeRT.toolLines || activeRT.toolLines.length === 0) ? (
+                  {!activeRT || !activeRT.toolLines || activeRT.toolLines.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="p-4 text-center text-slate-500">
-                        No returned tools added to this ticket yet. Select tools from the lower DT section below and click &quot;Enter / Move to RT&quot;.
+                        No returned tools added to this ticket yet.
                       </td>
                     </tr>
                   ) : (
@@ -1614,11 +2277,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
                         <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
                         <td className="py-1 px-2 whitespace-nowrap text-center font-mono font-bold text-blue-800">{activeRT.rtNumber}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{activeRT.rtDate || '24-Aug-23'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{formatDateDD_MM_YYYY(activeRT.rtDate || '24-08-2023')}</td>
                         <td className="py-1 px-2 whitespace-nowrap">
                           <select
                             defaultValue={t.used ? 'USED' : 'NOT USED'}
-                            className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-800 cursor-pointer"
+                            disabled={isLocked}
+                            className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-800 cursor-pointer disabled:bg-slate-100"
                           >
                             <option value="USED">USED</option>
                             <option value="NOT USED">NOT USED</option>
@@ -1634,200 +2298,385 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             </div>
 
             {/* Lower Section: Search DT No & Select Tools to Move to RT */}
-            <div className="bg-[#fffbeb] border border-[#fde68a] rounded p-3 text-xs space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-amber-900">Search DT No:</span>
-                  <select
-                    value={rgtSearchDTNo}
-                    onChange={(e) => setRgtSearchDTNo(e.target.value)}
-                    className="bg-white border border-amber-300 rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 cursor-pointer"
-                  >
-                    {jobDTs.map((d) => (
-                      <option key={d.dtNumber} value={d.dtNumber}>
-                        {d.dtNumber} ({d.toolLines?.length || 0} tools dispatched)
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-[11px] text-amber-800">
-                    &larr; Select DT dispatched to this rig to pick backloaded tools
-                  </span>
+            {unreturnedDTs.length === 0 ? (
+              <div className="bg-emerald-50 border border-emerald-300 rounded p-4 text-center">
+                <div className="text-emerald-800 font-bold text-sm flex items-center justify-center gap-1.5 mb-1">
+                  <span>✅</span>
+                  <span>All Dispatched Equipment Reconciled &amp; Returned</span>
+                </div>
+                <p className="text-xs text-emerald-700">
+                  All <strong>{totalDispatched}</strong> tool(s) dispatched across {jobDTs.length} Delivery Ticket(s) have been received back into yard inventory on {jobRTs.length} Return Ticket(s).
+                  There is no unreturned equipment remaining on Rig {jobData.rig}.
+                </p>
+              </div>
+            ) : (
+              <div className="bg-[#fffbeb] border border-[#fde68a] rounded p-3 text-xs space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-amber-900">Search DT No for Backload:</span>
+                    <select
+                      value={rgtSearchDTNo}
+                      onChange={(e) => setRgtSearchDTNo(e.target.value)}
+                      className="bg-white border border-amber-300 rounded px-2.5 py-1 text-xs font-mono font-bold text-slate-800 cursor-pointer"
+                    >
+                      {unreturnedDTs.map((d) => (
+                        <option key={d.dtNumber} value={d.dtNumber}>
+                          {d.dtNumber} ({d.toolLines?.length || 0} tools dispatched)
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-[11px] text-amber-800">
+                      &larr; Select DT with tools still on rig
+                    </span>
+                  </div>
+
+                  {!isLocked && (
+                    <button
+                      type="button"
+                      onClick={handleMoveToolsToRT}
+                      disabled={rgtCheckedSerials.length === 0}
+                      className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>⬇️</span>
+                      <span>Enter / Move to RT Details ({rgtCheckedSerials.length})</span>
+                    </button>
+                  )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleMoveToolsToRT}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>⬇️</span>
-                  <span>Enter / Move to RT Details</span>
-                </button>
+                {/* Lower DT Table: Tools from the selected DT */}
+                <div className="border border-amber-200 rounded overflow-hidden bg-white">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-amber-100/70 text-amber-950 font-bold text-[11px]">
+                      <tr>
+                        <th className="p-1.5 text-center w-12">TicketNo</th>
+                        <th className="p-1.5 text-center w-12">ItemNo</th>
+                        <th className="p-1.5">PartNo / Serial</th>
+                        <th className="p-1.5">Description</th>
+                        <th className="p-1.5 text-center w-14">DTQTY</th>
+                        <th className="p-1.5 text-center w-16">Ret_ [✓]</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-amber-100">
+                      {rgtDTToolsToReturn.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-4 text-center text-slate-500">
+                            No unreturned tools available in selected DT.
+                          </td>
+                        </tr>
+                      ) : (
+                        rgtDTToolsToReturn.map((t, idx) => {
+                          const isChecked = rgtCheckedSerials.includes(t.serial);
+                          return (
+                            <tr key={idx} className={`h-7 leading-none ${isChecked ? 'bg-amber-100/80 font-semibold' : 'hover:bg-slate-50'}`}>
+                              <td className="py-1 px-2 whitespace-nowrap text-center font-mono text-slate-600">{rgtSearchDTNo}</td>
+                              <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
+                              <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial}</td>
+                              <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
+                              <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{t.qty || 1}</td>
+                              <td className="py-1 px-2 whitespace-nowrap text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  disabled={isLocked}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setRgtCheckedSerials((prev) => [...prev, t.serial]);
+                                    } else {
+                                      setRgtCheckedSerials((prev) => prev.filter((s) => s !== t.serial));
+                                    }
+                                  }}
+                                  className="cursor-pointer"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 7: UTILIZATION (FULLY DYNAMIC WITH MONTH/YEAR PICKER & ENGINEER UTILIZATION) */}
+        {activeTab === 'utilization' && (
+          <div className="space-y-3">
+            {/* Top Job Utilization Context Bar */}
+            <div className="bg-[#1a3055] text-white p-3 rounded text-xs grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div>
+                <span className="text-slate-300">RIG / WELL:</span>{' '}
+                <strong className="text-amber-400 font-mono font-bold">{jobData.rig} / {jobData.well}</strong>
+              </div>
+              <div>
+                <span className="text-slate-300">CLIENT:</span>{' '}
+                <strong className="text-white font-bold">{jobData.client}</strong>
+              </div>
+              <div>
+                <span className="text-slate-300">CONTRACT:</span>{' '}
+                <strong className="text-white font-mono">{jobData.contractNo || jobData.contract}</strong>
+              </div>
+              <div>
+                <span className="text-slate-300">MONTHLY ACCRUAL:</span>{' '}
+                <strong className="text-emerald-400 font-mono font-bold">
+                  {totalToolRevenueAED.toLocaleString()} AED (${(totalToolRevenueAED / 3.6725 + totalCrewRevenueUSD).toLocaleString('en-US', { maximumFractionDigits: 0 })} USD)
+                </strong>
+              </div>
+            </div>
+
+            {/* Month & Year Selection Bar */}
+            <div className="bg-slate-100 border border-slate-300 rounded p-2.5 flex flex-wrap items-center justify-between text-xs gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <label className="font-bold text-slate-700">Month:</label>
+                  <select
+                    value={selectedUtilMonth}
+                    onChange={(e) => setSelectedUtilMonth(parseInt(e.target.value, 10))}
+                    className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs font-bold text-slate-800 cursor-pointer shadow-2xs"
+                  >
+                    {MONTH_NAMES.map((name, idx) => (
+                      <option key={name} value={idx + 1}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <label className="font-bold text-slate-700">Year:</label>
+                  <select
+                    value={selectedUtilYear}
+                    onChange={(e) => setSelectedUtilYear(parseInt(e.target.value, 10))}
+                    className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs font-mono font-bold text-slate-800 cursor-pointer shadow-2xs"
+                  >
+                    {[2022, 2023, 2024, 2025, 2026, 2027].map((yr) => (
+                      <option key={yr} value={yr}>{yr}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <span className="text-slate-500 font-mono text-[11px]">
+                  (Legend: <strong className="text-emerald-700 font-bold">1 = Ops</strong>, <strong className="text-blue-700 font-bold">S = Standby</strong>)
+                </span>
               </div>
 
-              {/* Lower DT Table: Tools from the selected DT */}
-              <div className="border border-amber-200 rounded overflow-hidden bg-white">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-amber-100/70 text-amber-950 font-bold text-[11px]">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-600 text-xs">
+                  Mobilized Tools in Month: <strong className="font-mono text-blue-900">{toolUtilizationRows.length}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs px-3 py-1 rounded cursor-pointer transition shadow-2xs"
+                >
+                  Print Log
+                </button>
+              </div>
+            </div>
+
+            {/* 1. Downhole Tool Fleet Utilization Matrix */}
+            <div>
+              <div className="bg-[#1a3055] text-white px-3 py-1.5 rounded-t font-bold text-xs flex items-center justify-between">
+                <span>Downhole Tool Fleet Utilization &bull; {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}</span>
+                <span className="text-emerald-400 font-mono text-[11px]">
+                  Total Tool Revenue: {totalToolRevenueAED.toLocaleString()} AED
+                </span>
+              </div>
+              <div className="border border-slate-300 rounded-b overflow-x-auto bg-white shadow-inner">
+                <table className="w-full text-left text-[11px] border-collapse min-w-[960px]">
+                  <thead className="bg-[#e9f0f8] text-[#1a3055] font-bold border-b border-slate-300">
                     <tr>
-                      <th className="p-1.5 text-center w-12">TicketNo</th>
-                      <th className="p-1.5 text-center w-12">ItemNo</th>
-                      <th className="p-1.5">PartNo / Serial</th>
-                      <th className="p-1.5">Description</th>
-                      <th className="p-1.5 text-center w-14">DTQTY</th>
-                      <th className="p-1.5 text-center w-16">Ret_ [✓]</th>
+                      <th className="p-1 text-center w-8">#</th>
+                      <th className="p-1 whitespace-nowrap">DT NO</th>
+                      <th className="p-1 whitespace-nowrap">DEL DATE</th>
+                      <th className="p-1 whitespace-nowrap">ASSET / SERIAL</th>
+                      <th className="p-1 whitespace-nowrap min-w-[140px]">DESCRIPTION</th>
+                      <th className="p-1 text-center w-8">QTY</th>
+                      <th className="p-1 text-center whitespace-nowrap">STATUS</th>
+                      {utilDaysList.map((d) => (
+                        <th key={d} className="p-0.5 text-center w-6 font-mono text-[10px] bg-slate-200/60 border-x border-slate-300">
+                          {d}
+                        </th>
+                      ))}
+                      <th className="p-1 text-center bg-blue-100 text-blue-950 font-bold whitespace-nowrap">SB DAYS</th>
+                      <th className="p-1 text-center bg-emerald-100 text-emerald-950 font-bold whitespace-nowrap">OPS DAYS</th>
+                      <th className="p-1 text-right bg-slate-100 text-slate-900 font-bold pr-2 whitespace-nowrap">TOTAL (AED)</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-amber-100">
-                    {rgtDTToolsToReturn.length === 0 ? (
+                  <tbody className="divide-y divide-slate-200">
+                    {toolUtilizationRows.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="p-4 text-center text-slate-500">
-                          No tools available for return in selected DT.
+                        <td colSpan={utilDaysList.length + 10} className="p-8 text-center text-slate-500 font-medium">
+                          No mobilized tools found for Job {jobData.id} in {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}.
                         </td>
                       </tr>
                     ) : (
-                      rgtDTToolsToReturn.map((t, idx) => {
-                        const isChecked = rgtCheckedSerials.includes(t.serial);
-                        return (
-                          <tr key={idx} className={`h-7 leading-none ${isChecked ? 'bg-amber-100/80 font-semibold' : 'hover:bg-slate-50'}`}>
-                            <td className="py-1 px-2 whitespace-nowrap text-center font-mono text-slate-600">{rgtSearchDTNo}</td>
-                            <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial}</td>
-                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
-                            <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{t.qty || 1}</td>
-                            <td className="py-1 px-2 whitespace-nowrap text-center">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setRgtCheckedSerials((prev) => [...prev, t.serial]);
-                                  } else {
-                                    setRgtCheckedSerials((prev) => prev.filter((s) => s !== t.serial));
-                                  }
-                                }}
-                                className="cursor-pointer"
-                              />
-                            </td>
-                          </tr>
-                        );
-                      })
+                      toolUtilizationRows.map((row) => (
+                        <tr key={row.rowSeq} className="hover:bg-blue-50/50 h-7 leading-none">
+                          <td className="p-1 text-center font-mono text-slate-500">{row.rowSeq}</td>
+                          <td className="p-1 font-mono text-blue-700 font-bold whitespace-nowrap">{row.dtNumber}</td>
+                          <td className="p-1 font-mono whitespace-nowrap text-[10px]">{formatDateDD_MM_YYYY(row.dispatchDate)}</td>
+                          <td className="p-1 font-mono font-bold whitespace-nowrap">{row.serial || row.assetNo}</td>
+                          <td className="p-1 truncate max-w-[200px]" title={row.desc || row.shortDesc}>{row.desc || row.shortDesc}</td>
+                          <td className="p-1 text-center font-bold">{row.qty || 1}</td>
+                          <td className="p-1 text-center whitespace-nowrap">
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
+                              {row.status || 'On Rig'}
+                            </span>
+                          </td>
+                          {utilDaysList.map((day) => {
+                            const val = row.dayStatuses[day];
+                            return (
+                              <td
+                                key={day}
+                                className={`p-0.5 text-center font-mono font-bold text-[10px] border-x border-slate-100 ${
+                                  val === '1'
+                                    ? 'bg-emerald-100 text-emerald-900'
+                                    : val === 'S'
+                                    ? 'bg-blue-100 text-blue-900'
+                                    : ''
+                                }`}
+                              >
+                                {val}
+                              </td>
+                            );
+                          })}
+                          <td className="p-1 text-center font-bold text-blue-800 bg-blue-50/40">{row.sbCount}</td>
+                          <td className="p-1 text-center font-bold text-emerald-800 bg-emerald-50/40">{row.opsCount}</td>
+                          <td className="p-1 text-right font-mono font-bold pr-2 bg-slate-50/50">{row.totalAED.toLocaleString()}</td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
+                  {toolUtilizationRows.length > 0 && (
+                    <tfoot className="bg-[#e9f0f8] font-bold text-[#1a3055] border-t-2 border-slate-300">
+                      <tr>
+                        <td colSpan={7} className="p-1.5 text-right uppercase">Fleet Totals:</td>
+                        {utilDaysList.map((day) => {
+                          const dayActiveCount = toolUtilizationRows.filter((r) => r.dayStatuses[day] !== '').length;
+                          return (
+                            <td key={day} className="p-0.5 text-center font-mono text-[10px] text-slate-700 border-x border-slate-300">
+                              {dayActiveCount || ''}
+                            </td>
+                          );
+                        })}
+                        <td className="p-1.5 text-center font-mono text-blue-900">
+                          {toolUtilizationRows.reduce((acc, r) => acc + r.sbCount, 0)}
+                        </td>
+                        <td className="p-1.5 text-center font-mono text-emerald-900">
+                          {toolUtilizationRows.reduce((acc, r) => acc + r.opsCount, 0)}
+                        </td>
+                        <td className="p-1.5 text-right font-mono text-base text-slate-900 pr-2">
+                          {totalToolRevenueAED.toLocaleString()} AED
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+
+            {/* 2. Field Engineer & Crew Utilization Section */}
+            <div className="pt-2">
+              <div className="bg-[#1a3055] text-white px-3 py-1.5 rounded-t font-bold text-xs flex items-center justify-between">
+                <span>Field Engineer &amp; Rig Crew Utilization &bull; {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}</span>
+                <span className="text-amber-300 font-mono text-[11px]">
+                  Total Manpower Charge: ${totalCrewRevenueUSD.toLocaleString()} USD
+                </span>
+              </div>
+              <div className="border border-slate-300 rounded-b overflow-x-auto bg-white shadow-inner">
+                <table className="w-full text-left text-[11px] border-collapse min-w-[960px]">
+                  <thead className="bg-[#e9f0f8] text-[#1a3055] font-bold border-b border-slate-300">
+                    <tr>
+                      <th className="p-1 text-center w-8">#</th>
+                      <th className="p-1 whitespace-nowrap">BADGE #</th>
+                      <th className="p-1 whitespace-nowrap min-w-[140px]">ENGINEER NAME</th>
+                      <th className="p-1 whitespace-nowrap min-w-[150px]">DESIGNATION / ROLE</th>
+                      <th className="p-1 whitespace-nowrap">MOB DATE</th>
+                      <th className="p-1 whitespace-nowrap">DEMOB DATE</th>
+                      <th className="p-1 text-center whitespace-nowrap">DAILY RATE</th>
+                      {utilDaysList.map((d) => (
+                        <th key={d} className="p-0.5 text-center w-6 font-mono text-[10px] bg-slate-200/60 border-x border-slate-300">
+                          {d}
+                        </th>
+                      ))}
+                      <th className="p-1 text-center bg-blue-100 text-blue-950 font-bold whitespace-nowrap">SB DAYS</th>
+                      <th className="p-1 text-center bg-emerald-100 text-emerald-950 font-bold whitespace-nowrap">OPS DAYS</th>
+                      <th className="p-1 text-right bg-slate-100 text-slate-900 font-bold pr-2 whitespace-nowrap">TOTAL (USD)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {engineerUtilizationRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={utilDaysList.length + 10} className="p-6 text-center text-slate-500 font-medium">
+                          No certified engineers assigned to Job {jobData.id}. Assign crew members in the &quot;Manpower / Crew&quot; tab.
+                        </td>
+                      </tr>
+                    ) : (
+                      engineerUtilizationRows.map((eng) => (
+                        <tr key={eng.rowSeq} className="hover:bg-blue-50/50 h-7 leading-none">
+                          <td className="p-1 text-center font-mono text-slate-500">{eng.rowSeq}</td>
+                          <td className="p-1 font-mono text-slate-900 font-bold whitespace-nowrap">{eng.badgeNo}</td>
+                          <td className="p-1 font-bold text-blue-900 whitespace-nowrap">{eng.name}</td>
+                          <td className="p-1 text-slate-700 whitespace-nowrap">{eng.designation}</td>
+                          <td className="p-1 font-mono whitespace-nowrap text-[10px]">{formatDateDD_MM_YYYY(eng.mobDate)}</td>
+                          <td className="p-1 font-mono whitespace-nowrap text-[10px] text-slate-500">{eng.demobDate ? formatDateDD_MM_YYYY(eng.demobDate) : '—'}</td>
+                          <td className="p-1 text-center font-mono font-bold whitespace-nowrap">${eng.dailyRateUSD}</td>
+                          {utilDaysList.map((day) => {
+                            const val = eng.dayStatuses[day];
+                            return (
+                              <td
+                                key={day}
+                                className={`p-0.5 text-center font-mono font-bold text-[10px] border-x border-slate-100 ${
+                                  val === '1'
+                                    ? 'bg-emerald-100 text-emerald-900'
+                                    : val === 'S'
+                                    ? 'bg-blue-100 text-blue-900'
+                                    : ''
+                                }`}
+                              >
+                                {val}
+                              </td>
+                            );
+                          })}
+                          <td className="p-1 text-center font-bold text-blue-800 bg-blue-50/40">{eng.sbCount}</td>
+                          <td className="p-1 text-center font-bold text-emerald-800 bg-emerald-50/40">{eng.opsCount}</td>
+                          <td className="p-1 text-right font-mono font-bold pr-2 bg-slate-50/50">${eng.totalUSD.toLocaleString()}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  {engineerUtilizationRows.length > 0 && (
+                    <tfoot className="bg-[#e9f0f8] font-bold text-[#1a3055] border-t-2 border-slate-300">
+                      <tr>
+                        <td colSpan={7} className="p-1.5 text-right uppercase">Crew Totals:</td>
+                        {utilDaysList.map((day) => {
+                          const activeCrew = engineerUtilizationRows.filter((e) => e.dayStatuses[day] !== '').length;
+                          return (
+                            <td key={day} className="p-0.5 text-center font-mono text-[10px] text-slate-700 border-x border-slate-300">
+                              {activeCrew || ''}
+                            </td>
+                          );
+                        })}
+                        <td className="p-1.5 text-center font-mono text-blue-900">
+                          {engineerUtilizationRows.reduce((acc, e) => acc + e.sbCount, 0)}
+                        </td>
+                        <td className="p-1.5 text-center font-mono text-emerald-900">
+                          {engineerUtilizationRows.reduce((acc, e) => acc + e.opsCount, 0)}
+                        </td>
+                        <td className="p-1.5 text-right font-mono text-base text-slate-900 pr-2">
+                          ${totalCrewRevenueUSD.toLocaleString()} USD
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               </div>
             </div>
           </div>
         )}
-
-        {/* TAB 7: UTILIZATION */}
-        {activeTab === 'utilization' && (
-          <div className="space-y-3">
-            <div className="bg-[#1a3055] text-white p-3 rounded text-xs grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div>
-                <span className="text-slate-300">RIG / WELL:</span>{' '}
-                <strong className="text-amber-400 font-mono">{jobData.rig} / {jobData.well}</strong>
-              </div>
-              <div>
-                <span className="text-slate-300">CLIENT:</span>{' '}
-                <strong className="text-white">{jobData.client}</strong>
-              </div>
-              <div>
-                <span className="text-slate-300">CONTRACT:</span>{' '}
-                <strong className="text-white">{jobData.contractNo || jobData.contract}</strong>
-              </div>
-              <div>
-                <span className="text-slate-300">TOTAL BILLING ACCRUAL:</span>{' '}
-                <strong className="text-emerald-400 font-mono">
-                  ${(
-                    208750 / 3.6725 +
-                    assignedCrew.reduce((acc, c) => acc + (c.totalChargeUSD || ((c.operatingDays + c.standbyDays) * c.dailyRateUSD)), 0)
-                  ).toLocaleString('en-US', { maximumFractionDigits: 0 })} USD
-                </strong>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-xs py-1">
-              <div className="flex items-center gap-2">
-                <span className="font-bold">Year: 2026</span>
-                <span className="font-bold">Month: September</span>
-                <span className="text-slate-500 ml-4 font-mono text-[11px]">(Legend: 1 = Ops, S = Standby)</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  className="bg-emerald-700 text-white font-bold text-xs px-3 py-1 rounded"
-                >
-                  ✓ Signed Log Attached
-                </button>
-                <button
-                  type="button"
-                  className="bg-slate-200 text-slate-800 font-bold text-xs px-3 py-1 rounded"
-                >
-                  Export XLSX
-                </button>
-              </div>
-            </div>
-
-            {/* Calendar Table Preview */}
-            <div className="border border-slate-300 rounded overflow-x-auto">
-              <table className="w-full text-left text-[11px] border-collapse min-w-[900px]">
-                <thead className="bg-slate-800 text-white font-bold">
-                  <tr>
-                    <th className="p-1 text-center w-8">#</th>
-                    <th className="p-1">DT NO</th>
-                    <th className="p-1">DEL DATE</th>
-                    <th className="p-1">ASSET NUMBER</th>
-                    <th className="p-1">DESCRIPTION</th>
-                    <th className="p-1 text-center">QTY</th>
-                    <th className="p-1 text-center">STATUS</th>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((d) => (
-                      <th key={d} className="p-1 text-center w-6">{d}</th>
-                    ))}
-                    <th className="p-1 text-center bg-blue-900">SB DAYS</th>
-                    <th className="p-1 text-center bg-emerald-900">OPS DAYS</th>
-                    <th className="p-1 text-right bg-slate-900 pr-2">TOTAL (AED)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {jobDTs.flatMap((d) => d.toolLines || []).length === 0 ? (
-                    <tr>
-                      <td colSpan={24} className="p-8 text-center text-slate-500 font-medium">
-                        No mobilized tools found for Job {jobData.id}. Tools will appear here automatically when Delivery Tickets are generated and dispatched to Rig {jobData.rig}.
-                      </td>
-                    </tr>
-                  ) : (
-                    jobDTs.flatMap((d) => (d.toolLines || []).map((t) => ({ ...t, dtNumber: d.dtNumber, dispatchDate: d.dispatchDate }))).map((t, idx) => (
-                      <tr key={idx} className="hover:bg-blue-50/50">
-                        <td className="p-1 text-center font-mono">{idx + 1}</td>
-                        <td className="p-1 font-mono text-blue-700">{t.dtNumber}</td>
-                        <td className="p-1 font-mono">{formatDateDDMMYYYY(t.dispatchDate)}</td>
-                        <td className="p-1 font-mono font-bold">{t.serial || t.assetNo}</td>
-                        <td className="p-1 truncate max-w-[200px]" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
-                        <td className="p-1 text-center font-bold">{t.qty || 1}</td>
-                        <td className="p-1 text-center">
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
-                            {t.status || 'On Rig'}
-                          </span>
-                        </td>
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((day) => (
-                          <td key={day} className="p-1 text-center font-mono font-bold text-slate-700">
-                            {day <= 3 ? 'S' : day <= 10 ? '1' : ''}
-                          </td>
-                        ))}
-                        <td className="p-1 text-center font-bold text-blue-800">3</td>
-                        <td className="p-1 text-center font-bold text-emerald-800">7</td>
-                        <td className="p-1 text-right font-mono font-bold pr-2">10,950</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* PERSONNELSELECT MODAL (Matches MS Access itemsselect exactly) */}
+      {/* PERSONNELSELECT MODAL */}
       {isPersonnelSelectOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-3 animate-in fade-in duration-150">
           <div
@@ -1871,7 +2720,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 Based on role selection, available certified engineers and supervisors show below. Select with checkbox and click <strong>&quot;Insert Selected Personnel&quot;</strong> to mobilize personnel to Rig {jobData.rig} for Job {jobData.id}.
               </div>
 
-              {/* Personnel Table - Fixed height container with scrolling so window never jumps */}
+              {/* Personnel Table */}
               <div className="flex-1 min-h-0 bg-white border border-[#9fb6cf] rounded overflow-y-auto shadow-inner">
                 <table className="w-full text-left border-collapse text-[11.5px]">
                   <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#9fb6cf] font-bold text-[11px] sticky top-0 z-10 shadow-2xs">
@@ -1913,7 +2762,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             <td className="py-1 px-2 whitespace-nowrap truncate max-w-[200px] font-bold text-blue-900" title={p.name}>{p.name}</td>
                             <td className="py-1 px-2 whitespace-nowrap truncate max-w-[240px] text-slate-700" title={p.designation}>{p.designation}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">{p.rigPassNo}</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{p.h2sExpiry}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{p.h2sExpiry ? formatDateDD_MM_YYYY(p.h2sExpiry) : '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-center">
                               <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
                                 {p.status}
@@ -1941,7 +2790,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </table>
               </div>
 
-              {/* Footer - Single clean Insert Button */}
+              {/* Footer */}
               <div className="flex items-center justify-between pt-1 flex-shrink-0">
                 <span className="text-slate-600 text-[11px]">
                   Total certified personnel: <strong>{filteredPersonnelRoster.length}</strong> | Selected: <strong className="text-blue-900">{checkedPersonnelBadges.length}</strong>
@@ -1985,6 +2834,16 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <span>itemsselect &bull; Tool Assignment Picker</span>
               </div>
               <div className="flex items-center gap-2">
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setIsAdminCategoriesOpen(true)}
+                    className="text-xs bg-amber-400 hover:bg-amber-300 text-slate-900 px-2 py-0.5 rounded font-bold cursor-pointer transition flex items-center gap-1"
+                  >
+                    <span>⚙️</span>
+                    <span>Manage Categories &amp; Sizes</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setIsToolModalMaximized(!isToolModalMaximized)}
@@ -2068,7 +2927,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                               >
                                 <span>{c}</span>
                                 <span className="text-[10px] text-slate-500 font-mono">
-                                  {inventory.filter((t) => t.shortDesc?.trim() === c).length} in stock
+                                  {inventory.filter((t) => t.shortDesc?.trim().toUpperCase() === c.toUpperCase()).length} in stock
                                 </span>
                               </div>
                             ))
@@ -2103,7 +2962,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 Type in the category box above to filter downhole tools. Select with checkbox and click <strong>&quot;Insert Selected Tools&quot;</strong> to reserve tools for Job {jobData.id}.
               </div>
 
-              {/* Tools Table - Fixed height container with scrolling so window height never changes */}
+              {/* Tools Table */}
               <div className="flex-1 min-h-0 bg-white border border-[#9fb6cf] rounded overflow-auto shadow-inner">
                 <table className="w-full text-left border-collapse text-[11.5px] min-w-[850px]">
                   <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#9fb6cf] font-bold text-[11px] sticky top-0 z-10 shadow-2xs">
@@ -2148,7 +3007,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             </td>
                             <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{tool.qty || 1}</td>
                             <td className="py-1 px-3 whitespace-nowrap text-slate-700">{tool.supplier || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')}</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">31-Mar-23</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">31-03-2023</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">GIS-Z-01073-2023</td>
                             <td className="py-1 px-2 whitespace-nowrap font-bold text-emerald-700">ACCEPTED</td>
                             <td className="py-1 px-2 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
@@ -2173,7 +3032,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </table>
               </div>
 
-              {/* Footer - Single clean Insert button next to Cancel */}
+              {/* Footer */}
               <div className="flex items-center justify-between pt-1 flex-shrink-0">
                 <span className="text-slate-700 text-[11px]">
                   Total matching items: <strong>{modalAvailableTools.length}</strong> | Selected: <strong className="text-blue-900">{checkedToolSerials.length}</strong>
@@ -2200,6 +3059,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* ADMIN TOOL CATEGORIES & SIZES MODAL */}
+      <AdminCategoriesModal
+        isOpen={isAdminCategoriesOpen}
+        onClose={() => setIsAdminCategoriesOpen(false)}
+        categories={customCategories}
+        onUpdateCategories={handleUpdateCategories}
+        sizes={customSizes}
+        onUpdateSizes={handleUpdateSizes}
+        isAdmin={isAdmin}
+      />
     </div>
   );
 };
