@@ -1372,6 +1372,8 @@ export const App: React.FC = () => {
               callouts={callouts}
               dtBatches={dtBatches}
               rtBatches={rtBatches}
+              inventory={inventory}
+              contracts={contracts}
               onSaveJob={handleSaveJob}
               onDispatchJob={handleDispatchJob}
               onReceiveJob={(jobId) => {
@@ -1386,6 +1388,12 @@ export const App: React.FC = () => {
                 setJobs(updatedJobs);
                 showToast(`Aligned and saved ${updatedJobs.length} jobs in system.`, 'success');
               }}
+              onSaveDTBatch={handleSaveDTBatch}
+              onUpdateDTBatch={handleUpdateDTBatch}
+              onSaveRTBatch={handleSaveRTBatch}
+              onUpdateRTBatch={handleUpdateRTBatch}
+              onSaveCallout={handleSaveCallout}
+              showToast={showToast}
               isNewJobModalOpen={isNewJobOpen}
               onCloseNewJobModal={() => {
                 setIsNewJobOpen(false);

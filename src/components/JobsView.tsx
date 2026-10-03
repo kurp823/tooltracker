@@ -11,6 +11,8 @@ import {
 import { JobStatusModal } from './JobStatusModal';
 import { JobLifecycleStepper } from './JobLifecycleStepper';
 import { JobDetailModal } from './JobDetailModal';
+import { JobDossierView } from './JobDossierView';
+import { ToolItem, ContractRecord } from '../types';
 import {
   Search,
   Download,
@@ -44,10 +46,18 @@ interface JobsViewProps {
   callouts: Callout[];
   dtBatches: DTBatch[];
   rtBatches?: RTBatch[];
+  inventory?: ToolItem[];
+  contracts?: ContractRecord[];
   onSaveJob: (job: DrillingJob) => void;
   onDispatchJob: (jobId: string) => void;
   onReceiveJob?: (jobId: string) => void;
   onBatchUpdateJobs?: (jobs: DrillingJob[]) => void;
+  onSaveDTBatch?: (batch: DTBatch) => void;
+  onUpdateDTBatch?: (batch: DTBatch, addedTools?: ToolItem[], removedTools?: ToolItem[]) => void;
+  onSaveRTBatch?: (batch: RTBatch) => void;
+  onUpdateRTBatch?: (batch: RTBatch) => void;
+  onSaveCallout?: (callout: Callout) => void;
+  showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
   isNewJobModalOpen: boolean;
   onCloseNewJobModal: () => void;
   onOpenNewJobModal: () => void;
@@ -183,10 +193,18 @@ export const JobsView: React.FC<JobsViewProps> = ({
   callouts,
   dtBatches,
   rtBatches = [],
+  inventory = [],
+  contracts = [],
   onSaveJob,
   onDispatchJob,
   onReceiveJob,
   onBatchUpdateJobs,
+  onSaveDTBatch,
+  onUpdateDTBatch,
+  onSaveRTBatch,
+  onUpdateRTBatch,
+  onSaveCallout,
+  showToast,
   isNewJobModalOpen,
   onCloseNewJobModal,
   onOpenNewJobModal,
@@ -199,6 +217,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   const [selectedClientFilter, setSelectedClientFilter] = useState<string>('all');
   const [density, setDensity] = useState<'compact' | 'comfortable'>('compact');
   const [selectedJobDetail, setSelectedJobDetail] = useState<DrillingJob | null>(null);
+  const [dossierJob, setDossierJob] = useState<DrillingJob | null>(null);
 
   // Sorting State
   const [sortField, setSortField] = useState<'id' | 'client' | 'rig' | 'startDate' | 'endDate' | 'dtTools' | 'rtTools' | 'toolsOnRig' | 'stage' | 'stageDays' | 'value'>('id');
@@ -820,6 +839,32 @@ export const JobsView: React.FC<JobsViewProps> = ({
     );
   };
 
+  if (dossierJob) {
+    return (
+      <JobDossierView
+        job={dossierJob}
+        user={user}
+        jobs={jobs}
+        dtBatches={dtBatches}
+        rtBatches={rtBatches || []}
+        callouts={callouts}
+        inventory={inventory || []}
+        contracts={contracts || []}
+        onSaveJob={(updated) => {
+          onSaveJob(updated);
+          setDossierJob(updated);
+        }}
+        onSaveDTBatch={onSaveDTBatch || (() => {})}
+        onUpdateDTBatch={onUpdateDTBatch}
+        onSaveRTBatch={onSaveRTBatch || (() => {})}
+        onUpdateRTBatch={onUpdateRTBatch}
+        onSaveCallout={onSaveCallout}
+        onBackToRegister={() => setDossierJob(null)}
+        showToast={showToast || ((msg) => alert(msg))}
+      />
+    );
+  }
+
   return (
     <div className="space-y-3 w-full">
       {/* Executive Command Header */}
@@ -845,6 +890,15 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
         {/* Global Action Buttons */}
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setDossierJob(sortedJobs[0] || jobs[0])}
+            className="h-7.5 px-3 rounded bg-blue-50 border border-blue-300 text-blue-900 font-bold text-xs hover:bg-blue-100 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            title="Open MS Access style Job Dossier"
+          >
+            <span>🗂️</span>
+            <span>Job Dossier (MS Access)</span>
+          </button>
           <button
             type="button"
             onClick={handleExportJobsCsv}
@@ -1365,11 +1419,12 @@ export const JobsView: React.FC<JobsViewProps> = ({
                       {/* 1. Job # - Strict whitespace-nowrap, sticky left anchor */}
                       <td className={`px-3 ${padY} whitespace-nowrap align-middle sticky left-0 bg-white group-hover:bg-blue-50/70 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]`}>
                         <button
-                          onClick={() => setSelectedJobDetail(job)}
-                          className="font-mono font-bold text-slate-900 group-hover:text-blue-700 text-xs tracking-tight transition cursor-pointer text-left select-all"
-                          title="Click to view complete job details and tool ledger"
+                          onClick={() => setDossierJob(job)}
+                          className="font-mono font-bold text-[#1a3055] group-hover:text-blue-700 text-xs tracking-tight transition cursor-pointer text-left select-all flex items-center gap-1.5"
+                          title="Click to open MS Access style Job Dossier"
                         >
-                          {job.id}
+                          <span className="text-amber-500 text-[10px]">🗂️</span>
+                          <span>{job.id}</span>
                         </button>
                       </td>
 
@@ -1519,6 +1574,14 @@ export const JobsView: React.FC<JobsViewProps> = ({
                       {/* 11. View & Actions (Redundant Status badge button removed) */}
                       <td className={`px-3 ${padY} text-right whitespace-nowrap align-middle pr-3.5`}>
                         <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => setDossierJob(job)}
+                            className="h-6 px-1.5 rounded bg-blue-100 hover:bg-[#1a3055] hover:text-white text-blue-900 font-bold text-[10px] transition-colors border border-blue-300 cursor-pointer flex items-center gap-1 shadow-2xs"
+                            title="Open MS Access style Job Dossier"
+                          >
+                            <span>🗂️</span>
+                            <span>Dossier</span>
+                          </button>
                           <button
                             onClick={() => setSelectedJobDetail(job)}
                             className="h-6 px-1.5 rounded bg-slate-100 hover:bg-[#1a3055] hover:text-white text-[#1a3055] font-semibold text-[10px] transition-colors border border-slate-200 cursor-pointer flex items-center gap-1 shadow-2xs"

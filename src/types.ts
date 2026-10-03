@@ -66,20 +66,35 @@ export interface CalloutItem {
   assigned: number;
   serialNos: string[];
   status: 'Pending' | 'Partial' | 'Assigned' | 'Released';
+  partNo?: string;
+  description?: string;
+  supplier?: string;
+  qtyIn?: number;
+  insNum?: string;
+  insDate?: string;
+  comments?: string;
+  cat?: string;
+  condition?: string;
 }
 
 export interface Callout {
-  id: string;           // CAL-YY-NNNNN
+  id: string;           // CAL-YY-NNNNN or ticket number (e.g. 2120, 2266)
   CalloutID?: string;
   rig: string;
   well: string;
   client: string;
   contract?: string;
   poRef?: string;
-  status: 'Active' | 'Forecast' | 'Closed' | 'Pending' | 'In Progress';
+  poNumber?: string;
+  status: 'Active' | 'Forecast' | 'Closed' | 'Pending' | 'In Progress' | 'Checklist - Opened' | 'Delivery Ticket - Created' | 'Delivery Ticket - Released';
   createdDate: string;
   items: CalloutItem[];
   jobId?: string | null;
+  ticketNo?: string;
+  reqDate?: string;
+  projectNo?: string;
+  emailRef?: string;
+  taskorderNo?: string;
 }
 
 export type JobLifecycleStatus =
@@ -184,6 +199,36 @@ export interface DrillingJob {
   rtToolsCount?: number;
   toolsOnRig?: number;
   cost?: string | number;
+  jobDescription?: string;
+  field?: string;
+  contractNo?: string;
+  technicalDetails?: {
+    serviceCategory?: 'Fishing' | 'Whipstock' | 'Rentals';
+    casing?: string;
+    csgPpf?: string;
+    scopeOfWork?: string;
+    // Whipstock:
+    inclination?: string;
+    whipstockType?: 'PERMANENT' | 'RETRIEVABLE';
+    settingDepth?: string;
+    // Rentals:
+    holeSection1?: string;
+    casing1?: string;
+    holeSection2?: string;
+    casing2?: string;
+    holeSection3?: string;
+    casing3?: string;
+    holeSection4?: string;
+    casing4?: string;
+    holeSection5?: string;
+    casing5?: string;
+    holeSection6?: string;
+    casing6?: string;
+    wellboreCleanout1?: boolean;
+    casingCleanout1?: string;
+    wellboreCleanout2?: boolean;
+    casingCleanout2?: string;
+  };
 }
 
 export interface DTLine {
