@@ -25,6 +25,7 @@ export type NavModule =
   | 'utilization'        // Fleet Utilization (Moved to Operations Module)
   | 'inventory-dash'     // Inventory Dashboard
   | 'inventory'          // Tool Fleet Catalog
+  | 'categories-sizes'   // Tool Categories & Sizes Master
   | 'maintenance-dash'   // Maintenance & QC Dashboard
   | 'inspection'         // QC Inspection Bay
   | 'maintenance'        // Maintenance Orders
@@ -159,6 +160,7 @@ export interface DrillingJob {
   client: string;
   contract?: string;
   poNumber?: string;
+  poValue?: number;
   clientRef?: string;
   erpRef?: string;
   holeSection?: string;

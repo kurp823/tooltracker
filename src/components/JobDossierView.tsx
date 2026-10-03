@@ -290,9 +290,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       if (c.clientName && c.clientName.trim()) set.add(c.clientName.trim().toUpperCase());
       if (c.client && c.client.trim()) set.add(c.client.trim().toUpperCase());
     });
+    dtBatches.forEach((d) => {
+      if (d.client && d.client.trim()) set.add(d.client.trim().toUpperCase());
+    });
+    rtBatches.forEach((r) => {
+      if (r.client && r.client.trim()) set.add(r.client.trim().toUpperCase());
+    });
+    callouts.forEach((c) => {
+      if (c.client && c.client.trim()) set.add(c.client.trim().toUpperCase());
+    });
     ['ADNOC ONSHORE', 'ADNOC OFFSHORE', 'ADNOC DRILLING', 'SNOC', 'SCHLUMBERGER', 'BAKER HUGHES', 'HALLIBURTON', 'WEATHERFORD'].forEach((c) => set.add(c));
     return Array.from(set).sort();
-  }, [jobs, contracts, jobData.client]);
+  }, [jobs, contracts, dtBatches, rtBatches, callouts, jobData.client]);
 
   const contractOptions = useMemo(() => {
     const map = new Map<string, string>(); // Name -> Contract No
@@ -309,11 +318,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         map.set(j.contract.trim(), j.contractNo || '');
       }
     });
+    dtBatches.forEach((d) => {
+      if (d.contract && d.contract.trim()) {
+        map.set(d.contract.trim(), d.contract.trim());
+      }
+    });
+    callouts.forEach((c) => {
+      if (c.contract && c.contract.trim()) {
+        map.set(c.contract.trim(), c.projectNo || '');
+      }
+    });
     if (!map.has('ADNOC ONSHORE - RENTALS')) map.set('ADNOC ONSHORE - RENTALS', '4700023861');
     if (!map.has('ADNOC OFFSHORE - RENTALS')) map.set('ADNOC OFFSHORE - RENTALS', '4700015149');
     if (!map.has('SCHEDULE 2 RENTALS')) map.set('SCHEDULE 2 RENTALS', '4700012465');
     return Array.from(map.entries()).map(([name, no]) => ({ name, no }));
-  }, [contracts, jobs, jobData.contract, jobData.contractNo]);
+  }, [contracts, jobs, dtBatches, callouts, jobData.contract, jobData.contractNo]);
 
   // Related real data for this specific job from live database
   const jobDTs = useMemo(() => {
@@ -374,6 +393,141 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     });
   }, [callouts, jobData]);
 
+  // Equipment dispatch and reconciliation counts
+  const totalDispatched = useMemo(() => {
+    return jobDTs.reduce((acc, dt) => acc + (dt.toolLines?.length || 0), 0);
+  }, [jobDTs]);
+
+  const totalReturned = useMemo(() => {
+    return jobRTs.reduce((acc, rt) => acc + (rt.toolLines?.length || 0), 0);
+  }, [jobRTs]);
+
+  const activeOnRig = useMemo(() => {
+    return Math.max(0, totalDispatched - totalReturned);
+  }, [totalDispatched, totalReturned]);
+
+  // Automated Checklist Status derived from workflow lifecycle
+  const automatedChecklistStatus = useMemo(() => {
+    if (isJobInvoicedOrSubmitted || (totalDispatched > 0 && activeOnRig === 0)) {
+      return 'Checklist - Closed / Released';
+    }
+    const anyDispatched = jobDTs.some((d) => d.isLocked);
+    if (anyDispatched) {
+      return 'Delivery Ticket - Dispatched to Rig';
+    }
+    if (jobDTs.length > 0) {
+      return 'Delivery Ticket - Created';
+    }
+    return 'Checklist - Opened';
+  }, [isJobInvoicedOrSubmitted, totalDispatched, activeOnRig, jobDTs]);
+
+  // All mobilized tools linked to DT and RT
+  const allMobilizedTools = useMemo(() => {
+    return jobDTs.flatMap((d) =>
+      (d.toolLines || []).map((t) => {
+        const returnBatch = jobRTs.find((rt) =>
+          (rt.toolLines || []).some((rtl) => rtl.serial === t.serial || (t.assetNo && rtl.assetNo === t.assetNo))
+        );
+        return {
+          ...t,
+          dtNumber: d.dtNumber,
+          dispatchDate: d.dispatchDate,
+          returnDate: returnBatch ? returnBatch.rtDate || returnBatch.backloadRmDate : null,
+          rtNumber: returnBatch ? returnBatch.rtNumber : null,
+        };
+      })
+    );
+  }, [jobDTs, jobRTs]);
+
+  // Dynamic Month Options based strictly on first DT to last RT
+  const utilMonthOptions = useMemo(() => {
+    let startMs = 0;
+    jobDTs.forEach((dt) => {
+      const ms = parseDateToMs(dt.dispatchDate);
+      if (ms > 0 && (startMs === 0 || ms < startMs)) startMs = ms;
+    });
+    if (!startMs && jobData.mobDate) startMs = parseDateToMs(jobData.mobDate);
+    if (!startMs && jobData.firstDtDate) startMs = parseDateToMs(jobData.firstDtDate);
+    if (!startMs) startMs = Date.now();
+
+    let endMs = 0;
+    jobRTs.forEach((rt) => {
+      const ms = parseDateToMs(rt.rtDate || rt.backloadRmDate);
+      if (ms > 0 && ms > endMs) endMs = ms;
+    });
+    if (!endMs && jobData.lastRtDate) endMs = parseDateToMs(jobData.lastRtDate);
+    if (activeOnRig > 0 || endMs === 0 || endMs < startMs) {
+      endMs = Math.max(endMs, Date.now());
+    }
+
+    const startDate = new Date(startMs);
+    const endDate = new Date(endMs);
+
+    const startY = startDate.getFullYear();
+    const startM = startDate.getMonth() + 1;
+    const endY = endDate.getFullYear();
+    const endM = endDate.getMonth() + 1;
+
+    const options: { month: number; year: number; key: string; label: string }[] = [];
+    let curY = startY;
+    let curM = startM;
+
+    while (curY < endY || (curY === endY && curM <= endM)) {
+      options.push({
+        month: curM,
+        year: curY,
+        key: `${curY}-${curM}`,
+        label: `${MONTH_NAMES[curM - 1]} ${curY}`,
+      });
+      curM += 1;
+      if (curM > 12) {
+        curM = 1;
+        curY += 1;
+      }
+    }
+
+    if (options.length === 0) {
+      const d = new Date();
+      options.push({
+        month: d.getMonth() + 1,
+        year: d.getFullYear(),
+        key: `${d.getFullYear()}-${d.getMonth() + 1}`,
+        label: `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`,
+      });
+    }
+
+    return options;
+  }, [jobDTs, jobRTs, jobData.mobDate, jobData.firstDtDate, jobData.lastRtDate, activeOnRig]);
+
+  // Total Cumulative Job Value across all months
+  const totalCumulativeJobValue = useMemo(() => {
+    let grandTotal = 0;
+    utilMonthOptions.forEach((opt) => {
+      const daysInM = new Date(opt.year, opt.month, 0).getDate();
+      allMobilizedTools.forEach((t) => {
+        const dispMs = parseDateToMs(t.dispatchDate);
+        const retMs = t.returnDate ? parseDateToMs(t.returnDate) : 0;
+        let sb = 0;
+        let ops = 0;
+        for (let d = 1; d <= daysInM; d++) {
+          const cur = new Date(opt.year, opt.month - 1, d).getTime();
+          const isDisp = dispMs > 0 ? cur >= dispMs : true;
+          const isRet = retMs > 0 ? cur > retMs : false;
+          if (isDisp && !isRet) {
+            const daysSinceDisp = dispMs > 0 ? Math.floor((cur - dispMs) / (1000 * 60 * 60 * 24)) : d;
+            if (daysSinceDisp <= 2) sb += 1;
+            else ops += 1;
+          }
+        }
+        grandTotal += sb * 600 + ops * 1200;
+      });
+    });
+    return grandTotal;
+  }, [allMobilizedTools, utilMonthOptions]);
+
+  const poValueNum = typeof jobData.poValue === 'number' ? jobData.poValue : parseFloat(String(jobData.poValue || 0)) || 0;
+  const poBalance = poValueNum - totalCumulativeJobValue;
+
   // Manpower / Crew State
   const [assignedCrew, setAssignedCrew] = useState<JobCrewMember[]>(() => {
     return jobData.crewMembers || [];
@@ -406,18 +560,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return jobCallouts[0]?.id || (jobData.calloutId ? jobData.calloutId : 'NEW');
   });
 
-  // Default checklist status: closed if job is already finished/invoiced!
-  const defaultChecklistStatus = isJobInvoicedOrSubmitted ? 'Checklist - Closed / Released' : 'Checklist - Opened';
-
   // Active callout object - Guaranteed to link to this jobData.id
   const activeCallout = useMemo(() => {
     const found = jobCallouts.find((c) => c.id === selectedCalloutId) || jobCallouts[0];
     if (found) {
       return {
         ...found,
-        status: isJobInvoicedOrSubmitted && found.status.includes('Opened')
-          ? 'Checklist - Closed / Released'
-          : found.status,
+        status: automatedChecklistStatus,
       };
     }
     return {
@@ -432,12 +581,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       poNumber: jobData.poNumber || '',
       projectNo: jobData.contractNo || jobData.contract || '—',
       reqDate: formatDateDD_MM_YYYY(jobData.mobDate || jobData.firstDtDate || new Date().toISOString()),
-      status: defaultChecklistStatus,
+      status: automatedChecklistStatus,
       createdDate: new Date().toISOString().split('T')[0],
       emailRef: 'Approved via ADNOC Operations',
       items: [],
     };
-  }, [jobCallouts, selectedCalloutId, jobData, isJobInvoicedOrSubmitted, defaultChecklistStatus]);
+  }, [jobCallouts, selectedCalloutId, jobData, automatedChecklistStatus]);
 
   // Checklist Items State
   const [checklistItems, setChecklistItems] = useState<CalloutItem[]>(() => {
@@ -628,11 +777,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const activeRT = useMemo(() => {
     return jobRTs.find((r) => r.rtNumber === selectedRTNumber) || jobRTs[0] || null;
   }, [jobRTs, selectedRTNumber]);
-
-  // Unreturned DT tools filter: Check if equipment has already been returned
-  const totalDispatched = jobDTs.reduce((acc, dt) => acc + (dt.toolLines?.length || 0), 0);
-  const totalReturned = jobRTs.reduce((acc, rt) => acc + (rt.toolLines?.length || 0), 0);
-  const activeOnRig = Math.max(0, totalDispatched - totalReturned);
 
   // Return Goods: Filter DTs that actually have unreturned tools
   const unreturnedDTs = useMemo(() => {
@@ -868,6 +1012,35 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     showToast(`Delivery Ticket ${newDT.dtNumber} generated from Checklist with ${checklistItems.length} tool(s)!`, 'success');
   };
 
+  // Delivery Ticket Confirmation & Lock (Ship to Rig)
+  const handleConfirmAndLockDT = () => {
+    if (!activeDT) return;
+    const count = activeDT.toolLines?.length || 0;
+    const confirmed = window.confirm(
+      `Are you sure you want to confirm dispatch and lock Delivery Ticket ${activeDT.dtNumber}?\n\n` +
+      `• Tools to release: ${count}\n` +
+      `• Destination: Rig ${jobData.rig} / Well ${jobData.well}\n\n` +
+      `This confirms equipment has been released from yard and locks this ticket against modifications.`
+    );
+    if (!confirmed) return;
+
+    const updatedBatch: DTBatch = {
+      ...activeDT,
+      isLocked: true,
+      lockedBy: user?.name || 'Operations',
+      lockedDate: new Date().toISOString(),
+      dispatchDate: activeDT.dispatchDate || formatDateDD_MM_YYYY(new Date().toISOString()),
+    };
+
+    if (onUpdateDTBatch) {
+      onUpdateDTBatch(updatedBatch);
+    } else {
+      onSaveDTBatch(updatedBatch);
+    }
+
+    showToast(`Delivery Ticket ${activeDT.dtNumber} confirmed dispatched and locked. Tools mobilized to Rig ${jobData.rig}.`, 'success');
+  };
+
   // Transfer checked tools from Lower DT to Upper RT
   const handleMoveToolsToRT = () => {
     if (isLocked) {
@@ -918,31 +1091,22 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // ==========================================
   // DYNAMIC UTILIZATION SHEET SETUP & DATA
   // ==========================================
-  // Default month and year calculated from job's first dispatch date or mob date
-  const defaultUtilMonth = useMemo(() => {
-    const rawDate = jobData.mobDate || jobDTs[0]?.dispatchDate;
-    if (rawDate) {
-      const ms = parseDateToMs(rawDate);
-      if (ms > 0) {
-        return new Date(ms).getMonth() + 1;
-      }
-    }
-    return 8; // August default
-  }, [jobData.mobDate, jobDTs]);
+  // Dynamic Month & Year selection initialized to first month of job
+  const [selectedUtilMonth, setSelectedUtilMonth] = useState<number>(() => {
+    return utilMonthOptions[0]?.month || (new Date().getMonth() + 1);
+  });
+  const [selectedUtilYear, setSelectedUtilYear] = useState<number>(() => {
+    return utilMonthOptions[0]?.year || new Date().getFullYear();
+  });
 
-  const defaultUtilYear = useMemo(() => {
-    const rawDate = jobData.mobDate || jobDTs[0]?.dispatchDate;
-    if (rawDate) {
-      const ms = parseDateToMs(rawDate);
-      if (ms > 0) {
-        return new Date(ms).getFullYear();
-      }
+  // Keep month/year valid within available options
+  useEffect(() => {
+    const isValid = utilMonthOptions.some((o) => o.month === selectedUtilMonth && o.year === selectedUtilYear);
+    if (!isValid && utilMonthOptions.length > 0) {
+      setSelectedUtilMonth(utilMonthOptions[0].month);
+      setSelectedUtilYear(utilMonthOptions[0].year);
     }
-    return 2023; // Default year
-  }, [jobData.mobDate, jobDTs]);
-
-  const [selectedUtilMonth, setSelectedUtilMonth] = useState<number>(defaultUtilMonth);
-  const [selectedUtilYear, setSelectedUtilYear] = useState<number>(defaultUtilYear);
+  }, [utilMonthOptions, selectedUtilMonth, selectedUtilYear]);
 
   // Number of days in the selected calendar month
   const daysInUtilMonth = useMemo(() => {
@@ -953,24 +1117,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return Array.from({ length: daysInUtilMonth }, (_, i) => i + 1);
   }, [daysInUtilMonth]);
 
-  // Compute operational days for each tool in the selected month
+  // Compute operational days and commercial breakdown for each tool in selected month
   const toolUtilizationRows = useMemo(() => {
-    const allMobilizedTools = jobDTs.flatMap((d) =>
-      (d.toolLines || []).map((t) => {
-        // Find if returned
-        const returnBatch = jobRTs.find((rt) =>
-          (rt.toolLines || []).some((rtl) => rtl.serial === t.serial || (t.assetNo && rtl.assetNo === t.assetNo))
-        );
-        return {
-          ...t,
-          dtNumber: d.dtNumber,
-          dispatchDate: d.dispatchDate,
-          returnDate: returnBatch ? returnBatch.rtDate || returnBatch.backloadRmDate : null,
-          rtNumber: returnBatch ? returnBatch.rtNumber : null,
-        };
-      })
-    );
-
     return allMobilizedTools.map((t, idx) => {
       const dispMs = parseDateToMs(t.dispatchDate);
       const retMs = t.returnDate ? parseDateToMs(t.returnDate) : 0;
@@ -1000,10 +1148,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         }
       });
 
-      // Daily rate AED (e.g. 1,200 AED Ops, 600 AED Standby)
-      const dayRateAED = 1200;
-      const standbyRateAED = 600;
-      const totalAED = opsCount * dayRateAED + sbCount * standbyRateAED;
+      const standbyRate = 600;
+      const opsRate = 1200;
+      const totalStandbyRate = sbCount * standbyRate;
+      const totalOpsRate = opsCount * opsRate;
+      const runCharge = 0;
+      const redressCharge = 0;
+      const totalMonthValue = totalStandbyRate + totalOpsRate + runCharge + redressCharge;
 
       return {
         ...t,
@@ -1011,15 +1162,24 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         dayStatuses,
         sbCount,
         opsCount,
-        dayRateAED,
-        totalAED,
+        standbyRate,
+        opsRate,
+        totalStandbyRate,
+        totalOpsRate,
+        runCharge,
+        redressCharge,
+        totalMonthValue,
       };
     });
-  }, [jobDTs, jobRTs, selectedUtilMonth, selectedUtilYear, utilDaysList]);
+  }, [allMobilizedTools, selectedUtilMonth, selectedUtilYear, utilDaysList]);
 
-  const totalToolRevenueAED = useMemo(() => {
-    return toolUtilizationRows.reduce((acc, r) => acc + r.totalAED, 0);
-  }, [toolUtilizationRows]);
+  const monthTotalSB = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.sbCount, 0), [toolUtilizationRows]);
+  const monthTotalOps = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.opsCount, 0), [toolUtilizationRows]);
+  const monthTotalSBRate = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.totalStandbyRate, 0), [toolUtilizationRows]);
+  const monthTotalOpsRate = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.totalOpsRate, 0), [toolUtilizationRows]);
+  const monthTotalRunCharge = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.runCharge, 0), [toolUtilizationRows]);
+  const monthTotalRedress = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.redressCharge, 0), [toolUtilizationRows]);
+  const totalToolRevenueAED = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.totalMonthValue, 0), [toolUtilizationRows]);
 
   // Engineer Utilization calculation
   const engineerUtilizationRows = useMemo(() => {
@@ -1144,43 +1304,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
       {/* Main Form Body */}
       <div className="bg-white border-x border-b border-[#9fb6cf] p-4 rounded-b-md shadow-md min-h-[620px] relative">
-        {/* INVOICED / DRAFT INVOICED LOCK BANNER */}
+        {/* SIMPLIFIED LOCK BANNER */}
         {isJobInvoicedOrSubmitted && (
-          <div
-            className={`p-2.5 mb-3 rounded border text-xs flex items-center justify-between shadow-2xs ${
-              isLocked
-                ? 'bg-amber-50 border-amber-300 text-amber-900'
-                : 'bg-blue-50 border-blue-300 text-blue-900'
-            }`}
-          >
+          <div className="p-1.5 px-3 mb-3 rounded border bg-amber-50 border-amber-300 text-amber-900 text-xs flex items-center justify-between font-bold shadow-2xs">
             <div className="flex items-center gap-2">
-              <span className="text-base">{isLocked ? '🔒' : '🛡️'}</span>
-              <div>
-                <strong className="uppercase font-bold">
-                  {isLocked ? 'Archived & Invoiced Record (View-Only Mode)' : 'Admin Super-User Override (Audited Mode)'}:
-                </strong>{' '}
-                {jobData.legalInvoiceNumber ? (
-                  <span>
-                    Legal Invoice: <strong className="font-mono text-red-700 font-bold">{jobData.legalInvoiceNumber}</strong> &bull;{' '}
-                  </span>
-                ) : jobData.draftInvoiceNumber ? (
-                  <span>
-                    Draft Invoice: <strong className="font-mono text-blue-700 font-bold">{jobData.draftInvoiceNumber}</strong> &bull;{' '}
-                  </span>
-                ) : null}
-                Job Status: <strong className="font-mono font-bold">{jobData.status}</strong>.
-                {isLocked
-                  ? ' This job is submitted/invoiced and locked against operational edits. Only Admin can modify audited data.'
-                  : ' Any modifications to this invoiced job will be logged in database audit ledger.'}
-              </div>
+              <span>🔒</span>
+              <span>
+                Locked (Invoiced){jobData.legalInvoiceNumber ? ` — Legal Invoice: ${jobData.legalInvoiceNumber}` : jobData.draftInvoiceNumber ? ` — Draft Invoice: ${jobData.draftInvoiceNumber}` : ''}
+              </span>
             </div>
-            <span
-              className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                isLocked ? 'bg-amber-200 text-amber-950 border border-amber-300' : 'bg-blue-200 text-blue-950 border border-blue-300'
-              }`}
-            >
-              {isLocked ? 'Locked (View Only)' : 'Admin Override'}
-            </span>
+            {!isLocked && (
+              <span className="text-[10px] bg-blue-100 text-blue-900 border border-blue-300 px-2 py-0.5 rounded font-bold">
+                Admin Super-User Override
+              </span>
+            )}
           </div>
         )}
 
@@ -1335,6 +1472,55 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   onChange={(e) => setJobData({ ...jobData, contractNo: e.target.value })}
                   className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-64 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
+              </div>
+
+              <div className="flex items-center">
+                <label className="w-28 font-bold text-slate-700 text-right pr-3">PO Number:</label>
+                <input
+                  type="text"
+                  value={jobData.poNumber || ''}
+                  disabled={isLocked}
+                  onChange={(e) => setJobData({ ...jobData, poNumber: e.target.value })}
+                  placeholder="e.g. PO-4700023861"
+                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-64 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                />
+              </div>
+
+              <div className="flex items-center">
+                <label className="w-28 font-bold text-slate-700 text-right pr-3">PO Value:</label>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <span className="absolute left-2 top-0.5 text-slate-400 font-bold text-[11px]">AED</span>
+                    <input
+                      type="number"
+                      value={jobData.poValue !== undefined && jobData.poValue !== null ? jobData.poValue : ''}
+                      disabled={isLocked}
+                      onChange={(e) => setJobData({ ...jobData, poValue: parseFloat(e.target.value) || 0 })}
+                      placeholder="0.00"
+                      className="bg-white border border-[#9fb6cf] rounded pl-9 pr-2 py-0.5 text-xs font-mono font-bold text-slate-900 w-32 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                  <span className="font-bold text-slate-700 text-xs">Job Value:</span>
+                  <span className="font-mono font-bold text-blue-900 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-xs">
+                    {totalCumulativeJobValue.toLocaleString()} AED
+                  </span>
+                </div>
+              </div>
+
+              {/* Available in PO Balance & Client Warning */}
+              <div className="flex items-center pl-28 pt-0.5">
+                {poBalance >= 0 ? (
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                    <span>Available in PO:</span>
+                    <span className="font-mono">{poBalance.toLocaleString()} AED</span>
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-red-50 text-red-800 border border-red-300 flex items-center gap-1">
+                    <span>⚠️ PO Limit Exceeded by</span>
+                    <span className="font-mono">{Math.abs(poBalance).toLocaleString()} AED</span>
+                    <span>(Discuss PO increase)</span>
+                  </span>
+                )}
               </div>
 
               {/* Status / Fleet indicators */}
@@ -1890,17 +2076,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="font-bold text-slate-600 w-16">Status:</span>
-                  <select
-                    value={activeCallout.status || defaultChecklistStatus}
-                    disabled={isLocked}
-                    onChange={(e) => handleUpdateCalloutHeader('status', e.target.value)}
-                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-bold text-blue-900 w-44 disabled:bg-slate-100"
-                  >
-                    <option value="Checklist - Opened">Checklist - Opened</option>
-                    <option value="Checklist - In Progress">Checklist - In Progress</option>
-                    <option value="Delivery Ticket - Created">Delivery Ticket - Created</option>
-                    <option value="Checklist - Closed / Released">Checklist - Closed / Released</option>
-                  </select>
+                  <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
+                    automatedChecklistStatus.includes('Closed')
+                      ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                      : automatedChecklistStatus.includes('Dispatched')
+                      ? 'bg-purple-100 text-purple-900 border-purple-300'
+                      : automatedChecklistStatus.includes('Delivery Ticket')
+                      ? 'bg-blue-100 text-blue-900 border-blue-300'
+                      : automatedChecklistStatus.includes('In Progress')
+                      ? 'bg-amber-100 text-amber-900 border-amber-300'
+                      : 'bg-slate-100 text-slate-800 border-slate-300'
+                  }`}>
+                    {automatedChecklistStatus}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1991,6 +2179,25 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 )}
               </div>
               <div className="flex items-center gap-2">
+                {activeDT && (
+                  activeDT.isLocked ? (
+                    <span className="bg-purple-100 text-purple-900 border border-purple-300 font-bold text-xs px-3 py-1 rounded flex items-center gap-1 shadow-2xs">
+                      <span>🔒</span>
+                      <span>Dispatched &amp; Locked (Shipped to Rig)</span>
+                    </span>
+                  ) : (
+                    !isLocked && (
+                      <button
+                        type="button"
+                        onClick={handleConfirmAndLockDT}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span>🚚</span>
+                        <span>Confirm Dispatch &amp; Lock DT (Ship to Rig)</span>
+                      </button>
+                    )
+                  )
+                )}
                 <button
                   type="button"
                   onClick={() => handlePrintTicket('onshore')}
@@ -2228,6 +2435,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                 <div>
+                  <span className="font-bold text-slate-600">Customer:</span>{' '}
+                  <span className="font-bold text-slate-900">{jobData.client}</span>
+                </div>
+                <div>
+                  <span className="font-bold text-slate-600">Contract / Project:</span>{' '}
+                  <span className="font-mono">{jobData.contractNo || jobData.contract || '—'}</span>
+                </div>
+                <div>
+                  <span className="font-bold text-slate-600">Rig / Well:</span>{' '}
+                  <span className="font-mono font-bold text-blue-900">{jobData.rig} / {jobData.well}</span>
+                </div>
+                <div>
                   <span className="font-bold text-slate-600">Date:</span>{' '}
                   <span className="font-mono font-bold">{formatDateDD_MM_YYYY(activeRT?.rtDate || '26-08-2023')}</span>
                 </div>
@@ -2299,15 +2518,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
             {/* Lower Section: Search DT No & Select Tools to Move to RT */}
             {unreturnedDTs.length === 0 ? (
-              <div className="bg-emerald-50 border border-emerald-300 rounded p-4 text-center">
-                <div className="text-emerald-800 font-bold text-sm flex items-center justify-center gap-1.5 mb-1">
-                  <span>✅</span>
-                  <span>All Dispatched Equipment Reconciled &amp; Returned</span>
-                </div>
-                <p className="text-xs text-emerald-700">
-                  All <strong>{totalDispatched}</strong> tool(s) dispatched across {jobDTs.length} Delivery Ticket(s) have been received back into yard inventory on {jobRTs.length} Return Ticket(s).
-                  There is no unreturned equipment remaining on Rig {jobData.rig}.
-                </p>
+              <div className="p-3 text-center text-slate-500 text-xs italic bg-slate-50 border border-slate-200 rounded">
+                No equipment pending return for this job.
               </div>
             ) : (
               <div className="bg-[#fffbeb] border border-[#fde68a] rounded p-3 text-xs space-y-2">
@@ -2425,31 +2637,24 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </div>
             </div>
 
-            {/* Month & Year Selection Bar */}
+            {/* Month & Year Selection Bar (Dynamic first DT to last RT) */}
             <div className="bg-slate-100 border border-slate-300 rounded p-2.5 flex flex-wrap items-center justify-between text-xs gap-3">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
-                  <label className="font-bold text-slate-700">Month:</label>
+                  <label className="font-bold text-slate-700">Billing Period (DT to RT):</label>
                   <select
-                    value={selectedUtilMonth}
-                    onChange={(e) => setSelectedUtilMonth(parseInt(e.target.value, 10))}
+                    value={`${selectedUtilYear}-${selectedUtilMonth}`}
+                    onChange={(e) => {
+                      const [yStr, mStr] = e.target.value.split('-');
+                      setSelectedUtilYear(parseInt(yStr, 10));
+                      setSelectedUtilMonth(parseInt(mStr, 10));
+                    }}
                     className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs font-bold text-slate-800 cursor-pointer shadow-2xs"
                   >
-                    {MONTH_NAMES.map((name, idx) => (
-                      <option key={name} value={idx + 1}>{name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <label className="font-bold text-slate-700">Year:</label>
-                  <select
-                    value={selectedUtilYear}
-                    onChange={(e) => setSelectedUtilYear(parseInt(e.target.value, 10))}
-                    className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs font-mono font-bold text-slate-800 cursor-pointer shadow-2xs"
-                  >
-                    {[2022, 2023, 2024, 2025, 2026, 2027].map((yr) => (
-                      <option key={yr} value={yr}>{yr}</option>
+                    {utilMonthOptions.map((opt) => (
+                      <option key={opt.key} value={opt.key}>
+                        {opt.label}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -2482,7 +2687,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </span>
               </div>
               <div className="border border-slate-300 rounded-b overflow-x-auto bg-white shadow-inner">
-                <table className="w-full text-left text-[11px] border-collapse min-w-[960px]">
+                <table className="w-full text-left text-[11px] border-collapse min-w-[1200px]">
                   <thead className="bg-[#e9f0f8] text-[#1a3055] font-bold border-b border-slate-300">
                     <tr>
                       <th className="p-1 text-center w-8">#</th>
@@ -2497,15 +2702,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           {d}
                         </th>
                       ))}
-                      <th className="p-1 text-center bg-blue-100 text-blue-950 font-bold whitespace-nowrap">SB DAYS</th>
-                      <th className="p-1 text-center bg-emerald-100 text-emerald-950 font-bold whitespace-nowrap">OPS DAYS</th>
-                      <th className="p-1 text-right bg-slate-100 text-slate-900 font-bold pr-2 whitespace-nowrap">TOTAL (AED)</th>
+                      <th className="p-1 text-center bg-blue-100 text-blue-950 font-bold whitespace-nowrap">TOTAL SB</th>
+                      <th className="p-1 text-center bg-emerald-100 text-emerald-950 font-bold whitespace-nowrap">TOTAL OPS</th>
+                      <th className="p-1 text-right bg-slate-100 text-slate-900 font-bold whitespace-nowrap">SB RATE</th>
+                      <th className="p-1 text-right bg-slate-100 text-slate-900 font-bold whitespace-nowrap">OPS RATE</th>
+                      <th className="p-1 text-right bg-blue-50 text-blue-950 font-bold whitespace-nowrap">TOTAL STDBY RATE</th>
+                      <th className="p-1 text-right bg-emerald-50 text-emerald-950 font-bold whitespace-nowrap">TOTAL OPS RATE</th>
+                      <th className="p-1 text-right bg-slate-100 text-slate-900 font-bold whitespace-nowrap">RUN CHARGE</th>
+                      <th className="p-1 text-right bg-slate-100 text-slate-900 font-bold whitespace-nowrap">REDRESS CHARGE</th>
+                      <th className="p-1 text-right bg-amber-100 text-amber-950 font-bold pr-2 whitespace-nowrap">TOTAL VALUE FOR MONTH</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {toolUtilizationRows.length === 0 ? (
                       <tr>
-                        <td colSpan={utilDaysList.length + 10} className="p-8 text-center text-slate-500 font-medium">
+                        <td colSpan={utilDaysList.length + 16} className="p-8 text-center text-slate-500 font-medium">
                           No mobilized tools found for Job {jobData.id} in {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}.
                         </td>
                       </tr>
@@ -2542,7 +2753,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           })}
                           <td className="p-1 text-center font-bold text-blue-800 bg-blue-50/40">{row.sbCount}</td>
                           <td className="p-1 text-center font-bold text-emerald-800 bg-emerald-50/40">{row.opsCount}</td>
-                          <td className="p-1 text-right font-mono font-bold pr-2 bg-slate-50/50">{row.totalAED.toLocaleString()}</td>
+                          <td className="p-1 text-right font-mono text-slate-700">{row.standbyRate.toLocaleString()}</td>
+                          <td className="p-1 text-right font-mono text-slate-700">{row.opsRate.toLocaleString()}</td>
+                          <td className="p-1 text-right font-mono font-bold text-blue-900 bg-blue-50/30">{row.totalStandbyRate.toLocaleString()}</td>
+                          <td className="p-1 text-right font-mono font-bold text-emerald-900 bg-emerald-50/30">{row.totalOpsRate.toLocaleString()}</td>
+                          <td className="p-1 text-right font-mono text-slate-600">{row.runCharge.toLocaleString()}</td>
+                          <td className="p-1 text-right font-mono text-slate-600">{row.redressCharge.toLocaleString()}</td>
+                          <td className="p-1 text-right font-mono font-bold pr-2 text-slate-900 bg-amber-50/50">{row.totalMonthValue.toLocaleString()} AED</td>
                         </tr>
                       ))
                     )}
@@ -2559,12 +2776,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             </td>
                           );
                         })}
-                        <td className="p-1.5 text-center font-mono text-blue-900">
-                          {toolUtilizationRows.reduce((acc, r) => acc + r.sbCount, 0)}
-                        </td>
-                        <td className="p-1.5 text-center font-mono text-emerald-900">
-                          {toolUtilizationRows.reduce((acc, r) => acc + r.opsCount, 0)}
-                        </td>
+                        <td className="p-1.5 text-center font-mono text-blue-900">{monthTotalSB}</td>
+                        <td className="p-1.5 text-center font-mono text-emerald-900">{monthTotalOps}</td>
+                        <td className="p-1.5 text-right font-mono text-slate-500">—</td>
+                        <td className="p-1.5 text-right font-mono text-slate-500">—</td>
+                        <td className="p-1.5 text-right font-mono text-blue-900">{monthTotalSBRate.toLocaleString()}</td>
+                        <td className="p-1.5 text-right font-mono text-emerald-900">{monthTotalOpsRate.toLocaleString()}</td>
+                        <td className="p-1.5 text-right font-mono text-slate-700">{monthTotalRunCharge.toLocaleString()}</td>
+                        <td className="p-1.5 text-right font-mono text-slate-700">{monthTotalRedress.toLocaleString()}</td>
                         <td className="p-1.5 text-right font-mono text-base text-slate-900 pr-2">
                           {totalToolRevenueAED.toLocaleString()} AED
                         </td>
@@ -2572,6 +2791,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     </tfoot>
                   )}
                 </table>
+              </div>
+
+              {/* Cumulative Job Value Banner so Ops knows how much they made */}
+              <div className="mt-2 bg-[#1a3055] text-white p-2.5 rounded flex flex-wrap items-center justify-between text-xs font-bold shadow-xs gap-2">
+                <div className="flex items-center gap-2">
+                  <span>📊</span>
+                  <span className="uppercase tracking-wide">TOTAL JOB VALUE (All Months &amp; Life of Job):</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-slate-300 font-normal">Active Window: {utilMonthOptions[0]?.label} &rarr; {utilMonthOptions[utilMonthOptions.length - 1]?.label}</span>
+                  <span className="text-amber-300 font-mono text-base font-extrabold">{totalCumulativeJobValue.toLocaleString()} AED</span>
+                </div>
               </div>
             </div>
 

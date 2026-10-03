@@ -67,6 +67,7 @@ import { InvoicePackageView } from './components/InvoicePackageView';
 import { InvoicingView } from './components/InvoicingView';
 import { JobToolsListView } from './components/JobToolsListView';
 import { ToolHistoryView } from './components/ToolHistoryView';
+import { CategoriesSizesView } from './components/CategoriesSizesView';
 
 // Safe localStorage write — never lets a quota failure crash the app.
 //
@@ -205,6 +206,44 @@ export const App: React.FC = () => {
     }
     return INITIAL_CONTRACTS;
   });
+
+  // Master Data: Tool Categories & Sizes
+  const [customCategories, setCustomCategories] = useState<string[]>(() => {
+    try {
+      const s = localStorage.getItem('emdad_custom_categories');
+      if (s) {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [
+      'BIT SUB', 'CARGO BASKET', 'CROSSOVER SUB', 'CUTLIP GUIDE', 'DRILL PIPE',
+      'DRILLING JAR', 'FISHING JAR', 'GUNDRILL REAMER', 'HOLE OPENER',
+      'HYD DRILLING JAR', 'MOTOR', 'OVERSHOT', 'ROLLER REAMER', 'SAFETY VALVE',
+      'STABILIZER', 'WHIPSTOCK',
+    ];
+  });
+
+  const [customSizes, setCustomSizes] = useState<string[]>(() => {
+    try {
+      const s = localStorage.getItem('emdad_custom_sizes');
+      if (s) {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return ['3-1/2"', '4-3/4"', '5-3/4"', '6"', '6-1/2"', '6-3/4"', '8"', '8-1/8"', '8-1/2"', '9-1/2"', '11-3/4"', '12-1/4"', '17-1/2"', '26"'];
+  });
+
+  const handleUpdateCustomCategories = (cats: string[]) => {
+    setCustomCategories(cats);
+    localStorage.setItem('emdad_custom_categories', JSON.stringify(cats));
+  };
+
+  const handleUpdateCustomSizes = (sizesList: string[]) => {
+    setCustomSizes(sizesList);
+    localStorage.setItem('emdad_custom_sizes', JSON.stringify(sizesList));
+  };
 
   // LocalStorage Persistence
   //
@@ -1348,6 +1387,19 @@ export const App: React.FC = () => {
               }}
             />
           )}
+
+          {activeView === 'categories-sizes' && (
+            <CategoriesSizesView
+              user={currentUser}
+              inventory={inventory}
+              categories={customCategories}
+              sizes={customSizes}
+              onUpdateCategories={handleUpdateCustomCategories}
+              onUpdateSizes={handleUpdateCustomSizes}
+              showToast={showToast}
+            />
+          )}
+
 
           {activeView === 'callouts' && (
             <CalloutsView

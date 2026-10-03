@@ -80,6 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'inventory-dash', label: 'Inventory Dashboard', icon: '📊' },
         { id: 'inventory', label: 'Assets and Inventory', icon: '🧰' },
+        { id: 'categories-sizes', label: 'Tool Categories & Sizes', icon: '🏷️' },
       ],
     },
     {
