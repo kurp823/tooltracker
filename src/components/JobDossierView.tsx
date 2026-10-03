@@ -1090,6 +1090,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       onSaveDTBatch(updatedBatch);
     }
 
+    if (onSaveCallout) {
+      onSaveCallout({
+        ...activeCallout,
+        status: 'Delivery Ticket - Dispatched to Rig',
+      });
+    }
+
     showToast(`Delivery Ticket ${activeDT.dtNumber} confirmed dispatched and locked. Tools mobilized to Rig ${jobData.rig}.`, 'success');
   };
 
@@ -1987,7 +1994,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                       : 'bg-blue-100 text-blue-900 border border-blue-300'
                   }`}>
-                    {activeCallout.status || defaultChecklistStatus}
+                    {activeCallout.status || automatedChecklistStatus}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
