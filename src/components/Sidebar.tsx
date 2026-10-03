@@ -35,11 +35,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const current = activeView || currentModule || 'dashboard';
   const handleNav = onNavigate || onSelectModule || (() => {});
 
-  const allowed = user?.role ? MODULE_PERMISSIONS[user.role] || [] : null;
+  // Dynamic Role Permissions Matrix loaded from localStorage with default fallback
+  const [rolePermissions, setRolePermissions] = useState<Record<string, NavModule[]>>(() => {
+    try {
+      const saved = localStorage.getItem('emdad_role_permissions');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return MODULE_PERMISSIONS;
+  });
+
+  useEffect(() => {
+    const handlePermissionsChange = () => {
+      try {
+        const saved = localStorage.getItem('emdad_role_permissions');
+        if (saved) setRolePermissions(JSON.parse(saved));
+        else setRolePermissions(MODULE_PERMISSIONS);
+      } catch (e) {}
+    };
+    window.addEventListener('permissions_updated', handlePermissionsChange);
+    window.addEventListener('storage', handlePermissionsChange);
+    return () => {
+      window.removeEventListener('permissions_updated', handlePermissionsChange);
+      window.removeEventListener('storage', handlePermissionsChange);
+    };
+  }, []);
 
   const isAllowed = (id: NavModule) => {
     if (id === 'settings' && user?.role !== 'Admin') return false;
-    if (!allowed) return true;
+    if (user?.role === 'Admin') return true;
+    const currentRole = user?.role || 'Viewer';
+    const allowed = rolePermissions[currentRole] || MODULE_PERMISSIONS[currentRole as any] || [];
     return allowed.includes(id);
   };
 

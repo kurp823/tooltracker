@@ -200,7 +200,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedRigKey, setSelectedRigKey] = useState<string>('');
   const [checkedSerialMap, setCheckedSerialMap] = useState<Record<string, boolean>>({});
-  const [usedStateMap, setUsedStateMap] = useState<Record<string, boolean>>({});
+  const [toolConditionMap, setToolConditionMap] = useState<Record<string, 'USED' | 'NOT USED' | 'LIH'>>({});
   const [newRtNumber, setNewRtNumber] = useState('');
   const [newRtDate, setNewRtDate] = useState(new Date().toISOString().split('T')[0]);
   const [newBackloadRmDate, setNewBackloadRmDate] = useState(new Date().toISOString().split('T')[0]);
@@ -309,14 +309,16 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
       return;
     }
 
-    const unassigned = checkedTools.filter((t) => usedStateMap[t.serial] === undefined);
+    const unassigned = checkedTools.filter((t) => !toolConditionMap[t.serial]);
     if (unassigned.length > 0) {
-      alert('Please mark each checked tool as Used or Not Used.');
+      alert('Please mark each checked tool as USED, NOT USED, or LIH.');
       return;
     }
 
     const lines: RTLine[] = checkedTools.map((t) => {
-      const isUsed = usedStateMap[t.serial] === true;
+      const cond = toolConditionMap[t.serial] || 'NOT USED';
+      const isUsed = cond === 'USED';
+      const isLih = cond === 'LIH';
       return {
         serial: t.serial,
         assetNo: t.assetNo,
@@ -325,8 +327,8 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
         ownership: t.ownership,
         dtBatchId: t.dtBatchId,
         used: isUsed,
-        routedTo: isUsed ? 'Inspection Bay' : 'Emdad Base',
-        condition: newCondition.trim() || (isUsed ? 'Used - Pending QC' : 'Good / Standby'),
+        condition: cond,
+        routedTo: isLih ? 'Lost in Hole' : isUsed ? 'Inspection Bay' : 'Emdad Base',
       };
     });
 
@@ -962,7 +964,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                       <tbody className="divide-y divide-slate-100">
                         {activeModalRigGroup.tools.map((t) => {
                           const isChecked = Boolean(checkedSerialMap[t.serial]);
-                          const isUsed = usedStateMap[t.serial] === true;
+                          const cond = toolConditionMap[t.serial] || 'NOT USED';
 
                           return (
                             <tr
@@ -975,12 +977,19 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
-                                  onChange={(e) =>
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
                                     setCheckedSerialMap((prev) => ({
                                       ...prev,
-                                      [t.serial]: e.target.checked,
-                                    }))
-                                  }
+                                      [t.serial]: checked,
+                                    }));
+                                    if (checked && !toolConditionMap[t.serial]) {
+                                      setToolConditionMap((prev) => ({
+                                        ...prev,
+                                        [t.serial]: 'NOT USED',
+                                      }));
+                                    }
+                                  }}
                                   className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
                                 />
                               </td>
@@ -990,38 +999,57 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                               <td className="p-2 text-slate-600">{t.ownership || 'EMDAD'}</td>
                               <td className="p-2 text-center">
                                 {isChecked ? (
-                                  <div className="inline-flex rounded-md shadow-2xs border border-slate-200 overflow-hidden text-[11px]">
+                                  <div className="inline-flex rounded-md shadow-2xs border border-slate-200 overflow-hidden text-[10px]">
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        setUsedStateMap((prev) => ({
+                                        setToolConditionMap((prev) => ({
                                           ...prev,
-                                          [t.serial]: true,
+                                          [t.serial]: 'USED',
                                         }))
                                       }
                                       className={`px-2 py-0.5 font-bold transition cursor-pointer ${
-                                        isUsed
+                                        cond === 'USED'
                                           ? 'bg-amber-600 text-white'
                                           : 'bg-white text-slate-600 hover:bg-slate-100'
                                       }`}
+                                      title="Used - routes to QC Inspection Bay"
                                     >
-                                      Used
+                                      USED
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        setUsedStateMap((prev) => ({
+                                        setToolConditionMap((prev) => ({
                                           ...prev,
-                                          [t.serial]: false,
+                                          [t.serial]: 'NOT USED',
                                         }))
                                       }
                                       className={`px-2 py-0.5 font-bold transition cursor-pointer ${
-                                        !isUsed
+                                        cond === 'NOT USED'
                                           ? 'bg-emerald-600 text-white'
                                           : 'bg-white text-slate-600 hover:bg-slate-100'
                                       }`}
+                                      title="Not Used - returns to Available Inventory"
                                     >
-                                      Not Used
+                                      NOT USED
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setToolConditionMap((prev) => ({
+                                          ...prev,
+                                          [t.serial]: 'LIH',
+                                        }))
+                                      }
+                                      className={`px-2 py-0.5 font-bold transition cursor-pointer ${
+                                        cond === 'LIH'
+                                          ? 'bg-rose-700 text-white'
+                                          : 'bg-white text-rose-700 hover:bg-rose-50'
+                                      }`}
+                                      title="Lost in Hole - physically lost downhole, closes transaction & quarantined from future jobs"
+                                    >
+                                      LIH
                                     </button>
                                   </div>
                                 ) : (
@@ -1247,16 +1275,24 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                             <td className="px-3 py-2 text-center whitespace-nowrap">
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  t.used
+                                  t.condition === 'LIH' || t.routedTo === 'Lost in Hole'
+                                    ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                                    : t.used || t.condition === 'USED'
                                     ? 'bg-amber-100 text-amber-900 border border-amber-300'
                                     : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                                 }`}
                               >
-                                {t.used ? 'Used' : 'Not Used'}
+                                {t.condition === 'LIH' || t.routedTo === 'Lost in Hole'
+                                  ? 'LIH (Lost in Hole)'
+                                  : t.used || t.condition === 'USED'
+                                  ? 'USED'
+                                  : 'NOT USED'}
                               </span>
                             </td>
                             <td className="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">
-                              {t.routedTo || (t.used ? 'Inspection Bay' : 'Emdad Base')}
+                              {t.condition === 'LIH' || t.routedTo === 'Lost in Hole'
+                                ? 'Lost in Hole'
+                                : t.routedTo || (t.used ? 'Inspection Bay' : 'Emdad Base')}
                             </td>
                           </tr>
                         );

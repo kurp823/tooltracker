@@ -27,11 +27,11 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
   const norm = (s: string) => (s || '').trim().toUpperCase();
   const normSize = (s: string) => (s || '').trim().toLowerCase().replace(/["″]+\s*$/, '');
 
-  const candidates = inventory.filter(
-    (t) =>
-      norm(t.shortDesc) === norm(category) &&
-      normSize(t.size) === normSize(size)
-  );
+  const candidates = inventory.filter((t) => {
+    const st = (t.status || '').toUpperCase();
+    if (st === 'LOST IN HOLE' || st === 'LIH' || st === 'REMOVED') return false;
+    return norm(t.shortDesc) === norm(category) && normSize(t.size) === normSize(size);
+  });
 
   const toggleTool = (tool: ToolItem, isAvailable: boolean) => {
     if (!isAvailable && !selectedIds.includes(tool.id)) return;

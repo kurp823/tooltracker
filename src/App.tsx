@@ -727,7 +727,9 @@ export const App: React.FC = () => {
         })
         .reduce((max, val) => Math.max(max, val), 0) + 1;
 
-    const usedLines = batch.toolLines.filter((l) => l.used);
+    const usedLines = batch.toolLines.filter(
+      (l) => l.used && l.condition !== 'LIH' && l.routedTo !== 'Lost in Hole'
+    );
     const newInspections: InspectionRecord[] = usedLines.map((line) => {
       const invItem = inventory.find((t) => t.serial === line.serial);
       const woNum = `WO-INS-${curYr}-${String(nextInsSeq++).padStart(5, '0')}`;
@@ -765,7 +767,17 @@ export const App: React.FC = () => {
         const line = batch.toolLines.find((l) => l.serial === tool.serial);
         if (!line) return tool;
 
-        const updated: ToolItem = line.used
+        const isLih = line.condition === 'LIH' || line.routedTo === 'Lost in Hole';
+        const isUsed = (line.condition === 'USED' || line.used) && !isLih;
+
+        const updated: ToolItem = isLih
+          ? {
+              ...tool,
+              status: 'Lost in Hole',
+              location: 'Lost in Hole',
+              currentJobId: null,
+            }
+          : isUsed
           ? {
               ...tool,
               status: 'Inspection',
@@ -787,8 +799,11 @@ export const App: React.FC = () => {
       saveInventoryApi(tool);
     });
 
+    const lihCount = batch.toolLines.filter(
+      (l) => l.condition === 'LIH' || l.routedTo === 'Lost in Hole'
+    ).length;
     showToast(
-      `Receiving Ticket ${batch.rtNumber} processed. ${newInspections.length} used tool(s) sent to QC Inspection Bay.`,
+      `Receiving Ticket ${batch.rtNumber} processed. ${newInspections.length} used tool(s) sent to QC, ${lihCount} tool(s) recorded as Lost in Hole (quarantined).`,
       'success'
     );
   };
@@ -798,31 +813,67 @@ export const App: React.FC = () => {
     saveReceivingTicketApi(updatedBatch).then((r) => {
       if (!r.success) showToast(r.message, 'error');
     });
+
+    // Cascade RT tool condition changes to Inventory
+    const lineMap = new Map((updatedBatch.toolLines || []).map((l) => [l.serial, l]));
+    const updatedTools: ToolItem[] = [];
+    setInventory((prev) =>
+      prev.map((tool) => {
+        const line = lineMap.get(tool.serial);
+        if (!line) return tool;
+
+        const isLih = line.condition === 'LIH' || line.routedTo === 'Lost in Hole';
+        const isUsed = (line.condition === 'USED' || line.used) && !isLih;
+
+        const updated: ToolItem = isLih
+          ? { ...tool, status: 'Lost in Hole', location: 'Lost in Hole', currentJobId: null }
+          : isUsed
+          ? { ...tool, status: 'Inspection', location: 'Inspection Bay', currentJobId: null }
+          : { ...tool, status: 'Good', location: 'Emdad Base', currentJobId: null };
+        updatedTools.push(updated);
+        return updated;
+      })
+    );
+    updatedTools.forEach((tool) => saveInventoryApi(tool));
+
     showToast(`Receiving Ticket ${updatedBatch.rtNumber} updated successfully.`, 'success');
   };
 
   // Gate Pass Actions
-  const handleSaveGatePass = (gp: GatePass, removedTools: ToolItem[]) => {
+  const handleSaveGatePass = (gp: GatePass, affectedTools: ToolItem[]) => {
     setGatePasses((prev) => [gp, ...prev]);
     saveGatePassApi(gp).then((r) => {
       if (!r.success) showToast(r.message, 'error');
     });
-    const removedIds = new Set(removedTools.map((t) => t.id));
+    const affectedIds = new Set(affectedTools.map((t) => t.id));
+    const isRepairDispatch = gp.gpType === 'Dispatch for Repair / Maintenance (Returnable)';
+
     setInventory((prev) =>
       prev.map((t) => {
-        if (removedIds.has(t.id)) {
-          const updated: ToolItem = {
-            ...t,
-            status: 'Removed',
-            location: 'Returned to Supplier',
-          };
+        if (affectedIds.has(t.id)) {
+          const updated: ToolItem = isRepairDispatch
+            ? {
+                ...t,
+                status: 'Maintenance',
+                location: `At Vendor (${gp.supplier})`,
+              }
+            : {
+                ...t,
+                status: 'Removed',
+                location: 'Returned to Supplier',
+              };
           saveInventoryApi(updated);
           return updated;
         }
         return t;
       })
     );
-    showToast(`Security Gate Pass ${gp.gpNumber} issued. Tools returned to supplier.`, 'success');
+
+    if (isRepairDispatch) {
+      showToast(`Security Gate Pass ${gp.gpNumber} issued. Tools dispatched to ${gp.supplier} for repair & maintenance (Returnable).`, 'success');
+    } else {
+      showToast(`Security Gate Pass ${gp.gpNumber} issued. Third-party tools returned to supplier and removed from inventory.`, 'success');
+    }
   };
 
   // Inspection Actions

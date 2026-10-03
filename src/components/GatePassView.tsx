@@ -23,6 +23,7 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
   const [openGPKeys, setOpenGPKeys] = useState<Record<string, boolean>>({});
 
   // Form State
+  const [gpType, setGpType] = useState<'Return Third-Party Tool (Permanent)' | 'Dispatch for Repair / Maintenance (Returnable)'>('Return Third-Party Tool (Permanent)');
   const [selectedSupplier, setSelectedSupplier] = useState('');
   const [newGpNumber, setNewGpNumber] = useState('');
   const [newGpDate, setNewGpDate] = useState(new Date().toISOString().split('T')[0]);
@@ -43,26 +44,58 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
     return `GP-${curYr}-${String(nextSeq).padStart(5, '0')}`;
   }, [gatePasses]);
 
-  // Sub-contractor tools at base
-  const subConToolsAtBase = useMemo(() => {
-    return inventory.filter(
-      (t) =>
-        !t.isEmdad &&
-        t.status !== 'Removed' &&
-        ['Emdad Base', 'Base', 'Our Base'].includes(t.location)
-    );
-  }, [inventory]);
+  // Tools at base for the selected GP type
+  const availableToolsForGP = useMemo(() => {
+    if (gpType === 'Return Third-Party Tool (Permanent)') {
+      // 3rd party tools at base to return permanently
+      return inventory.filter(
+        (t) =>
+          !t.isEmdad &&
+          t.status !== 'Removed' &&
+          t.status !== 'Lost in Hole' &&
+          t.status !== 'LIH' &&
+          ['Emdad Base', 'Base', 'Our Base', 'Mussafah Yard', 'Yard'].includes(t.location)
+      );
+    } else {
+      // Tools at base being sent for repair or maintenance (Returnable)
+      return inventory.filter(
+        (t) =>
+          t.status !== 'Removed' &&
+          t.status !== 'On Rig' &&
+          t.status !== 'Lost in Hole' &&
+          t.status !== 'LIH' &&
+          ['Emdad Base', 'Base', 'Our Base', 'Mussafah Yard', 'Yard', 'Workshop'].includes(t.location)
+      );
+    }
+  }, [inventory, gpType]);
 
-  // Suppliers available
+  // Suppliers / Vendors available
   const availableSuppliers = useMemo(() => {
-    return Array.from(new Set(subConToolsAtBase.map((t) => t.ownership).filter(Boolean))).sort();
-  }, [subConToolsAtBase]);
+    if (gpType === 'Return Third-Party Tool (Permanent)') {
+      const set = new Set(availableToolsForGP.map((t) => t.ownership).filter(Boolean));
+      return Array.from(set).sort();
+    } else {
+      return [
+        'EMDAD Central Machine Shop',
+        'National Oilwell Varco (NOV)',
+        'Smith International / SLB',
+        'Baker Hughes Machine Shop',
+        'Weatherford Workshop',
+        'Al Ghaith Oilfield Services',
+        'Specialized Oilfield Workshop',
+      ];
+    }
+  }, [availableToolsForGP, gpType]);
 
-  // Tools for selected supplier
+  // Tools for selected supplier/vendor
   const toolsForSupplier = useMemo(() => {
     if (!selectedSupplier) return [];
-    return subConToolsAtBase.filter((t) => t.ownership === selectedSupplier);
-  }, [subConToolsAtBase, selectedSupplier]);
+    if (gpType === 'Return Third-Party Tool (Permanent)') {
+      return availableToolsForGP.filter((t) => t.ownership === selectedSupplier);
+    } else {
+      return availableToolsForGP;
+    }
+  }, [availableToolsForGP, selectedSupplier, gpType]);
 
   const [sortField, setSortField] = useState<'gpNumber' | 'supplier' | 'date'>('gpNumber');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -129,6 +162,7 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
     const newGP: GatePass = {
       id: `GP-${Date.now()}`,
       gpNumber: newGpNumber.trim() || nextGpNumber,
+      gpType: gpType,
       supplier: selectedSupplier,
       gpDate: newGpDate,
       preparedBy: user?.name || 'Operations',
@@ -420,9 +454,32 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
             </div>
 
             <form onSubmit={handleCreateGPSubmit} className="p-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-bold mb-1 text-slate-800">Gate Pass Purpose / Type *</label>
+                <select
+                  value={gpType}
+                  onChange={(e) => {
+                    const chosen = e.target.value as any;
+                    setGpType(chosen);
+                    setSelectedSupplier('');
+                    setCheckedToolIds([]);
+                  }}
+                  className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-bold text-xs bg-slate-50 text-slate-900 shadow-2xs focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="Return Third-Party Tool (Permanent)">
+                    1. Return Third-Party Tool to Supplier (Permanent Outbound - Removes from Fleet)
+                  </option>
+                  <option value="Dispatch for Repair / Maintenance (Returnable)">
+                    2. Dispatch Tools to Third Party for Repair &amp; Maintenance (Returnable Outbound)
+                  </option>
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold mb-1">Select Sub-Contractor Supplier *</label>
+                  <label className="block font-bold mb-1">
+                    {gpType === 'Return Third-Party Tool (Permanent)' ? 'Select Sub-Contractor Supplier *' : 'Select Workshop / Service Vendor *'}
+                  </label>
                   <select
                     required
                     value={selectedSupplier}
@@ -432,7 +489,7 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
                     }}
                     className="w-full border rounded px-2.5 py-1.5 font-bold"
                   >
-                    <option value="">— Select supplier —</option>
+                    <option value="">— {gpType === 'Return Third-Party Tool (Permanent)' ? 'Select supplier' : 'Select vendor / machine shop'} —</option>
                     {availableSuppliers.map((s) => (
                       <option key={s} value={s}>
                         {s}
@@ -544,10 +601,16 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
               </div>
 
               <div>
-                <label className="block font-bold mb-1">Remarks &amp; Reason for Return</label>
+                <label className="block font-bold mb-1">
+                  {gpType === 'Return Third-Party Tool (Permanent)' ? 'Remarks & Reason for Return' : 'Scope of Work & Repair Instructions'}
+                </label>
                 <textarea
                   rows={2}
-                  placeholder="e.g. End of rental campaign; return to supplier yard."
+                  placeholder={
+                    gpType === 'Return Third-Party Tool (Permanent)'
+                      ? 'e.g. End of rental campaign; return to supplier yard.'
+                      : 'e.g. Redress seals, hardbanding re-application, magnetic particle inspection, calibrate...'
+                  }
                   value={newNotes}
                   onChange={(e) => setNewNotes(e.target.value)}
                   className="w-full border rounded px-2.5 py-1.5"
@@ -564,9 +627,15 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded bg-rose-700 text-white font-bold hover:bg-rose-800 shadow-sm cursor-pointer"
+                  className={`px-4 py-1.5 rounded text-white font-bold shadow-sm cursor-pointer ${
+                    gpType === 'Return Third-Party Tool (Permanent)'
+                      ? 'bg-rose-700 hover:bg-rose-800'
+                      : 'bg-blue-700 hover:bg-blue-800'
+                  }`}
                 >
-                  Confirm &amp; Remove from Fleet &rarr;
+                  {gpType === 'Return Third-Party Tool (Permanent)'
+                    ? 'Confirm & Remove from Fleet →'
+                    : 'Confirm & Dispatch for Repair (Returnable) →'}
                 </button>
               </div>
             </form>

@@ -233,6 +233,16 @@ export interface DrillingJob {
     casingCleanout2?: string;
   };
   crewMembers?: JobCrewMember[];
+  dailyLogs?: DailyFieldLog[];
+}
+
+export interface DailyFieldLog {
+  id: string;
+  date: string;         // YYYY-MM-DD or DD-MM-YYYY
+  status: 'Operational' | 'Standby';
+  depth?: string;        // e.g. "8,450 ft" or "6-1/8 Hole"
+  activity: string;     // Drilling / milling / fishing operations summary
+  loggedBy: string;     // Engineer name
 }
 
 export interface JobCrewMember {
@@ -353,6 +363,7 @@ export interface GatePassLine {
 export interface GatePass {
   id: string;
   gpNumber: string;     // GP-YY-NNNNN
+  gpType?: 'Return Third-Party Tool (Permanent)' | 'Dispatch for Repair / Maintenance (Returnable)';
   supplier: string;
   gpDate: string;
   preparedBy: string;

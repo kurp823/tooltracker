@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { ToolItem, User } from '../types';
+import { ToolItem, User, NavModule } from '../types';
+import { WRITE_PERMISSIONS } from '../data/initialData';
 import { Plus, Trash2, Edit2, Check, X, Tag, FolderPlus, Search, Layers, Box } from 'lucide-react';
 
 interface CategoriesSizesViewProps {
@@ -21,6 +22,20 @@ export const CategoriesSizesView: React.FC<CategoriesSizesViewProps> = ({
   onUpdateSizes,
   showToast,
 }) => {
+  // Check if current user has permission to write / edit master categories & sizes
+  const canEdit = useMemo(() => {
+    if (user?.role === 'Admin') return true;
+    try {
+      const saved = localStorage.getItem('emdad_write_permissions');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const roleWrites: NavModule[] = parsed[user?.role || 'Viewer'] || [];
+        return roleWrites.includes('categories-sizes');
+      }
+    } catch (e) {}
+    const defaultWrites = WRITE_PERMISSIONS[user?.role || 'Viewer'] || [];
+    return defaultWrites.includes('categories-sizes');
+  }, [user]);
   // Category state
   const [catSearch, setCatSearch] = useState('');
   const [newCatName, setNewCatName] = useState('');
@@ -189,24 +204,33 @@ export const CategoriesSizesView: React.FC<CategoriesSizesViewProps> = ({
           </div>
 
           <div className="p-3 border-b border-slate-200 bg-white space-y-2">
+            {!canEdit && (
+              <div className="p-2 bg-amber-50 border border-amber-200 rounded text-amber-900 text-xs font-semibold flex items-center gap-1.5">
+                <span>🔒</span>
+                <span>View-Only Mode: Administrative clearance required to modify master categories.</span>
+              </div>
+            )}
+
             {/* Add Category Form */}
-            <form onSubmit={handleAddCategory} className="flex gap-2">
-              <input
-                type="text"
-                value={newCatName}
-                onChange={(e) => setNewCatName(e.target.value)}
-                placeholder="New Category Name (e.g. STABILIZER, ROLLER REAMER, MOTOR)"
-                className="flex-1 border border-slate-300 rounded px-3 py-1.5 text-xs font-bold uppercase focus:ring-1 focus:ring-blue-500 outline-none"
-              />
-              <button
-                type="submit"
-                disabled={!newCatName.trim()}
-                className="bg-[#107c41] hover:bg-[#0c6233] disabled:opacity-50 text-white font-bold text-xs px-3.5 py-1.5 rounded shadow-xs cursor-pointer flex items-center gap-1.5 transition"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Category</span>
-              </button>
-            </form>
+            {canEdit && (
+              <form onSubmit={handleAddCategory} className="flex gap-2">
+                <input
+                  type="text"
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  placeholder="New Category Name (e.g. STABILIZER, ROLLER REAMER, MOTOR)"
+                  className="flex-1 border border-slate-300 rounded px-3 py-1.5 text-xs font-bold uppercase focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={!newCatName.trim()}
+                  className="bg-[#107c41] hover:bg-[#0c6233] disabled:opacity-50 text-white font-bold text-xs px-3.5 py-1.5 rounded shadow-xs cursor-pointer flex items-center gap-1.5 transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Category</span>
+                </button>
+              </form>
+            )}
 
             {/* Search filter */}
             <div className="relative">
@@ -268,7 +292,9 @@ export const CategoriesSizesView: React.FC<CategoriesSizesViewProps> = ({
                           )}
                         </td>
                         <td className="py-2 px-3 text-right">
-                          {editingCatIdx === idx ? (
+                          {!canEdit ? (
+                            <span className="text-slate-400 text-xs">—</span>
+                          ) : editingCatIdx === idx ? (
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 type="button"
@@ -333,24 +359,33 @@ export const CategoriesSizesView: React.FC<CategoriesSizesViewProps> = ({
           </div>
 
           <div className="p-3 border-b border-slate-200 bg-white space-y-2">
+            {!canEdit && (
+              <div className="p-2 bg-amber-50 border border-amber-200 rounded text-amber-900 text-xs font-semibold flex items-center gap-1.5">
+                <span>🔒</span>
+                <span>View-Only Mode: Administrative clearance required to modify standard tool sizes.</span>
+              </div>
+            )}
+
             {/* Add Size Form */}
-            <form onSubmit={handleAddSize} className="flex gap-2">
-              <input
-                type="text"
-                value={newSizeName}
-                onChange={(e) => setNewSizeName(e.target.value)}
-                placeholder="New Tool Size (e.g. 8-1/2&quot;, 12-1/4&quot;, 17-1/2&quot;, 26&quot;)"
-                className="flex-1 border border-slate-300 rounded px-3 py-1.5 text-xs font-bold focus:ring-1 focus:ring-blue-500 outline-none"
-              />
-              <button
-                type="submit"
-                disabled={!newSizeName.trim()}
-                className="bg-[#107c41] hover:bg-[#0c6233] disabled:opacity-50 text-white font-bold text-xs px-3.5 py-1.5 rounded shadow-xs cursor-pointer flex items-center gap-1.5 transition"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Size</span>
-              </button>
-            </form>
+            {canEdit && (
+              <form onSubmit={handleAddSize} className="flex gap-2">
+                <input
+                  type="text"
+                  value={newSizeName}
+                  onChange={(e) => setNewSizeName(e.target.value)}
+                  placeholder="New Tool Size (e.g. 8-1/2&quot;, 12-1/4&quot;, 17-1/2&quot;, 26&quot;)"
+                  className="flex-1 border border-slate-300 rounded px-3 py-1.5 text-xs font-bold focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={!newSizeName.trim()}
+                  className="bg-[#107c41] hover:bg-[#0c6233] disabled:opacity-50 text-white font-bold text-xs px-3.5 py-1.5 rounded shadow-xs cursor-pointer flex items-center gap-1.5 transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Size</span>
+                </button>
+              </form>
+            )}
 
             {/* Search filter */}
             <div className="relative">
@@ -412,7 +447,9 @@ export const CategoriesSizesView: React.FC<CategoriesSizesViewProps> = ({
                           )}
                         </td>
                         <td className="py-2 px-3 text-right">
-                          {editingSizeIdx === idx ? (
+                          {!canEdit ? (
+                            <span className="text-slate-400 text-xs">—</span>
+                          ) : editingSizeIdx === idx ? (
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 type="button"

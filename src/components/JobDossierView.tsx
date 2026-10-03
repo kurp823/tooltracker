@@ -9,8 +9,8 @@ import {
   User,
   ContractRecord,
   JobCrewMember,
+  DailyFieldLog,
 } from '../types';
-import { AdminCategoriesModal } from './AdminCategoriesModal';
 
 interface JobDossierViewProps {
   job: DrillingJob;
@@ -282,9 +282,67 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     isJobInvoicedOrSubmitted ||
     (jobData.legalInvoiceNumber && jobData.legalInvoiceNumber !== '—' && jobData.legalInvoiceNumber !== '-')
   );
-  // ABSOLUTE LOCK: When closed or legally invoiced, entire job is locked in VIEW ONLY mode for everyone
-  const isJobLocked = isClosedOrInvoiced;
+
+  // Admin Re-open override state (strictly available only to Admin users)
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [isReopenModalOpen, setIsReopenModalOpen] = useState(false);
+  const [reopenJustification, setReopenJustification] = useState('');
+
+  // When closed or legally invoiced, entire job is locked in VIEW ONLY mode unless Admin unlocks with justification
+  const isJobLocked = isClosedOrInvoiced && !adminUnlocked;
   const isLocked = isJobLocked;
+
+  // Daily Field Log state (Daily Drilling Report / Operational Remarks)
+  const [dailyLogs, setDailyLogs] = useState<DailyFieldLog[]>(() => {
+    return jobData.dailyLogs || [];
+  });
+  const [isAddDailyLogOpen, setIsAddDailyLogOpen] = useState(false);
+  const [newLogDate, setNewLogDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newLogStatus, setNewLogStatus] = useState<'Operational' | 'Standby'>('Operational');
+  const [newLogDepth, setNewLogDepth] = useState('');
+  const [newLogActivity, setNewLogActivity] = useState('');
+  const [newLogEngineer, setNewLogEngineer] = useState(user?.name || 'Field Engineer');
+
+  const handleAddDailyLog = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLogActivity.trim()) {
+      showToast('Please enter the daily operations summary.', 'error');
+      return;
+    }
+    const entry: DailyFieldLog = {
+      id: `LOG-${Date.now()}`,
+      date: newLogDate,
+      status: newLogStatus,
+      depth: newLogDepth.trim() || undefined,
+      activity: newLogActivity.trim(),
+      loggedBy: newLogEngineer.trim(),
+    };
+    const updatedLogs = [entry, ...dailyLogs];
+    setDailyLogs(updatedLogs);
+    const updatedJob = {
+      ...jobData,
+      dailyLogs: updatedLogs,
+    };
+    setJobData(updatedJob);
+    onSaveJob(updatedJob);
+    setIsAddDailyLogOpen(false);
+    setNewLogActivity('');
+    setNewLogDepth('');
+    showToast(`Daily log for ${formatDateDD_MM_YYYY(newLogDate)} recorded successfully!`, 'success');
+  };
+
+  const handleDeleteDailyLog = (logId: string) => {
+    if (isClosedOrInvoiced || isLocked) return;
+    const updatedLogs = dailyLogs.filter((l) => l.id !== logId);
+    setDailyLogs(updatedLogs);
+    const updatedJob = {
+      ...jobData,
+      dailyLogs: updatedLogs,
+    };
+    setJobData(updatedJob);
+    onSaveJob(updatedJob);
+    showToast('Daily log entry removed.', 'info');
+  };
 
   // Helper to remove any Performance Bank Guarantee (PBG) notes or values from contract strings
   const cleanContractName = (raw?: string | null) => {
@@ -698,9 +756,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     }
   }, [activeCallout, jobDTs]);
 
-  // Admin Categories & Sizes Modal State & Storage
-  const [isAdminCategoriesOpen, setIsAdminCategoriesOpen] = useState(false);
-  const [customCategories, setCustomCategories] = useState<string[]>(() => {
+  // Master Tool Categories & Sizes for Tool Picker
+  const [customCategories] = useState<string[]>(() => {
     const s = localStorage.getItem('emdad_custom_categories');
     if (s) {
       try {
@@ -728,7 +785,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     ];
   });
 
-  const [customSizes, setCustomSizes] = useState<string[]>(() => {
+  const [customSizes] = useState<string[]>(() => {
     const s = localStorage.getItem('emdad_custom_sizes');
     if (s) {
       try {
@@ -738,18 +795,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     }
     return ['3-1/2"', '4-3/4"', '5-3/4"', '6"', '6-1/2"', '6-3/4"', '8"', '8-1/8"', '8-1/2"', '9-1/2"', '11-3/4"', '12-1/4"', '17-1/2"', '26"'];
   });
-
-  const handleUpdateCategories = (cats: string[]) => {
-    setCustomCategories(cats);
-    localStorage.setItem('emdad_custom_categories', JSON.stringify(cats));
-    showToast(`Tool categories updated (${cats.length} total).`, 'success');
-  };
-
-  const handleUpdateSizes = (sizes: string[]) => {
-    setCustomSizes(sizes);
-    localStorage.setItem('emdad_custom_sizes', JSON.stringify(sizes));
-    showToast(`Tool sizes updated (${sizes.length} total).`, 'success');
-  };
 
   // Tool Selection Modal (itemsselect) State
   const [isToolSelectOpen, setIsToolSelectOpen] = useState(false);
@@ -779,8 +824,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [availableCategories, categorySearchQuery]);
 
   const categoryInventory = useMemo(() => {
-    if (!selectedCategory) return inventory;
-    return inventory.filter((t) => {
+    // Strictly exclude Lost in Hole (LIH) and Removed tools from ever being selected for a job
+    const validInventory = inventory.filter((t) => {
+      const st = (t.status || '').toUpperCase();
+      return st !== 'LOST IN HOLE' && st !== 'LIH' && st !== 'REMOVED';
+    });
+    if (!selectedCategory) return validInventory;
+    return validInventory.filter((t) => {
       const matchShort = (t.shortDesc || '').toUpperCase().includes(selectedCategory.toUpperCase());
       const matchDesc = (t.desc || '').toUpperCase().includes(selectedCategory.toUpperCase());
       return matchShort || matchDesc;
@@ -1355,13 +1405,42 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       <div className="bg-white border-x border-b border-[#9fb6cf] p-4 rounded-b-md shadow-md min-h-[620px] relative">
         {/* SIMPLIFIED LOCK BANNER */}
         {isClosedOrInvoiced && (
-          <div className="p-1.5 px-3 mb-3 rounded border bg-amber-50 border-amber-300 text-amber-900 text-xs flex items-center justify-between font-bold shadow-2xs">
+          <div className="p-1.5 px-3 mb-3 rounded border bg-amber-50 border-amber-300 text-amber-900 text-xs flex flex-wrap items-center justify-between font-bold shadow-2xs gap-2">
             <div className="flex items-center gap-2">
               <span>🔒</span>
               <span>
-                Locked (Invoiced){jobData.legalInvoiceNumber ? ` — Legal Invoice: ${jobData.legalInvoiceNumber}` : jobData.draftInvoiceNumber ? ` — Draft Invoice: ${jobData.draftInvoiceNumber}` : ''}
+                {adminUnlocked ? 'Job Temporarily Re-opened by Admin' : 'Locked (Invoiced)'}
+                {jobData.legalInvoiceNumber ? ` — Legal Invoice: ${jobData.legalInvoiceNumber}` : jobData.draftInvoiceNumber ? ` — Draft Invoice: ${jobData.draftInvoiceNumber}` : ''}
               </span>
+              {adminUnlocked && (
+                <span className="text-[10px] bg-red-100 text-red-900 border border-red-300 px-2 py-0.5 rounded font-bold">
+                  Admin Audit Override Active
+                </span>
+              )}
             </div>
+            {isAdmin && (
+              <div className="flex items-center gap-1.5">
+                {!adminUnlocked ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsReopenModalOpen(true)}
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs cursor-pointer flex items-center gap-1 transition"
+                  >
+                    <span>🔓</span>
+                    <span>Re-open Job for Editing (Admin)</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setAdminUnlocked(false)}
+                    className="bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs cursor-pointer transition flex items-center gap-1"
+                  >
+                    <span>🔒</span>
+                    <span>Re-lock Job</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1576,7 +1655,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Notes &amp; Operational Log:</label>
               <textarea
-                rows={12}
+                rows={8}
                 value={jobData.notes || ''}
                 disabled={isLocked}
                 onChange={(e) => setJobData({ ...jobData, notes: e.target.value })}
@@ -1596,6 +1675,100 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </button>
               </div>
             )}
+
+            {/* Daily Field Operations Log & Remarks (DDR) */}
+            <div className="bg-white border border-[#b8cce0] rounded-md shadow-2xs overflow-hidden mt-4">
+              <div className="bg-[#f0f4f9] px-3 py-2 border-b border-[#b8cce0] flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-bold text-[#1a3055] flex items-center gap-1.5">
+                    <span>📋</span>
+                    <span>Daily Field Operations Log &amp; Remarks (DDR)</span>
+                    <span className="text-[10px] bg-blue-100 text-blue-900 border border-blue-200 px-1.5 py-0.2 rounded font-bold">
+                      {dailyLogs.length} {dailyLogs.length === 1 ? 'Entry' : 'Entries'}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Day-by-day rig operations, hole depth, operational vs standby status, and engineer remarks.
+                  </p>
+                </div>
+                {!isLocked && (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddDailyLogOpen(true)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1 rounded shadow-xs cursor-pointer flex items-center gap-1 transition"
+                  >
+                    <span>+</span>
+                    <span>Add Daily Field Log</span>
+                  </button>
+                )}
+              </div>
+
+              {dailyLogs.length === 0 ? (
+                <div className="p-6 text-center text-slate-500 text-xs">
+                  <div className="text-2xl mb-1 text-slate-400">📝</div>
+                  <p className="font-semibold text-slate-700">No daily field log entries recorded yet.</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Field engineers and operations supervisors can log daily progress, standby/operational status, and hole depth by clicking &quot;Add Daily Field Log&quot;.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-[#e9eff6] text-[#1a3055] font-bold border-b border-[#b8cce0] sticky top-0 text-[11px]">
+                      <tr>
+                        <th className="py-1.5 px-3 whitespace-nowrap w-28">Date</th>
+                        <th className="py-1.5 px-3 whitespace-nowrap w-28">Status</th>
+                        <th className="py-1.5 px-3 whitespace-nowrap w-32">Hole Depth / Section</th>
+                        <th className="py-1.5 px-3">24-Hr Operations Summary &amp; Remarks</th>
+                        <th className="py-1.5 px-3 whitespace-nowrap w-36">Logged By</th>
+                        {!isLocked && <th className="py-1.5 px-2 text-center w-12">Action</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {dailyLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-blue-50/50">
+                          <td className="py-2 px-3 whitespace-nowrap font-mono font-bold text-slate-800">
+                            {formatDateDD_MM_YYYY(log.date)}
+                          </td>
+                          <td className="py-2 px-3 whitespace-nowrap">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                log.status === 'Operational'
+                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                  : 'bg-amber-100 text-amber-900 border border-amber-300'
+                              }`}
+                            >
+                              {log.status}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 whitespace-nowrap font-mono text-slate-700">
+                            {log.depth || '—'}
+                          </td>
+                          <td className="py-2 px-3 text-slate-800 leading-relaxed font-sans whitespace-pre-wrap">
+                            {log.activity}
+                          </td>
+                          <td className="py-2 px-3 whitespace-nowrap text-slate-600 font-medium text-[11px]">
+                            {log.loggedBy}
+                          </td>
+                          {!isLocked && (
+                            <td className="py-2 px-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteDailyLog(log.id)}
+                                className="text-rose-600 hover:text-rose-800 hover:bg-rose-50 p-1 rounded cursor-pointer transition font-bold"
+                                title="Delete daily log entry"
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -2542,14 +2715,39 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{activeRT.rtDate ? formatDateDD_MM_YYYY(activeRT.rtDate) : '—'}</td>
                         <td className="py-1 px-2 whitespace-nowrap">
                           <select
-                            defaultValue={t.used ? 'USED' : 'NOT USED'}
+                            value={t.condition || (t.used ? 'USED' : 'NOT USED')}
                             disabled={isClosedOrInvoiced || isLocked}
+                            onChange={(e) => {
+                              const newCond = e.target.value as 'USED' | 'NOT USED' | 'LIH';
+                              const updatedToolLines = (activeRT.toolLines || []).map((line, lIdx) => {
+                                if (lIdx === idx) {
+                                  return {
+                                    ...line,
+                                    condition: newCond,
+                                    remarks: newCond,
+                                    used: newCond === 'USED',
+                                    status: newCond === 'LIH' ? 'Lost in Hole' : newCond === 'USED' ? 'Inspection' : 'Available',
+                                    routedTo: newCond === 'LIH' ? 'Lost in Hole' : newCond === 'USED' ? 'Inspection Bay' : 'Available Inventory',
+                                  };
+                                }
+                                return line;
+                              });
+                              const updatedRT: RTBatch = {
+                                ...activeRT,
+                                toolLines: updatedToolLines,
+                              };
+                              if (onUpdateRTBatch) {
+                                onUpdateRTBatch(updatedRT);
+                              } else {
+                                onSaveRTBatch(updatedRT);
+                              }
+                              showToast(`Tool ${t.serial} condition updated to ${newCond} (${newCond === 'LIH' ? 'Lost in Hole' : newCond === 'USED' ? 'Routes to QC Inspection' : 'Returns to Available Inventory'}).`, 'info');
+                            }}
                             className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-800 cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed"
                           >
                             <option value="USED">USED</option>
                             <option value="NOT USED">NOT USED</option>
-                            <option value="DAMAGED">DAMAGED</option>
-                            <option value="LOST IN HOLE">LOST IN HOLE (LIH)</option>
+                            <option value="LIH">LIH</option>
                           </select>
                         </td>
                       </tr>
@@ -3108,16 +3306,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <span>itemsselect &bull; Tool Assignment Picker</span>
               </div>
               <div className="flex items-center gap-2">
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => setIsAdminCategoriesOpen(true)}
-                    className="text-xs bg-amber-400 hover:bg-amber-300 text-slate-900 px-2 py-0.5 rounded font-bold cursor-pointer transition flex items-center gap-1"
-                  >
-                    <span>⚙️</span>
-                    <span>Manage Categories &amp; Sizes</span>
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => setIsToolModalMaximized(!isToolModalMaximized)}
@@ -3332,18 +3520,180 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             </div>
           </div>
         </div>
+      {/* ADMIN RE-OPEN JUSTIFICATION MODAL */}
+      {isReopenModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-lg border-2 border-amber-500 shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="bg-amber-500 text-slate-900 px-4 py-2.5 flex items-center justify-between font-black text-sm">
+              <div className="flex items-center gap-2">
+                <span>⚠️</span>
+                <span>Admin Re-open Job Justification</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsReopenModalOpen(false);
+                  setReopenJustification('');
+                }}
+                className="text-slate-900 hover:text-white font-bold text-base cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="p-4 space-y-3 text-xs">
+              <p className="text-slate-700 leading-relaxed">
+                Job <strong>{jobData.id}</strong> has been legally invoiced or closed.
+                Re-opening this job unlocks operational editing.
+                <strong className="text-amber-900"> A formal justification is required for the database audit log.</strong>
+              </p>
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  Audit Justification Reason (Required, min 10 characters):
+                </label>
+                <textarea
+                  rows={4}
+                  value={reopenJustification}
+                  onChange={(e) => setReopenJustification(e.target.value)}
+                  placeholder="e.g. Correcting backload serial number per client billing dispute audit ref #4412..."
+                  className="w-full border border-slate-300 rounded p-2 text-xs text-slate-800 focus:ring-1 focus:ring-amber-500 outline-none"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsReopenModalOpen(false);
+                    setReopenJustification('');
+                  }}
+                  className="px-3 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={reopenJustification.trim().length < 10}
+                  onClick={() => {
+                    const auditEntry = `\n\n[ADMIN AUDIT OVERRIDE - ${new Date().toLocaleString()} by ${user?.name || 'Admin'}]: Job re-opened for editing. Justification: ${reopenJustification.trim()}`;
+                    const updated = {
+                      ...jobData,
+                      notes: (jobData.notes || '') + auditEntry,
+                    };
+                    setJobData(updated);
+                    onSaveJob(updated);
+                    setAdminUnlocked(true);
+                    setIsReopenModalOpen(false);
+                    setReopenJustification('');
+                    showToast('Job unlocked for administrative editing. Justification logged in audit notes.', 'info');
+                  }}
+                  className="px-4 py-1 rounded bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-900 font-bold shadow-xs cursor-pointer"
+                >
+                  Confirm &amp; Unlock Job
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* ADMIN TOOL CATEGORIES & SIZES MODAL */}
-      <AdminCategoriesModal
-        isOpen={isAdminCategoriesOpen}
-        onClose={() => setIsAdminCategoriesOpen(false)}
-        categories={customCategories}
-        onUpdateCategories={handleUpdateCategories}
-        sizes={customSizes}
-        onUpdateSizes={handleUpdateSizes}
-        isAdmin={isAdmin}
-      />
+      {/* ADD DAILY FIELD LOG MODAL */}
+      {isAddDailyLogOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full border border-slate-300 overflow-hidden">
+            <div className="bg-[#1a3055] text-white px-4 py-2.5 flex items-center justify-between text-xs font-bold">
+              <span className="flex items-center gap-1.5">
+                <span>📝</span>
+                <span>Add Daily Field Operations Log (DDR)</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsAddDailyLogOpen(false)}
+                className="text-white hover:text-amber-300 text-base font-bold cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+            <form onSubmit={handleAddDailyLog} className="p-4 space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Log Date:</label>
+                  <input
+                    type="date"
+                    required
+                    value={newLogDate}
+                    onChange={(e) => setNewLogDate(e.target.value)}
+                    className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Operational Status:</label>
+                  <select
+                    value={newLogStatus}
+                    onChange={(e) => setNewLogStatus(e.target.value as any)}
+                    className="w-full border border-slate-300 rounded px-2 py-1 text-xs font-bold text-slate-800 bg-white"
+                  >
+                    <option value="Operational">Operational (In-Hole / Running)</option>
+                    <option value="Standby">Standby (Rig Idle / Client Orders)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Hole Depth / Section:</label>
+                  <input
+                    type="text"
+                    value={newLogDepth}
+                    onChange={(e) => setNewLogDepth(e.target.value)}
+                    placeholder="e.g. 11,250 ft / 8-1/2&quot; hole"
+                    className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Logged By:</label>
+                  <input
+                    type="text"
+                    required
+                    value={newLogEngineer}
+                    onChange={(e) => setNewLogEngineer(e.target.value)}
+                    placeholder="Field Engineer / Specialist"
+                    className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  24-Hour Operations Summary &amp; Remarks (Required):
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  value={newLogActivity}
+                  onChange={(e) => setNewLogActivity(e.target.value)}
+                  placeholder="Describe daily operations, tool performance, BHA runs, fishing progress, or standby reasons..."
+                  className="w-full border border-slate-300 rounded p-2 text-xs text-slate-800 focus:ring-1 focus:ring-blue-500 outline-none leading-relaxed"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsAddDailyLogOpen(false)}
+                  className="px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer shadow-xs"
+                >
+                  Record Daily Log
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

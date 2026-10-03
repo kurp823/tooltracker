@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { User } from '../types';
+import { User, UserRole, NavModule } from '../types';
+import { MODULE_PERMISSIONS, WRITE_PERMISSIONS } from '../data/initialData';
 import { downloadStandaloneHtml, testAzureConnection, DbConnectionStatus } from '../services/api';
 
 interface SettingsViewProps {
@@ -14,6 +15,55 @@ interface SettingsViewProps {
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
   currentData: any;
 }
+
+const ALL_ROLES: UserRole[] = ['Admin', 'Operations', 'Handler', 'QC', 'Inspector', 'Accounts', 'Viewer'];
+
+const ALL_MODULES: { id: NavModule; label: string; group: string; icon: string }[] = [
+  // Operations
+  { id: 'dashboard', label: 'Operations Dashboard', group: 'Operations', icon: '📊' },
+  { id: 'jobs', label: 'Drilling Jobs & Dossier', group: 'Operations', icon: '⚡' },
+  { id: 'callouts', label: 'Rig Callouts', group: 'Operations', icon: '📞' },
+  { id: 'dt', label: 'Delivery Tickets (DT)', group: 'Operations', icon: '🚚' },
+  { id: 'rt', label: 'Receiving Tickets (RT)', group: 'Operations', icon: '📥' },
+  { id: 'job-tools-list', label: 'Job Tools List', group: 'Operations', icon: '📋' },
+  { id: 'tool-history', label: 'Tool Movement History', group: 'Operations', icon: '⏱️' },
+  { id: 'gatepass', label: 'Security Gate Pass', group: 'Operations', icon: '🛡️' },
+  { id: 'utilization', label: 'Utilization & Daily Sheet', group: 'Operations', icon: '📈' },
+
+  // Inventory
+  { id: 'inventory-dash', label: 'Inventory Dashboard', group: 'Inventory', icon: '📊' },
+  { id: 'inventory', label: 'Assets and Inventory', group: 'Inventory', icon: '🧰' },
+  { id: 'categories-sizes', label: 'Tool Categories & Sizes Master', group: 'Inventory', icon: '🏷️' },
+
+  // Maintenance & QC
+  { id: 'maintenance-dash', label: 'Maintenance & QC Dashboard', group: 'Maintenance & QC', icon: '📊' },
+  { id: 'inspection', label: 'QC Inspection Bay', group: 'Maintenance & QC', icon: '🔍' },
+  { id: 'maintenance', label: 'Maintenance Work Orders', group: 'Maintenance & QC', icon: '🛠️' },
+
+  // Finance & Contracts
+  { id: 'billing-dash', label: 'Billing Dashboard', group: 'Finance & Invoicing', icon: '💳' },
+  { id: 'invoicing', label: 'Invoicing Screen (Audit & Ledger)', group: 'Finance & Invoicing', icon: '📄' },
+  { id: 'contracts', label: 'Master Contracts & Price Book', group: 'Finance & Invoicing', icon: '📑' },
+
+  // System
+  { id: 'settings', label: 'System & Azure SQL Settings', group: 'System & Admin', icon: '⚙️' },
+  { id: 'data-management', label: 'Data Management Tool (DMT)', group: 'System & Admin', icon: '🗄️' },
+];
+
+const FUNCTION_PERMISSIONS: { id: NavModule; label: string; desc: string }[] = [
+  { id: 'jobs', label: 'Jobs & Dossier Management', desc: 'Create, modify drilling jobs, checklists, assign tools & re-open' },
+  { id: 'dt', label: 'Delivery Tickets Dispatch', desc: 'Create, sign, issue and ship delivery tickets to rigs' },
+  { id: 'rt', label: 'Receiving Tickets & Backloads', desc: 'Process backloads, inspect conditions (USED, NOT USED, LIH)' },
+  { id: 'callouts', label: 'Callouts Authorization', desc: 'Create, modify and approve rig callouts' },
+  { id: 'gatepass', label: 'Security Gate Pass Issuance', desc: 'Issue 3rd-party tool return & maintenance gate passes' },
+  { id: 'inventory', label: 'Asset Fleet Catalog', desc: 'Add new tools, update serials, change ownership & scrap tools' },
+  { id: 'categories-sizes', label: 'Tool Categories & Sizes Master', desc: 'Add, rename, and delete standardized categories & sizes' },
+  { id: 'inspection', label: 'QC Inspection Certification', desc: 'Perform MPI/visual inspections and sign off inspection reports' },
+  { id: 'maintenance', label: 'Maintenance Work Orders', desc: 'Create work orders, perform redressing, and close maintenance' },
+  { id: 'utilization', label: 'Fleet & Engineer Utilization', desc: 'Log daily standby/operational charges and engineer rates' },
+  { id: 'contracts', label: 'Contract Price Schedules', desc: 'Update ADNOC contract terms, rental rates and BHA items' },
+  { id: 'settings', label: 'System Configuration & SQL', desc: 'Modify Azure SQL parameters, API keys and reset operational data' },
+];
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   user,
@@ -41,6 +91,60 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [importJsonText, setImportJsonText] = useState('');
+
+  // Role-Based Access Control (RBAC) Matrix State
+  const [selectedRoleForMatrix, setSelectedRoleForMatrix] = useState<UserRole>('Operations');
+
+  const [rolePermissions, setRolePermissions] = useState<Record<UserRole, NavModule[]>>(() => {
+    try {
+      const saved = localStorage.getItem('emdad_role_permissions');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return { ...MODULE_PERMISSIONS };
+  });
+
+  const [writePermissions, setWritePermissions] = useState<Record<UserRole, NavModule[]>>(() => {
+    try {
+      const saved = localStorage.getItem('emdad_write_permissions');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return { ...WRITE_PERMISSIONS };
+  });
+
+  const handleToggleScreen = (role: UserRole, modId: NavModule) => {
+    if (role === 'Admin') return; // Admin has full access
+    const currentList = rolePermissions[role] || [];
+    const updated = currentList.includes(modId)
+      ? currentList.filter((m) => m !== modId)
+      : [...currentList, modId];
+    setRolePermissions({ ...rolePermissions, [role]: updated });
+  };
+
+  const handleToggleFunction = (role: UserRole, funcId: NavModule) => {
+    if (role === 'Admin') return; // Admin has full access
+    const currentList = writePermissions[role] || [];
+    const updated = currentList.includes(funcId)
+      ? currentList.filter((m) => m !== funcId)
+      : [...currentList, funcId];
+    setWritePermissions({ ...writePermissions, [role]: updated });
+  };
+
+  const handleSavePermissions = () => {
+    localStorage.setItem('emdad_role_permissions', JSON.stringify(rolePermissions));
+    localStorage.setItem('emdad_write_permissions', JSON.stringify(writePermissions));
+    window.dispatchEvent(new Event('permissions_updated'));
+    showToast('Role permissions matrix saved successfully!', 'success');
+  };
+
+  const handleResetPermissions = () => {
+    if (!window.confirm('Reset all role permissions to factory defaults?')) return;
+    localStorage.removeItem('emdad_role_permissions');
+    localStorage.removeItem('emdad_write_permissions');
+    setRolePermissions({ ...MODULE_PERMISSIONS });
+    setWritePermissions({ ...WRITE_PERMISSIONS });
+    window.dispatchEvent(new Event('permissions_updated'));
+    showToast('Role permissions reset to factory defaults.', 'info');
+  };
 
   // Strict Admin RBAC Protection
   if (user?.role !== 'Admin') {
@@ -319,28 +423,226 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="border-b pb-2">
           <h3 className="text-sm font-bold text-[#1a3055]">User Profile &amp; Role Management</h3>
           <div className="text-[11px] text-slate-500">
-            Switch permissions to test role-based access control (Admin, Coordinator, Inspector, Viewer)
+            Switch active user clearance to test role-based access control across all 7 operational roles
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <div className="font-medium text-slate-700">Current Role:</div>
-          {(['Admin', 'Operations', 'Inspector', 'Viewer'] as const).map((r) => (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <div className="font-medium text-slate-700">Active Test Role:</div>
+          {ALL_ROLES.map((r) => (
             <button
               key={r}
               onClick={() => {
                 onUpdateUserRole(r);
                 showToast(`Switched active user role to ${r}`, 'info');
               }}
-              className={`px-3 py-1.5 rounded font-bold transition cursor-pointer ${
+              className={`px-3 py-1.5 rounded font-bold transition cursor-pointer flex items-center gap-1 ${
                 user?.role === r
                   ? 'bg-[#1a3055] text-white shadow-xs'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'
               }`}
             >
-              {r}
+              <span>{r === 'Admin' ? '👑' : r === 'Operations' ? '⚙️' : r === 'QC' || r === 'Inspector' ? '🔬' : r === 'Accounts' ? '💳' : '👤'}</span>
+              <span>{r}</span>
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Role-Based Access Control (RBAC) & Screen / Function Permissions Matrix */}
+      <div className="bg-white border border-[#b8c9db] rounded p-4 shadow-sm space-y-4">
+        <div className="border-b pb-2 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold text-[#1a3055] flex items-center gap-1.5">
+              <span>🛡️</span>
+              <span>Role-Based Access Control (RBAC) &amp; Permissions Matrix</span>
+            </h3>
+            <div className="text-[11px] text-slate-500">
+              Configure which screens (view access) and operational functions (create/edit/delete access) are granted to each user role.
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleResetPermissions}
+              className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 border border-slate-300 font-bold text-slate-700 text-xs cursor-pointer transition"
+            >
+              🔄 Reset to Defaults
+            </button>
+            <button
+              type="button"
+              onClick={handleSavePermissions}
+              className="px-3.5 py-1 rounded bg-[#107c41] hover:bg-[#0c6233] text-white font-bold text-xs cursor-pointer transition shadow-xs flex items-center gap-1"
+            >
+              <span>💾</span>
+              <span>Save Permissions Matrix</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Role Selector Tabs */}
+        <div>
+          <label className="block text-[11px] font-bold text-slate-600 mb-1">Select Role to Configure:</label>
+          <div className="flex flex-wrap gap-1.5">
+            {ALL_ROLES.map((r) => {
+              const isSelected = selectedRoleForMatrix === r;
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setSelectedRoleForMatrix(r)}
+                  className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-[#1a3055] text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'
+                  }`}
+                >
+                  <span>{r === 'Admin' ? '👑' : r === 'Operations' ? '⚙️' : r === 'QC' || r === 'Inspector' ? '🔬' : r === 'Accounts' ? '💳' : '👤'}</span>
+                  <span>{r}</span>
+                  {r === 'Admin' && <span className="text-[10px] bg-amber-400 text-slate-900 px-1 rounded font-mono">Full</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Permission Controls for Selected Role */}
+        <div className="bg-slate-50/70 border border-slate-200 rounded p-3 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
+            <div>
+              <span className="text-xs font-bold text-slate-900">
+                Editing Permissions for: <strong className="text-blue-900">{selectedRoleForMatrix}</strong>
+              </span>
+              {selectedRoleForMatrix === 'Admin' ? (
+                <span className="text-xs text-amber-900 ml-2 font-semibold">
+                  (Superuser clearance &mdash; Admin has unconditional read &amp; write access to all modules)
+                </span>
+              ) : (
+                <span className="text-xs text-slate-500 ml-2 font-mono">
+                  ({(rolePermissions[selectedRoleForMatrix] || []).length} screens, {(writePermissions[selectedRoleForMatrix] || []).length} functions active)
+                </span>
+              )}
+            </div>
+
+            {selectedRoleForMatrix !== 'Admin' && (
+              <div className="flex items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const allModIds = ALL_MODULES.map((m) => m.id);
+                    setRolePermissions({ ...rolePermissions, [selectedRoleForMatrix]: allModIds });
+                  }}
+                  className="text-blue-700 hover:text-blue-900 font-semibold cursor-pointer underline text-[11px]"
+                >
+                  Select All Screens
+                </button>
+                <span className="text-slate-300">|</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRolePermissions({ ...rolePermissions, [selectedRoleForMatrix]: [] });
+                  }}
+                  className="text-slate-600 hover:text-slate-800 font-semibold cursor-pointer underline text-[11px]"
+                >
+                  Clear All Screens
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Section 1: Screen & View Navigation Access */}
+          <div>
+            <h4 className="text-xs font-bold text-[#1a3055] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <span>🖥️</span>
+              <span>Screen &amp; Navigation Module Access (Sidebar Visibility)</span>
+            </h4>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {['Operations', 'Inventory', 'Maintenance & QC', 'Finance & Invoicing', 'System & Admin'].map((grp) => {
+                const groupModules = ALL_MODULES.filter((m) => m.group === grp);
+                return (
+                  <div key={grp} className="bg-white border border-slate-200 rounded p-2.5 shadow-2xs space-y-2">
+                    <div className="text-[11px] font-bold text-slate-700 border-b pb-1 flex items-center justify-between">
+                      <span>{grp}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">{groupModules.length}</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {groupModules.map((m) => {
+                        const isGranted =
+                          selectedRoleForMatrix === 'Admin' ||
+                          (rolePermissions[selectedRoleForMatrix] || []).includes(m.id);
+                        const isDisabled = selectedRoleForMatrix === 'Admin' || (m.id === 'settings' && selectedRoleForMatrix !== 'Admin');
+
+                        return (
+                          <label
+                            key={m.id}
+                            className={`flex items-start gap-2 text-xs cursor-pointer p-1 rounded transition ${
+                              isGranted ? 'bg-blue-50/50' : 'hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isGranted}
+                              disabled={isDisabled}
+                              onChange={() => handleToggleScreen(selectedRoleForMatrix, m.id)}
+                              className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
+                            />
+                            <div className="leading-tight">
+                              <span className="font-semibold text-slate-800 flex items-center gap-1">
+                                <span>{m.icon}</span>
+                                <span>{m.label}</span>
+                              </span>
+                              {m.id === 'categories-sizes' && (
+                                <span className="block text-[10px] text-amber-800 font-mono">Master category &amp; size setup</span>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Section 2: Function & Action Write Access */}
+          <div>
+            <h4 className="text-xs font-bold text-[#1a3055] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <span>✍️</span>
+              <span>Function &amp; Operational Action Permissions (Create / Edit / Delete)</span>
+            </h4>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {FUNCTION_PERMISSIONS.map((f) => {
+                const isGranted =
+                  selectedRoleForMatrix === 'Admin' ||
+                  (writePermissions[selectedRoleForMatrix] || []).includes(f.id);
+                const isDisabled = selectedRoleForMatrix === 'Admin';
+
+                return (
+                  <label
+                    key={f.id}
+                    className={`flex items-start gap-2.5 p-2 bg-white border border-slate-200 rounded text-xs cursor-pointer shadow-2xs transition ${
+                      isGranted ? 'border-emerald-300 bg-emerald-50/30' : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isGranted}
+                      disabled={isDisabled}
+                      onChange={() => handleToggleFunction(selectedRoleForMatrix, f.id)}
+                      className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-50"
+                    />
+                    <div>
+                      <span className="font-bold text-slate-800 block">{f.label}</span>
+                      <span className="text-[11px] text-slate-500 block leading-tight">{f.desc}</span>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
