@@ -66,22 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: '⚙️',
       items: [
         { id: 'dashboard', label: 'Operations Dashboard', icon: '📊' },
-        {
-          id: 'callouts',
-          label: 'Rig Callouts',
-          icon: '📞',
-          badge: pendingCalloutsCount > 0 ? pendingCalloutsCount : null,
-          badgeColor: 'bg-amber-400 text-amber-950',
-        },
         { id: 'jobs', label: 'Drilling Jobs', icon: '⚡' },
-        {
-          id: 'dt',
-          label: 'Delivery Tickets (DT)',
-          icon: '🚚',
-          badge: pendingSignedDTsCount > 0 ? pendingSignedDTsCount : null,
-          badgeColor: 'bg-amber-400 text-amber-950',
-        },
-        { id: 'rt', label: 'Receiving Tickets (RT)', icon: '📥' },
         { id: 'job-tools-list', label: 'Job Tools List', icon: '📋' },
         { id: 'tool-history', label: 'Tool Movement History', icon: '⏱️' },
         { id: 'gatepass', label: 'Security Gate Pass', icon: '🛡️' },

@@ -167,70 +167,78 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Technical Details sub-tab
   const [techSubTab, setTechSubTab] = useState<'fishing' | 'whipstock' | 'rentals'>('fishing');
 
-  // Related data for this specific job
-  const jobKeyRaw = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
+  // Helper to normalize job numbers for robust live SQL data matching (e.g. Job-023-00039 <-> JOB-023-00039 <-> 023-00039)
+  const normalizeJobKey = (val?: string | null) => {
+    if (!val) return '';
+    return val.replace(/^JOB-?/i, '').replace(/^0+/, '').trim().toUpperCase();
+  };
+
+  // Related real data for this specific job from live database
   const jobDTs = useMemo(() => {
+    const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
+    const normId = normalizeJobKey(jobData.id || jobData.jobNumber);
+    const jRig = (jobData.rig || '').trim().toUpperCase();
+    const jWell = (jobData.well || '').trim().toUpperCase();
+
     return dtBatches.filter((b) => {
-      const bRaw = (b.jobId || b.jobNumber || '').trim().toUpperCase();
-      return bRaw === jobKeyRaw || (bRaw && bRaw.includes(jobKeyRaw));
+      const bJob = (b.jobId || b.jobNumber || '').trim().toUpperCase();
+      const bNorm = normalizeJobKey(b.jobId || b.jobNumber);
+      if (rawId && bJob && (bJob === rawId || bJob.includes(rawId) || rawId.includes(bJob))) return true;
+      if (normId && bNorm && normId === bNorm) return true;
+      if (jRig && jWell && b.rig && b.well) {
+        const bRig = b.rig.trim().toUpperCase();
+        const bWell = b.well.trim().toUpperCase();
+        if (bRig === jRig && (bWell === jWell || bWell.includes(jWell) || jWell.includes(bWell))) {
+          return true;
+        }
+      }
+      return false;
     });
-  }, [dtBatches, jobKeyRaw]);
+  }, [dtBatches, jobData]);
 
   const jobRTs = useMemo(() => {
+    const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
+    const normId = normalizeJobKey(jobData.id || jobData.jobNumber);
+    const jRig = (jobData.rig || '').trim().toUpperCase();
+    const jWell = (jobData.well || '').trim().toUpperCase();
+
     return rtBatches.filter((b) => {
-      const bRaw = (b.jobId || b.jobNumber || '').trim().toUpperCase();
-      return bRaw === jobKeyRaw || (bRaw && bRaw.includes(jobKeyRaw));
+      const bJob = (b.jobId || b.jobNumber || '').trim().toUpperCase();
+      const bNorm = normalizeJobKey(b.jobId || b.jobNumber);
+      if (rawId && bJob && (bJob === rawId || bJob.includes(rawId) || rawId.includes(bJob))) return true;
+      if (normId && bNorm && normId === bNorm) return true;
+      if (jRig && jWell && b.rig && b.well) {
+        const bRig = b.rig.trim().toUpperCase();
+        const bWell = b.well.trim().toUpperCase();
+        if (bRig === jRig && (bWell === jWell || bWell.includes(jWell) || jWell.includes(bWell))) {
+          return true;
+        }
+      }
+      return false;
     });
-  }, [rtBatches, jobKeyRaw]);
+  }, [rtBatches, jobData]);
 
   const jobCallouts = useMemo(() => {
-    return callouts.filter((c) => {
-      const cRaw = (c.jobId || '').trim().toUpperCase();
-      return cRaw === jobKeyRaw || c.id === jobData.calloutId;
-    });
-  }, [callouts, jobKeyRaw, jobData.calloutId]);
+    const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
+    const normId = normalizeJobKey(jobData.id || jobData.jobNumber);
 
-  // Manpower / Crew State
+    return callouts.filter((c) => {
+      const cJob = (c.jobId || c.jobNumber || '').trim().toUpperCase();
+      const cNorm = normalizeJobKey(c.jobId || c.jobNumber);
+      if (rawId && cJob && (cJob === rawId || cJob.includes(rawId) || rawId.includes(cJob))) return true;
+      if (normId && cNorm && normId === cNorm) return true;
+      if (jobData.calloutId && c.id === jobData.calloutId) return true;
+      return false;
+    });
+  }, [callouts, jobData]);
+
+  // Manpower / Crew State - Strictly based on live job data, zero hardcoded defaults!
   const [assignedCrew, setAssignedCrew] = useState<JobCrewMember[]>(() => {
-    if (jobData.crewMembers && jobData.crewMembers.length > 0) {
-      return jobData.crewMembers;
-    }
-    // Default initial crew for this job
-    return [
-      {
-        id: 'CREW-1',
-        badgeNo: 'EMD-4102',
-        name: 'Ahmed Al-Mansoor',
-        designation: 'Lead Fishing Engineer',
-        mobDate: jobData.mobDate || '15-May-2023',
-        demobDate: jobData.demobDate || '28-May-2023',
-        dailyRateUSD: 850,
-        operatingDays: 10,
-        standbyDays: 4,
-        totalChargeUSD: 14 * 850,
-        rigPassNo: 'RP-88421',
-        h2sExpiry: '12-Dec-2025',
-        status: 'Mobilized (On Rig)',
-        contactNo: '+971501122334',
-      },
-      {
-        id: 'CREW-2',
-        badgeNo: 'EMD-3841',
-        name: 'Rajesh Sharma',
-        designation: 'Whipstock Specialist',
-        mobDate: jobData.mobDate || '18-May-2023',
-        demobDate: jobData.demobDate || '26-May-2023',
-        dailyRateUSD: 750,
-        operatingDays: 7,
-        standbyDays: 2,
-        totalChargeUSD: 9 * 750,
-        rigPassNo: 'RP-90112',
-        h2sExpiry: '15-Jan-2026',
-        status: 'Mobilized (On Rig)',
-        contactNo: '+971502233445',
-      },
-    ];
+    return jobData.crewMembers || [];
   });
+  useEffect(() => {
+    setAssignedCrew(jobData.crewMembers || []);
+  }, [jobData.crewMembers]);
 
   // Manpower Picker Modal State
   const [isPersonnelSelectOpen, setIsPersonnelSelectOpen] = useState(false);
@@ -256,19 +264,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return jobCallouts[0]?.id || 'NEW';
   });
 
-  // Active callout object
+  // Active callout object - Guaranteed to link to this jobData.id
   const activeCallout = useMemo(() => {
     return (
       jobCallouts.find((c) => c.id === selectedCalloutId) ||
       jobCallouts[0] || {
         id: `CAL-${new Date().getFullYear().toString().slice(-2)}-${String(jobCallouts.length + 1).padStart(4, '0')}`,
-        ticketNo: '2266',
+        ticketNo: jobData.clientRef || jobData.poNumber || '2266',
+        jobId: jobData.id,
+        jobNumber: jobData.id,
         rig: jobData.rig || '',
         well: jobData.well || '',
         client: jobData.client || '',
         contract: jobData.contract || '',
         poNumber: jobData.poNumber || '',
-        projectNo: jobData.contractNo || jobData.contract || '4700012465',
+        projectNo: jobData.contractNo || jobData.contract || '—',
         reqDate: formatDateDDMMYYYY(new Date().toISOString()),
         status: 'Checklist - Opened',
         createdDate: new Date().toISOString().split('T')[0],
@@ -278,14 +288,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     );
   }, [jobCallouts, selectedCalloutId, jobData]);
 
-  // Checklist Items State
+  // Checklist Items State - Keep synced without erasing newly inserted tools
   const [checklistItems, setChecklistItems] = useState<CalloutItem[]>(() => activeCallout.items || []);
   useEffect(() => {
-    setChecklistItems(activeCallout.items || []);
+    if (activeCallout && activeCallout.items && activeCallout.items.length > 0) {
+      setChecklistItems(activeCallout.items);
+    }
   }, [activeCallout]);
 
-  // Tool Selection Modal (itemsselect) State
+  // Tool Selection Modal (itemsselect) State - with Type-to-Search and Window Maximize
   const [isToolSelectOpen, setIsToolSelectOpen] = useState(false);
+  const [isToolModalMaximized, setIsToolModalMaximized] = useState(false);
+  const [categorySearchQuery, setCategorySearchQuery] = useState('CUTLIP GUIDE');
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('CUTLIP GUIDE');
   const [selectedToolSize, setSelectedToolSize] = useState<string>('');
   const [checkedToolSerials, setCheckedToolSerials] = useState<string[]>([]);
@@ -300,6 +315,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     ['CUTLIP GUIDE', 'HYD DRILLING JAR', 'FISHING JAR', 'CROSSOVER SUB', 'OVERSHOT', 'BIT SUB', 'CARGO BASKET', 'GUNDRILL REAMER', 'SAFETY VALVE'].forEach(c => set.add(c));
     return Array.from(set).sort();
   }, [inventory]);
+
+  const filteredCategories = useMemo(() => {
+    if (!categorySearchQuery || categorySearchQuery.trim() === '') {
+      return availableCategories;
+    }
+    const q = categorySearchQuery.toLowerCase().trim();
+    return availableCategories.filter((c) => c.toLowerCase().includes(q));
+  }, [availableCategories, categorySearchQuery]);
 
   const categoryInventory = useMemo(() => {
     if (!selectedCategory) return inventory;
@@ -445,12 +468,25 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     setCheckedToolSerials([]);
     setIsToolSelectOpen(false);
 
+    const calloutToSave: Callout = {
+      ...activeCallout,
+      jobId: jobData.id,
+      jobNumber: jobData.id,
+      items: updated,
+    };
+
+    setSelectedCalloutId(calloutToSave.id);
+
     if (onSaveCallout) {
-      onSaveCallout({
-        ...activeCallout,
-        items: updated,
-      });
+      onSaveCallout(calloutToSave);
     }
+
+    if (!jobData.calloutId || jobData.calloutId !== calloutToSave.id) {
+      const updatedJob = { ...jobData, calloutId: calloutToSave.id };
+      setJobData(updatedJob);
+      onSaveJob(updatedJob);
+    }
+
     showToast(`Inserted ${newItems.length} tool(s) into Checklist. Reserved for Job ${jobData.id}.`, 'success');
   };
 
@@ -458,11 +494,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const handleDeleteChecklistRow = (seq: number) => {
     const updated = checklistItems.filter((item) => item.seq !== seq);
     setChecklistItems(updated);
+    const calloutToSave: Callout = {
+      ...activeCallout,
+      jobId: jobData.id,
+      jobNumber: jobData.id,
+      items: updated,
+    };
     if (onSaveCallout) {
-      onSaveCallout({
-        ...activeCallout,
-        items: updated,
-      });
+      onSaveCallout(calloutToSave);
     }
     showToast('Row removed from checklist and released back to yard availability.', 'info');
   };
@@ -593,23 +632,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           <span>Job Dossier Workspace &bull; Job No: <span className="font-mono text-amber-300">{jobData.id}</span></span>
         </div>
         <div className="flex items-center gap-2">
-          {/* Bridge to Dedicated Invoicing Screen in Billing Module */}
-          <button
-            type="button"
-            onClick={() => {
-              if (onNavigateToInvoicing) {
-                onNavigateToInvoicing(jobData.id);
-              } else {
-                showToast(`Job ${jobData.id} passed to Billing & Commercial Invoicing module.`, 'info');
-              }
-            }}
-            className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-0.5 rounded shadow-xs cursor-pointer transition flex items-center gap-1.5"
-            title="Open Job in dedicated Billing & Commercial Invoicing module"
-          >
-            <span>💳</span>
-            <span>Open in Invoicing Screen &rarr;</span>
-          </button>
-
           {onBackToRegister && (
             <button
               onClick={onBackToRegister}
@@ -1092,31 +1114,28 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </div>
             </div>
 
-            {/* Crew Members Table */}
+            {/* Crew Members Table - Pure Assignment without utilization/billing */}
             <div className="border border-[#b8cce0] rounded overflow-hidden">
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
                   <tr>
-                    <th className="p-1.5 text-center w-12">Seq</th>
-                    <th className="p-1.5">Badge #</th>
-                    <th className="p-1.5">Engineer / Supervisor Name</th>
-                    <th className="p-1.5">Role / Designation</th>
-                    <th className="p-1.5 font-mono">Mob Date</th>
-                    <th className="p-1.5 font-mono">Demob Date</th>
-                    <th className="p-1.5 text-center">Ops Days</th>
-                    <th className="p-1.5 text-center">Stdby</th>
-                    <th className="p-1.5 text-right font-mono">Day Rate ($)</th>
-                    <th className="p-1.5 text-right font-mono">Total ($)</th>
-                    <th className="p-1.5">Rig Pass / Cert</th>
-                    <th className="p-1.5 text-center">Status</th>
-                    <th className="p-1.5 text-center w-20">Action</th>
+                    <th className="py-1 px-2 whitespace-nowrap text-center w-12">Seq</th>
+                    <th className="py-1 px-2 whitespace-nowrap">Badge #</th>
+                    <th className="py-1 px-2 whitespace-nowrap">Engineer / Supervisor Name</th>
+                    <th className="py-1 px-2 whitespace-nowrap">Role / Designation</th>
+                    <th className="py-1 px-2 whitespace-nowrap font-mono">Mob Date</th>
+                    <th className="py-1 px-2 whitespace-nowrap font-mono">Demob Date</th>
+                    <th className="py-1 px-2 whitespace-nowrap">Rig Pass / Cert</th>
+                    <th className="py-1 px-2 whitespace-nowrap font-mono">H2S Expiry</th>
+                    <th className="py-1 px-2 whitespace-nowrap text-center">Status</th>
+                    <th className="py-1 px-2 whitespace-nowrap text-center w-16">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {assignedCrew.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="p-6 text-center text-slate-500 font-medium">
-                        No field engineers assigned to this job yet. Click <strong>&quot;Select Personnel / Crew&quot;</strong> above to assign certified crew members.
+                      <td colSpan={10} className="p-6 text-center text-slate-500 font-medium">
+                        No field personnel assigned to this job yet. Click <strong>&quot;Select Personnel / Crew&quot;</strong> above to assign certified crew members.
                       </td>
                     </tr>
                   ) : (
@@ -1126,13 +1145,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{c.badgeNo}</td>
                         <td className="py-1 px-2 whitespace-nowrap truncate max-w-[180px] font-bold text-blue-900" title={c.name}>{c.name}</td>
                         <td className="py-1 px-2 whitespace-nowrap truncate max-w-[200px] text-slate-700" title={c.designation}>{c.designation}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px]">{c.mobDate || '15-May-2023'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px]">{c.mobDate || '—'}</td>
                         <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-500">{c.demobDate || '— (Active)'}</td>
-                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-emerald-800">{c.operatingDays || 0}</td>
-                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-blue-800">{c.standbyDays || 0}</td>
-                        <td className="py-1 px-2 whitespace-nowrap text-right font-mono text-slate-800">${c.dailyRateUSD.toFixed(2)}</td>
-                        <td className="py-1 px-2 whitespace-nowrap text-right font-mono font-bold text-slate-900">${(c.totalChargeUSD || ((c.operatingDays + c.standbyDays) * c.dailyRateUSD)).toLocaleString()}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">{c.rigPassNo || 'RP-88421'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">{c.rigPassNo || '—'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{c.h2sExpiry || '—'}</td>
                         <td className="py-1 px-2 whitespace-nowrap text-center">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             c.status.includes('Rig')
@@ -1158,7 +1174,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </table>
             </div>
 
-            {/* Crew Billing Summary Bar */}
+            {/* Crew Assignment Summary Bar */}
             <div className="bg-[#1a3055] text-white p-2.5 rounded flex items-center justify-between text-xs font-medium">
               <div>
                 Total Assigned Personnel: <strong className="text-amber-400 font-mono font-bold">{assignedCrew.length} Engineers</strong>
@@ -1167,10 +1183,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 Active on Rig: <strong className="text-emerald-400 font-mono font-bold">{assignedCrew.filter(c => c.status.includes('Rig')).length}</strong>
               </div>
               <div>
-                Total Crew Billing Accrual:{' '}
-                <strong className="text-white font-mono font-bold text-sm">
-                  ${assignedCrew.reduce((acc, c) => acc + (c.totalChargeUSD || ((c.operatingDays + c.standbyDays) * c.dailyRateUSD)), 0).toLocaleString()} USD
-                </strong>
+                Designated Rig: <strong className="text-white font-bold">{jobData.rig}</strong>
               </div>
             </div>
           </div>
@@ -1776,29 +1789,37 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {jobDTs.flatMap((d) => d.toolLines || []).slice(0, 8).map((t, idx) => (
-                    <tr key={idx} className="hover:bg-blue-50/50">
-                      <td className="p-1 text-center font-mono">{idx + 1}</td>
-                      <td className="p-1 font-mono text-blue-700">{jobDTs[0]?.dtNumber || 'DT-85161'}</td>
-                      <td className="p-1 font-mono">{formatDateDDMMYYYY(jobDTs[0]?.dispatchDate) || '01/09/2026'}</td>
-                      <td className="p-1 font-mono font-bold">{t.serial}</td>
-                      <td className="p-1 truncate max-w-[200px]">{t.desc || t.shortDesc}</td>
-                      <td className="p-1 text-center font-bold">1</td>
-                      <td className="p-1 text-center">
-                        <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
-                          On Rig
-                        </span>
+                  {jobDTs.flatMap((d) => d.toolLines || []).length === 0 ? (
+                    <tr>
+                      <td colSpan={24} className="p-8 text-center text-slate-500 font-medium">
+                        No mobilized tools found for Job {jobData.id}. Tools will appear here automatically when Delivery Tickets are generated and dispatched to Rig {jobData.rig}.
                       </td>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((day) => (
-                        <td key={day} className="p-1 text-center font-mono font-bold text-slate-700">
-                          {day <= 3 ? 'S' : day <= 10 ? '1' : ''}
-                        </td>
-                      ))}
-                      <td className="p-1 text-center font-bold text-blue-800">3</td>
-                      <td className="p-1 text-center font-bold text-emerald-800">7</td>
-                      <td className="p-1 text-right font-mono font-bold pr-2">10,950</td>
                     </tr>
-                  ))}
+                  ) : (
+                    jobDTs.flatMap((d) => (d.toolLines || []).map((t) => ({ ...t, dtNumber: d.dtNumber, dispatchDate: d.dispatchDate }))).map((t, idx) => (
+                      <tr key={idx} className="hover:bg-blue-50/50">
+                        <td className="p-1 text-center font-mono">{idx + 1}</td>
+                        <td className="p-1 font-mono text-blue-700">{t.dtNumber}</td>
+                        <td className="p-1 font-mono">{formatDateDDMMYYYY(t.dispatchDate)}</td>
+                        <td className="p-1 font-mono font-bold">{t.serial || t.assetNo}</td>
+                        <td className="p-1 truncate max-w-[200px]" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
+                        <td className="p-1 text-center font-bold">{t.qty || 1}</td>
+                        <td className="p-1 text-center">
+                          <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
+                            {t.status || 'On Rig'}
+                          </span>
+                        </td>
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((day) => (
+                          <td key={day} className="p-1 text-center font-mono font-bold text-slate-700">
+                            {day <= 3 ? 'S' : day <= 10 ? '1' : ''}
+                          </td>
+                        ))}
+                        <td className="p-1 text-center font-bold text-blue-800">3</td>
+                        <td className="p-1 text-center font-bold text-emerald-800">7</td>
+                        <td className="p-1 text-right font-mono font-bold pr-2">10,950</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1860,7 +1881,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <th className="py-1 px-2 whitespace-nowrap">Designation</th>
                       <th className="py-1 px-2 whitespace-nowrap">Rig Pass #</th>
                       <th className="py-1 px-2 whitespace-nowrap font-mono">H2S Expiry</th>
-                      <th className="py-1 px-2 whitespace-nowrap font-mono text-right">Daily Rate ($)</th>
                       <th className="py-1 px-2 whitespace-nowrap text-center">Status</th>
                       <th className="py-1 px-2 whitespace-nowrap text-center w-14">select [✓]</th>
                     </tr>
@@ -1868,7 +1888,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <tbody className="divide-y divide-slate-200">
                     {filteredPersonnelRoster.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-slate-500 font-medium">
+                        <td colSpan={7} className="p-8 text-center text-slate-500 font-medium">
                           No personnel found for role: <strong>{selectedPersonnelRole}</strong>.
                         </td>
                       </tr>
@@ -1894,7 +1914,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             <td className="py-1 px-2 whitespace-nowrap truncate max-w-[240px] text-slate-700" title={p.designation}>{p.designation}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">{p.rigPassNo}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{p.h2sExpiry}</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-mono text-right font-bold text-slate-900">${p.dailyRateUSD.toFixed(2)}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-center">
                               <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
                                 {p.status}
@@ -1952,50 +1971,120 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
       {/* ITEMSSELECT TOOL PICKER MODAL */}
       {isToolSelectOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-3 animate-in fade-in duration-150">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150">
           <div
-            className="bg-[#dce6f1] border-2 border-[#1a3055] rounded-md shadow-2xl w-full max-w-4xl h-[620px] max-h-[92vh] flex flex-col overflow-hidden"
+            className={`bg-[#dce6f1] border-2 border-[#1a3055] rounded-md shadow-2xl flex flex-col overflow-hidden transition-all duration-150 ${
+              isToolModalMaximized
+                ? 'w-[98vw] h-[95vh] max-w-none max-h-none'
+                : 'w-full max-w-5xl h-[640px] max-h-[92vh]'
+            }`}
             style={{ fontFamily: "'Calibri', 'Arial Nova', 'Segoe UI', Arial, sans-serif", fontSize: '9pt' }}
           >
             <div className="bg-[#1a3055] text-white px-3 py-1.5 flex items-center justify-between text-xs font-bold flex-shrink-0">
               <div className="flex items-center gap-2">
                 <span>itemsselect &bull; Tool Assignment Picker</span>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsToolSelectOpen(false)}
-                className="text-white hover:text-amber-300 font-bold text-base cursor-pointer px-1"
-              >
-                &times;
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsToolModalMaximized(!isToolModalMaximized)}
+                  className="text-xs text-white/80 hover:text-white bg-white/10 hover:bg-white/20 px-2 py-0.5 rounded cursor-pointer transition font-mono"
+                  title={isToolModalMaximized ? 'Restore window size' : 'Maximize window size'}
+                >
+                  {isToolModalMaximized ? '❐ Restore' : '⛶ Maximize'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsToolSelectOpen(false)}
+                  className="text-white hover:text-amber-300 font-bold text-base cursor-pointer px-1"
+                >
+                  &times;
+                </button>
+              </div>
             </div>
 
             <div className="p-3 flex-1 flex flex-col min-h-0 space-y-2.5">
-              {/* Category & Size Selection - Single line filter, duplicate insert button removed */}
-              <div className="bg-white border border-[#9fb6cf] rounded p-2 flex flex-wrap items-center justify-between gap-3 shadow-2xs flex-shrink-0">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1.5">
+              {/* Category Combobox (Type-to-Search) & Tool Size Filter */}
+              <div className="bg-white border border-[#9fb6cf] rounded p-2 flex flex-wrap items-center justify-between gap-3 shadow-2xs flex-shrink-0 relative">
+                <div className="flex flex-wrap items-center gap-4">
+                  {/* Category Type-To-Search Combobox */}
+                  <div className="flex items-center gap-1.5 relative">
                     <label className="font-extrabold text-slate-800 uppercase tracking-tight text-[11px]">CATEGORY :</label>
-                    <select
-                      value={selectedCategory}
-                      onChange={(e) => {
-                        setSelectedCategory(e.target.value);
-                        setSelectedToolSize('');
-                      }}
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-56 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500"
-                    >
-                      {availableCategories.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <div className="flex items-center">
+                        <input
+                          type="text"
+                          value={categorySearchQuery}
+                          onChange={(e) => {
+                            setCategorySearchQuery(e.target.value);
+                            setIsCategoryDropdownOpen(true);
+                          }}
+                          onFocus={() => setIsCategoryDropdownOpen(true)}
+                          placeholder="Type category..."
+                          className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs font-bold text-slate-800 w-56 sm:w-64 shadow-2xs cursor-text focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                        />
+                        {categorySearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCategorySearchQuery('');
+                              setIsCategoryDropdownOpen(true);
+                            }}
+                            className="absolute right-2 text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Dropdown Options */}
+                      {isCategoryDropdownOpen && (
+                        <div className="absolute left-0 top-full mt-1 w-72 max-h-60 overflow-y-auto bg-white border-2 border-[#1a3055] rounded shadow-2xl z-50 text-xs divide-y divide-slate-100">
+                          <div className="bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600 flex justify-between items-center sticky top-0 border-b border-slate-200">
+                            <span>Matching Categories ({filteredCategories.length})</span>
+                            <button
+                              type="button"
+                              onClick={() => setIsCategoryDropdownOpen(false)}
+                              className="text-slate-500 hover:text-red-600 font-bold px-1"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          {filteredCategories.length === 0 ? (
+                            <div className="p-3 text-center text-slate-400 italic">No matching categories found</div>
+                          ) : (
+                            filteredCategories.map((c) => (
+                              <div
+                                key={c}
+                                onClick={() => {
+                                  setSelectedCategory(c);
+                                  setCategorySearchQuery(c);
+                                  setSelectedToolSize('');
+                                  setIsCategoryDropdownOpen(false);
+                                }}
+                                className={`px-3 py-1.5 cursor-pointer hover:bg-blue-100 flex items-center justify-between transition ${
+                                  selectedCategory === c ? 'bg-blue-50 font-bold text-blue-900' : 'text-slate-800'
+                                }`}
+                              >
+                                <span>{c}</span>
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  {inventory.filter((t) => t.shortDesc?.trim() === c).length} in stock
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
+                  {/* Tool Size Filter */}
                   <div className="flex items-center gap-1.5">
                     <label className="font-extrabold text-slate-800 uppercase tracking-tight text-[11px]">TOOL SIZE :</label>
                     <select
                       value={selectedToolSize}
                       onChange={(e) => setSelectedToolSize(e.target.value)}
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-36 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500"
+                      className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs font-bold text-slate-800 w-36 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500"
                     >
                       <option value="">All Sizes</option>
                       {availableSizes.map((s) => (
@@ -2011,22 +2100,22 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded px-2.5 py-1 text-[11px] text-blue-900 leading-tight flex-shrink-0">
-                Based on category selection, the size shows in second dropdown against available stock. Select with checkbox and click <strong>&quot;Insert Selected Tools&quot;</strong> to reserve tools for Job {jobData.id}.
+                Type in the category box above to filter downhole tools. Select with checkbox and click <strong>&quot;Insert Selected Tools&quot;</strong> to reserve tools for Job {jobData.id}.
               </div>
 
               {/* Tools Table - Fixed height container with scrolling so window height never changes */}
-              <div className="flex-1 min-h-0 bg-white border border-[#9fb6cf] rounded overflow-y-auto shadow-inner">
-                <table className="w-full text-left border-collapse text-[11.5px]">
+              <div className="flex-1 min-h-0 bg-white border border-[#9fb6cf] rounded overflow-auto shadow-inner">
+                <table className="w-full text-left border-collapse text-[11.5px] min-w-[850px]">
                   <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#9fb6cf] font-bold text-[11px] sticky top-0 z-10 shadow-2xs">
                     <tr>
-                      <th className="py-1 px-2 whitespace-nowrap">PartNo</th>
-                      <th className="py-1 px-2 whitespace-nowrap">Description</th>
-                      <th className="py-1 px-2 whitespace-nowrap text-center w-14">DTQTY</th>
-                      <th className="py-1 px-2 whitespace-nowrap">Supplier</th>
-                      <th className="py-1 px-2 whitespace-nowrap">Ins_Date</th>
-                      <th className="py-1 px-2 whitespace-nowrap">Ins_Num</th>
-                      <th className="py-1 px-2 whitespace-nowrap">Condition</th>
-                      <th className="py-1 px-2 whitespace-nowrap text-center w-14">select [✓]</th>
+                      <th className="py-1 px-3 whitespace-nowrap min-w-[130px]">PartNo / Serial</th>
+                      <th className="py-1 px-3 whitespace-nowrap min-w-[340px]">Description</th>
+                      <th className="py-1 px-2 whitespace-nowrap text-center w-16">DTQTY</th>
+                      <th className="py-1 px-3 whitespace-nowrap min-w-[120px]">Supplier</th>
+                      <th className="py-1 px-2 whitespace-nowrap min-w-[95px]">Ins_Date</th>
+                      <th className="py-1 px-2 whitespace-nowrap min-w-[130px]">Ins_Num</th>
+                      <th className="py-1 px-2 whitespace-nowrap min-w-[100px]">Condition</th>
+                      <th className="py-1 px-2 whitespace-nowrap text-center w-16">select [✓]</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -2053,12 +2142,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                               isChecked ? 'bg-amber-100/80 font-semibold' : 'hover:bg-blue-50/60'
                             }`}
                           >
-                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{tool.assetNo || tool.serial}</td>
-                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={tool.desc || tool.shortDesc}>
+                            <td className="py-1 px-3 whitespace-nowrap font-mono font-bold text-slate-900">{tool.assetNo || tool.serial}</td>
+                            <td className="py-1 px-3 whitespace-nowrap font-medium text-slate-800" title={tool.desc || tool.shortDesc}>
                               {tool.desc || tool.shortDesc}
                             </td>
                             <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{tool.qty || 1}</td>
-                            <td className="py-1 px-2 whitespace-nowrap text-slate-700">{tool.supplier || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')}</td>
+                            <td className="py-1 px-3 whitespace-nowrap text-slate-700">{tool.supplier || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">31-Mar-23</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">GIS-Z-01073-2023</td>
                             <td className="py-1 px-2 whitespace-nowrap font-bold text-emerald-700">ACCEPTED</td>
