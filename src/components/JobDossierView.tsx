@@ -272,12 +272,36 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       stage.includes('invoiced') ||
       stage.includes('completed') ||
       stage.includes('submitted to billing') ||
-      stage.includes('ses');
+      stage.includes('ses') ||
+      stage.includes('closed');
     return hasLegal || hasDraft || isFinishedStage;
   }, [jobData]);
 
   const isAdmin = user?.role === 'Admin';
-  const isLocked = isJobInvoicedOrSubmitted && !isAdmin;
+  const isClosedOrInvoiced = Boolean(
+    isJobInvoicedOrSubmitted ||
+    (jobData.legalInvoiceNumber && jobData.legalInvoiceNumber !== '—' && jobData.legalInvoiceNumber !== '-')
+  );
+  const isLocked = isClosedOrInvoiced && !isAdmin;
+
+  // Prevent legal invoice number or draft invoice number from ever duplicating as operational ticket number
+  const isInvoiceRef = (val?: string | null) => {
+    if (!val) return false;
+    const v = val.trim().toUpperCase();
+    const legal = (jobData.legalInvoiceNumber || '').trim().toUpperCase();
+    const draft = (jobData.draftInvoiceNumber || '').trim().toUpperCase();
+    const inv = (jobData.invoiceNumber || '').trim().toUpperCase();
+    if (legal && v === legal) return true;
+    if (draft && v === draft) return true;
+    if (inv && v === inv) return true;
+    if (/^FR-\d+/i.test(v)) return true;
+    return false;
+  };
+
+  const sanitizeTicketNumber = (val?: string | null) => {
+    if (!val || isInvoiceRef(val)) return '';
+    return val.trim();
+  };
 
   // Dynamic distinct Clients & Contracts pulled from real database records
   const clientOptions = useMemo(() => {
@@ -564,14 +588,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const activeCallout = useMemo(() => {
     const found = jobCallouts.find((c) => c.id === selectedCalloutId) || jobCallouts[0];
     if (found) {
+      const safeTicket = sanitizeTicketNumber(found.ticketNo) || sanitizeTicketNumber(found.calloutNumber) || sanitizeTicketNumber(jobData.clientRef);
       return {
         ...found,
+        ticketNo: safeTicket,
         status: automatedChecklistStatus,
       };
     }
+    const safeFallbackTicket = sanitizeTicketNumber(jobData.clientRef);
     return {
       id: jobData.calloutId || `CAL-${jobData.id.replace(/^JOB-?/i, '')}`,
-      ticketNo: jobData.clientRef || jobData.poNumber || '2266',
+      ticketNo: safeFallbackTicket,
       jobId: jobData.id,
       jobNumber: jobData.id,
       rig: jobData.rig || '',
@@ -820,7 +847,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Save Job Record
   const handleSaveJobHeader = () => {
-    if (isLocked) {
+    if (isClosedOrInvoiced || isLocked) {
       showToast('Cannot save changes: this job is invoiced and locked in read-only mode.', 'error');
       return;
     }
@@ -831,7 +858,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Update Callout Header Values
   const handleUpdateCalloutHeader = (field: string, val: string) => {
-    if (isLocked) return;
+    if (isClosedOrInvoiced || isLocked) return;
     const updatedCallout: Callout = {
       ...activeCallout,
       [field]: val,
@@ -843,7 +870,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Insert Personnel from Modal
   const handleInsertSelectedPersonnel = () => {
-    if (isLocked) return;
+    if (isClosedOrInvoiced || isLocked) return;
     const selectedPersons = MASTER_PERSONNEL_ROSTER.filter((p) => checkedPersonnelBadges.includes(p.badgeNo));
     const newMembers: JobCrewMember[] = selectedPersons.map((p, idx) => ({
       id: `CREW-${Date.now()}-${idx}`,
@@ -876,7 +903,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Delete Crew Member
   const handleDeleteCrewMember = (id: string) => {
-    if (isLocked) return;
+    if (isClosedOrInvoiced || isLocked) return;
     const updated = assignedCrew.filter((c) => c.id !== id);
     setAssignedCrew(updated);
     const updatedJob = { ...jobData, crewMembers: updated };
@@ -887,7 +914,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Insert tools from modal to checklist
   const handleInsertSelectedTools = () => {
-    if (isLocked) return;
+    if (isClosedOrInvoiced || isLocked) return;
     const newlySelectedTools = inventory.filter((t) => checkedToolSerials.includes(t.serial));
     const newItems: CalloutItem[] = newlySelectedTools.map((t, idx) => ({
       seq: checklistItems.length + idx + 1,
@@ -937,7 +964,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Delete row from checklist
   const handleDeleteChecklistRow = (seq: number) => {
-    if (isLocked) return;
+    if (isClosedOrInvoiced || isLocked) return;
     const updated = checklistItems.filter((item) => item.seq !== seq);
     setChecklistItems(updated);
     const calloutToSave: Callout = {
@@ -954,7 +981,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // AUTOMATED LIFECYCLE BRIDGE: Generate Delivery Ticket (DT) from Checklist
   const handleGenerateDTFromChecklist = () => {
-    if (isLocked) {
+    if (isClosedOrInvoiced || isLocked) {
       showToast('Action disabled: Invoiced jobs cannot generate new delivery tickets.', 'error');
       return;
     }
@@ -1043,7 +1070,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Transfer checked tools from Lower DT to Upper RT
   const handleMoveToolsToRT = () => {
-    if (isLocked) {
+    if (isClosedOrInvoiced || isLocked) {
       showToast('Action disabled: Invoiced jobs cannot accept new returns.', 'error');
       return;
     }
@@ -1281,7 +1308,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           { key: 'manpower', label: 'Manpower / Crew' },
           { key: 'checklist', label: 'Checklistheader' },
           { key: 'delivery-tickets', label: 'Delivery Ticket Header' },
-          { key: 'return-tickets', label: 'RTHeader / RGT' },
+          { key: 'return-tickets', label: 'Return Ticket' },
           { key: 'utilization', label: 'Utilization' },
         ].map((t) => {
           const isActive = activeTab === t.key;
@@ -1305,7 +1332,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       {/* Main Form Body */}
       <div className="bg-white border-x border-b border-[#9fb6cf] p-4 rounded-b-md shadow-md min-h-[620px] relative">
         {/* SIMPLIFIED LOCK BANNER */}
-        {isJobInvoicedOrSubmitted && (
+        {isClosedOrInvoiced && (
           <div className="p-1.5 px-3 mb-3 rounded border bg-amber-50 border-amber-300 text-amber-900 text-xs flex items-center justify-between font-bold shadow-2xs">
             <div className="flex items-center gap-2">
               <span>🔒</span>
@@ -1313,9 +1340,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 Locked (Invoiced){jobData.legalInvoiceNumber ? ` — Legal Invoice: ${jobData.legalInvoiceNumber}` : jobData.draftInvoiceNumber ? ` — Draft Invoice: ${jobData.draftInvoiceNumber}` : ''}
               </span>
             </div>
-            {!isLocked && (
+            {isAdmin && (
               <span className="text-[10px] bg-blue-100 text-blue-900 border border-blue-300 px-2 py-0.5 rounded font-bold">
-                Admin Super-User Override
+                Admin Super-User View
               </span>
             )}
           </div>
@@ -1505,22 +1532,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     {totalCumulativeJobValue.toLocaleString()} AED
                   </span>
                 </div>
-              </div>
-
-              {/* Available in PO Balance & Client Warning */}
-              <div className="flex items-center pl-28 pt-0.5">
-                {poBalance >= 0 ? (
-                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                    <span>Available in PO:</span>
-                    <span className="font-mono">{poBalance.toLocaleString()} AED</span>
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-red-50 text-red-800 border border-red-300 flex items-center gap-1">
-                    <span>⚠️ PO Limit Exceeded by</span>
-                    <span className="font-mono">{Math.abs(poBalance).toLocaleString()} AED</span>
-                    <span>(Discuss PO increase)</span>
-                  </span>
-                )}
               </div>
 
               {/* Status / Fleet indicators */}
@@ -1854,7 +1865,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {!isLocked && (
+                {!isClosedOrInvoiced && !isLocked && (
                   <button
                     type="button"
                     onClick={() => setIsPersonnelSelectOpen(true)}
@@ -1888,15 +1899,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <th className="py-1 px-2 whitespace-nowrap">Rig Pass / Cert</th>
                     <th className="py-1 px-2 whitespace-nowrap font-mono">H2S Expiry</th>
                     <th className="py-1 px-2 whitespace-nowrap text-center">Status</th>
-                    {!isLocked && <th className="py-1 px-2 whitespace-nowrap text-center w-16">Action</th>}
+                    {!isClosedOrInvoiced && !isLocked && <th className="py-1 px-2 whitespace-nowrap text-center w-16">Action</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {assignedCrew.length === 0 ? (
                     <tr>
-                      <td colSpan={isLocked ? 9 : 10} className="p-6 text-center text-slate-500 font-medium">
+                      <td colSpan={isClosedOrInvoiced || isLocked ? 9 : 10} className="p-6 text-center text-slate-500 font-medium">
                         No field personnel assigned to this job yet.
-                        {!isLocked && (
+                        {!isClosedOrInvoiced && !isLocked && (
                           <span> Click <strong>&quot;Select Personnel / Crew&quot;</strong> above to assign certified crew members.</span>
                         )}
                       </td>
@@ -1921,7 +1932,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             {c.status}
                           </span>
                         </td>
-                        {!isLocked && (
+                        {!isClosedOrInvoiced && !isLocked && (
                           <td className="py-1 px-2 whitespace-nowrap text-center">
                             <button
                               type="button"
@@ -1962,7 +1973,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <div className="flex items-center gap-3">
                   <h2 className="text-sm font-bold text-[#1a3055]">Tools Check List</h2>
                   <span className="text-xs text-slate-500 font-mono">
-                    Ticket No: <strong className="text-red-600 font-bold text-sm">{activeCallout.ticketNo || '2266'}</strong>
+                    Ticket No: <strong className="text-red-600 font-bold text-sm">{activeCallout.ticketNo || '—'}</strong>
                   </span>
                   <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
                     activeCallout.status.includes('Closed') || activeCallout.status.includes('Released')
@@ -1973,7 +1984,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  {!isLocked && (
+                  {!isClosedOrInvoiced && !isLocked && (
                     <>
                       <button
                         type="button"
@@ -2013,9 +2024,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <input
                     type="text"
                     value={activeCallout.id || ''}
-                    disabled={isLocked}
+                    disabled={isClosedOrInvoiced || isLocked}
                     onChange={(e) => handleUpdateCalloutHeader('id', e.target.value)}
-                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-blue-900 w-28 disabled:bg-slate-100"
+                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-blue-900 w-28 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   />
                 </div>
                 <div className="flex items-center gap-1">
@@ -2023,10 +2034,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <input
                     type="text"
                     value={activeCallout.reqDate || ''}
-                    disabled={isLocked}
+                    disabled={isClosedOrInvoiced || isLocked}
                     placeholder="DD-MM-YYYY"
                     onChange={(e) => handleUpdateCalloutHeader('reqDate', e.target.value)}
-                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono w-28 disabled:bg-slate-100"
+                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono w-28 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   />
                 </div>
                 <div className="flex items-center gap-1">
@@ -2034,9 +2045,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <input
                     type="text"
                     value={activeCallout.projectNo || jobData.contractNo || ''}
-                    disabled={isLocked}
+                    disabled={isClosedOrInvoiced || isLocked}
                     onChange={(e) => handleUpdateCalloutHeader('projectNo', e.target.value)}
-                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono w-28 disabled:bg-slate-100"
+                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono w-28 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   />
                 </div>
                 <div className="flex items-center gap-1">
@@ -2044,9 +2055,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <input
                     type="text"
                     value={activeCallout.poNumber || jobData.poNumber || ''}
-                    disabled={isLocked}
+                    disabled={isClosedOrInvoiced || isLocked}
                     onChange={(e) => handleUpdateCalloutHeader('poNumber', e.target.value)}
-                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono w-28 disabled:bg-slate-100"
+                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono w-28 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   />
                 </div>
                 <div className="flex items-center gap-1">
@@ -2058,10 +2069,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <input
                     type="text"
                     value={activeCallout.emailRef || ''}
-                    disabled={isLocked}
+                    disabled={isClosedOrInvoiced || isLocked}
                     placeholder="Client authorization / email"
                     onChange={(e) => handleUpdateCalloutHeader('emailRef', e.target.value)}
-                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs w-36 disabled:bg-slate-100"
+                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs w-36 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   />
                 </div>
                 <div className="flex items-center gap-1">
@@ -2069,9 +2080,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <input
                     type="text"
                     value={activeCallout.ticketNo || ''}
-                    disabled={isLocked}
+                    disabled={isClosedOrInvoiced || isLocked}
+                    placeholder="—"
                     onChange={(e) => handleUpdateCalloutHeader('ticketNo', e.target.value)}
-                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-red-600 w-24 disabled:bg-slate-100"
+                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-red-600 w-24 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   />
                 </div>
                 <div className="flex items-center gap-1">
@@ -2108,15 +2120,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <th className="p-1.5">INS_DATE</th>
                     <th className="p-1.5">Comments</th>
                     <th className="p-1.5">Category</th>
-                    {!isLocked && <th className="p-1.5 text-center w-16">Action</th>}
+                    {!isClosedOrInvoiced && !isLocked && <th className="p-1.5 text-center w-16">Action</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {checklistItems.length === 0 ? (
                     <tr>
-                      <td colSpan={isLocked ? 10 : 11} className="p-6 text-center text-slate-500 font-medium">
+                      <td colSpan={isClosedOrInvoiced || isLocked ? 10 : 11} className="p-6 text-center text-slate-500 font-medium">
                         No tools in checklist.
-                        {!isLocked && (
+                        {!isClosedOrInvoiced && !isLocked && (
                           <span> Click <strong>&quot;Select Tools&quot;</strong> above to pick available tools from yard inventory.</span>
                         )}
                       </td>
@@ -2134,7 +2146,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{formatDateDD_MM_YYYY(item.insDate)}</td>
                         <td className="py-1 px-2 whitespace-nowrap font-bold text-emerald-700">{item.comments || 'ACCEPTED'}</td>
                         <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600">{item.cat || item.shortDesc}</td>
-                        {!isLocked && (
+                        {!isClosedOrInvoiced && !isLocked && (
                           <td className="py-1 px-2 whitespace-nowrap text-center">
                             <button
                               type="button"
@@ -2180,13 +2192,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </div>
               <div className="flex items-center gap-2">
                 {activeDT && (
-                  activeDT.isLocked ? (
+                  activeDT.isLocked || isClosedOrInvoiced ? (
                     <span className="bg-purple-100 text-purple-900 border border-purple-300 font-bold text-xs px-3 py-1 rounded flex items-center gap-1 shadow-2xs">
                       <span>🔒</span>
                       <span>Dispatched &amp; Locked (Shipped to Rig)</span>
                     </span>
                   ) : (
-                    !isLocked && (
+                    !isClosedOrInvoiced && !isLocked && (
                       <button
                         type="button"
                         onClick={handleConfirmAndLockDT}
@@ -2500,8 +2512,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <td className="py-1 px-2 whitespace-nowrap">
                           <select
                             defaultValue={t.used ? 'USED' : 'NOT USED'}
-                            disabled={isLocked}
-                            className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-800 cursor-pointer disabled:bg-slate-100"
+                            disabled={isClosedOrInvoiced || isLocked}
+                            className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-800 cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed"
                           >
                             <option value="USED">USED</option>
                             <option value="NOT USED">NOT USED</option>
@@ -2517,7 +2529,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             </div>
 
             {/* Lower Section: Search DT No & Select Tools to Move to RT */}
-            {unreturnedDTs.length === 0 ? (
+            {unreturnedDTs.length === 0 || isClosedOrInvoiced ? (
               <div className="p-3 text-center text-slate-500 text-xs italic bg-slate-50 border border-slate-200 rounded">
                 No equipment pending return for this job.
               </div>
@@ -2542,7 +2554,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     </span>
                   </div>
 
-                  {!isLocked && (
+                  {!isClosedOrInvoiced && !isLocked && (
                     <button
                       type="button"
                       onClick={handleMoveToolsToRT}
@@ -2589,7 +2601,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
-                                  disabled={isLocked}
+                                  disabled={isClosedOrInvoiced || isLocked}
                                   onChange={(e) => {
                                     if (e.target.checked) {
                                       setRgtCheckedSerials((prev) => [...prev, t.serial]);
