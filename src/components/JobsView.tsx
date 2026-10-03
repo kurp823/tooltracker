@@ -1423,11 +1423,10 @@ export const JobsView: React.FC<JobsViewProps> = ({
                       <td className={`px-3 ${padY} whitespace-nowrap align-middle sticky left-0 bg-white group-hover:bg-blue-50/70 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]`}>
                         <button
                           onClick={() => setDossierJob(job)}
-                          className="font-mono font-bold text-[#1a3055] group-hover:text-blue-700 text-xs tracking-tight transition cursor-pointer text-left select-all flex items-center gap-1.5"
+                          className="font-mono font-bold text-[#1a3055] group-hover:text-blue-700 text-xs tracking-tight transition cursor-pointer text-left select-all hover:underline"
                           title="Click to open MS Access style Job Dossier"
                         >
-                          <span className="text-amber-500 text-[10px]">🗂️</span>
-                          <span>{job.id}</span>
+                          {job.id}
                         </button>
                       </td>
 

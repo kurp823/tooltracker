@@ -575,11 +575,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   };
 
   return (
-    <div className="bg-[#dce6f1] min-h-screen text-slate-800 p-2 sm:p-4 select-none">
+    <div
+      className="access-dossier bg-[#dce6f1] min-h-screen text-slate-800 p-2 sm:p-4 select-none"
+      style={{ fontFamily: "'Calibri', 'Arial Nova', 'Segoe UI', Arial, sans-serif", fontSize: '9pt' }}
+    >
+      <style>{`
+        .access-dossier, .access-dossier * {
+          font-family: 'Calibri', 'Arial Nova', 'Segoe UI', Arial, sans-serif;
+        }
+        .access-dossier input, .access-dossier select, .access-dossier textarea, .access-dossier td, .access-dossier th {
+          font-size: 9pt;
+        }
+      `}</style>
       {/* Top Access Window Bar */}
       <div className="bg-[#1a3055] text-white px-3 py-1.5 rounded-t-md flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-2 text-xs font-bold tracking-wide">
-          <span className="text-amber-400">🗂️</span>
           <span>Job Dossier Workspace &bull; Job No: <span className="font-mono text-amber-300">{jobData.id}</span></span>
         </div>
         <div className="flex items-center gap-2">
@@ -1111,19 +1121,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     </tr>
                   ) : (
                     assignedCrew.map((c, idx) => (
-                      <tr key={c.id || idx} className="hover:bg-blue-50/50">
-                        <td className="p-1.5 text-center font-bold text-slate-600">{idx + 1}</td>
-                        <td className="p-1.5 font-mono font-bold text-slate-900">{c.badgeNo}</td>
-                        <td className="p-1.5 font-bold text-blue-900">{c.name}</td>
-                        <td className="p-1.5 text-slate-700">{c.designation}</td>
-                        <td className="p-1.5 font-mono text-[11px]">{c.mobDate || '15-May-2023'}</td>
-                        <td className="p-1.5 font-mono text-[11px] text-slate-500">{c.demobDate || '— (Active)'}</td>
-                        <td className="p-1.5 text-center font-bold text-emerald-800">{c.operatingDays || 0}</td>
-                        <td className="p-1.5 text-center font-bold text-blue-800">{c.standbyDays || 0}</td>
-                        <td className="p-1.5 text-right font-mono text-slate-800">${c.dailyRateUSD.toFixed(2)}</td>
-                        <td className="p-1.5 text-right font-mono font-bold text-slate-900">${(c.totalChargeUSD || ((c.operatingDays + c.standbyDays) * c.dailyRateUSD)).toLocaleString()}</td>
-                        <td className="p-1.5 font-mono text-[11px] text-blue-700">{c.rigPassNo || 'RP-88421'}</td>
-                        <td className="p-1.5 text-center">
+                      <tr key={c.id || idx} className="hover:bg-blue-50/50 h-7 leading-none">
+                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{c.badgeNo}</td>
+                        <td className="py-1 px-2 whitespace-nowrap truncate max-w-[180px] font-bold text-blue-900" title={c.name}>{c.name}</td>
+                        <td className="py-1 px-2 whitespace-nowrap truncate max-w-[200px] text-slate-700" title={c.designation}>{c.designation}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px]">{c.mobDate || '15-May-2023'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-500">{c.demobDate || '— (Active)'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-emerald-800">{c.operatingDays || 0}</td>
+                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-blue-800">{c.standbyDays || 0}</td>
+                        <td className="py-1 px-2 whitespace-nowrap text-right font-mono text-slate-800">${c.dailyRateUSD.toFixed(2)}</td>
+                        <td className="py-1 px-2 whitespace-nowrap text-right font-mono font-bold text-slate-900">${(c.totalChargeUSD || ((c.operatingDays + c.standbyDays) * c.dailyRateUSD)).toLocaleString()}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">{c.rigPassNo || 'RP-88421'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap text-center">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             c.status.includes('Rig')
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
@@ -1132,7 +1142,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             {c.status}
                           </span>
                         </td>
-                        <td className="p-1.5 text-center">
+                        <td className="py-1 px-2 whitespace-nowrap text-center">
                           <button
                             type="button"
                             onClick={() => handleDeleteCrewMember(c.id)}
@@ -1271,25 +1281,25 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     </tr>
                   ) : (
                     checklistItems.map((item, i) => (
-                      <tr key={i} className="hover:bg-blue-50/50">
-                        <td className="p-1.5 text-center font-bold text-slate-600">{i + 1}</td>
-                        <td className="p-1.5 font-mono font-bold text-slate-900">{item.partNo || item.serialNos?.[0] || '—'}</td>
-                        <td className="p-1.5 font-medium text-slate-800">{item.description || item.shortDesc}</td>
-                        <td className="p-1.5 text-center font-bold">{item.qty || 1}</td>
-                        <td className="p-1.5 font-medium">{item.supplier || 'EMDAD'}</td>
-                        <td className="p-1.5 text-center font-bold">{item.qtyIn || 1}</td>
-                        <td className="p-1.5 font-mono text-[11px] text-blue-700">{item.insNum || 'GIS-Z-01480-2023'}</td>
-                        <td className="p-1.5 font-mono text-[11px] text-slate-600">{item.insDate || '09-May-23'}</td>
-                        <td className="p-1.5 font-bold text-emerald-700">{item.comments || 'ACCEPTED'}</td>
-                        <td className="p-1.5 text-[11px] text-slate-600">{item.cat || item.shortDesc}</td>
-                        <td className="p-1.5 text-center">
+                      <tr key={i} className="hover:bg-blue-50/50 h-7 leading-none">
+                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{i + 1}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{item.partNo || item.serialNos?.[0] || '—'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap truncate max-w-[320px] font-medium text-slate-800" title={item.description || item.shortDesc}>{item.description || item.shortDesc}</td>
+                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{item.qty || 1}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700">{item.supplier || 'EMDAD'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{item.qtyIn || 1}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">{item.insNum || 'GIS-Z-01480-2023'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{item.insDate || '09-May-23'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-bold text-emerald-700">{item.comments || 'ACCEPTED'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600">{item.cat || item.shortDesc}</td>
+                        <td className="py-1 px-2 whitespace-nowrap text-center">
                           <button
                             type="button"
                             onClick={() => handleDeleteChecklistRow(item.seq)}
                             className="text-red-600 hover:text-red-800 font-bold text-[11px] hover:underline cursor-pointer"
                             title="Delete row and return tool to inventory"
                           >
-                            Delete Row
+                            Delete
                           </button>
                         </td>
                       </tr>
@@ -1410,17 +1420,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       {activeDT.toolLines?.map((t, idx) => (
-                        <tr key={idx} className="hover:bg-blue-50/50">
-                          <td className="p-1.5 text-center font-bold text-slate-600">{idx + 1}</td>
-                          <td className="p-1.5 font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
-                          <td className="p-1.5 font-medium">{t.desc || t.shortDesc}</td>
-                          <td className="p-1.5 text-center font-bold">{t.qty || 1}</td>
-                          <td className="p-1.5 font-mono text-[11px]">{activeDT.dispatchDate || '25-Aug-23'}</td>
-                          <td className="p-1.5 font-mono text-blue-700">{jobData.id}</td>
-                          <td className="p-1.5 font-mono text-slate-500">{t.rtBatchId || '—'}</td>
-                          <td className="p-1.5 font-mono text-slate-500">—</td>
-                          <td className="p-1.5">{t.ownership || 'EMDAD'}</td>
-                          <td className="p-1.5 text-slate-600 text-[11px]">{t.shortDesc || 'Downhole Tool'}</td>
+                        <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
+                          <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
+                          <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
+                          <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{t.qty || 1}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{activeDT.dispatchDate || '25-Aug-23'}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono text-blue-700">{jobData.id}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono text-slate-500">{t.rtBatchId || '—'}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono text-slate-500">—</td>
+                          <td className="py-1 px-2 whitespace-nowrap text-slate-700">{t.ownership || 'EMDAD'}</td>
+                          <td className="py-1 px-2 whitespace-nowrap text-slate-600 text-[11px]">{t.shortDesc || 'Downhole Tool'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1586,13 +1596,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     </tr>
                   ) : (
                     activeRT.toolLines.map((t, idx) => (
-                      <tr key={idx} className="hover:bg-blue-50/50">
-                        <td className="p-1.5 text-center font-bold text-slate-600">{idx + 1}</td>
-                        <td className="p-1.5 font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
-                        <td className="p-1.5 font-medium">{t.desc || t.shortDesc}</td>
-                        <td className="p-1.5 text-center font-mono font-bold text-blue-800">{activeRT.rtNumber}</td>
-                        <td className="p-1.5 font-mono text-[11px] text-slate-600">{activeRT.rtDate || '24-Aug-23'}</td>
-                        <td className="p-1.5">
+                      <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
+                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
+                        <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
+                        <td className="py-1 px-2 whitespace-nowrap text-center font-mono font-bold text-blue-800">{activeRT.rtNumber}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{activeRT.rtDate || '24-Aug-23'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap">
                           <select
                             defaultValue={t.used ? 'USED' : 'NOT USED'}
                             className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-800 cursor-pointer"
@@ -1665,13 +1675,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       rgtDTToolsToReturn.map((t, idx) => {
                         const isChecked = rgtCheckedSerials.includes(t.serial);
                         return (
-                          <tr key={idx} className={isChecked ? 'bg-amber-50' : 'hover:bg-slate-50'}>
-                            <td className="p-1.5 text-center font-mono text-slate-600">{rgtSearchDTNo}</td>
-                            <td className="p-1.5 text-center font-bold text-slate-600">{idx + 1}</td>
-                            <td className="p-1.5 font-mono font-bold text-slate-900">{t.serial}</td>
-                            <td className="p-1.5 font-medium">{t.desc || t.shortDesc}</td>
-                            <td className="p-1.5 text-center font-bold">{t.qty || 1}</td>
-                            <td className="p-1.5 text-center">
+                          <tr key={idx} className={`h-7 leading-none ${isChecked ? 'bg-amber-100/80 font-semibold' : 'hover:bg-slate-50'}`}>
+                            <td className="py-1 px-2 whitespace-nowrap text-center font-mono text-slate-600">{rgtSearchDTNo}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial}</td>
+                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{t.qty || 1}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-center">
                               <input
                                 type="checkbox"
                                 checked={isChecked}
@@ -1799,10 +1809,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       {/* PERSONNELSELECT MODAL (Matches MS Access itemsselect exactly) */}
       {isPersonnelSelectOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-3 animate-in fade-in duration-150">
-          <div className="bg-[#dce6f1] border-2 border-[#1a3055] rounded-md shadow-2xl w-full max-w-4xl overflow-hidden">
-            <div className="bg-[#1a3055] text-white px-3 py-1.5 flex items-center justify-between text-xs font-bold">
+          <div
+            className="bg-[#dce6f1] border-2 border-[#1a3055] rounded-md shadow-2xl w-full max-w-4xl h-[620px] max-h-[92vh] flex flex-col overflow-hidden"
+            style={{ fontFamily: "'Calibri', 'Arial Nova', 'Segoe UI', Arial, sans-serif", fontSize: '9pt' }}
+          >
+            <div className="bg-[#1a3055] text-white px-3 py-1.5 flex items-center justify-between text-xs font-bold flex-shrink-0">
               <div className="flex items-center gap-2">
-                <span>👷</span>
                 <span>personnelselect &bull; Field Crew Assignment Picker</span>
               </div>
               <button
@@ -1814,10 +1826,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </button>
             </div>
 
-            <div className="p-3 text-xs space-y-3">
-              <div className="bg-white border border-[#9fb6cf] rounded p-2.5 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+            <div className="p-3 flex-1 flex flex-col min-h-0 space-y-2.5">
+              <div className="bg-white border border-[#9fb6cf] rounded p-2 flex flex-wrap items-center justify-between gap-3 shadow-2xs flex-shrink-0">
                 <div className="flex items-center gap-1.5">
-                  <label className="font-extrabold text-slate-800 uppercase tracking-tight">ROLE / DESIGNATION :</label>
+                  <label className="font-extrabold text-slate-800 uppercase tracking-tight text-[11px]">ROLE / DESIGNATION :</label>
                   <select
                     value={selectedPersonnelRole}
                     onChange={(e) => setSelectedPersonnelRole(e.target.value)}
@@ -1829,102 +1841,107 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   </select>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleInsertSelectedPersonnel}
-                  className="bg-[#107c41] hover:bg-[#0c6233] text-white font-bold text-xs px-5 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>⬇️</span>
-                  <span>Insert Selected Personnel ({checkedPersonnelBadges.length})</span>
-                </button>
+                <div className="text-[11px] text-slate-600 font-medium">
+                  Available in Role: <strong className="text-slate-900">{filteredPersonnelRoster.length}</strong>
+                </div>
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded p-2 text-[11px] text-blue-900 leading-snug">
-                Based on role selection, available certified engineers and supervisors show below. Select with checkbox and click <strong>&quot;Insert&quot;</strong> to mobilize personnel to Rig {jobData.rig} for Job {jobData.id}.
+              <div className="bg-blue-50 border border-blue-200 rounded px-2.5 py-1 text-[11px] text-blue-900 leading-tight flex-shrink-0">
+                Based on role selection, available certified engineers and supervisors show below. Select with checkbox and click <strong>&quot;Insert Selected Personnel&quot;</strong> to mobilize personnel to Rig {jobData.rig} for Job {jobData.id}.
               </div>
 
-              {/* Personnel Table */}
-              <div className="bg-white border border-[#9fb6cf] rounded overflow-hidden max-h-80 overflow-y-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#9fb6cf] font-bold text-[11px] sticky top-0">
+              {/* Personnel Table - Fixed height container with scrolling so window never jumps */}
+              <div className="flex-1 min-h-0 bg-white border border-[#9fb6cf] rounded overflow-y-auto shadow-inner">
+                <table className="w-full text-left border-collapse text-[11.5px]">
+                  <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#9fb6cf] font-bold text-[11px] sticky top-0 z-10 shadow-2xs">
                     <tr>
-                      <th className="p-1.5">Badge #</th>
-                      <th className="p-1.5">Engineer Name</th>
-                      <th className="p-1.5">Designation</th>
-                      <th className="p-1.5">Rig Pass #</th>
-                      <th className="p-1.5 font-mono">H2S Expiry</th>
-                      <th className="p-1.5 font-mono text-right">Daily Rate ($)</th>
-                      <th className="p-1.5 text-center">Status</th>
-                      <th className="p-1.5 text-center w-14">select [✓]</th>
+                      <th className="py-1 px-2 whitespace-nowrap">Badge #</th>
+                      <th className="py-1 px-2 whitespace-nowrap">Engineer Name</th>
+                      <th className="py-1 px-2 whitespace-nowrap">Designation</th>
+                      <th className="py-1 px-2 whitespace-nowrap">Rig Pass #</th>
+                      <th className="py-1 px-2 whitespace-nowrap font-mono">H2S Expiry</th>
+                      <th className="py-1 px-2 whitespace-nowrap font-mono text-right">Daily Rate ($)</th>
+                      <th className="py-1 px-2 whitespace-nowrap text-center">Status</th>
+                      <th className="py-1 px-2 whitespace-nowrap text-center w-14">select [✓]</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {filteredPersonnelRoster.map((p) => {
-                      const isChecked = checkedPersonnelBadges.includes(p.badgeNo);
-                      return (
-                        <tr
-                          key={p.badgeNo}
-                          onClick={() => {
-                            if (isChecked) {
-                              setCheckedPersonnelBadges((prev) => prev.filter((b) => b !== p.badgeNo));
-                            } else {
-                              setCheckedPersonnelBadges((prev) => [...prev, p.badgeNo]);
-                            }
-                          }}
-                          className={`cursor-pointer transition ${
-                            isChecked ? 'bg-amber-100/70 font-semibold' : 'hover:bg-blue-50/50'
-                          }`}
-                        >
-                          <td className="p-1.5 font-mono font-bold text-slate-900">{p.badgeNo}</td>
-                          <td className="p-1.5 font-bold text-blue-900">{p.name}</td>
-                          <td className="p-1.5 text-slate-700">{p.designation}</td>
-                          <td className="p-1.5 font-mono text-[11px] text-blue-700">{p.rigPassNo}</td>
-                          <td className="p-1.5 font-mono text-[11px] text-slate-600">{p.h2sExpiry}</td>
-                          <td className="p-1.5 font-mono text-right font-bold text-slate-900">${p.dailyRateUSD.toFixed(2)}</td>
-                          <td className="p-1.5 text-center">
-                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
-                              {p.status}
-                            </span>
-                          </td>
-                          <td className="p-1.5 text-center" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setCheckedPersonnelBadges((prev) => [...prev, p.badgeNo]);
-                                } else {
-                                  setCheckedPersonnelBadges((prev) => prev.filter((b) => b !== p.badgeNo));
-                                }
-                              }}
-                              className="cursor-pointer"
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {filteredPersonnelRoster.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="p-8 text-center text-slate-500 font-medium">
+                          No personnel found for role: <strong>{selectedPersonnelRole}</strong>.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredPersonnelRoster.map((p) => {
+                        const isChecked = checkedPersonnelBadges.includes(p.badgeNo);
+                        return (
+                          <tr
+                            key={p.badgeNo}
+                            onClick={() => {
+                              if (isChecked) {
+                                setCheckedPersonnelBadges((prev) => prev.filter((b) => b !== p.badgeNo));
+                              } else {
+                                setCheckedPersonnelBadges((prev) => [...prev, p.badgeNo]);
+                              }
+                            }}
+                            className={`cursor-pointer transition h-7 leading-none ${
+                              isChecked ? 'bg-amber-100/80 font-semibold' : 'hover:bg-blue-50/60'
+                            }`}
+                          >
+                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{p.badgeNo}</td>
+                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[200px] font-bold text-blue-900" title={p.name}>{p.name}</td>
+                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[240px] text-slate-700" title={p.designation}>{p.designation}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">{p.rigPassNo}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{p.h2sExpiry}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-right font-bold text-slate-900">${p.dailyRateUSD.toFixed(2)}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-center">
+                              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+                                {p.status}
+                              </span>
+                            </td>
+                            <td className="py-1 px-2 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setCheckedPersonnelBadges((prev) => [...prev, p.badgeNo]);
+                                  } else {
+                                    setCheckedPersonnelBadges((prev) => prev.filter((b) => b !== p.badgeNo));
+                                  }
+                                }}
+                                className="cursor-pointer"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
 
-              <div className="flex items-center justify-between pt-1">
+              {/* Footer - Single clean Insert Button */}
+              <div className="flex items-center justify-between pt-1 flex-shrink-0">
                 <span className="text-slate-600 text-[11px]">
-                  Total certified personnel: <strong>{filteredPersonnelRoster.length}</strong> | Selected: <strong>{checkedPersonnelBadges.length}</strong>
+                  Total certified personnel: <strong>{filteredPersonnelRoster.length}</strong> | Selected: <strong className="text-blue-900">{checkedPersonnelBadges.length}</strong>
                 </span>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setIsPersonnelSelectOpen(false)}
-                    className="px-3 py-1 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer"
+                    className="px-3.5 py-1 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer text-xs"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={handleInsertSelectedPersonnel}
-                    className="px-4 py-1 rounded bg-[#107c41] hover:bg-[#0c6233] text-white font-bold shadow-xs cursor-pointer"
+                    disabled={checkedPersonnelBadges.length === 0}
+                    className="px-5 py-1 rounded bg-[#107c41] hover:bg-[#0c6233] disabled:opacity-50 text-white font-bold shadow-xs cursor-pointer text-xs flex items-center gap-1.5"
                   >
-                    Insert Selected Personnel
+                    <span>Insert Selected Personnel ({checkedPersonnelBadges.length})</span>
                   </button>
                 </div>
               </div>
@@ -1936,10 +1953,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       {/* ITEMSSELECT TOOL PICKER MODAL */}
       {isToolSelectOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-3 animate-in fade-in duration-150">
-          <div className="bg-[#dce6f1] border-2 border-[#1a3055] rounded-md shadow-2xl w-full max-w-4xl overflow-hidden">
-            <div className="bg-[#1a3055] text-white px-3 py-1.5 flex items-center justify-between text-xs font-bold">
+          <div
+            className="bg-[#dce6f1] border-2 border-[#1a3055] rounded-md shadow-2xl w-full max-w-4xl h-[620px] max-h-[92vh] flex flex-col overflow-hidden"
+            style={{ fontFamily: "'Calibri', 'Arial Nova', 'Segoe UI', Arial, sans-serif", fontSize: '9pt' }}
+          >
+            <div className="bg-[#1a3055] text-white px-3 py-1.5 flex items-center justify-between text-xs font-bold flex-shrink-0">
               <div className="flex items-center gap-2">
-                <span>📦</span>
                 <span>itemsselect &bull; Tool Assignment Picker</span>
               </div>
               <button
@@ -1951,18 +1970,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </button>
             </div>
 
-            <div className="p-3 text-xs space-y-3">
-              <div className="bg-white border border-[#9fb6cf] rounded p-2.5 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+            <div className="p-3 flex-1 flex flex-col min-h-0 space-y-2.5">
+              {/* Category & Size Selection - Single line filter, duplicate insert button removed */}
+              <div className="bg-white border border-[#9fb6cf] rounded p-2 flex flex-wrap items-center justify-between gap-3 shadow-2xs flex-shrink-0">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-1.5">
-                    <label className="font-extrabold text-slate-800 uppercase tracking-tight">CATEGORY :</label>
+                    <label className="font-extrabold text-slate-800 uppercase tracking-tight text-[11px]">CATEGORY :</label>
                     <select
                       value={selectedCategory}
                       onChange={(e) => {
                         setSelectedCategory(e.target.value);
                         setSelectedToolSize('');
                       }}
-                      className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs font-bold text-slate-800 w-56 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500"
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-56 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500"
                     >
                       {availableCategories.map((c) => (
                         <option key={c} value={c}>{c}</option>
@@ -1971,11 +1991,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    <label className="font-extrabold text-slate-800 uppercase tracking-tight">TOOL SIZE :</label>
+                    <label className="font-extrabold text-slate-800 uppercase tracking-tight text-[11px]">TOOL SIZE :</label>
                     <select
                       value={selectedToolSize}
                       onChange={(e) => setSelectedToolSize(e.target.value)}
-                      className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs font-bold text-slate-800 w-36 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500"
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-36 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500"
                     >
                       <option value="">All Sizes</option>
                       {availableSizes.map((s) => (
@@ -1985,38 +2005,34 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleInsertSelectedTools}
-                  className="bg-[#107c41] hover:bg-[#0c6233] text-white font-bold text-xs px-5 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>⬇️</span>
-                  <span>Insert ({checkedToolSerials.length})</span>
-                </button>
+                <div className="text-[11px] text-slate-600 font-medium">
+                  Available in Category: <strong className="text-slate-900">{modalAvailableTools.length}</strong>
+                </div>
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded p-2 text-[11px] text-blue-900 leading-snug">
-                Based on category selection, the size shows in second dropdown against that category available. User selects from the availability below with that check mark, then clicking <strong>&quot;Insert&quot;</strong> button tool will be inserted into checklist details (Reserved for Job {jobData.id}).
+              <div className="bg-blue-50 border border-blue-200 rounded px-2.5 py-1 text-[11px] text-blue-900 leading-tight flex-shrink-0">
+                Based on category selection, the size shows in second dropdown against available stock. Select with checkbox and click <strong>&quot;Insert Selected Tools&quot;</strong> to reserve tools for Job {jobData.id}.
               </div>
 
-              <div className="bg-white border border-[#9fb6cf] rounded overflow-hidden max-h-80 overflow-y-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#9fb6cf] font-bold text-[11px] sticky top-0">
+              {/* Tools Table - Fixed height container with scrolling so window height never changes */}
+              <div className="flex-1 min-h-0 bg-white border border-[#9fb6cf] rounded overflow-y-auto shadow-inner">
+                <table className="w-full text-left border-collapse text-[11.5px]">
+                  <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#9fb6cf] font-bold text-[11px] sticky top-0 z-10 shadow-2xs">
                     <tr>
-                      <th className="p-1.5">PartNo</th>
-                      <th className="p-1.5">Description</th>
-                      <th className="p-1.5 text-center w-14">DTQTY</th>
-                      <th className="p-1.5">Supplier</th>
-                      <th className="p-1.5">Ins_Date</th>
-                      <th className="p-1.5">Ins_Num</th>
-                      <th className="p-1.5">Condition</th>
-                      <th className="p-1.5 text-center w-14">select [✓]</th>
+                      <th className="py-1 px-2 whitespace-nowrap">PartNo</th>
+                      <th className="py-1 px-2 whitespace-nowrap">Description</th>
+                      <th className="py-1 px-2 whitespace-nowrap text-center w-14">DTQTY</th>
+                      <th className="py-1 px-2 whitespace-nowrap">Supplier</th>
+                      <th className="py-1 px-2 whitespace-nowrap">Ins_Date</th>
+                      <th className="py-1 px-2 whitespace-nowrap">Ins_Num</th>
+                      <th className="py-1 px-2 whitespace-nowrap">Condition</th>
+                      <th className="py-1 px-2 whitespace-nowrap text-center w-14">select [✓]</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {modalAvailableTools.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-6 text-center text-slate-500 font-medium">
+                        <td colSpan={8} className="p-8 text-center text-slate-500 font-medium">
                           No available tools found in yard for Category: <strong>{selectedCategory}</strong> {selectedToolSize && `(Size: ${selectedToolSize})`}.
                         </td>
                       </tr>
@@ -2033,18 +2049,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                                 setCheckedToolSerials((prev) => [...prev, tool.serial]);
                               }
                             }}
-                            className={`cursor-pointer transition ${
-                              isChecked ? 'bg-amber-100/70 font-semibold' : 'hover:bg-blue-50/50'
+                            className={`cursor-pointer transition h-7 leading-none ${
+                              isChecked ? 'bg-amber-100/80 font-semibold' : 'hover:bg-blue-50/60'
                             }`}
                           >
-                            <td className="p-1.5 font-mono font-bold text-slate-900">{tool.assetNo || tool.serial}</td>
-                            <td className="p-1.5 font-medium">{tool.desc || tool.shortDesc}</td>
-                            <td className="p-1.5 text-center font-bold">{tool.qty || 1}</td>
-                            <td className="p-1.5">{tool.supplier || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')}</td>
-                            <td className="p-1.5 font-mono text-[11px] text-slate-600">31-Mar-23</td>
-                            <td className="p-1.5 font-mono text-[11px] text-blue-700">GIS-Z-01073-2023</td>
-                            <td className="p-1.5 font-bold text-emerald-700">ACCEPTED</td>
-                            <td className="p-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{tool.assetNo || tool.serial}</td>
+                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={tool.desc || tool.shortDesc}>
+                              {tool.desc || tool.shortDesc}
+                            </td>
+                            <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{tool.qty || 1}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-slate-700">{tool.supplier || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">31-Mar-23</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">GIS-Z-01073-2023</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-bold text-emerald-700">ACCEPTED</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
                               <input
                                 type="checkbox"
                                 checked={isChecked}
@@ -2066,24 +2084,26 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </table>
               </div>
 
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-slate-600 text-[11px]">
-                  Total matching items: <strong>{modalAvailableTools.length}</strong> | Selected: <strong>{checkedToolSerials.length}</strong>
+              {/* Footer - Single clean Insert button next to Cancel */}
+              <div className="flex items-center justify-between pt-1 flex-shrink-0">
+                <span className="text-slate-700 text-[11px]">
+                  Total matching items: <strong>{modalAvailableTools.length}</strong> | Selected: <strong className="text-blue-900">{checkedToolSerials.length}</strong>
                 </span>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setIsToolSelectOpen(false)}
-                    className="px-3 py-1 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer"
+                    className="px-3.5 py-1 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer text-xs"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={handleInsertSelectedTools}
-                    className="px-4 py-1 rounded bg-[#107c41] hover:bg-[#0c6233] text-white font-bold shadow-xs cursor-pointer"
+                    disabled={checkedToolSerials.length === 0}
+                    className="px-5 py-1 rounded bg-[#107c41] hover:bg-[#0c6233] disabled:opacity-50 text-white font-bold shadow-xs cursor-pointer text-xs flex items-center gap-1.5"
                   >
-                    Insert Selected Tools
+                    <span>Insert Selected Tools ({checkedToolSerials.length})</span>
                   </button>
                 </div>
               </div>
