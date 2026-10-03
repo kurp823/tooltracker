@@ -57,6 +57,7 @@ interface JobsViewProps {
   onSaveRTBatch?: (batch: RTBatch) => void;
   onUpdateRTBatch?: (batch: RTBatch) => void;
   onSaveCallout?: (callout: Callout) => void;
+  onNavigateToInvoicing?: (jobId: string) => void;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
   isNewJobModalOpen: boolean;
   onCloseNewJobModal: () => void;
@@ -204,6 +205,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   onSaveRTBatch,
   onUpdateRTBatch,
   onSaveCallout,
+  onNavigateToInvoicing,
   showToast,
   isNewJobModalOpen,
   onCloseNewJobModal,
@@ -860,6 +862,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
         onUpdateRTBatch={onUpdateRTBatch}
         onSaveCallout={onSaveCallout}
         onBackToRegister={() => setDossierJob(null)}
+        onNavigateToInvoicing={onNavigateToInvoicing}
         showToast={showToast || ((msg) => alert(msg))}
       />
     );

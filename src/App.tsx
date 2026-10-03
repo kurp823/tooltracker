@@ -1384,6 +1384,11 @@ export const App: React.FC = () => {
                 setActiveView('job-tools-list');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
+              onNavigateToInvoicing={(jobId) => {
+                setSelectedJobIdForBillingPackage(jobId);
+                setActiveView('invoicing');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
               onBatchUpdateJobs={(updatedJobs) => {
                 setJobs(updatedJobs);
                 showToast(`Aligned and saved ${updatedJobs.length} jobs in system.`, 'success');

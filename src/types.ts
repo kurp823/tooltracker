@@ -229,6 +229,25 @@ export interface DrillingJob {
     wellboreCleanout2?: boolean;
     casingCleanout2?: string;
   };
+  crewMembers?: JobCrewMember[];
+}
+
+export interface JobCrewMember {
+  id: string;
+  badgeNo: string;
+  name: string;
+  designation: string; // e.g. "Lead Fishing Engineer", "Whipstock Specialist", "Field Supervisor"
+  mobDate: string;
+  demobDate?: string;
+  dailyRateUSD: number;
+  operatingDays: number;
+  standbyDays: number;
+  totalChargeUSD: number;
+  rigPassNo?: string;
+  h2sExpiry?: string;
+  status: 'Mobilized (On Rig)' | 'Demobilized' | 'Standby';
+  contactNo?: string;
+  comments?: string;
 }
 
 export interface DTLine {
