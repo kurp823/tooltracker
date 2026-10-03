@@ -282,7 +282,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     isJobInvoicedOrSubmitted ||
     (jobData.legalInvoiceNumber && jobData.legalInvoiceNumber !== '—' && jobData.legalInvoiceNumber !== '-')
   );
-  const isLocked = isClosedOrInvoiced && !isAdmin;
+  // ABSOLUTE LOCK: When closed or legally invoiced, entire job is locked in VIEW ONLY mode for everyone
+  const isJobLocked = isClosedOrInvoiced;
+  const isLocked = isJobLocked;
+
+  // Helper to remove any Performance Bank Guarantee (PBG) notes or values from contract strings
+  const cleanContractName = (raw?: string | null) => {
+    if (!raw) return '';
+    let s = raw.trim();
+    s = s.replace(/PBG\s*[:\-].*$/i, '');
+    s = s.replace(/\(AED\s+[\d,\.]+\s*-\s*OPEN\s+ENDED\)/gi, '');
+    s = s.replace(/\(AED\s+[\d,\.]+.*?\)/gi, '');
+    s = s.replace(/\.\s*$/, '').trim();
+    s = s.replace(/^Contract Description:\s*/i, '');
+    return s;
+  };
 
   // Prevent legal invoice number or draft invoice number from ever duplicating as operational ticket number
   const isInvoiceRef = (val?: string | null) => {
@@ -330,26 +344,37 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const contractOptions = useMemo(() => {
     const map = new Map<string, string>(); // Name -> Contract No
     if (jobData.contract && jobData.contract.trim()) {
-      map.set(jobData.contract.trim(), jobData.contractNo || '');
+      const cleanCurrent = cleanContractName(jobData.contract);
+      if (cleanCurrent) map.set(cleanCurrent, jobData.contractNo || '');
     }
     contracts.forEach((c) => {
-      const name = c.contractName || c.title || c.description || c.contractNumber || c.contractNo;
-      const no = c.contractNumber || c.contractNo || '';
-      if (name) map.set(name.trim(), no ? no.trim() : '');
+      let name = c.name || c.shortDesc || c.title || c.contractName || '';
+      name = cleanContractName(name);
+      if (!name && c.description) {
+        name = cleanContractName(c.description);
+      }
+      const no = (c.contractNo || c.contractNumber || '').trim();
+      if (!name) name = no;
+      if (name) {
+        map.set(name, no || map.get(name) || '');
+      }
     });
     jobs.forEach((j) => {
       if (j.contract && j.contract.trim()) {
-        map.set(j.contract.trim(), j.contractNo || '');
+        const clean = cleanContractName(j.contract);
+        if (clean) map.set(clean, j.contractNo || '');
       }
     });
     dtBatches.forEach((d) => {
       if (d.contract && d.contract.trim()) {
-        map.set(d.contract.trim(), d.contract.trim());
+        const clean = cleanContractName(d.contract);
+        if (clean) map.set(clean, d.contract.trim());
       }
     });
     callouts.forEach((c) => {
       if (c.contract && c.contract.trim()) {
-        map.set(c.contract.trim(), c.projectNo || '');
+        const clean = cleanContractName(c.contract);
+        if (clean) map.set(clean, c.projectNo || '');
       }
     });
     if (!map.has('ADNOC ONSHORE - RENTALS')) map.set('ADNOC ONSHORE - RENTALS', '4700023861');
@@ -1279,16 +1304,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setIsAdminCategoriesOpen(true)}
-              className="text-xs bg-amber-400 hover:bg-amber-300 text-slate-900 px-2.5 py-0.5 rounded font-bold cursor-pointer transition flex items-center gap-1 shadow-2xs"
-            >
-              <span>⚙️</span>
-              <span>Tool Categories &amp; Sizes (Admin)</span>
-            </button>
-          )}
           {onBackToRegister && (
             <button
               onClick={onBackToRegister}
@@ -1340,11 +1355,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 Locked (Invoiced){jobData.legalInvoiceNumber ? ` — Legal Invoice: ${jobData.legalInvoiceNumber}` : jobData.draftInvoiceNumber ? ` — Draft Invoice: ${jobData.draftInvoiceNumber}` : ''}
               </span>
             </div>
-            {isAdmin && (
-              <span className="text-[10px] bg-blue-100 text-blue-900 border border-blue-300 px-2 py-0.5 rounded font-bold">
-                Admin Super-User View
-              </span>
-            )}
           </div>
         )}
 
@@ -1469,7 +1479,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               <div className="flex items-center">
                 <label className="w-28 font-bold text-slate-700 text-right pr-3">Contract:</label>
                 <select
-                  value={jobData.contract || ''}
+                  value={cleanContractName(jobData.contract) || ''}
                   disabled={isLocked}
                   onChange={(e) => {
                     const chosen = e.target.value;
@@ -1484,7 +1494,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 >
                   {contractOptions.map((co) => (
                     <option key={co.name} value={co.name}>
-                      {co.name} {co.no ? `(${co.no})` : ''}
+                      {co.name}{co.no && co.no !== co.name ? ` (${co.no})` : ''}
                     </option>
                   ))}
                 </select>
@@ -1972,9 +1982,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
                 <div className="flex items-center gap-3">
                   <h2 className="text-sm font-bold text-[#1a3055]">Tools Check List</h2>
-                  <span className="text-xs text-slate-500 font-mono">
-                    Ticket No: <strong className="text-red-600 font-bold text-sm">{activeCallout.ticketNo || '—'}</strong>
-                  </span>
                   <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
                     activeCallout.status.includes('Closed') || activeCallout.status.includes('Released')
                       ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
@@ -2073,17 +2080,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     placeholder="Client authorization / email"
                     onChange={(e) => handleUpdateCalloutHeader('emailRef', e.target.value)}
                     className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs w-36 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                  />
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="font-bold text-slate-600 w-16">Ticket No:</span>
-                  <input
-                    type="text"
-                    value={activeCallout.ticketNo || ''}
-                    disabled={isClosedOrInvoiced || isLocked}
-                    placeholder="—"
-                    onChange={(e) => handleUpdateCalloutHeader('ticketNo', e.target.value)}
-                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-red-600 w-24 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   />
                 </div>
                 <div className="flex items-center gap-1">
@@ -2421,61 +2417,89 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         {/* TAB 6: RETURN GOODS TICKET (RGT / RT) */}
         {activeTab === 'return-tickets' && (
           <div className="space-y-3">
-            <div className="bg-[#f0f5fb] border border-[#b8cce0] rounded p-3 text-xs space-y-2">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <h3 className="font-bold text-blue-900 text-sm">RETURN GOODS TICKET</h3>
-                <span className="text-xs font-mono">
-                  TicketNo: <strong className="text-red-600 font-bold text-base">{activeRT?.rtNumber || '1555'}</strong>
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handlePrintTicket('onshore')}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer"
+            {/* RT Selector Strip */}
+            <div className="bg-[#f0f5fb] border border-[#b8cce0] rounded p-2.5 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-slate-700 whitespace-nowrap">Select Return Ticket:</label>
+                {jobRTs.length === 0 ? (
+                  <span className="text-xs text-slate-400 italic">No return tickets for this job yet.</span>
+                ) : (
+                  <select
+                    value={selectedRTNumber}
+                    onChange={(e) => setSelectedRTNumber(e.target.value)}
+                    className="bg-white border border-[#9fb6cf] rounded px-3 py-1 text-xs font-mono font-bold text-[#1a3055] shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 min-w-[240px]"
                   >
-                    Onshore ticket
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePrintTicket('offshore')}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer"
-                  >
-                    Offshore ticket
-                  </button>
-                </div>
+                    {jobRTs.map((rt) => (
+                      <option key={rt.rtNumber} value={rt.rtNumber}>
+                        {rt.rtNumber} — {rt.toolLines?.length || 0} tool(s) ({formatDateDD_MM_YYYY(rt.rtDate)})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                <div>
-                  <span className="font-bold text-slate-600">Customer:</span>{' '}
-                  <span className="font-bold text-slate-900">{jobData.client}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-600">Contract / Project:</span>{' '}
-                  <span className="font-mono">{jobData.contractNo || jobData.contract || '—'}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-600">Rig / Well:</span>{' '}
-                  <span className="font-mono font-bold text-blue-900">{jobData.rig} / {jobData.well}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-600">Date:</span>{' '}
-                  <span className="font-mono font-bold">{formatDateDD_MM_YYYY(activeRT?.rtDate || '26-08-2023')}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-600">Shipped Via:</span>{' '}
-                  <span>EMDAD</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-600">L/Note Date:</span>{' '}
-                  <span className="font-mono">{formatDateDD_MM_YYYY('24-08-2023')}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-600">L/Note No:</span>{' '}
-                  <span className="font-mono font-bold">144781</span>
-                </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handlePrintTicket('onshore')}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer"
+                >
+                  Onshore ticket
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePrintTicket('offshore')}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer"
+                >
+                  Offshore ticket
+                </button>
               </div>
             </div>
+
+            {activeRT ? (
+              <div className="bg-[#f0f5fb] border border-[#b8cce0] rounded p-3 text-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                  <h3 className="font-bold text-blue-900 text-sm">RETURN TICKET</h3>
+                  <span className="text-xs font-mono">
+                    TicketNo: <strong className="text-red-600 font-bold text-base">{activeRT.rtNumber || '—'}</strong>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                  <div>
+                    <span className="font-bold text-slate-600">Customer:</span>{' '}
+                    <span className="font-bold text-slate-900">{jobData.client}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">Contract / Project:</span>{' '}
+                    <span className="font-mono">{jobData.contractNo || cleanContractName(jobData.contract) || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">Rig / Well:</span>{' '}
+                    <span className="font-mono font-bold text-blue-900">{jobData.rig} / {jobData.well}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">Date:</span>{' '}
+                    <span className="font-mono font-bold">{activeRT.rtDate ? formatDateDD_MM_YYYY(activeRT.rtDate) : '—'}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">Shipped Via:</span>{' '}
+                    <span>{activeRT.carrier || 'EMDAD'}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">L/Note Date:</span>{' '}
+                    <span className="font-mono">{activeRT.loadingNoteDate ? formatDateDD_MM_YYYY(activeRT.loadingNoteDate) : '—'}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">L/Note No:</span>{' '}
+                    <span className="font-mono font-bold">{activeRT.loadingNoteNo || activeRT.lNoteNo || '—'}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-slate-500 font-medium bg-slate-50 border border-slate-200 rounded">
+                No Return Tickets issued yet for Job {jobData.id}.
+              </div>
+            )}
 
             {/* Upper Table: Tools in active RT */}
             <div className="border border-[#b8cce0] rounded overflow-hidden">
@@ -2508,7 +2532,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
                         <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
                         <td className="py-1 px-2 whitespace-nowrap text-center font-mono font-bold text-blue-800">{activeRT.rtNumber}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{formatDateDD_MM_YYYY(activeRT.rtDate || '24-08-2023')}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{activeRT.rtDate ? formatDateDD_MM_YYYY(activeRT.rtDate) : '—'}</td>
                         <td className="py-1 px-2 whitespace-nowrap">
                           <select
                             defaultValue={t.used ? 'USED' : 'NOT USED'}
@@ -2690,136 +2714,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </div>
             </div>
 
-            {/* 1. Downhole Tool Fleet Utilization Matrix */}
+            {/* 1. Field Engineer & Crew Utilization Section (First) */}
             <div>
-              <div className="bg-[#1a3055] text-white px-3 py-1.5 rounded-t font-bold text-xs flex items-center justify-between">
-                <span>Downhole Tool Fleet Utilization &bull; {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}</span>
-                <span className="text-emerald-400 font-mono text-[11px]">
-                  Total Tool Revenue: {totalToolRevenueAED.toLocaleString()} AED
-                </span>
-              </div>
-              <div className="border border-slate-300 rounded-b overflow-x-auto bg-white shadow-inner">
-                <table className="w-full text-left text-[11px] border-collapse min-w-[1200px]">
-                  <thead className="bg-[#e9f0f8] text-[#1a3055] font-bold border-b border-slate-300">
-                    <tr>
-                      <th className="p-1 text-center w-8">#</th>
-                      <th className="p-1 whitespace-nowrap">DT NO</th>
-                      <th className="p-1 whitespace-nowrap">DEL DATE</th>
-                      <th className="p-1 whitespace-nowrap">ASSET / SERIAL</th>
-                      <th className="p-1 whitespace-nowrap min-w-[140px]">DESCRIPTION</th>
-                      <th className="p-1 text-center w-8">QTY</th>
-                      <th className="p-1 text-center whitespace-nowrap">STATUS</th>
-                      {utilDaysList.map((d) => (
-                        <th key={d} className="p-0.5 text-center w-6 font-mono text-[10px] bg-slate-200/60 border-x border-slate-300">
-                          {d}
-                        </th>
-                      ))}
-                      <th className="p-1 text-center bg-blue-100 text-blue-950 font-bold whitespace-nowrap">TOTAL SB</th>
-                      <th className="p-1 text-center bg-emerald-100 text-emerald-950 font-bold whitespace-nowrap">TOTAL OPS</th>
-                      <th className="p-1 text-right bg-slate-100 text-slate-900 font-bold whitespace-nowrap">SB RATE</th>
-                      <th className="p-1 text-right bg-slate-100 text-slate-900 font-bold whitespace-nowrap">OPS RATE</th>
-                      <th className="p-1 text-right bg-blue-50 text-blue-950 font-bold whitespace-nowrap">TOTAL STDBY RATE</th>
-                      <th className="p-1 text-right bg-emerald-50 text-emerald-950 font-bold whitespace-nowrap">TOTAL OPS RATE</th>
-                      <th className="p-1 text-right bg-slate-100 text-slate-900 font-bold whitespace-nowrap">RUN CHARGE</th>
-                      <th className="p-1 text-right bg-slate-100 text-slate-900 font-bold whitespace-nowrap">REDRESS CHARGE</th>
-                      <th className="p-1 text-right bg-amber-100 text-amber-950 font-bold pr-2 whitespace-nowrap">TOTAL VALUE FOR MONTH</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {toolUtilizationRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={utilDaysList.length + 16} className="p-8 text-center text-slate-500 font-medium">
-                          No mobilized tools found for Job {jobData.id} in {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}.
-                        </td>
-                      </tr>
-                    ) : (
-                      toolUtilizationRows.map((row) => (
-                        <tr key={row.rowSeq} className="hover:bg-blue-50/50 h-7 leading-none">
-                          <td className="p-1 text-center font-mono text-slate-500">{row.rowSeq}</td>
-                          <td className="p-1 font-mono text-blue-700 font-bold whitespace-nowrap">{row.dtNumber}</td>
-                          <td className="p-1 font-mono whitespace-nowrap text-[10px]">{formatDateDD_MM_YYYY(row.dispatchDate)}</td>
-                          <td className="p-1 font-mono font-bold whitespace-nowrap">{row.serial || row.assetNo}</td>
-                          <td className="p-1 truncate max-w-[200px]" title={row.desc || row.shortDesc}>{row.desc || row.shortDesc}</td>
-                          <td className="p-1 text-center font-bold">{row.qty || 1}</td>
-                          <td className="p-1 text-center whitespace-nowrap">
-                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
-                              {row.status || 'On Rig'}
-                            </span>
-                          </td>
-                          {utilDaysList.map((day) => {
-                            const val = row.dayStatuses[day];
-                            return (
-                              <td
-                                key={day}
-                                className={`p-0.5 text-center font-mono font-bold text-[10px] border-x border-slate-100 ${
-                                  val === '1'
-                                    ? 'bg-emerald-100 text-emerald-900'
-                                    : val === 'S'
-                                    ? 'bg-blue-100 text-blue-900'
-                                    : ''
-                                }`}
-                              >
-                                {val}
-                              </td>
-                            );
-                          })}
-                          <td className="p-1 text-center font-bold text-blue-800 bg-blue-50/40">{row.sbCount}</td>
-                          <td className="p-1 text-center font-bold text-emerald-800 bg-emerald-50/40">{row.opsCount}</td>
-                          <td className="p-1 text-right font-mono text-slate-700">{row.standbyRate.toLocaleString()}</td>
-                          <td className="p-1 text-right font-mono text-slate-700">{row.opsRate.toLocaleString()}</td>
-                          <td className="p-1 text-right font-mono font-bold text-blue-900 bg-blue-50/30">{row.totalStandbyRate.toLocaleString()}</td>
-                          <td className="p-1 text-right font-mono font-bold text-emerald-900 bg-emerald-50/30">{row.totalOpsRate.toLocaleString()}</td>
-                          <td className="p-1 text-right font-mono text-slate-600">{row.runCharge.toLocaleString()}</td>
-                          <td className="p-1 text-right font-mono text-slate-600">{row.redressCharge.toLocaleString()}</td>
-                          <td className="p-1 text-right font-mono font-bold pr-2 text-slate-900 bg-amber-50/50">{row.totalMonthValue.toLocaleString()} AED</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                  {toolUtilizationRows.length > 0 && (
-                    <tfoot className="bg-[#e9f0f8] font-bold text-[#1a3055] border-t-2 border-slate-300">
-                      <tr>
-                        <td colSpan={7} className="p-1.5 text-right uppercase">Fleet Totals:</td>
-                        {utilDaysList.map((day) => {
-                          const dayActiveCount = toolUtilizationRows.filter((r) => r.dayStatuses[day] !== '').length;
-                          return (
-                            <td key={day} className="p-0.5 text-center font-mono text-[10px] text-slate-700 border-x border-slate-300">
-                              {dayActiveCount || ''}
-                            </td>
-                          );
-                        })}
-                        <td className="p-1.5 text-center font-mono text-blue-900">{monthTotalSB}</td>
-                        <td className="p-1.5 text-center font-mono text-emerald-900">{monthTotalOps}</td>
-                        <td className="p-1.5 text-right font-mono text-slate-500">—</td>
-                        <td className="p-1.5 text-right font-mono text-slate-500">—</td>
-                        <td className="p-1.5 text-right font-mono text-blue-900">{monthTotalSBRate.toLocaleString()}</td>
-                        <td className="p-1.5 text-right font-mono text-emerald-900">{monthTotalOpsRate.toLocaleString()}</td>
-                        <td className="p-1.5 text-right font-mono text-slate-700">{monthTotalRunCharge.toLocaleString()}</td>
-                        <td className="p-1.5 text-right font-mono text-slate-700">{monthTotalRedress.toLocaleString()}</td>
-                        <td className="p-1.5 text-right font-mono text-base text-slate-900 pr-2">
-                          {totalToolRevenueAED.toLocaleString()} AED
-                        </td>
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </div>
-
-              {/* Cumulative Job Value Banner so Ops knows how much they made */}
-              <div className="mt-2 bg-[#1a3055] text-white p-2.5 rounded flex flex-wrap items-center justify-between text-xs font-bold shadow-xs gap-2">
-                <div className="flex items-center gap-2">
-                  <span>📊</span>
-                  <span className="uppercase tracking-wide">TOTAL JOB VALUE (All Months &amp; Life of Job):</span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-slate-300 font-normal">Active Window: {utilMonthOptions[0]?.label} &rarr; {utilMonthOptions[utilMonthOptions.length - 1]?.label}</span>
-                  <span className="text-amber-300 font-mono text-base font-extrabold">{totalCumulativeJobValue.toLocaleString()} AED</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Field Engineer & Crew Utilization Section */}
-            <div className="pt-2">
               <div className="bg-[#1a3055] text-white px-3 py-1.5 rounded-t font-bold text-xs flex items-center justify-between">
                 <span>Field Engineer &amp; Rig Crew Utilization &bull; {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}</span>
                 <span className="text-amber-300 font-mono text-[11px]">
@@ -2827,24 +2723,24 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </span>
               </div>
               <div className="border border-slate-300 rounded-b overflow-x-auto bg-white shadow-inner">
-                <table className="w-full text-left text-[11px] border-collapse min-w-[960px]">
+                <table className="w-full text-left text-[11px] border-collapse min-w-[1700px]">
                   <thead className="bg-[#e9f0f8] text-[#1a3055] font-bold border-b border-slate-300">
                     <tr>
-                      <th className="p-1 text-center w-8">#</th>
-                      <th className="p-1 whitespace-nowrap">BADGE #</th>
-                      <th className="p-1 whitespace-nowrap min-w-[140px]">ENGINEER NAME</th>
-                      <th className="p-1 whitespace-nowrap min-w-[150px]">DESIGNATION / ROLE</th>
-                      <th className="p-1 whitespace-nowrap">MOB DATE</th>
-                      <th className="p-1 whitespace-nowrap">DEMOB DATE</th>
-                      <th className="p-1 text-center whitespace-nowrap">DAILY RATE</th>
+                      <th className="p-1.5 text-center w-9 min-w-[36px]">#</th>
+                      <th className="p-1.5 whitespace-nowrap min-w-[90px]">BADGE #</th>
+                      <th className="p-1.5 whitespace-nowrap min-w-[180px]">ENGINEER NAME</th>
+                      <th className="p-1.5 whitespace-nowrap min-w-[170px]">DESIGNATION / ROLE</th>
+                      <th className="p-1.5 whitespace-nowrap min-w-[95px]">MOB DATE</th>
+                      <th className="p-1.5 whitespace-nowrap min-w-[95px]">DEMOB DATE</th>
+                      <th className="p-1.5 text-center whitespace-nowrap min-w-[90px]">DAILY RATE</th>
                       {utilDaysList.map((d) => (
-                        <th key={d} className="p-0.5 text-center w-6 font-mono text-[10px] bg-slate-200/60 border-x border-slate-300">
+                        <th key={d} className="p-0.5 text-center w-7 min-w-[28px] font-mono text-[11px] bg-slate-200/70 border-x border-slate-300">
                           {d}
                         </th>
                       ))}
-                      <th className="p-1 text-center bg-blue-100 text-blue-950 font-bold whitespace-nowrap">SB DAYS</th>
-                      <th className="p-1 text-center bg-emerald-100 text-emerald-950 font-bold whitespace-nowrap">OPS DAYS</th>
-                      <th className="p-1 text-right bg-slate-100 text-slate-900 font-bold pr-2 whitespace-nowrap">TOTAL (USD)</th>
+                      <th className="p-1.5 text-center bg-blue-100 text-blue-950 font-bold whitespace-nowrap min-w-[70px]">SB DAYS</th>
+                      <th className="p-1.5 text-center bg-emerald-100 text-emerald-950 font-bold whitespace-nowrap min-w-[70px]">OPS DAYS</th>
+                      <th className="p-1.5 text-right bg-slate-100 text-slate-900 font-bold pr-2 whitespace-nowrap min-w-[110px]">TOTAL (USD)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -2913,6 +2809,134 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     </tfoot>
                   )}
                 </table>
+              </div>
+            </div>
+
+            {/* 2. Downhole Tool Fleet Utilization Matrix (Second) */}
+            <div className="pt-2">
+              <div className="bg-[#1a3055] text-white px-3 py-1.5 rounded-t font-bold text-xs flex items-center justify-between">
+                <span>Downhole Tool Fleet Utilization &bull; {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}</span>
+                <span className="text-emerald-400 font-mono text-[11px]">
+                  Total Tool Revenue: {totalToolRevenueAED.toLocaleString()} AED
+                </span>
+              </div>
+              <div className="border border-slate-300 rounded-b overflow-x-auto bg-white shadow-inner">
+                <table className="w-full text-left text-[11px] border-collapse min-w-[2400px]">
+                  <thead className="bg-[#e9f0f8] text-[#1a3055] font-bold border-b border-slate-300">
+                    <tr>
+                      <th className="p-1.5 text-center w-9 min-w-[36px]">#</th>
+                      <th className="p-1.5 whitespace-nowrap min-w-[110px]">DT NO</th>
+                      <th className="p-1.5 whitespace-nowrap min-w-[95px]">DEL DATE</th>
+                      <th className="p-1.5 whitespace-nowrap min-w-[130px]">ASSET / SERIAL</th>
+                      <th className="p-1.5 whitespace-nowrap min-w-[240px]">DESCRIPTION</th>
+                      <th className="p-1.5 text-center w-12 min-w-[48px]">QTY</th>
+                      <th className="p-1.5 text-center whitespace-nowrap min-w-[90px]">STATUS</th>
+                      {utilDaysList.map((d) => (
+                        <th key={d} className="p-0.5 text-center w-7 min-w-[28px] font-mono text-[11px] bg-slate-200/70 border-x border-slate-300">
+                          {d}
+                        </th>
+                      ))}
+                      <th className="p-1.5 text-center bg-blue-100 text-blue-950 font-bold whitespace-nowrap min-w-[75px]">TOTAL SB</th>
+                      <th className="p-1.5 text-center bg-emerald-100 text-emerald-950 font-bold whitespace-nowrap min-w-[75px]">TOTAL OPS</th>
+                      <th className="p-1.5 text-right bg-slate-100 text-slate-900 font-bold whitespace-nowrap min-w-[90px]">SB RATE</th>
+                      <th className="p-1.5 text-right bg-slate-100 text-slate-900 font-bold whitespace-nowrap min-w-[90px]">OPS RATE</th>
+                      <th className="p-1.5 text-right bg-blue-50 text-blue-950 font-bold whitespace-nowrap min-w-[120px]">TOTAL STDBY RATE</th>
+                      <th className="p-1.5 text-right bg-emerald-50 text-emerald-950 font-bold whitespace-nowrap min-w-[120px]">TOTAL OPS RATE</th>
+                      <th className="p-1.5 text-right bg-slate-100 text-slate-900 font-bold whitespace-nowrap min-w-[100px]">RUN CHARGE</th>
+                      <th className="p-1.5 text-right bg-slate-100 text-slate-900 font-bold whitespace-nowrap min-w-[105px]">REDRESS CHARGE</th>
+                      <th className="p-1.5 text-right bg-amber-100 text-amber-950 font-bold pr-3 whitespace-nowrap min-w-[160px]">TOTAL VALUE FOR MONTH</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {toolUtilizationRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={utilDaysList.length + 16} className="p-8 text-center text-slate-500 font-medium">
+                          No mobilized tools found for Job {jobData.id} in {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}.
+                        </td>
+                      </tr>
+                    ) : (
+                      toolUtilizationRows.map((row) => (
+                        <tr key={row.rowSeq} className="hover:bg-blue-50/50 h-7 leading-none">
+                          <td className="p-1 text-center font-mono text-slate-500">{row.rowSeq}</td>
+                          <td className="p-1 font-mono text-blue-700 font-bold whitespace-nowrap">{row.dtNumber}</td>
+                          <td className="p-1 font-mono whitespace-nowrap text-[10px]">{formatDateDD_MM_YYYY(row.dispatchDate)}</td>
+                          <td className="p-1 font-mono font-bold whitespace-nowrap">{row.serial || row.assetNo}</td>
+                          <td className="p-1 truncate max-w-[240px]" title={row.desc || row.shortDesc}>{row.desc || row.shortDesc}</td>
+                          <td className="p-1 text-center font-bold">{row.qty || 1}</td>
+                          <td className="p-1 text-center whitespace-nowrap">
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
+                              {row.status || 'On Rig'}
+                            </span>
+                          </td>
+                          {utilDaysList.map((day) => {
+                            const val = row.dayStatuses[day];
+                            return (
+                              <td
+                                key={day}
+                                className={`p-0.5 text-center font-mono font-bold text-[10px] border-x border-slate-100 ${
+                                  val === '1'
+                                    ? 'bg-emerald-100 text-emerald-900'
+                                    : val === 'S'
+                                    ? 'bg-blue-100 text-blue-900'
+                                    : ''
+                                }`}
+                              >
+                                {val}
+                              </td>
+                            );
+                          })}
+                          <td className="p-1 text-center font-bold text-blue-800 bg-blue-50/40">{row.sbCount}</td>
+                          <td className="p-1 text-center font-bold text-emerald-800 bg-emerald-50/40">{row.opsCount}</td>
+                          <td className="p-1 text-right font-mono text-slate-700">{row.standbyRate.toLocaleString()}</td>
+                          <td className="p-1 text-right font-mono text-slate-700">{row.opsRate.toLocaleString()}</td>
+                          <td className="p-1 text-right font-mono font-bold text-blue-900 bg-blue-50/30">{row.totalStandbyRate.toLocaleString()}</td>
+                          <td className="p-1 text-right font-mono font-bold text-emerald-900 bg-emerald-50/30">{row.totalOpsRate.toLocaleString()}</td>
+                          <td className="p-1 text-right font-mono text-slate-600">{row.runCharge.toLocaleString()}</td>
+                          <td className="p-1 text-right font-mono text-slate-600">{row.redressCharge.toLocaleString()}</td>
+                          <td className="p-1 text-right font-mono font-bold pr-2 text-slate-900 bg-amber-50/50">{row.totalMonthValue.toLocaleString()} AED</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  {toolUtilizationRows.length > 0 && (
+                    <tfoot className="bg-[#e9f0f8] font-bold text-[#1a3055] border-t-2 border-slate-300">
+                      <tr>
+                        <td colSpan={7} className="p-1.5 text-right uppercase">Fleet Totals:</td>
+                        {utilDaysList.map((day) => {
+                          const dayActiveCount = toolUtilizationRows.filter((r) => r.dayStatuses[day] !== '').length;
+                          return (
+                            <td key={day} className="p-0.5 text-center font-mono text-[10px] text-slate-700 border-x border-slate-300">
+                              {dayActiveCount || ''}
+                            </td>
+                          );
+                        })}
+                        <td className="p-1.5 text-center font-mono text-blue-900">{monthTotalSB}</td>
+                        <td className="p-1.5 text-center font-mono text-emerald-900">{monthTotalOps}</td>
+                        <td className="p-1.5 text-right font-mono text-slate-500">—</td>
+                        <td className="p-1.5 text-right font-mono text-slate-500">—</td>
+                        <td className="p-1.5 text-right font-mono text-blue-900">{monthTotalSBRate.toLocaleString()}</td>
+                        <td className="p-1.5 text-right font-mono text-emerald-900">{monthTotalOpsRate.toLocaleString()}</td>
+                        <td className="p-1.5 text-right font-mono text-slate-700">{monthTotalRunCharge.toLocaleString()}</td>
+                        <td className="p-1.5 text-right font-mono text-slate-700">{monthTotalRedress.toLocaleString()}</td>
+                        <td className="p-1.5 text-right font-mono text-base text-slate-900 pr-2">
+                          {totalToolRevenueAED.toLocaleString()} AED
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+
+            {/* 3. FINAL FOOTER: TOTAL JOB VALUE (All Months & Life of Job) */}
+            <div className="bg-[#1a3055] text-white p-3 rounded flex flex-wrap items-center justify-between text-xs font-bold shadow-md gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-base">📊</span>
+                <span className="uppercase tracking-wide text-sm">TOTAL JOB VALUE (All Months &amp; Life of Job):</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-slate-300 font-normal">Active Window: {utilMonthOptions[0]?.label} &rarr; {utilMonthOptions[utilMonthOptions.length - 1]?.label}</span>
+                <span className="text-amber-300 font-mono text-base font-extrabold">{totalCumulativeJobValue.toLocaleString()} AED</span>
               </div>
             </div>
           </div>
