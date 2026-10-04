@@ -163,14 +163,13 @@ export const getJobEndDate = (job: DrillingJob, rtBatches?: RTBatch[]): string =
   return job.demobDate || '';
 };
 
-// Normalize keys to allow cross-matching between Job-023-00002-1, Job-023-00002, and 023-00002
+// Normalize keys to allow exact cross-matching (e.g. Job-023-00002 <-> 023-00002)
 const normalizeJobKey = (str?: string): string => {
   if (!str) return '';
   return str
     .trim()
     .toUpperCase()
-    .replace(/^JOB[-_]?/i, '')
-    .replace(/[-_]0?1$/i, '');
+    .replace(/^JOB[-_]?/i, '');
 };
 
 // Natural sequential sorter for Job IDs (handles Job-023-00001, Job-023-00002-1, JOB-26-00001)

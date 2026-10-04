@@ -205,13 +205,11 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
         } else if (line.status === 'Returned' || line.rtBatchId) {
           const directRt = rtBatches.find(
             (b) =>
-              b.id === line.rtBatchId ||
-              b.rtNumber === line.rtBatchId ||
-              (b as any).rgtNo === line.rtBatchId ||
-              (b.jobId && normalizeJobKey(b.jobId) === normJob)
+              (line.rtBatchId && (b.id === line.rtBatchId || b.rtNumber === line.rtBatchId || (b as any).rgtNo === line.rtBatchId)) ||
+              ((b.toolLines || []).some((rtl) => (rtl.serial && rtl.serial.trim().toUpperCase() === lineSerial) || (rtl.assetNo && rtl.assetNo.trim().toUpperCase() === lineSerial)))
           );
           retNum = directRt?.rtNumber || (directRt as any)?.rgtNo || line.rtBatchId || 'Returned';
-          retDate = directRt?.rtDate || directRt?.backloadRmDate || (line as any).rtDate || (line as any).returnDate || (line as any).dateIn || (linkedJob?.demobDate || '');
+          retDate = directRt?.rtDate || directRt?.backloadRmDate || (line as any).rtDate || (line as any).returnDate || (line as any).dateIn || '';
           remark = line.used ? 'Used' : 'Not Used';
         }
 

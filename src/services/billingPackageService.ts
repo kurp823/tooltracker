@@ -195,7 +195,8 @@ export function generateInvoicePackageForJob(
   const dtRefs = jobDTs.map((d) => d.dtNumber).filter(Boolean);
   const rtRefs = jobRTs.map((r) => r.rtNumber).filter(Boolean);
 
-  const mobDateRaw = job.mobDate || (jobDTs[0]?.dispatchDate || jobDTs[0]?.rmDate) || '2025-05-27';
+  const todayStr = new Date().toISOString().split('T')[0];
+  const mobDateRaw = job.mobDate || (jobDTs[0]?.dispatchDate || jobDTs[0]?.rmDate) || todayStr;
   let demobDateRaw = job.demobDate || job.lastRtDate || job.finalInvoicedDate || (jobRTs[0]?.rtDate) || '';
   if (!demobDateRaw) {
     try {
@@ -203,22 +204,22 @@ export function generateInvoicePackageForJob(
       d.setDate(d.getDate() + 29);
       demobDateRaw = d.toISOString().split('T')[0];
     } catch {
-      demobDateRaw = '2025-06-25';
+      demobDateRaw = todayStr;
     }
   }
 
-  const mobDateFormatted = formatJobDisplayDate(mobDateRaw, '27-May-2025');
-  const demobDateFormatted = formatJobDisplayDate(demobDateRaw, '25-Jun-2025');
+  const mobDateFormatted = formatJobDisplayDate(mobDateRaw, '—');
+  const demobDateFormatted = formatJobDisplayDate(demobDateRaw, '—');
 
   // Calculate rental days
-  let rentalDays = 29;
+  let rentalDays = 1;
   try {
     const d1 = new Date(mobDateRaw).getTime();
     const d2 = new Date(demobDateRaw).getTime();
     const diff = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
     if (diff > 0) rentalDays = diff;
   } catch {
-    rentalDays = 29;
+    rentalDays = 1;
   }
 
   // Invoice identifiers
@@ -226,16 +227,16 @@ export function generateInvoicePackageForJob(
     options?.invoiceNo ||
     job.legalInvoiceNumber ||
     job.draftInvoiceNumber ||
-    (job.id ? `INV-${job.id.replace(/^JOB[-_]?/i, '')}` : '216205');
+    (job.id ? `INV-${job.id.replace(/^JOB[-_]?/i, '')}` : 'INV-DRAFT');
 
   const invDate =
     options?.invoiceDate ||
-    (job.finalInvoicedDate ? formatJobDisplayDate(job.finalInvoicedDate) : (job.invoiceDate ? formatJobDisplayDate(job.invoiceDate) : '16-Jan-2026'));
+    (job.finalInvoicedDate ? formatJobDisplayDate(job.finalInvoicedDate) : (job.invoiceDate ? formatJobDisplayDate(job.invoiceDate) : formatJobDisplayDate(todayStr)));
 
   const dateOfSupply = options?.dateOfSupply || mobDateFormatted;
 
-  const derivedDT = `DT-0${job.id.replace(/[^0-9]/g, '').slice(-4) || '2171'}`;
-  const derivedRT = `RT-0${job.id.replace(/[^0-9]/g, '').slice(-4) || '2214'}`;
+  const derivedDT = `DT-0${job.id.replace(/[^0-9]/g, '').slice(-4) || '0001'}`;
+  const derivedRT = `RT-0${job.id.replace(/[^0-9]/g, '').slice(-4) || '0001'}`;
 
   const deliveryTicketRefs = dtRefs.length > 0 ? dtRefs.join(', ') : derivedDT;
   const returnLoadingNoteNo = rtRefs.length > 0 ? rtRefs.join(', ') : derivedRT;
@@ -278,43 +279,48 @@ export function generateInvoicePackageForJob(
 
   const poNo =
     options?.poNo ||
-    (job.poNumber && job.poNumber !== '0' && job.poNumber !== '' ? job.poNumber : (contract?.poNumber || '4200237257'));
+    (job.poNumber && job.poNumber !== '0' && job.poNumber !== '' ? job.poNumber : (contract?.poNumber || '—'));
 
   const contractNo =
     (job.contract && job.contract !== '—' && !job.contract.startsWith('TW-')) ? job.contract : (contract?.contractNo || '444558');
 
+  // Standby cap determination based on client contract:
+  // - ADNOC Onshore: max 6 standby days per job
+  // - ADNOC Drilling: max 10 standby days per month
+  // - Other contracts: no standby cap
+  const isAdnocOnshore = cStr.includes('ONSHORE') || cStr.includes('ADCO');
+  const isAdnocDrilling = cStr.includes('DRILLING');
+
   // Build calculation lines
   let lines: CalculationTicketLine[] = [];
-  const isSampleAdnocJob = job.id === 'Job-025-01160' || (job.contract === '444558' && String(job.id).includes('1160'));
 
-  if (isSampleAdnocJob) {
-    // Generate the real 44 lines from the client submission package
-    lines = getPredefinedSampleLines();
-  } else if (jobDTs.length > 0 && jobDTs.some((dt) => dt.toolLines && dt.toolLines.length > 0)) {
-    // Dynamically derive from DT and RT batches
+  if (jobDTs.length > 0 && jobDTs.some((dt) => dt.toolLines && dt.toolLines.length > 0)) {
+    // Dynamically derive from live DT and RT batches
     let itemSeq = 1;
 
-    // Personnel line
-    lines.push({
-      itemNo: itemSeq++,
-      serialNumber: 'SUBCTR24',
-      toolDescription: 'JOSE SALOMAO - FISHING ENGINEER',
-      qty: 1,
-      deliveryTicketNo: '',
-      deliveryDate: mobDateFormatted,
-      returnDate: demobDateFormatted,
-      rentalDays: 4,
-      rgtNo: '',
-      contractRefOper: 'A.4.33',
-      contractRefStandby: 'A.4.33',
-      operDays: 4,
-      operRateUSD: 850.00,
-      standbyDays: 0,
-      standbyRateUSD: 0.00,
-      operTotalUSD: 3400.00,
-      standbyTotalUSD: 0.00,
-      totalChargesUSD: 3400.00,
-    });
+    // Optional Personnel line if assigned
+    if (job.leadEngineer || job.serviceType?.toLowerCase().includes('engineer')) {
+      lines.push({
+        itemNo: itemSeq++,
+        serialNumber: 'SUBCTR-ENG',
+        toolDescription: `${job.leadEngineer || 'FISHING SPECIALIST'} - FIELD ENGINEER`,
+        qty: 1,
+        deliveryTicketNo: '',
+        deliveryDate: mobDateFormatted,
+        returnDate: demobDateFormatted,
+        rentalDays: Math.min(rentalDays, 4),
+        rgtNo: '',
+        contractRefOper: 'A.4.33',
+        contractRefStandby: 'A.4.33',
+        operDays: Math.min(rentalDays, 4),
+        operRateUSD: 850.00,
+        standbyDays: 0,
+        standbyRateUSD: 0.00,
+        operTotalUSD: Math.min(rentalDays, 4) * 850.00,
+        standbyTotalUSD: 0.00,
+        totalChargesUSD: Math.min(rentalDays, 4) * 850.00,
+      });
+    }
 
     jobDTs.forEach((dt) => {
       (dt.toolLines || []).forEach((tl) => {
@@ -337,7 +343,14 @@ export function generateInvoicePackageForJob(
 
         const isOper = tl.used === true;
         const operDays = isOper ? 2 : 0;
-        const standbyDays = Math.max(0, rentalDays - operDays);
+        const uncappedStandby = Math.max(0, rentalDays - operDays);
+        let standbyDays = uncappedStandby;
+        if (isAdnocOnshore) {
+          standbyDays = Math.min(uncappedStandby, 6);
+        } else if (isAdnocDrilling) {
+          standbyDays = Math.min(uncappedStandby, 10);
+        }
+
         const operTotalUSD = operDays * rateLookup.operRate;
         const standbyTotalUSD = Math.round(standbyDays * rateLookup.standbyRate * 100) / 100;
         const totalChargesUSD = Math.round((operTotalUSD + standbyTotalUSD) * 100) / 100;
@@ -365,33 +378,11 @@ export function generateInvoicePackageForJob(
       });
     });
   } else {
-    // Generate tailored, realistic lines matching the specific job's attributes
+    // Generate tailored lines matching the specific job's attributes
     let itemSeq = 1;
     const numTools = Math.max(2, job.dtToolsCount || 3);
 
-    // 1. Crew Engineer
-    lines.push({
-      itemNo: itemSeq++,
-      serialNumber: 'SUBCTR24',
-      toolDescription: 'JOSE SALOMAO - FISHING ENGINEER',
-      qty: 1,
-      deliveryTicketNo: '',
-      deliveryDate: mobDateFormatted,
-      returnDate: demobDateFormatted,
-      rentalDays: 4,
-      rgtNo: '',
-      contractRefOper: 'A.4.33',
-      contractRefStandby: 'A.4.33',
-      operDays: 4,
-      operRateUSD: 850.00,
-      standbyDays: 0,
-      standbyRateUSD: 0.00,
-      operTotalUSD: 3400.00,
-      standbyTotalUSD: 0.00,
-      totalChargesUSD: 3400.00,
-    });
-
-    // 2. Standard fishing tool items matching rig assembly
+    // Standard fishing tool items matching rig assembly
     const defaultAssembly = [
       { desc: '5-3/4" FS OVERSHOT W/ 3-1/2" IF BOX', prefix: 'OS534', operRate: 0, standbyRate: 32.84, ref: 'A.4.1', isOper: false },
       { desc: '4-3/4" LOGAN SUPER FISHING JAR W/ 3-1/2" IF', prefix: 'SPFJ434', operRate: 0, standbyRate: 33.88, ref: 'A.4.8', isOper: false },
@@ -406,7 +397,14 @@ export function generateInvoicePackageForJob(
       const serial = `${template.prefix}-${job.id.replace(/[^0-9]/g, '').slice(-3) || '101'}-${i + 1}`;
       const isOper = template.isOper;
       const operDays = isOper ? 2 : 0;
-      const toolStandbyDays = Math.max(0, rentalDays - operDays);
+      const uncappedStandby = Math.max(0, rentalDays - operDays);
+      let toolStandbyDays = uncappedStandby;
+      if (isAdnocOnshore) {
+        toolStandbyDays = Math.min(uncappedStandby, 6);
+      } else if (isAdnocDrilling) {
+        toolStandbyDays = Math.min(uncappedStandby, 10);
+      }
+
       const operTotalUSD = Math.round(operDays * template.operRate * 100) / 100;
       const standbyTotalUSD = Math.round(toolStandbyDays * template.standbyRate * 100) / 100;
       const totalChargesUSD = Math.round((operTotalUSD + standbyTotalUSD) * 100) / 100;
@@ -585,54 +583,7 @@ export function generateInvoicePackageForJob(
     });
   }
 
-  // Fallback demo attachments if the job has none yet and matches sample data
-  if (attachedDocuments.length === 0 && (job.id === 'Job-025-01160' || job.id.includes('1160'))) {
-    attachedDocuments.push(
-      {
-        id: 'att-sample-dt-1',
-        name: 'DT-02171_Signed_Delivery_Ticket_&_Manifest.pdf',
-        url: '',
-        category: 'Combined DT & Manifest',
-        sourceType: 'DT',
-        sourceRef: 'DT-02171',
-        uploadDate: '25-10-2025',
-        uploadedBy: 'Muhammad Tariq (EMDAD Base)',
-        notes: 'Signed Delivery Ticket and Client Cargo Manifest scanned as single document.',
-      },
-      {
-        id: 'att-sample-dt-2',
-        name: 'DT-02311_Signed_Delivery_Ticket.pdf',
-        url: '',
-        category: 'Signed Delivery Ticket',
-        sourceType: 'DT',
-        sourceRef: 'DT-02311',
-        uploadDate: '27-11-2025',
-        uploadedBy: 'Muhammad Tariq (EMDAD Base)',
-      },
-      {
-        id: 'att-sample-rt-1',
-        name: 'RT-02214_Signed_Receiving_&_Demob_Manifest.pdf',
-        url: '',
-        category: 'Combined RT & Demob Manifest',
-        sourceType: 'RT',
-        sourceRef: 'RT-02214',
-        uploadDate: '18-12-2025',
-        uploadedBy: 'Receiving Inspection Yard Lead',
-        notes: 'Signed RT and Demob Vessel Cargo Manifest combined in 1 file.',
-      },
-      {
-        id: 'att-sample-rig-1',
-        name: 'Rig_AD-63_DualSigned_Rig_Daily_Tour_Log.pdf',
-        url: '',
-        category: 'Dual-Signed Rig Daily Log',
-        sourceType: 'Utilization',
-        sourceRef: 'Rig AD-63 Operations',
-        uploadDate: '18-12-2025',
-        uploadedBy: 'ADNOC Rig Superintendent & Jose Salomao',
-        notes: 'Dual sign-off for 4 operating days and 51 standby days.',
-      }
-    );
-  }
+
 
   return {
     jobId: job.id,
@@ -682,56 +633,4 @@ export function generateInvoicePackageForJob(
       swift: 'NBADAEAA',
     },
   };
-}
-
-/**
- * Predefined 44-line calculations matching the client's actual submission ticket
- */
-function getPredefinedSampleLines(): CalculationTicketLine[] {
-  return [
-    { itemNo: 1, serialNumber: 'SUBCTR24', toolDescription: 'JOSE SALOMAO', qty: 1, deliveryTicketNo: '', deliveryDate: '05-12-2025', returnDate: '08-12-2025', rentalDays: 4, rgtNo: '', contractRefOper: 'A.4.33', contractRefStandby: 'A.4.33', operDays: 4, operRateUSD: 850.00, standbyDays: 0, standbyRateUSD: 0.00, operTotalUSD: 3400.00, standbyTotalUSD: 0.00, totalChargesUSD: 3400.00 },
-    { itemNo: 2, serialNumber: 'OS534FS-1295', toolDescription: '5-3/4" FS OVERSHOT W/ 3-1/2" IF BOX', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.1', contractRefStandby: 'A.4.1', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 32.84, operTotalUSD: 0.00, standbyTotalUSD: 1805.93, totalChargesUSD: 1805.93 },
-    { itemNo: 3, serialNumber: 'OS578SH-001', toolDescription: '5-7/8" SH OVERSHOT W/ 3-1/2" IF BOX', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.1', contractRefStandby: 'A.4.1', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 32.84, operTotalUSD: 0.00, standbyTotalUSD: 1805.93, totalChargesUSD: 1805.93 },
-    { itemNo: 4, serialNumber: 'SPFJ434-004', toolDescription: '4-3/4" LOGAN SUPER FISHING JAR , 2-1/4"ID C/W 3-1/2" IF PIN X BOX', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.8', contractRefStandby: 'A.4.8', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 33.88, operTotalUSD: 0.00, standbyTotalUSD: 1863.13, totalChargesUSD: 1863.13 },
-    { itemNo: 5, serialNumber: 'SN-1088', toolDescription: '4-3/4" OD FISHING JAR INTENSIFIER W/ 3-1/2" IF BOX X PIN', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.8', contractRefStandby: 'A.4.8', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 22.47, operTotalUSD: 0.00, standbyTotalUSD: 1235.58, totalChargesUSD: 1235.58 },
-    { itemNo: 6, serialNumber: 'FBS434-1002', toolDescription: '4-3/4" OD FISHING BUMPER SUB W/ 3-1/2" IF BOX X PIN', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.7', contractRefStandby: 'A.4.7', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 20.74, operTotalUSD: 0.00, standbyTotalUSD: 1140.43, totalChargesUSD: 1140.43 },
-    { itemNo: 7, serialNumber: 'LIB578-1363', toolDescription: '5-7/8" LEAD IMP BLOCK W/ 2-7/8" REG PIN', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.15', contractRefStandby: 'A.4.15', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 1.90, operTotalUSD: 0.00, standbyTotalUSD: 104.50, totalChargesUSD: 104.50 },
-    { itemNo: 8, serialNumber: 'FMG512-001', toolDescription: '5-1/2" FISHING MAGNET W/ 3-1/2" REG PIN', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.12', contractRefStandby: 'A.4.12', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 7.60, operTotalUSD: 0.00, standbyTotalUSD: 418.00, totalChargesUSD: 418.00 },
-    { itemNo: 9, serialNumber: 'JM6-1499', toolDescription: '6" BLADED JUNK MILL C/W 3-1/2" REG PIN', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.13', contractRefStandby: 'A.4.13', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 6.57, operTotalUSD: 0.00, standbyTotalUSD: 361.08, totalChargesUSD: 361.08 },
-    { itemNo: 10, serialNumber: 'SN-1480', toolDescription: '6-1/16" TAPER MILL C/W 3-1/2" REG PIN', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.13', contractRefStandby: 'A.4.13', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 6.57, operTotalUSD: 0.00, standbyTotalUSD: 361.08, totalChargesUSD: 361.08 },
-    { itemNo: 11, serialNumber: 'SM6-012', toolDescription: '6" STRING MILL W/ 3-1/2" IF PIN X BOX', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.13', contractRefStandby: 'A.4.13', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 6.56, operTotalUSD: 0.00, standbyTotalUSD: 360.80, totalChargesUSD: 360.80 },
-    { itemNo: 12, serialNumber: 'SN-1517', toolDescription: '5" JUNK SUB W/ 3-1/2" REG PIN X BOX', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.22', contractRefStandby: 'A.4.22', operDays: 2, operRateUSD: 6.91, standbyDays: 53, standbyRateUSD: 3.46, operTotalUSD: 13.82, standbyTotalUSD: 183.12, totalChargesUSD: 196.94 },
-    { itemNo: 13, serialNumber: 'SN-1248', toolDescription: 'BIT SUB W/ 3-1/2" IF BOX X 3-1/2" REG BOX', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.21', contractRefStandby: 'A.4.21', operDays: 2, operRateUSD: 2.76, standbyDays: 53, standbyRateUSD: 1.38, operTotalUSD: 5.52, standbyTotalUSD: 73.14, totalChargesUSD: 78.66 },
-    { itemNo: 14, serialNumber: 'XO-1542', toolDescription: 'CROSSOVER SUB W/3-1/2" REG PIN X 3-1/2" IF PIN', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.21', contractRefStandby: 'A.4.21', operDays: 2, operRateUSD: 2.76, standbyDays: 53, standbyRateUSD: 1.38, operTotalUSD: 5.52, standbyTotalUSD: 73.14, totalChargesUSD: 78.66 },
-    { itemNo: 15, serialNumber: 'SN-1372', toolDescription: 'DITCH MAGNET 36" LONG', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.24', contractRefStandby: 'A.4.24', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 6.22, operTotalUSD: 0.00, standbyTotalUSD: 342.10, totalChargesUSD: 342.10 },
-    { itemNo: 16, serialNumber: 'SN-1023', toolDescription: '4-3/4" OD COARSE THREAD SAFETY JOINT W/ 2-11/16" BORE W/ 3-1/2" IF BOX X PIN', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.26', contractRefStandby: 'A.4.26', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 6.91, operTotalUSD: 0.00, standbyTotalUSD: 380.05, totalChargesUSD: 380.05 },
-    { itemNo: 17, serialNumber: 'SN-1347', toolDescription: '4-3/4" OD TAPER TAP 1-3/4" TO 3-1/2" W/ 3-1/2" IF BOX', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.11', contractRefStandby: 'A.4.11', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 6.57, operTotalUSD: 0.00, standbyTotalUSD: 361.08, totalChargesUSD: 361.08 },
-    { itemNo: 18, serialNumber: 'SN-1272', toolDescription: 'CROSSOVER SUB W/3-1/2" IF PIN X 4-1/2" IF BOX', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.21', contractRefStandby: 'A.4.21', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 1.38, operTotalUSD: 0.00, standbyTotalUSD: 75.90, totalChargesUSD: 75.90 },
-    { itemNo: 19, serialNumber: 'RCJB534-003', toolDescription: '5-3/4" REVERSE CIRCULATING JUNK BASKET / 3-1/2" IF BOX C/W 6-1/8" TYPE A MILL SHOE, JUNK CATER, STEEL BALL & LIFT SUB.', qty: 1, deliveryTicketNo: 'DT-02171', deliveryDate: '25-10-2025', returnDate: '18-12-2025', rentalDays: 55, rgtNo: 'RT-02214', contractRefOper: 'A.4.6', contractRefStandby: 'A.4.6', operDays: 0, operRateUSD: 0.00, standbyDays: 55, standbyRateUSD: 14.86, operTotalUSD: 0.00, standbyTotalUSD: 817.30, totalChargesUSD: 817.30 },
-    { itemNo: 20, serialNumber: 'SN-1016', toolDescription: '5-3/4" FS OVERSHOT W/ 3-1/2" IF BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.1', contractRefStandby: 'A.4.1', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 32.84, operTotalUSD: 0.00, standbyTotalUSD: 722.37, totalChargesUSD: 722.37 },
-    { itemNo: 21, serialNumber: 'HM534-1500', toolDescription: '2-7/8" ID HOLLOW MILL GUIDE FOR 5-3/4" FS OVERSHOT', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.2', contractRefStandby: 'A.4.3', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 24.89, operTotalUSD: 0.00, standbyTotalUSD: 547.47, totalChargesUSD: 547.47 },
-    { itemNo: 22, serialNumber: 'HM534-1517', toolDescription: '3-1/2" HOLLOW MILL GUIDE FOR 5-3/4" FS OVERSHOT', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.2', contractRefStandby: 'A.4.3', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 24.89, operTotalUSD: 0.00, standbyTotalUSD: 547.47, totalChargesUSD: 547.47 },
-    { itemNo: 23, serialNumber: 'FJ434-1430', toolDescription: '4-3/4"OD X 2" ID TYPE "Z" FISHING JAR W/ 3-1/2" IF BOX X PIN CONN', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.8', contractRefStandby: 'A.4.8', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 33.88, operTotalUSD: 0.00, standbyTotalUSD: 745.25, totalChargesUSD: 745.25 },
-    { itemNo: 24, serialNumber: 'SN-1181', toolDescription: '5-7/8" SC OVERSHOT W/ 3-1/2" IF BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.2', contractRefStandby: 'A.4.2', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 33.88, operTotalUSD: 0.00, standbyTotalUSD: 745.25, totalChargesUSD: 745.25 },
-    { itemNo: 25, serialNumber: 'WPSJ534-1334', toolDescription: '5-3/4" 18PPF L-80/N-80 SHORT JOINT WASH PIPE C/W 5-3/4" FJWP PIN X BOX - 10FT LONG', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.4', contractRefStandby: 'A.4.4', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 32.15, operTotalUSD: 0.00, standbyTotalUSD: 707.19, totalChargesUSD: 707.19 },
-    { itemNo: 26, serialNumber: 'WP534-1548', toolDescription: '5-3/4" 18.18PPF N-80 WASH PIPE C/W 5-3/4" FJWP PIN X BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.4', contractRefStandby: 'A.4.4', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 32.84, operTotalUSD: 0.00, standbyTotalUSD: 722.48, totalChargesUSD: 722.48 },
-    { itemNo: 27, serialNumber: 'WP534-1577', toolDescription: '5-3/4" 18.18PPF / N-80 WASH PIPE C/W 5-3/4" FJWP PIN X BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.4', contractRefStandby: 'A.4.4', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 32.84, operTotalUSD: 0.00, standbyTotalUSD: 722.48, totalChargesUSD: 722.48 },
-    { itemNo: 28, serialNumber: 'WP534-1574', toolDescription: '5-3/4" 18.18PPF / N-80 WASH PIPE C/W 5-3/4" FJWP PIN X BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.4', contractRefStandby: 'A.4.4', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 32.84, operTotalUSD: 0.00, standbyTotalUSD: 722.48, totalChargesUSD: 722.48 },
-    { itemNo: 29, serialNumber: 'WP534-1556', toolDescription: '5-3/4" 18PPF L-80/N-80 WASH PIPE C/W 5-3/4" FJWP PIN X BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.4', contractRefStandby: 'A.4.4', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 32.84, operTotalUSD: 0.00, standbyTotalUSD: 722.48, totalChargesUSD: 722.48 },
-    { itemNo: 30, serialNumber: 'WP534-1573', toolDescription: '5-3/4" 18.18PPF / N-80 WASH PIPE C/W 5-3/4" FJWP PIN X BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.4', contractRefStandby: 'A.4.4', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 32.84, operTotalUSD: 0.00, standbyTotalUSD: 722.48, totalChargesUSD: 722.48 },
-    { itemNo: 31, serialNumber: 'WS534-1603', toolDescription: '5-3/4" FLAT BOTTOM TYPE WASHOVER SHOE W/C 6"OD X 4-3/4"ID C/W 5-3/4" FJWP BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.13', contractRefStandby: 'A.4.13', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 7.95, operTotalUSD: 0.00, standbyTotalUSD: 174.90, totalChargesUSD: 174.90 },
-    { itemNo: 32, serialNumber: 'WS534-1605', toolDescription: '5-3/4" FLAT BOTTOM WASHOVER SHOE W/ 6" OD X 4-3/4" ID C/W 5-3/4" FJWP BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.13', contractRefStandby: 'A.4.13', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 7.95, operTotalUSD: 0.00, standbyTotalUSD: 174.90, totalChargesUSD: 174.90 },
-    { itemNo: 33, serialNumber: 'WS534-1623', toolDescription: '5-3/4" FLAT BOTTOM WASHOVER SHOE W/ 6" OD X 4-3/4" ID C/W 5-3/4" FJWP BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.13', contractRefStandby: 'A.4.13', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 7.95, operTotalUSD: 0.00, standbyTotalUSD: 174.90, totalChargesUSD: 174.90 },
-    { itemNo: 34, serialNumber: 'WS534-1618', toolDescription: '5-3/4" FLAT BOTTOM WASHOVER SHOE W/ 6" OD X 4-3/4" ID C/W 5-3/4" FJWP BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.13', contractRefStandby: 'A.4.13', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 7.95, operTotalUSD: 0.00, standbyTotalUSD: 174.90, totalChargesUSD: 174.90 },
-    { itemNo: 35, serialNumber: 'WS534-1624', toolDescription: '5-3/4" WAVY BOTTOM TYPE WASHOVER SHOE W/C 6"OD X 4-3/4"ID C/W5-3/4" FJWP BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.13', contractRefStandby: 'A.4.13', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 7.95, operTotalUSD: 0.00, standbyTotalUSD: 174.90, totalChargesUSD: 174.90 },
-    { itemNo: 36, serialNumber: 'SN-1264', toolDescription: '4-1/32" ITCO RELEASING SPEAR W/ 2-7/8" REG BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.16', contractRefStandby: 'A.4.16', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 14.52, operTotalUSD: 0.00, standbyTotalUSD: 319.33, totalChargesUSD: 319.33 },
-    { itemNo: 37, serialNumber: 'STSB278-1500', toolDescription: 'SPEAR STOP SUB W/2-7/8" REG PIN X 3-1/2" IF BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.19', contractRefStandby: 'A.4.19', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 4.49, operTotalUSD: 0.00, standbyTotalUSD: 98.78, totalChargesUSD: 98.78 },
-    { itemNo: 38, serialNumber: 'JS5-1533', toolDescription: '5" JUNK SUB W/ 3-1/2" REG PIN X BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.22', contractRefStandby: 'A.4.22', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 3.46, operTotalUSD: 0.00, standbyTotalUSD: 76.01, totalChargesUSD: 76.01 },
-    { itemNo: 39, serialNumber: 'SN-1259', toolDescription: '2-13/16"OD ITCO RELEASING SPEAR W/2-3/8" REG BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.16', contractRefStandby: 'A.4.16', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 14.52, operTotalUSD: 0.00, standbyTotalUSD: 319.33, totalChargesUSD: 319.33 },
-    { itemNo: 40, serialNumber: 'EC578-004', toolDescription: '5-7/8" EXTERNAL CUTTER W/ 4-5/8"ID DRESSED WITH SPRING DOG ASSY FOR 2-3/8" THRU 3-1/2" TUBING C/W 5-3/4" FJWP BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.5', contractRefStandby: 'A.4.5', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 11.41, operTotalUSD: 0.00, standbyTotalUSD: 250.91, totalChargesUSD: 250.91 },
-    { itemNo: 41, serialNumber: 'DC6-005', toolDescription: '6" DIE COLLAR W/C 3-1/2" IF BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.11', contractRefStandby: 'A.4.11', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 7.95, operTotalUSD: 0.00, standbyTotalUSD: 174.90, totalChargesUSD: 174.90 },
-    { itemNo: 42, serialNumber: 'SN-1240', toolDescription: 'CROSSOVER SUB W/ 2-3/8" REG PIN X 3-1/2" IF BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.21', contractRefStandby: 'A.4.21', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 1.38, operTotalUSD: 0.00, standbyTotalUSD: 30.36, totalChargesUSD: 30.36 },
-    { itemNo: 43, serialNumber: 'SN-1080', toolDescription: '3-1/4"OD ITCO RELEASING SPEAR W/ 2-3/8" REG BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.16', contractRefStandby: 'A.4.16', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 14.52, operTotalUSD: 0.00, standbyTotalUSD: 319.33, totalChargesUSD: 319.33 },
-    { itemNo: 44, serialNumber: 'STSB238-1497', toolDescription: 'SPEAR STOP SUB W/ 2-3/8" REG PIN X 3-1/2" IF BOX', qty: 1, deliveryTicketNo: 'DT-02311', deliveryDate: '27-11-2025', returnDate: '18-12-2025', rentalDays: 22, rgtNo: 'RT-02214', contractRefOper: 'A.4.19', contractRefStandby: 'A.4.19', operDays: 0, operRateUSD: 0.00, standbyDays: 22, standbyRateUSD: 4.49, operTotalUSD: 0.00, standbyTotalUSD: 98.78, totalChargesUSD: 98.78 },
-  ];
 }

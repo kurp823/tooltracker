@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { DrillingJob, DTBatch, RTBatch, ToolItem, User } from '../types';
 import { formatDateDDMMYY, formatQty } from '../utils';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
+import { normalizeJobKey } from '../services/api';
 import * as XLSX from 'xlsx';
 
 interface UtilizationViewProps {
@@ -24,8 +25,8 @@ interface ClientRateConfig {
 const CLIENT_RATES: Record<string, ClientRateConfig> = {
   'AON': { currency: 'USD', standby: 700, ops: 950, cap: 6 },
   'ADNOC Onshore': { currency: 'USD', standby: 700, ops: 950, cap: 6 },
-  'ADNOC-D': { currency: 'AED', standby: 850, ops: 1200, cap: null },
-  'ADNOC Drilling': { currency: 'AED', standby: 850, ops: 1200, cap: null },
+  'ADNOC-D': { currency: 'AED', standby: 850, ops: 1200, cap: 10 },
+  'ADNOC Drilling': { currency: 'AED', standby: 850, ops: 1200, cap: 10 },
   'AOF': { currency: 'USD', standby: 750, ops: 1050, cap: null },
   'ADNOC Offshore': { currency: 'USD', standby: 750, ops: 1050, cap: null },
   'TWL': { currency: 'USD', standby: 600, ops: 900, cap: null },
@@ -179,32 +180,50 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
     const curYM = '2026-09';
 
     // A. Tools (from DTs or demo catalog)
-    const jobDTs = dtBatches.filter((b) => b.jobId === currentJob.id);
+    const curRaw = (currentJob.id || '').trim().toUpperCase();
+    const curNorm = normalizeJobKey(currentJob.id);
+    const jobDTs = dtBatches.filter((b) => {
+      const bRaw = (b.jobId || (b as any).jobNumber || '').trim().toUpperCase();
+      const bNorm = normalizeJobKey(b.jobId || (b as any).jobNumber);
+      return (bRaw && bRaw === curRaw) || (bNorm && bNorm === curNorm);
+    });
+    const jobRTs = (rtBatches || []).filter((b) => {
+      const bRaw = (b.jobId || (b as any).jobNumber || '').trim().toUpperCase();
+      const bNorm = normalizeJobKey(b.jobId || (b as any).jobNumber);
+      return (bRaw && bRaw === curRaw) || (bNorm && bNorm === curNorm);
+    });
+
     let lineSeq = 1;
 
     if (jobDTs.length > 0) {
       jobDTs.forEach((dt) => {
         (dt.toolLines || []).forEach((tl) => {
-          const matchedRT = rtBatches.find(
+          const tSerial = (tl.serial || tl.assetNo || '').trim().toUpperCase();
+          const matchedRT = jobRTs.find(
             (rt) =>
-              rt.jobId === currentJob.id &&
-              (rt.toolLines || []).some((rtl) => rtl.serial === tl.serial)
+              (rt.toolLines || []).some((rtl) => {
+                const rSerial = (rtl.serial || rtl.assetNo || '').trim().toUpperCase();
+                return rSerial && tSerial && rSerial === tSerial;
+              })
           );
-          const toolInv = inventory.find((t) => t.serial === tl.serial);
+          const toolInv = inventory.find((t) => (t.serial || '').trim().toUpperCase() === tSerial);
+
+          const retDate = matchedRT?.rtDate || matchedRT?.backloadRmDate || (tl as any).returnDate || (tl as any).dateIn || '';
+          const isReturned = Boolean(retDate || (tl.status && tl.status.toLowerCase().includes('return')));
 
           items.push({
             id: `tool-${dt.dtNumber}-${tl.serial}-${lineSeq}`,
             category: 'Tools',
             lineNo: lineSeq++,
             dtNumber: dt.dtNumber,
-            deliveryDate: dt.dispatchDate || dt.rmDate || `${curYM}-01`,
+            deliveryDate: dt.dispatchDate || dt.rmDate || (currentJob.mobDate || `${curYM}-01`),
             assetNumber: tl.assetNo || toolInv?.assetNo || tl.serial,
-            description: tl.desc || toolInv?.desc || `${tl.size} ${tl.shortDesc}`,
+            description: tl.desc || toolInv?.desc || `${tl.size || ''} ${tl.shortDesc || ''}`.trim() || 'Downhole Tool',
             quantity: 1,
-            status: tl.status === 'OnRig' ? 'On Rig' : 'New',
+            status: isReturned ? 'Returned' : (tl.status === 'OnRig' ? 'On Rig' : 'New'),
             rotHours: '',
-            returnDate: matchedRT?.rtDate || '',
-            rtNumber: matchedRT?.rtNumber || '',
+            returnDate: retDate,
+            rtNumber: matchedRT?.rtNumber || (tl as any).rtBatchId || '',
           });
         });
       });

@@ -515,9 +515,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return callouts.filter((c) => {
       const cJob = (c.jobId || c.jobNumber || '').trim().toUpperCase();
       const cNorm = normalizeJobKey(c.jobId || c.jobNumber);
-      if (rawId && cJob && (cJob === rawId || cJob.includes(rawId) || rawId.includes(cJob))) return true;
+      if (rawId && cJob && cJob === rawId) return true;
       if (normId && cNorm && normId === cNorm) return true;
-      if (jobData.calloutId && c.id === jobData.calloutId) return true;
+      if (jobData.calloutId && (c.id === jobData.calloutId || (c as any).calloutNumber === jobData.calloutId)) return true;
       return false;
     });
   }, [callouts, jobData]);
@@ -1636,8 +1636,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       // Dynamic rate lookup from active contract rates (c.rates) or tool properties
       const jobContractKey = (jobData.contractNo || jobData.contract || '').trim().toLowerCase();
       const matchedContract = contracts.find((c) => {
-        const cNum = (c.contractNumber || c.contractRef || c.id || '').trim().toLowerCase();
-        return cNum && (cNum === jobContractKey || jobContractKey.includes(cNum) || cNum.includes(jobContractKey));
+        const cNum = (c.contractNumber || c.contractNo || c.contractRef || c.id || '').trim().toLowerCase();
+        return cNum && (cNum === jobContractKey || normalizeJobKey(cNum) === normalizeJobKey(jobContractKey));
       });
       const contractRate = matchedContract?.rates?.find((r) => {
         const typeMatches = (r.shortDesc && (t.shortDesc || '').toLowerCase().includes(r.shortDesc.toLowerCase())) ||
@@ -1646,9 +1646,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         return typeMatches && sizeMatches;
       });
 
+      const clientStr = String(jobData.client || '').toUpperCase();
+      let billableSbCount = sbCount;
+      if (clientStr.includes('ONSHORE') || clientStr.includes('ADCO')) {
+        billableSbCount = Math.min(sbCount, 6);
+      } else if (clientStr.includes('DRILLING')) {
+        billableSbCount = Math.min(sbCount, 10);
+      }
+
       const standbyRate = contractRate?.standbyRate || (t as any).standbyRate || (t as any).standby_rate || (t as any).dayRate || 0;
       const opsRate = contractRate?.opsRate || (t as any).opsRate || (t as any).ops_rate || (t as any).dayRate || 0;
-      const totalStandbyRate = sbCount * standbyRate;
+      const totalStandbyRate = billableSbCount * standbyRate;
       const totalOpsRate = opsCount * opsRate;
       const runCharge = (t as any).runCharge || (contractRate as any)?.runCharges || 0;
       const redressCharge = (t as any).redressCharge || (contractRate as any)?.redress || 0;
@@ -2865,7 +2873,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
                         const returnBatch = rtBatches.find((rt) => {
                           const rNum = (rt.rtNumber || rt.id || '').trim().toUpperCase();
-                          if (directRtRef && directRtRef !== '—' && (rNum === directRtRef.toUpperCase() || rNum.includes(directRtRef.toUpperCase()))) return true;
+                          const rNorm = normalizeJobKey(rNum);
+                          const dNorm = normalizeJobKey(directRtRef);
+                          if (directRtRef && directRtRef !== '—' && (rNum === directRtRef.toUpperCase() || (rNorm && rNorm === dNorm))) return true;
                           return (rt.toolLines || []).some((rtl) => {
                             const rSerial = (rtl.serial || '').trim().toUpperCase();
                             const rAsset = (rtl.assetNo || '').trim().toUpperCase();
@@ -2881,7 +2891,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           returnBatch?.backloadRmDate ||
                           (returnBatch as any)?.Date_In ||
                           (returnBatch as any)?.dateIn ||
-                          (rgtNo ? (jobData.demobDate || jobData.lastRtDate || activeDT.dispatchDate) : null);
+                          (rgtNo && (rgtNo.startsWith('RT-CLS-') || isJobInvoicedOrSubmitted) ? (jobData.demobDate || jobData.lastRtDate) : null);
 
                         return (
                           <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { RTBatch, RTLine, DTBatch, ToolItem, User, DrillingJob, Callout } from '../types';
-import { extractSizeFromDescription, extractToolType } from '../services/api';
+import { extractSizeFromDescription, extractToolType, normalizeJobKey } from '../services/api';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
 import { formatDateDD_MM_YYYY } from './JobDossierView';
 
@@ -57,8 +57,14 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
     const map = new Map<string, DrillingJob>();
     if (Array.isArray(jobs)) {
       jobs.forEach((j) => {
-        if (j && j.id) map.set(j.id.trim().toUpperCase(), j);
-        if (j && j.jobNumber) map.set(j.jobNumber.trim().toUpperCase(), j);
+        if (j && j.id) {
+          map.set(j.id.trim().toUpperCase(), j);
+          map.set(normalizeJobKey(j.id), j);
+        }
+        if (j && j.jobNumber) {
+          map.set(j.jobNumber.trim().toUpperCase(), j);
+          map.set(normalizeJobKey(j.jobNumber), j);
+        }
       });
     }
     return map;
@@ -132,11 +138,10 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
     if (r.backloadRmDate && r.backloadRmDate !== '—') return formatDateDD_MM_YYYY(r.backloadRmDate);
     if ((r as any).Date_In) return formatDateDD_MM_YYYY((r as any).Date_In);
     if ((r as any).dateIn) return formatDateDD_MM_YYYY((r as any).dateIn);
-    if (r.jobId) {
-      const job = jobMap.get(r.jobId.trim().toUpperCase());
+    if (r.rtNumber && r.rtNumber.startsWith('RT-CLS-') && r.jobId) {
+      const job = jobMap.get(r.jobId.trim().toUpperCase()) || jobMap.get(normalizeJobKey(r.jobId));
       if (job?.demobDate) return formatDateDD_MM_YYYY(job.demobDate);
       if (job?.lastRtDate) return formatDateDD_MM_YYYY(job.lastRtDate);
-      if (job?.mobDate) return formatDateDD_MM_YYYY(job.mobDate);
     }
     return '—';
   };
@@ -146,11 +151,10 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
     if (r.rtDate && r.rtDate !== '—') return formatDateDD_MM_YYYY(r.rtDate);
     if ((r as any).Date_In) return formatDateDD_MM_YYYY((r as any).Date_In);
     if ((r as any).dateIn) return formatDateDD_MM_YYYY((r as any).dateIn);
-    if (r.jobId) {
-      const job = jobMap.get(r.jobId.trim().toUpperCase());
+    if (r.rtNumber && r.rtNumber.startsWith('RT-CLS-') && r.jobId) {
+      const job = jobMap.get(r.jobId.trim().toUpperCase()) || jobMap.get(normalizeJobKey(r.jobId));
       if (job?.demobDate) return formatDateDD_MM_YYYY(job.demobDate);
       if (job?.lastRtDate) return formatDateDD_MM_YYYY(job.lastRtDate);
-      if (job?.mobDate) return formatDateDD_MM_YYYY(job.mobDate);
     }
     return '—';
   };

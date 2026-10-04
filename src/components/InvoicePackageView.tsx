@@ -72,9 +72,7 @@ export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
   // Current job selection
   const [selectedJobId, setSelectedJobId] = useState<string>(() => {
     if (initialJobId && jobs.some((j) => j.id === initialJobId)) return initialJobId;
-    // Prefer Job-025-01160 if exists, or first job
-    const sample = jobs.find((j) => j.id === 'Job-025-01160');
-    return sample ? sample.id : (jobs[0]?.id || 'JOB-26-00001');
+    return jobs[0]?.id || '';
   });
 
   const currentJob = useMemo(() => {
@@ -94,20 +92,20 @@ export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
 
   // Editable parameters for submission
   const [invoiceNumber, setInvoiceNumber] = useState<string>(() => {
-    const j = jobs.find((x) => x.id === (initialJobId || 'Job-025-01160')) || jobs[0];
-    return j?.legalInvoiceNumber || j?.draftInvoiceNumber || (j?.id ? `INV-${j.id.replace(/^JOB[-_]?/i, '')}` : '216205');
+    const j = (initialJobId ? jobs.find((x) => x.id === initialJobId) : null) || jobs[0];
+    return j?.legalInvoiceNumber || j?.draftInvoiceNumber || (j?.id ? `INV-${j.id.replace(/^JOB[-_]?/i, '')}` : 'INV-DRAFT');
   });
   const [invoiceDate, setInvoiceDate] = useState<string>(() => {
-    const j = jobs.find((x) => x.id === (initialJobId || 'Job-025-01160')) || jobs[0];
-    return j?.finalInvoicedDate || j?.draftInvoicedDate || j?.invoiceDate || '16-01-2026';
+    const j = (initialJobId ? jobs.find((x) => x.id === initialJobId) : null) || jobs[0];
+    return j?.finalInvoicedDate || j?.draftInvoicedDate || j?.invoiceDate || new Date().toISOString().split('T')[0];
   });
   const [dateOfSupply, setDateOfSupply] = useState<string>(() => {
-    const j = jobs.find((x) => x.id === (initialJobId || 'Job-025-01160')) || jobs[0];
-    return j?.mobDate || '25/10/2025';
+    const j = (initialJobId ? jobs.find((x) => x.id === initialJobId) : null) || jobs[0];
+    return j?.mobDate || '';
   });
   const [poNumber, setPoNumber] = useState<string>(() => {
-    const j = jobs.find((x) => x.id === (initialJobId || 'Job-025-01160')) || jobs[0];
-    return (j?.poNumber && j.poNumber !== '0') ? j.poNumber : '4200237257';
+    const j = (initialJobId ? jobs.find((x) => x.id === initialJobId) : null) || jobs[0];
+    return (j?.poNumber && j.poNumber !== '0') ? j.poNumber : (currentContract?.poNumber || '—');
   });
   const [exchangeRate, setExchangeRate] = useState<number>(USD_TO_AED_EXCHANGE_RATE);
   // Package document filter (defaults to 'all' for complete unified dossier)

@@ -75,15 +75,15 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
   // Selected Job ID
   const [selectedJobId, setSelectedJobId] = useState<string>(() => {
     if (initialJobId && jobs.some((j) => j.id === initialJobId)) return initialJobId;
-    // Prefer Job-026-01388 or first job with billing stage
-    const sample = jobs.find(
+    const readyJob = jobs.find(
       (j) =>
-        j.id.includes('01388') ||
-        j.id === 'Job-025-01160' ||
         j.status === 'Submitted to Billing Team' ||
-        j.status === 'Tickets submitted to billing team'
+        j.status === 'Tickets submitted to billing team' ||
+        j.status === 'Draft invoiced' ||
+        j.status === 'Under SES approval' ||
+        j.status === 'SES Submitted'
     );
-    return sample ? sample.id : jobs[0]?.id || '';
+    return readyJob ? readyJob.id : (jobs[0]?.id || '');
   });
 
   // Active Document Tab for Preview / Print: 'draft' | 'calc' | 'final'

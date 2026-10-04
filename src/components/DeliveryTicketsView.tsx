@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { DTBatch, DTLine, DrillingJob, Callout, ToolItem, User } from '../types';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
-import { extractSizeFromDescription, extractToolType } from '../services/api';
+import { extractSizeFromDescription, extractToolType, normalizeJobKey } from '../services/api';
 
 interface DeliveryTicketsViewProps {
   user?: User | null;
@@ -55,8 +55,14 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
     const map = new Map<string, DrillingJob>();
     if (Array.isArray(jobs)) {
       jobs.forEach((j) => {
-        if (j && j.id) map.set(j.id.trim().toUpperCase(), j);
-        if (j && j.jobNumber) map.set(j.jobNumber.trim().toUpperCase(), j);
+        if (j && j.id) {
+          map.set(j.id.trim().toUpperCase(), j);
+          map.set(normalizeJobKey(j.id), j);
+        }
+        if (j && j.jobNumber) {
+          map.set(j.jobNumber.trim().toUpperCase(), j);
+          map.set(normalizeJobKey(j.jobNumber), j);
+        }
       });
     }
     return map;

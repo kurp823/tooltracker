@@ -673,8 +673,6 @@ export function normalizeRTBatch(row: any): any {
     row.dateIn ||
     row.RMDate ||
     row.rmDate ||
-    row.DemobDate ||
-    row.demobDate ||
     row.BackloadDate ||
     row.backloadDate ||
     row.ReturnDate ||
@@ -1078,18 +1076,28 @@ export function reconcileJobsDTRTAndInventory(
   const dtsByJobId = new Map<string, any[]>();
   dtBatches.forEach((dt) => {
     const k = String(dt.jobId || '').trim().toUpperCase();
+    const norm = normalizeJobKey(dt.jobId);
     if (k) {
       if (!dtsByJobId.has(k)) dtsByJobId.set(k, []);
       dtsByJobId.get(k)!.push(dt);
+    }
+    if (norm && norm !== k) {
+      if (!dtsByJobId.has(norm)) dtsByJobId.set(norm, []);
+      dtsByJobId.get(norm)!.push(dt);
     }
   });
 
   const rtsByJobId = new Map<string, any[]>();
   rtBatches.forEach((rt) => {
     const k = String(rt.jobId || '').trim().toUpperCase();
+    const norm = normalizeJobKey(rt.jobId);
     if (k) {
       if (!rtsByJobId.has(k)) rtsByJobId.set(k, []);
       rtsByJobId.get(k)!.push(rt);
+    }
+    if (norm && norm !== k) {
+      if (!rtsByJobId.has(norm)) rtsByJobId.set(norm, []);
+      rtsByJobId.get(norm)!.push(rt);
     }
   });
 
