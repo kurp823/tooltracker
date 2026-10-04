@@ -10,8 +10,7 @@ export const normalizeJobKey = (str?: string): string => {
   return str
     .trim()
     .toUpperCase()
-    .replace(/^JOB[-_]?/i, '')
-    .replace(/[-_]0?1$/i, '');
+    .replace(/^JOB[-_]?/i, '');
 };
 
 const MASTER_JOBS_MAP = new Map<string, any>();
@@ -1001,22 +1000,21 @@ export function reconcileJobsDTRTAndInventory(
   });
 
   dtBatches.forEach((dt) => {
-    const job = dt.jobId ? jobsById.get(String(dt.jobId).trim().toUpperCase()) : null;
     (dt.toolLines || []).forEach((tl: any) => {
       const rtNum = String(tl.returnedRtNumber || tl.rtBatchId || '').trim();
-      if (rtNum && rtNum !== '—' && rtNum !== '-' && !rtNum.toUpperCase().startsWith('RT-AUTO')) {
+      if (rtNum && rtNum !== '—' && rtNum !== '-' && !rtNum.toUpperCase().startsWith('RT-AUTO') && !rtNum.toUpperCase().startsWith('RT-CLS')) {
         const rtKey = rtNum.toUpperCase();
         let targetRT = rtsByRtNumber.get(rtKey);
-        const lineDate = cleanDateStr(tl.returnDate || tl.dateIn || tl.Date_In || dt.dispatchDate || job?.demobDate || job?.lastRtDate || '');
+        const lineDate = cleanDateStr(tl.returnDate || tl.dateIn || tl.Date_In || targetRT?.rtDate || targetRT?.backloadRmDate || '');
         
         if (!targetRT) {
           targetRT = {
             id: `RTB-${rtNum.replace(/[^a-zA-Z0-9]/g, '')}`,
             rtNumber: rtNum,
-            jobId: dt.jobId || job?.id || '',
-            rig: dt.rig || job?.rig || '',
-            well: dt.well || job?.well || '',
-            contract: dt.contract || job?.contract || '',
+            jobId: dt.jobId || '',
+            rig: dt.rig || '',
+            well: dt.well || '',
+            contract: dt.contract || '',
             rtDate: lineDate,
             backloadRmDate: lineDate,
             loadingNoteNo: `LN-${rtNum.replace(/^RT-?/i, '')}`,
@@ -1034,12 +1032,14 @@ export function reconcileJobsDTRTAndInventory(
           rtBatches.push(targetRT);
           rtsByRtNumber.set(rtKey, targetRT);
         } else {
-          if (!targetRT.rtDate || targetRT.rtDate === '—') targetRT.rtDate = lineDate;
-          if (!targetRT.backloadRmDate || targetRT.backloadRmDate === '—') targetRT.backloadRmDate = lineDate;
-          if (!targetRT.jobId) targetRT.jobId = dt.jobId || job?.id || '';
-          if (!targetRT.rig) targetRT.rig = dt.rig || job?.rig || '';
-          if (!targetRT.well) targetRT.well = dt.well || job?.well || '';
-          if (!targetRT.contract) targetRT.contract = dt.contract || job?.contract || '';
+          // If the existing targetRT from SQL has an empty date, fill it only if line has an explicit return date
+          if ((!targetRT.rtDate || targetRT.rtDate === '—') && lineDate) {
+            targetRT.rtDate = lineDate;
+            targetRT.backloadRmDate = lineDate;
+          }
+          if (!targetRT.jobId && dt.jobId) {
+            targetRT.jobId = dt.jobId;
+          }
         }
 
         const hasTool = (targetRT.toolLines || []).some(

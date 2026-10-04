@@ -271,7 +271,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Helper to normalize job numbers for robust live SQL data matching (e.g. Job-026-01737 <-> 026-01737)
   const normalizeJobKey = (val?: string | null) => {
     if (!val) return '';
-    return val.replace(/^JOB-?/i, '').replace(/^0+/, '').trim().toUpperCase();
+    return val.trim().toUpperCase().replace(/^JOB[-_]?/i, '');
   };
 
   // LOCKED STATE RULE: If legally invoiced, draft invoiced, or submitted to billing, job is strictly read-only!
@@ -459,21 +459,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const jobDTs = useMemo(() => {
     const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
     const normId = normalizeJobKey(jobData.id || jobData.jobNumber);
-    const jRig = (jobData.rig || '').trim().toUpperCase();
-    const jWell = (jobData.well || '').trim().toUpperCase();
+    if (!rawId && !normId) return [];
 
     return dtBatches.filter((b) => {
       const bJob = (b.jobId || b.jobNumber || '').trim().toUpperCase();
       const bNorm = normalizeJobKey(b.jobId || b.jobNumber);
-      if (rawId && bJob && (bJob === rawId || bJob.includes(rawId) || rawId.includes(bJob))) return true;
-      if (normId && bNorm && normId === bNorm) return true;
-      if (jRig && jWell && b.rig && b.well) {
-        const bRig = b.rig.trim().toUpperCase();
-        const bWell = b.well.trim().toUpperCase();
-        if (bRig === jRig && (bWell === jWell || bWell.includes(jWell) || jWell.includes(bWell))) {
-          return true;
-        }
-      }
+      if (bJob && rawId && bJob === rawId) return true;
+      if (bNorm && normId && bNorm === normId) return true;
       return false;
     });
   }, [dtBatches, jobData]);
@@ -481,6 +473,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const jobRTs = useMemo(() => {
     const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
     const normId = normalizeJobKey(jobData.id || jobData.jobNumber);
+    if (!rawId && !normId) return [];
 
     // 1. Collect all explicit RT references from this job's DT lines
     const jobReferencedRTs = new Set<string>();
@@ -498,8 +491,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       const bNorm = normalizeJobKey(b.jobId || b.jobNumber);
       const bNum = (b.rtNumber || b.id || '').trim().toUpperCase();
 
-      if (rawId && bJob && (bJob === rawId || bJob.includes(rawId) || rawId.includes(bJob))) return true;
-      if (normId && bNorm && normId === bNorm) return true;
+      if (bJob && rawId && bJob === rawId) return true;
+      if (bNorm && normId && bNorm === normId) return true;
       if (bNum && jobReferencedRTs.has(bNum)) return true;
 
       return false;
@@ -926,7 +919,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Robust field resolvers for Return Tickets
   const resolveRtDate = (rt?: RTBatch | null): string => {
-    if (!rt) return jobData.demobDate ? formatDateDD_MM_YYYY(jobData.demobDate) : (jobData.lastRtDate ? formatDateDD_MM_YYYY(jobData.lastRtDate) : '—');
+    if (!rt) return '—';
     const val =
       rt.rtDate ||
       rt.backloadRmDate ||
@@ -935,10 +928,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       (rt as any).DateIn ||
       (rt as any).rmDate ||
       (rt as any).date ||
-      (rt as any).ticketDate ||
-      jobData.demobDate ||
-      jobData.lastRtDate;
-    return formatDateDD_MM_YYYY(val);
+      (rt as any).ticketDate;
+    if (val && val !== '—') return formatDateDD_MM_YYYY(val);
+    if (rt.rtNumber?.startsWith('RT-CLS-') || rt.id?.startsWith('RT-AUTO-')) {
+      return formatDateDD_MM_YYYY(jobData.demobDate || jobData.lastRtDate);
+    }
+    return '—';
   };
 
   const resolveRtLoadingNoteNo = (rt?: RTBatch | null): string => {
@@ -3147,11 +3142,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         (t as any).dateIn ||
                         (t as any).Date_In ||
                         (t as any).DateIn ||
+                        (t as any).returnDate ||
+                        (t as any).ReturnDate ||
                         (t as any).rtDate ||
                         activeRT.rtDate ||
                         activeRT.backloadRmDate ||
-                        jobData.demobDate ||
-                        jobData.lastRtDate
+                        (activeRT.rtNumber?.startsWith('RT-CLS-') ? jobData.demobDate : null)
                       );
 
                       return (
