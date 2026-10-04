@@ -12,6 +12,7 @@ import { JobStatusModal } from './JobStatusModal';
 import { JobLifecycleStepper } from './JobLifecycleStepper';
 import { JobDetailModal } from './JobDetailModal';
 import { JobDossierView } from './JobDossierView';
+import { JobToolsListView } from './JobToolsListView';
 import { ToolItem, ContractRecord } from '../types';
 import {
   Search,
@@ -220,6 +221,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   const [density, setDensity] = useState<'compact' | 'comfortable'>('compact');
   const [selectedJobDetail, setSelectedJobDetail] = useState<DrillingJob | null>(null);
   const [dossierJob, setDossierJob] = useState<DrillingJob | null>(null);
+  const [selectedToolsJobId, setSelectedToolsJobId] = useState<string | null>(null);
 
   // Sorting State
   const [sortField, setSortField] = useState<'id' | 'client' | 'rig' | 'startDate' | 'endDate' | 'dtTools' | 'rtTools' | 'toolsOnRig' | 'stage' | 'stageDays' | 'value'>('id');
@@ -319,23 +321,28 @@ export const JobsView: React.FC<JobsViewProps> = ({
     }
   };
 
+  // Filter out any dummy test jobs
+  const validJobs = useMemo(() => {
+    return jobs.filter((j) => j && j.id && !j.id.toUpperCase().includes('TEST') && !j.id.toUpperCase().includes('DUMMY'));
+  }, [jobs]);
+
   // Distinct rigs for quick filter dropdown
   const uniqueRigs = useMemo(() => {
     const set = new Set<string>();
-    jobs.forEach((j) => {
+    validJobs.forEach((j) => {
       if (j.rig && j.rig.trim()) set.add(j.rig.trim());
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [jobs]);
+  }, [validJobs]);
 
   // Distinct clients for combo filter
   const uniqueClients = useMemo(() => {
     const set = new Set<string>();
-    jobs.forEach((j) => {
+    validJobs.forEach((j) => {
       if (j.client && j.client.trim()) set.add(j.client.trim());
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [jobs]);
+  }, [validJobs]);
 
   // Overall metric totals for ribbon across the 6 discrete lifecycle stages
   const metrics = useMemo(() => {
@@ -350,7 +357,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
     let totalToolsOnRigs = 0;
     let totalDispatched = 0;
 
-    jobs.forEach((j) => {
+    validJobs.forEach((j) => {
       const st = getJobStats(j.id);
       const toolsOnRig = Math.max(0, st.dtCount - st.rtCount);
       totalToolsOnRigs += toolsOnRig;
@@ -361,16 +368,16 @@ export const JobsView: React.FC<JobsViewProps> = ({
     });
 
     return {
-      total: jobs.length,
+      total: validJobs.length,
       counts,
       totalToolsOnRigs,
       totalDispatched,
     };
-  }, [jobs, jobToolStats]);
+  }, [validJobs, jobToolStats]);
 
   // Filtered and Sorted Jobs
   const filteredAndSortedJobs = useMemo(() => {
-    const list = jobs.filter((j) => {
+    const list = validJobs.filter((j) => {
       const st = getJobStats(j.id);
       const stage = resolveJobStage(j, st.dtCount, st.rtCount);
 
@@ -449,7 +456,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
       }
       return sortOrder === 'desc' ? -comparison : comparison;
     });
-  }, [jobs, tab, search, selectedRigFilter, sortField, sortOrder, jobToolStats]);
+  }, [validJobs, tab, search, selectedRigFilter, selectedClientFilter, sortField, sortOrder, jobToolStats]);
 
   // Paginated jobs
   const totalPages = Math.max(1, Math.ceil(filteredAndSortedJobs.length / (pageSize || 1)));
@@ -841,33 +848,6 @@ export const JobsView: React.FC<JobsViewProps> = ({
     );
   };
 
-  if (dossierJob) {
-    return (
-      <JobDossierView
-        job={dossierJob}
-        user={user}
-        jobs={jobs}
-        dtBatches={dtBatches}
-        rtBatches={rtBatches || []}
-        callouts={callouts}
-        inventory={inventory || []}
-        contracts={contracts || []}
-        onSaveJob={(updated) => {
-          onSaveJob(updated);
-          setDossierJob(updated);
-        }}
-        onSaveDTBatch={onSaveDTBatch || (() => {})}
-        onUpdateDTBatch={onUpdateDTBatch}
-        onSaveRTBatch={onSaveRTBatch || (() => {})}
-        onUpdateRTBatch={onUpdateRTBatch}
-        onSaveCallout={onSaveCallout}
-        onBackToRegister={() => setDossierJob(null)}
-        onNavigateToInvoicing={onNavigateToInvoicing}
-        showToast={showToast || ((msg) => alert(msg))}
-      />
-    );
-  }
-
   return (
     <div className="space-y-3 w-full">
       {/* Executive Command Header */}
@@ -893,15 +873,6 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
         {/* Global Action Buttons */}
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setDossierJob(sortedJobs[0] || jobs[0])}
-            className="h-7.5 px-3 rounded bg-blue-50 border border-blue-300 text-blue-900 font-bold text-xs hover:bg-blue-100 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
-            title="Open MS Access style Job Dossier"
-          >
-            <span>🗂️</span>
-            <span>Job Dossier (MS Access)</span>
-          </button>
           <button
             type="button"
             onClick={handleExportJobsCsv}
@@ -1261,13 +1232,13 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
-                {/* 2. Client / Project */}
+                {/* 2. Client */}
                 <th
                   onClick={() => handleSortToggle('client')}
-                  className="px-3 py-2 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[180px]"
+                  className="px-3 py-2 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[140px]"
                 >
                   <div className="flex items-center gap-1">
-                    <span>Client / Project</span>
+                    <span>Client</span>
                     {sortField === 'client' ? (
                       sortOrder === 'desc' ? <ArrowDown className="w-3 h-3 text-[#1a3055]" /> : <ArrowUp className="w-3 h-3 text-[#1a3055]" />
                     ) : (
@@ -1276,13 +1247,18 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
-                {/* 3. Rig / Well */}
+                {/* 3. Project */}
+                <th className="px-2.5 py-2 whitespace-nowrap min-w-[110px]">
+                  Project
+                </th>
+
+                {/* 4. Rig */}
                 <th
                   onClick={() => handleSortToggle('rig')}
-                  className="px-3 py-2 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[170px]"
+                  className="px-2.5 py-2 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[100px]"
                 >
                   <div className="flex items-center gap-1">
-                    <span>Rig / Well</span>
+                    <span>Rig</span>
                     {sortField === 'rig' ? (
                       sortOrder === 'desc' ? <ArrowDown className="w-3 h-3 text-[#1a3055]" /> : <ArrowUp className="w-3 h-3 text-[#1a3055]" />
                     ) : (
@@ -1291,12 +1267,17 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
-                {/* 4. PO Number */}
+                {/* 5. Well */}
+                <th className="px-2.5 py-2 whitespace-nowrap min-w-[100px]">
+                  Well
+                </th>
+
+                {/* 6. PO Number */}
                 <th className="px-2.5 py-2 whitespace-nowrap min-w-[110px]">
                   PO Number
                 </th>
 
-                {/* 5. Job Start Date */}
+                {/* 7. Job Start Date */}
                 <th
                   onClick={() => handleSortToggle('startDate')}
                   className="px-2.5 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[105px]"
@@ -1312,7 +1293,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
-                {/* 6. Job End Date */}
+                {/* 8. Job End Date */}
                 <th
                   onClick={() => handleSortToggle('endDate')}
                   className="px-2.5 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[105px]"
@@ -1328,7 +1309,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
-                {/* 7. Job Value */}
+                {/* 9. Job Value */}
                 <th
                   onClick={() => handleSortToggle('value')}
                   className="px-2.5 py-2 text-right cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[105px]"
@@ -1344,15 +1325,15 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
-                {/* 8. Legal / Invoice NO */}
+                {/* 10. Legal / Invoice NO */}
                 <th className="px-2.5 py-2 whitespace-nowrap min-w-[125px]">
                   Legal / Invoice NO
                 </th>
 
-                {/* 9. Current Status */}
+                {/* 11. Current Status */}
                 <th
                   onClick={() => handleSortToggle('stage')}
-                  className="px-2.5 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[140px]"
+                  className="px-2.5 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[130px]"
                   title="Click to sort by status"
                 >
                   <div className="flex items-center justify-center gap-1">
@@ -1365,11 +1346,11 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
-                {/* 10. Stage Aging */}
+                {/* 12. Stage Aging */}
                 <th
                   onClick={() => handleSortToggle('stageDays')}
-                  className="px-2.5 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[105px]"
-                  title="Recorded duration in current stage & total cycle time"
+                  className="px-2.5 py-2 text-center cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[95px]"
+                  title="Recorded duration in current stage"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>Stage Aging</span>
@@ -1381,9 +1362,9 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   </div>
                 </th>
 
-                {/* 11. View */}
-                <th className="px-3 py-2 text-right whitespace-nowrap w-24 pr-3.5">
-                  View
+                {/* 13. Actions */}
+                <th className="px-3 py-2 text-right whitespace-nowrap min-w-[170px] pr-3.5">
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -1391,7 +1372,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
             <tbody className="divide-y divide-slate-100 bg-white">
               {paginatedJobs.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-slate-500 font-medium">
+                  <td colSpan={13} className="py-12 text-center text-slate-500 font-medium">
                     <div className="flex flex-col items-center justify-center gap-1">
                       <FileSpreadsheet className="w-8 h-8 text-slate-300" />
                       <div className="font-semibold text-slate-700">No drilling jobs found</div>
@@ -1419,99 +1400,75 @@ export const JobsView: React.FC<JobsViewProps> = ({
                       key={job.id}
                       className="hover:bg-blue-50/40 transition-colors group"
                     >
-                      {/* 1. Job # - Strict whitespace-nowrap, sticky left anchor */}
+                      {/* 1. Job # */}
                       <td className={`px-3 ${padY} whitespace-nowrap align-middle sticky left-0 bg-white group-hover:bg-blue-50/70 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]`}>
                         <button
                           onClick={() => setDossierJob(job)}
-                          className="font-mono font-bold text-[#1a3055] group-hover:text-blue-700 text-xs tracking-tight transition cursor-pointer text-left select-all hover:underline"
-                          title="Click to open MS Access style Job Dossier"
+                          className="font-mono font-medium text-[#1a3055] group-hover:text-blue-700 text-xs tracking-tight transition cursor-pointer text-left select-all hover:underline"
+                          title="Click to open Job File"
                         >
                           {job.id}
                         </button>
                       </td>
 
-                      {/* 2. Client / Project Code (Stacked hierarchy) */}
-                      <td className={`px-3 ${padY} align-middle`}>
-                        <div className="flex flex-col min-w-0 max-w-[210px]">
-                          <span
-                            className="font-semibold text-slate-900 text-xs truncate leading-tight"
-                            title={job.client || 'ADNOC Drilling'}
-                          >
-                            {job.client || 'ADNOC Drilling'}
-                          </span>
-                          {job.contract && (
-                            <span
-                              className="text-[10px] font-mono text-slate-500 truncate leading-tight mt-0.5"
-                              title={`Project / Contract Code: ${job.contract}`}
-                            >
-                              Code: {job.contract}
-                            </span>
-                          )}
-                        </div>
+                      {/* 2. Client */}
+                      <td className={`px-3 ${padY} align-middle text-xs text-slate-800 truncate min-w-[140px] max-w-[180px]`} title={job.client || 'ADNOC Drilling'}>
+                        {job.client || 'ADNOC Drilling'}
                       </td>
 
-                      {/* 3. Rig / Well (Rig in bold, Well without bold) */}
-                      <td className={`px-3 ${padY} whitespace-nowrap align-middle`}>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-900 text-xs tracking-tight">
-                            {job.rig || 'Rig Unassigned'}
-                          </span>
-                          {job.well && job.well !== '—' && job.well !== '-' && (
-                            <span className="text-slate-500 font-normal text-xs">
-                              {job.well}
-                            </span>
-                          )}
-                        </div>
+                      {/* 3. Project / Contract (clean without "Code:") */}
+                      <td className={`px-2.5 ${padY} align-middle font-mono text-xs text-slate-600 truncate min-w-[100px] max-w-[140px]`} title={job.contract || '—'}>
+                        {job.contract || '—'}
                       </td>
 
-                      {/* 4. PO Number */}
-                      <td className={`px-2.5 ${padY} font-mono text-[11px] text-slate-600 whitespace-nowrap align-middle`}>
-                        {job.poNumber ? (
-                          <span className="font-medium text-slate-800">{job.poNumber}</span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
+                      {/* 4. Rig */}
+                      <td className={`px-2.5 ${padY} align-middle text-xs font-medium text-slate-900 whitespace-nowrap`}>
+                        {job.rig || '—'}
                       </td>
 
-                      {/* 5. Job Start Date (First DT date, fallback mobDate) */}
-                      <td className={`px-2.5 ${padY} text-center font-mono text-[11px] text-slate-700 whitespace-nowrap align-middle`}>
+                      {/* 5. Well */}
+                      <td className={`px-2.5 ${padY} align-middle text-xs text-slate-700 whitespace-nowrap`}>
+                        {job.well && job.well !== '—' && job.well !== '-' ? job.well : '—'}
+                      </td>
+
+                      {/* 6. PO Number */}
+                      <td className={`px-2.5 ${padY} font-mono text-xs text-slate-700 whitespace-nowrap align-middle`}>
+                        {job.poNumber ? job.poNumber : <span className="text-slate-300">—</span>}
+                      </td>
+
+                      {/* 7. Job Start Date */}
+                      <td className={`px-2.5 ${padY} text-center font-mono text-xs text-slate-700 whitespace-nowrap align-middle`}>
                         {formatJobDate(startDate)}
                       </td>
 
-                      {/* 6. Job End Date (Last RT date, fallback demobDate) */}
-                      <td className={`px-2.5 ${padY} text-center font-mono text-[11px] text-slate-700 whitespace-nowrap align-middle`}>
+                      {/* 8. Job End Date */}
+                      <td className={`px-2.5 ${padY} text-center font-mono text-xs text-slate-700 whitespace-nowrap align-middle`}>
                         {formatJobDate(endDate)}
                       </td>
 
-                      {/* 7. Job Value / Amount */}
-                      <td className={`px-2.5 ${padY} text-right font-mono whitespace-nowrap align-middle`}>
+                      {/* 9. Job Value */}
+                      <td className={`px-2.5 ${padY} text-right font-mono text-xs whitespace-nowrap align-middle`}>
                         {(() => {
                           const val = job.invoiceAmount || (typeof job.cost === 'number' ? job.cost : parseFloat(String(job.cost || '').replace(/[^0-9.-]/g, '')) || 0);
                           return val > 0 ? (
-                            <span className="font-bold text-slate-900 text-xs">
+                            <span className="font-medium text-slate-900 text-xs">
                               ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           ) : (
-                            <span className="text-slate-300 text-[11px]">—</span>
+                            <span className="text-slate-300">—</span>
                           );
                         })()}
                       </td>
 
-                      {/* 8. Legal / Invoice NO (Strictly displays FSH/FR/WHP; non-matching ERP invoices labeled under approval) */}
-                      <td className={`px-2.5 ${padY} font-mono text-[11px] whitespace-nowrap align-middle`}>
+                      {/* 10. Legal / Invoice NO */}
+                      <td className={`px-2.5 ${padY} font-mono text-xs whitespace-nowrap align-middle`}>
                         {job.legalInvoiceNumber && isLegalInvoiceNumber(job.legalInvoiceNumber) ? (
-                          <div className="flex items-center gap-1">
-                            <span className="font-medium text-slate-800 text-[11px]">
-                              {job.legalInvoiceNumber.split(',')[0].trim()}
-                            </span>
-                            {job.legalInvoiceNumber.includes(',') && (
-                              <span className="text-[10px] text-slate-400 font-sans">
-                                +{job.legalInvoiceNumber.split(',').length - 1}
-                              </span>
-                            )}
-                          </div>
+                          <span className="font-medium text-slate-800 text-xs" title={job.legalInvoiceNumber}>
+                            {job.legalInvoiceNumber.split(',')[0].trim()}
+                            {job.legalInvoiceNumber.includes(',') && ` +${job.legalInvoiceNumber.split(',').length - 1}`}
+                          </span>
                         ) : job.draftInvoiceNumber || (job.legalInvoiceNumber && !isLegalInvoiceNumber(job.legalInvoiceNumber)) ? (
-                          <span className="text-slate-500 text-[10px]" title="ERP Billing Document (Under Approval)">
+                          <span className="text-slate-500 text-[11px]" title="ERP Billing Document (Under Approval)">
                             ERP #{job.draftInvoiceNumber || job.legalInvoiceNumber}
                           </span>
                         ) : (
@@ -1519,93 +1476,74 @@ export const JobsView: React.FC<JobsViewProps> = ({
                         )}
                       </td>
 
-                      {/* 9. Current Status Badge (Sleek Executive Pill) */}
+                      {/* 11. Current Status (Clean text + subtle dot, no lock icons) */}
                       <td className={`px-2.5 ${padY} text-center whitespace-nowrap align-middle`}>
                         {isLegalInvoiceNumber(job.legalInvoiceNumber) || stage === '6_completed' ? (
-                          <span
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs"
-                            title={`Completed & Locked with verified Legal Invoice: ${job.legalInvoiceNumber || 'Final Invoiced'}`}
-                          >
-                            <CheckCircle className="w-3 h-3 text-emerald-600" />
+                          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                             <span>Completed</span>
-                            <span className="text-[10px] opacity-70">🔒</span>
                           </span>
                         ) : stage === '2_ongoing' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-300 shadow-2xs">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-blue-700 font-medium">
                             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
                             <span>Ongoing</span>
                           </span>
                         ) : stage === '5_ses_submitted' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-800 border border-purple-300 shadow-2xs">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-purple-700 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
                             <span>Under SES</span>
                           </span>
                         ) : stage === '4_submitted_billing' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-amber-800 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                             <span>In Billing</span>
                           </span>
                         ) : stage === '3_waiting_signed_docs' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-300 shadow-2xs">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-rose-700 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                             <span>Waiting Docs</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                             <span>Open</span>
                           </span>
                         )}
                       </td>
 
-                      {/* 10. Stage Aging & Cycle Duration */}
-                      <td className={`px-2.5 ${padY} text-center font-mono whitespace-nowrap align-middle`}>
-                        <div className="flex flex-col items-center leading-tight">
-                          <span
-                            className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${
-                              stage === '3_waiting_signed_docs' && lifecycleMetrics.currentStageDays <= 30 && lifecycleMetrics.currentStageDays > 0
-                                ? 'bg-amber-50 text-amber-900 border border-amber-200'
-                                : 'text-slate-700'
-                            }`}
-                            title={`${lifecycleMetrics.currentStageDays} days in status: ${STAGE_DEFINITIONS[stage].label}`}
-                          >
-                            {lifecycleMetrics.currentStageDays}d
-                          </span>
-                          <span className="text-[9px] text-slate-400 font-sans">
-                            {lifecycleMetrics.totalCycleDays}d total
-                          </span>
-                        </div>
+                      {/* 12. Stage Aging (Single clean duration line) */}
+                      <td className={`px-2.5 ${padY} text-center font-mono text-xs whitespace-nowrap align-middle`}>
+                        <span
+                          className={stage === '3_waiting_signed_docs' && lifecycleMetrics.currentStageDays > 0 ? 'text-amber-800 font-medium' : 'text-slate-700'}
+                          title={`${lifecycleMetrics.currentStageDays} days in stage: ${STAGE_DEFINITIONS[stage].label}`}
+                        >
+                          {lifecycleMetrics.currentStageDays}d
+                        </span>
                       </td>
 
-                      {/* 11. View & Actions (Redundant Status badge button removed) */}
+                      {/* 13. Actions */}
                       <td className={`px-3 ${padY} text-right whitespace-nowrap align-middle pr-3.5`}>
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => setDossierJob(job)}
-                            className="h-6 px-1.5 rounded bg-blue-100 hover:bg-[#1a3055] hover:text-white text-blue-900 font-bold text-[10px] transition-colors border border-blue-300 cursor-pointer flex items-center gap-1 shadow-2xs"
-                            title="Open MS Access style Job Dossier"
+                            className="h-6 px-2 rounded bg-blue-50 hover:bg-[#1a3055] hover:text-white text-blue-900 font-medium text-[11px] transition-colors border border-blue-200 cursor-pointer flex items-center gap-1 shadow-2xs"
+                            title="Open Job File"
                           >
                             <span>🗂️</span>
-                            <span>Dossier</span>
+                            <span>Job File</span>
                           </button>
                           <button
-                            onClick={() => setSelectedJobDetail(job)}
-                            className="h-6 px-1.5 rounded bg-slate-100 hover:bg-[#1a3055] hover:text-white text-[#1a3055] font-semibold text-[10px] transition-colors border border-slate-200 cursor-pointer flex items-center gap-1 shadow-2xs"
-                            title="View Job Details, Tickets & Tool Ledger"
+                            onClick={() => setSelectedToolsJobId(job.id)}
+                            className="h-6 px-2 rounded bg-sky-50 hover:bg-sky-600 hover:text-white text-sky-800 font-medium text-[11px] transition-colors border border-sky-200 cursor-pointer flex items-center gap-1 shadow-2xs"
+                            title="Open Tools List (Dispatched vs Returned)"
                           >
-                            <Eye className="w-3 h-3" />
-                            <span>View</span>
+                            <span>📋</span>
+                            <span>Tools</span>
                           </button>
-                          {onOpenJobToolsList && (
-                            <button
-                              onClick={() => onOpenJobToolsList(job.id)}
-                              className="h-6 px-1.5 rounded bg-sky-50 hover:bg-sky-100 text-sky-800 font-semibold text-[10px] transition-colors border border-sky-300 cursor-pointer flex items-center gap-1 shadow-2xs"
-                              title="Open Job_ToolsList (Dispatched vs Returned Tools)"
-                            >
-                              <span>📋</span>
-                              <span>Tools</span>
-                            </button>
-                          )}
                           {isActive && user?.role !== 'Viewer' && (
                             <button
                               onClick={() => onDispatchJob(job.id)}
-                              className="h-6 px-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[10px] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                              className="h-6 px-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-[11px] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
                               title="Create Delivery Ticket (DT)"
                             >
                               <Truck className="w-3 h-3" />
@@ -1615,7 +1553,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                           {toolsOnRig > 0 && onReceiveJob && user?.role !== 'Viewer' && (
                             <button
                               onClick={() => onReceiveJob(job.id)}
-                              className="h-6 px-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white font-semibold text-[10px] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                              className="h-6 px-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white font-medium text-[11px] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
                               title="Create Receiving Ticket (RT)"
                             >
                               <RotateCcw className="w-3 h-3" />
@@ -2018,6 +1956,74 @@ export const JobsView: React.FC<JobsViewProps> = ({
           }}
           onClose={() => setEditingJobStatus(null)}
         />
+      )}
+
+      {/* Dedicated Job File Modal Window (retains Drilling Jobs scroll, filters, and focus) */}
+      {dossierJob && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-1 sm:p-3 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-[#dce6f1] rounded-lg shadow-2xl border border-[#9fb6cf] w-full max-w-[1550px] max-h-[96vh] flex flex-col overflow-hidden">
+            <div className="overflow-y-auto flex-1">
+              <JobDossierView
+                job={dossierJob}
+                user={user}
+                jobs={jobs}
+                dtBatches={dtBatches}
+                rtBatches={rtBatches || []}
+                callouts={callouts}
+                inventory={inventory || []}
+                contracts={contracts || []}
+                onSaveJob={(updated) => {
+                  onSaveJob(updated);
+                  setDossierJob(updated);
+                }}
+                onSaveDTBatch={onSaveDTBatch || (() => {})}
+                onUpdateDTBatch={onUpdateDTBatch}
+                onSaveRTBatch={onSaveRTBatch || (() => {})}
+                onUpdateRTBatch={onUpdateRTBatch}
+                onSaveCallout={onSaveCallout}
+                onBackToRegister={() => setDossierJob(null)}
+                onNavigateToInvoicing={onNavigateToInvoicing}
+                showToast={showToast || ((msg) => alert(msg))}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dedicated Job Equipment & Tools List Modal Window (retains Drilling Jobs scroll, filters, and focus) */}
+      {selectedToolsJobId && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-lg shadow-2xl border border-slate-300 w-full max-w-7xl max-h-[92vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-[#1a3055] text-white px-4 py-2.5 flex items-center justify-between shadow-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm">Job Equipment &amp; Tools Reconciliation</span>
+                <span className="bg-amber-400 text-slate-950 px-2 py-0.5 rounded text-xs font-mono font-bold">
+                  {selectedToolsJobId}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedToolsJobId(null)}
+                className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+              >
+                <span>✕ Close / Back to Register</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-3 overflow-y-auto flex-1 bg-slate-50">
+              <JobToolsListView
+                jobs={jobs}
+                dtBatches={dtBatches}
+                rtBatches={rtBatches || []}
+                inventory={inventory || []}
+                preSelectedJobId={selectedToolsJobId}
+                showToast={showToast}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

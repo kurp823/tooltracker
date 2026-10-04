@@ -1353,7 +1353,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       {/* Top Access Window Bar */}
       <div className="bg-[#1a3055] text-white px-3 py-1.5 rounded-t-md flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-2 text-xs font-bold tracking-wide">
-          <span>Job Dossier Workspace &bull; Job No: <span className="font-mono text-amber-300">{jobData.id}</span></span>
+          <span>Job File Workspace &bull; Job No: <span className="font-mono text-amber-300">{jobData.id}</span></span>
           {jobData.legalInvoiceNumber && (
             <span className="bg-emerald-500/20 text-emerald-200 border border-emerald-400/40 px-2 py-0.5 rounded text-[10px] font-mono">
               Legal Inv: {jobData.legalInvoiceNumber}
@@ -2468,20 +2468,37 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {activeDT.toolLines?.map((t, idx) => (
-                        <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
-                          <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
-                          <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
-                          <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{t.qty || 1}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{formatDateDD_MM_YYYY(activeDT.dispatchDate)}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-mono text-blue-700">{jobData.id}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-mono text-slate-500">{t.rtBatchId || '—'}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-mono text-slate-500">—</td>
-                          <td className="py-1 px-2 whitespace-nowrap text-slate-700">{t.ownership || 'EMDAD'}</td>
-                          <td className="py-1 px-2 whitespace-nowrap text-slate-600 text-[11px]">{t.shortDesc || 'Downhole Tool'}</td>
-                        </tr>
-                      ))}
+                      {activeDT.toolLines?.map((t, idx) => {
+                        const tSerial = (t.serial || '').trim().toUpperCase();
+                        const tAsset = (t.assetNo || '').trim().toUpperCase();
+                        const returnBatch = jobRTs.find((rt) =>
+                          (rt.toolLines || []).some((rtl) => {
+                            const rSerial = (rtl.serial || '').trim().toUpperCase();
+                            const rAsset = (rtl.assetNo || '').trim().toUpperCase();
+                            return (tSerial && (rSerial === tSerial || rAsset === tSerial)) || (tAsset && (rSerial === tAsset || rAsset === tAsset));
+                          }) ||
+                          rt.id === t.rtBatchId ||
+                          rt.rtNumber === t.rtBatchId ||
+                          (rt as any).rgtNo === t.rtBatchId
+                        );
+                        const rgtNo = returnBatch ? returnBatch.rtNumber || (returnBatch as any).rgtNo : t.rtBatchId || null;
+                        const rgtDate = returnBatch ? returnBatch.rtDate || returnBatch.backloadRmDate : (t as any).rtDate || (t as any).returnDate || null;
+
+                        return (
+                          <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
+                            <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
+                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{t.qty || 1}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{formatDateDD_MM_YYYY(activeDT.dispatchDate)}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-blue-700">{jobData.id}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-emerald-700">{rgtNo || '—'}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{rgtDate ? formatDateDD_MM_YYYY(rgtDate) : '—'}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-slate-700">{t.ownership || 'EMDAD'}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-slate-600 text-[11px]">{t.shortDesc || 'Downhole Tool'}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

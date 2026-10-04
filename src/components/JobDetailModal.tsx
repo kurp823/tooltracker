@@ -68,6 +68,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
   const toolsListRows = useMemo(() => {
     const rtLineLookups: {
       serial: string;
+      assetNo: string;
       rtNumber: string;
       rtDate: string;
       used: boolean;
@@ -76,10 +77,11 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
     rtBatches.forEach((rt) => {
       (rt.toolLines || []).forEach((rtl) => {
         rtLineLookups.push({
-          serial: (rtl.serial || '').trim(),
-          rtNumber: rt.rtNumber,
-          rtDate: rt.rtDate || '',
-          used: Boolean(rtl.used),
+          serial: (rtl.serial || '').trim().toUpperCase(),
+          assetNo: (rtl.assetNo || '').trim().toUpperCase(),
+          rtNumber: rt.rtNumber || (rt as any).rgtNo || 'RT-GEN',
+          rtDate: rt.rtDate || rt.backloadRmDate || (rtl as any).rtDate || '',
+          used: Boolean(rtl.used || rtl.condition === 'USED'),
         });
       });
     });
@@ -101,8 +103,13 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
     dtBatches.forEach((dt) => {
       const lines = dt.toolLines || [];
       lines.forEach((line, idx) => {
-        const lineSerial = (line.serial || '').trim();
-        const matchedRT = rtLineLookups.find((r) => r.serial === lineSerial);
+        const lineSerial = (line.serial || '').trim().toUpperCase();
+        const lineAsset = (line.assetNo || '').trim().toUpperCase();
+        const matchedRT = rtLineLookups.find(
+          (r) =>
+            (lineSerial && (r.serial === lineSerial || r.assetNo === lineSerial)) ||
+            (lineAsset && (r.serial === lineAsset || r.assetNo === lineAsset))
+        );
 
         let remark: 'Used' | 'Not Used' | 'On Rig' = 'On Rig';
         let retNum = '';
@@ -113,14 +120,21 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
           retDate = matchedRT.rtDate;
           remark = matchedRT.used ? 'Used' : 'Not Used';
         } else if (line.status === 'Returned' || line.rtBatchId) {
-          retNum = line.rtBatchId || 'Returned';
+          const directRt = rtBatches.find(
+            (b) =>
+              b.id === line.rtBatchId ||
+              b.rtNumber === line.rtBatchId ||
+              (b as any).rgtNo === line.rtBatchId
+          );
+          retNum = directRt?.rtNumber || (directRt as any)?.rgtNo || line.rtBatchId || 'Returned';
+          retDate = directRt?.rtDate || directRt?.backloadRmDate || (line as any).rtDate || (line as any).returnDate || (job.demobDate || '');
           remark = line.used ? 'Used' : 'Not Used';
         }
 
         rows.push({
           jobNum: job.id,
           deliveryTicketNum: dt.dtNumber,
-          deliveryDate: dt.deliveryDate || dt.rmDate || '',
+          deliveryDate: dt.deliveryDate || dt.rmDate || dt.dispatchDate || '',
           sNo: idx + 1,
           partNum: line.serial || line.assetNo || '—',
           partDescription: line.desc || line.shortDesc || 'Drilling Tool',

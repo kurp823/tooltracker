@@ -21,7 +21,7 @@ const ALL_ROLES: UserRole[] = ['Admin', 'Operations', 'Handler', 'QC', 'Inspecto
 const ALL_MODULES: { id: NavModule; label: string; group: string; icon: string }[] = [
   // Operations
   { id: 'dashboard', label: 'Operations Dashboard', group: 'Operations', icon: '📊' },
-  { id: 'jobs', label: 'Drilling Jobs & Dossier', group: 'Operations', icon: '⚡' },
+  { id: 'jobs', label: 'Drilling Jobs & Job File', group: 'Operations', icon: '⚡' },
   { id: 'callouts', label: 'Rig Callouts', group: 'Operations', icon: '📞' },
   { id: 'dt', label: 'Delivery Tickets (DT)', group: 'Operations', icon: '🚚' },
   { id: 'rt', label: 'Receiving Tickets (RT)', group: 'Operations', icon: '📥' },
@@ -51,7 +51,7 @@ const ALL_MODULES: { id: NavModule; label: string; group: string; icon: string }
 ];
 
 const FUNCTION_PERMISSIONS: { id: NavModule; label: string; desc: string }[] = [
-  { id: 'jobs', label: 'Jobs & Dossier Management', desc: 'Create, modify drilling jobs, checklists, assign tools & re-open' },
+  { id: 'jobs', label: 'Jobs & Job File Management', desc: 'Create, modify drilling jobs, checklists, assign tools & re-open' },
   { id: 'dt', label: 'Delivery Tickets Dispatch', desc: 'Create, sign, issue and ship delivery tickets to rigs' },
   { id: 'rt', label: 'Receiving Tickets & Backloads', desc: 'Process backloads, inspect conditions (USED, NOT USED, LIH)' },
   { id: 'callouts', label: 'Callouts Authorization', desc: 'Create, modify and approve rig callouts' },
