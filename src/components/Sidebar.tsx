@@ -95,7 +95,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'job-tools-list', label: 'Job Tools List', icon: '📋' },
         { id: 'tool-history', label: 'Tool Movement History', icon: '⏱️' },
         { id: 'gatepass', label: 'Security Gate Pass', icon: '🛡️' },
-        { id: 'utilization', label: 'Utilization', icon: '📈' },
       ],
     },
     {

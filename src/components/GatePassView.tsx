@@ -69,6 +69,18 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
     }
   }, [inventory, gpType]);
 
+  // Sub-contractor tools at base count
+  const subConToolsAtBase = useMemo(() => {
+    return inventory.filter(
+      (t) =>
+        !t.isEmdad &&
+        t.status !== 'Removed' &&
+        t.status !== 'Lost in Hole' &&
+        t.status !== 'LIH' &&
+        ['Emdad Base', 'Base', 'Our Base', 'Mussafah Yard', 'Yard'].includes(t.location)
+    );
+  }, [inventory]);
+
   // Suppliers / Vendors available
   const availableSuppliers = useMemo(() => {
     if (gpType === 'Return Third-Party Tool (Permanent)') {

@@ -883,22 +883,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
             <span>Export CSV</span>
           </button>
 
-          {user?.role !== 'Viewer' && (
-            <button
-              type="button"
-              onClick={() => {
-                setCsvInputText('');
-                setCsvParsedPreview([]);
-                setCsvFileName('');
-                setIsImportModalOpen(true);
-              }}
-              className="h-7.5 px-3 rounded bg-emerald-700 text-white font-semibold text-xs hover:bg-emerald-800 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
-              title="Upload and synchronize Jobs CSV"
-            >
-              <Upload className="w-3.5 h-3.5 text-emerald-100" />
-              <span>Import / Sync CSV</span>
-            </button>
-          )}
+
 
           {user?.role !== 'Viewer' && (
             <button
@@ -1215,12 +1200,12 @@ export const JobsView: React.FC<JobsViewProps> = ({
       <div className="bg-white border border-slate-200 rounded-md shadow-xs overflow-hidden w-full">
         <div className="overflow-x-auto w-full max-h-[68vh] relative">
           <table className="w-full text-left text-xs border-collapse">
-            <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs text-slate-700 border-b border-slate-200 text-[11px] font-bold select-none uppercase tracking-wider">
+            <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 border-b border-slate-200 text-[11px] font-bold select-none uppercase tracking-wider">
               <tr>
                 {/* 1. Job # */}
                 <th
                   onClick={() => handleSortToggle('id')}
-                  className="sticky left-0 z-20 bg-slate-100 px-3 py-2 cursor-pointer hover:bg-slate-200/70 whitespace-nowrap min-w-[125px] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]"
+                  className="sticky left-0 z-30 bg-slate-100 px-3 py-2 cursor-pointer hover:bg-slate-200 whitespace-nowrap w-[130px] min-w-[130px] max-w-[130px] border-r border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]"
                 >
                   <div className="flex items-center gap-1">
                     <span>Job #</span>
@@ -1401,7 +1386,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                       className="hover:bg-blue-50/40 transition-colors group"
                     >
                       {/* 1. Job # */}
-                      <td className={`px-3 ${padY} whitespace-nowrap align-middle sticky left-0 bg-white group-hover:bg-blue-50/70 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]`}>
+                      <td className={`px-3 ${padY} whitespace-nowrap align-middle sticky left-0 bg-white group-hover:bg-slate-50 z-20 w-[130px] min-w-[130px] max-w-[130px] border-r border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]`}>
                         <button
                           onClick={() => setDossierJob(job)}
                           className="font-mono font-medium text-[#1a3055] group-hover:text-blue-700 text-xs tracking-tight transition cursor-pointer text-left select-all hover:underline"

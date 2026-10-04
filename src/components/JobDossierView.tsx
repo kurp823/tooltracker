@@ -1257,12 +1257,24 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         }
       });
 
-      const standbyRate = 600;
-      const opsRate = 1200;
+      // Dynamic rate lookup from active contract rate schedule or tool properties
+      const jobContractKey = (jobData.contractNo || jobData.contract || '').trim().toLowerCase();
+      const matchedContract = contracts.find((c) => {
+        const cNum = (c.contractNumber || '').trim().toLowerCase();
+        return cNum && (cNum === jobContractKey || jobContractKey.includes(cNum) || cNum.includes(jobContractKey));
+      });
+      const contractRate = matchedContract?.rateSchedule?.find((r) => {
+        const typeMatches = r.toolType && (t.shortDesc || '').toLowerCase().includes(r.toolType.toLowerCase());
+        const sizeMatches = !r.size || r.size === t.size;
+        return typeMatches && sizeMatches;
+      });
+
+      const standbyRate = (t as any).standbyRate || contractRate?.standbyRate || (t as any).dayRate || (matchedContract?.dayRateStandbyUSD ? matchedContract.dayRateStandbyUSD * 3.6725 : 600);
+      const opsRate = (t as any).opsRate || (t as any).operatingRate || contractRate?.operatingRate || (matchedContract?.dayRateOpsUSD ? matchedContract.dayRateOpsUSD * 3.6725 : 1200);
       const totalStandbyRate = sbCount * standbyRate;
       const totalOpsRate = opsCount * opsRate;
-      const runCharge = 0;
-      const redressCharge = 0;
+      const runCharge = (t as any).runCharge || (contractRate as any)?.runCharge || 0;
+      const redressCharge = (t as any).redressCharge || (contractRate as any)?.redressCharge || 0;
       const totalMonthValue = totalStandbyRate + totalOpsRate + runCharge + redressCharge;
 
       return {

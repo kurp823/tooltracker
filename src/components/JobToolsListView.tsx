@@ -79,18 +79,8 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
     });
   }, [jobs, jobToolCounts]);
 
-  // Selected job: defaults to preSelectedJobId, or first job with tools, or empty ("All Jobs")
-  const [selectedJobId, setSelectedJobId] = useState<string>(() => {
-    if (preSelectedJobId) return preSelectedJobId;
-    const firstWithTools = sortedJobs.find((j) => {
-      const count =
-        jobToolCounts.get(j.id.trim().toUpperCase()) ||
-        jobToolCounts.get(normalizeJobKey(j.id)) ||
-        0;
-      return count > 0;
-    });
-    return firstWithTools?.id || '';
-  });
+  // Selected job: defaults to preSelectedJobId or empty ("-- All Jobs --")
+  const [selectedJobId, setSelectedJobId] = useState<string>(preSelectedJobId || '');
 
   // Table filters & pagination
   const [tableSearchFilter, setTableSearchFilter] = useState('');

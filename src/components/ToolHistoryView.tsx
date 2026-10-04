@@ -47,15 +47,8 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
     });
   }, [inventory, toolDeploymentCounts]);
 
-  // Default selected tool: preSelectedSerial or first tool with deployments or empty
-  const [selectedSerial, setSelectedSerial] = useState<string>(() => {
-    if (preSelectedSerial) return preSelectedSerial;
-    const firstWithDeployments = sortedInventory.find((t) => {
-      const s = (t.serial || t.assetNo || '').trim().toUpperCase();
-      return (toolDeploymentCounts.get(s) || 0) > 0;
-    });
-    return firstWithDeployments?.serial || '';
-  });
+  // Default selected tool: preSelectedSerial or empty ("-- All Tools --")
+  const [selectedSerial, setSelectedSerial] = useState<string>(preSelectedSerial || '');
 
   // Table filters & pagination
   const [tableSearchFilter, setTableSearchFilter] = useState('');
