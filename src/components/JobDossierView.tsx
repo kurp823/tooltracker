@@ -3537,6 +3537,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
       {/* ADMIN RE-OPEN JUSTIFICATION MODAL */}
       {isReopenModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
