@@ -606,34 +606,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return options;
   }, [jobDTs, jobRTs, jobData.mobDate, jobData.firstDtDate, jobData.lastRtDate, activeOnRig]);
 
-  // Total Cumulative Job Value across all months
-  const totalCumulativeJobValue = useMemo(() => {
-    let grandTotal = 0;
-    utilMonthOptions.forEach((opt) => {
-      const daysInM = new Date(opt.year, opt.month, 0).getDate();
-      allMobilizedTools.forEach((t) => {
-        const dispMs = parseDateToMs(t.dispatchDate);
-        const retMs = t.returnDate ? parseDateToMs(t.returnDate) : 0;
-        let sb = 0;
-        let ops = 0;
-        for (let d = 1; d <= daysInM; d++) {
-          const cur = new Date(opt.year, opt.month - 1, d).getTime();
-          const isDisp = dispMs > 0 ? cur >= dispMs : true;
-          const isRet = retMs > 0 ? cur > retMs : false;
-          if (isDisp && !isRet) {
-            const daysSinceDisp = dispMs > 0 ? Math.floor((cur - dispMs) / (1000 * 60 * 60 * 24)) : d;
-            if (daysSinceDisp <= 2) sb += 1;
-            else ops += 1;
-          }
-        }
-        grandTotal += sb * 600 + ops * 1200;
-      });
-    });
-    return grandTotal;
-  }, [allMobilizedTools, utilMonthOptions]);
+  // Real SQL Job Value directly from database invoiceAmount or cost
+  const sqlJobValue = useMemo(() => {
+    if (jobData.invoiceAmount !== null && jobData.invoiceAmount !== undefined && jobData.invoiceAmount !== 0) {
+      return jobData.invoiceAmount;
+    }
+    if (typeof jobData.cost === 'number' && jobData.cost !== 0) {
+      return jobData.cost;
+    }
+    const parsed = parseFloat(String(jobData.cost || '').replace(/[^0-9.-]/g, ''));
+    return !isNaN(parsed) && parsed !== 0 ? parsed : 0;
+  }, [jobData.invoiceAmount, jobData.cost]);
 
   const poValueNum = typeof jobData.poValue === 'number' ? jobData.poValue : parseFloat(String(jobData.poValue || 0)) || 0;
-  const poBalance = poValueNum - totalCumulativeJobValue;
+  const poBalance = poValueNum - sqlJobValue;
 
   // Manpower / Crew State
   const [assignedCrew, setAssignedCrew] = useState<JobCrewMember[]>(() => {
@@ -1226,6 +1212,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return Array.from({ length: daysInUtilMonth }, (_, i) => i + 1);
   }, [daysInUtilMonth]);
 
+  // Interactive cell overrides for daily tool utilization
+  const [customUtilStatuses, setCustomUtilStatuses] = useState<Record<string, string>>({});
+  const handleToggleDayStatus = (toolKey: string, dayNum: number) => {
+    if (isLocked) return;
+    const key = `${toolKey}_${selectedUtilYear}_${selectedUtilMonth}_${dayNum}`;
+    const cur = customUtilStatuses[key];
+    let next = '1';
+    if (cur === '1') next = 'S';
+    else if (cur === 'S') next = '';
+    else if (cur === '') next = '1';
+    else next = 'S';
+    setCustomUtilStatuses((prev) => ({ ...prev, [key]: next }));
+  };
+
   // Compute operational days and commercial breakdown for each tool in selected month
   const toolUtilizationRows = useMemo(() => {
     return allMobilizedTools.map((t, idx) => {
@@ -1235,6 +1235,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       let sbCount = 0;
       let opsCount = 0;
       const dayStatuses: Record<number, string> = {};
+      const toolKey = t.serial || t.assetNo || String(idx);
 
       utilDaysList.forEach((dayNum) => {
         const curDate = new Date(selectedUtilYear, selectedUtilMonth - 1, dayNum).getTime();
@@ -1243,43 +1244,55 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         const isReturned = retMs > 0 ? curDate > retMs : false;
 
         if (isDispatched && !isReturned) {
-          // Operational pattern: 2 days standby (S), followed by active drilling (1)
-          const daysSinceDisp = dispMs > 0 ? Math.floor((curDate - dispMs) / (1000 * 60 * 60 * 24)) : dayNum;
-          if (daysSinceDisp <= 2) {
-            dayStatuses[dayNum] = 'S';
-            sbCount += 1;
+          const overrideKey = `${toolKey}_${selectedUtilYear}_${selectedUtilMonth}_${dayNum}`;
+          const customVal = customUtilStatuses[overrideKey];
+          if (customVal !== undefined) {
+            dayStatuses[dayNum] = customVal;
+            if (customVal === '1') opsCount += 1;
+            else if (customVal === 'S') sbCount += 1;
           } else {
-            dayStatuses[dayNum] = '1';
-            opsCount += 1;
+            // Live condition from Return Ticket or tool line:
+            // If tool was marked as Not Used / Standby, it was on Standby ('S')
+            // If tool was marked as Used, it was Operational ('1')
+            const isUsed = (t as any).used === true || (t as any).condition === 'Used' || (t as any).remark === 'Used';
+            if (isUsed) {
+              dayStatuses[dayNum] = '1';
+              opsCount += 1;
+            } else {
+              dayStatuses[dayNum] = 'S';
+              sbCount += 1;
+            }
           }
         } else {
           dayStatuses[dayNum] = '';
         }
       });
 
-      // Dynamic rate lookup from active contract rate schedule or tool properties
+      // Dynamic rate lookup from active contract rates (c.rates) or tool properties
       const jobContractKey = (jobData.contractNo || jobData.contract || '').trim().toLowerCase();
       const matchedContract = contracts.find((c) => {
-        const cNum = (c.contractNumber || '').trim().toLowerCase();
+        const cNum = (c.contractNumber || c.contractRef || c.id || '').trim().toLowerCase();
         return cNum && (cNum === jobContractKey || jobContractKey.includes(cNum) || cNum.includes(jobContractKey));
       });
-      const contractRate = matchedContract?.rateSchedule?.find((r) => {
-        const typeMatches = r.toolType && (t.shortDesc || '').toLowerCase().includes(r.toolType.toLowerCase());
-        const sizeMatches = !r.size || r.size === t.size;
+      const contractRate = matchedContract?.rates?.find((r) => {
+        const typeMatches = (r.shortDesc && (t.shortDesc || '').toLowerCase().includes(r.shortDesc.toLowerCase())) ||
+          (r.category && (t.shortDesc || '').toLowerCase().includes(r.category.toLowerCase()));
+        const sizeMatches = !r.size || !t.size || r.size.replace(/["\s]/g, '') === t.size.replace(/["\s]/g, '');
         return typeMatches && sizeMatches;
       });
 
-      const standbyRate = (t as any).standbyRate || contractRate?.standbyRate || (t as any).dayRate || (matchedContract?.dayRateStandbyUSD ? matchedContract.dayRateStandbyUSD * 3.6725 : 600);
-      const opsRate = (t as any).opsRate || (t as any).operatingRate || contractRate?.operatingRate || (matchedContract?.dayRateOpsUSD ? matchedContract.dayRateOpsUSD * 3.6725 : 1200);
+      const standbyRate = contractRate?.standbyRate || (t as any).standbyRate || (t as any).standby_rate || (t as any).dayRate || 0;
+      const opsRate = contractRate?.opsRate || (t as any).opsRate || (t as any).ops_rate || (t as any).dayRate || 0;
       const totalStandbyRate = sbCount * standbyRate;
       const totalOpsRate = opsCount * opsRate;
-      const runCharge = (t as any).runCharge || (contractRate as any)?.runCharge || 0;
-      const redressCharge = (t as any).redressCharge || (contractRate as any)?.redressCharge || 0;
+      const runCharge = (t as any).runCharge || (contractRate as any)?.runCharges || 0;
+      const redressCharge = (t as any).redressCharge || (contractRate as any)?.redress || 0;
       const totalMonthValue = totalStandbyRate + totalOpsRate + runCharge + redressCharge;
 
       return {
         ...t,
         rowSeq: idx + 1,
+        toolKey,
         dayStatuses,
         sbCount,
         opsCount,
@@ -1292,7 +1305,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         totalMonthValue,
       };
     });
-  }, [allMobilizedTools, selectedUtilMonth, selectedUtilYear, utilDaysList]);
+  }, [allMobilizedTools, selectedUtilMonth, selectedUtilYear, utilDaysList, contracts, customUtilStatuses, jobData.contractNo, jobData.contract]);
 
   const monthTotalSB = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.sbCount, 0), [toolUtilizationRows]);
   const monthTotalOps = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.opsCount, 0), [toolUtilizationRows]);
@@ -1331,7 +1344,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         }
       });
 
-      const totalUSD = (opsCount + sbCount) * (eng.dailyRateUSD || 750);
+      const totalUSD = (opsCount + sbCount) * (eng.dailyRateUSD || 0);
 
       return {
         ...eng,
@@ -1637,7 +1650,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   </div>
                   <span className="font-bold text-slate-700 text-xs">Job Value:</span>
                   <span className="font-mono font-bold text-blue-900 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-xs">
-                    {totalCumulativeJobValue.toLocaleString()} AED
+                    {sqlJobValue > 0 ? `${sqlJobValue.toLocaleString()} ${jobData.currency || 'USD'}` : '—'}
                   </span>
                 </div>
               </div>
@@ -3107,7 +3120,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             return (
                               <td
                                 key={day}
-                                className={`p-0.5 text-center font-mono font-bold text-[10px] border-x border-slate-100 ${
+                                onClick={() => handleToggleDayStatus(row.toolKey, day)}
+                                title={`Day ${day}: ${val === '1' ? '1 (Active Operations / Drilling)' : val === 'S' ? 'S (Standby on Rig)' : 'Off Rig'}. Click to toggle.`}
+                                className={`p-0.5 text-center font-mono font-bold text-[10px] border-x border-slate-100 transition select-none ${
+                                  !isLocked ? 'cursor-pointer hover:ring-1 hover:ring-blue-400' : ''
+                                } ${
                                   val === '1'
                                     ? 'bg-emerald-100 text-emerald-900'
                                     : val === 'S'
@@ -3170,7 +3187,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </div>
               <div className="flex items-center gap-4">
                 <span className="text-slate-300 font-normal">Active Window: {utilMonthOptions[0]?.label} &rarr; {utilMonthOptions[utilMonthOptions.length - 1]?.label}</span>
-                <span className="text-amber-300 font-mono text-base font-extrabold">{totalCumulativeJobValue.toLocaleString()} AED</span>
+                <span className="text-amber-300 font-mono text-base font-extrabold">
+                  {sqlJobValue > 0 ? `${sqlJobValue.toLocaleString()} ${jobData.currency || 'USD'}` : `${totalToolRevenueAED.toLocaleString()} AED`}
+                </span>
               </div>
             </div>
           </div>
