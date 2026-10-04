@@ -127,6 +127,34 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
     };
   }, [contractMap, jobMap, calloutMap, contracts]);
 
+  const resolveRTDate = (r: RTBatch): string => {
+    if (r.rtDate && r.rtDate !== '—') return formatDateDD_MM_YYYY(r.rtDate);
+    if (r.backloadRmDate && r.backloadRmDate !== '—') return formatDateDD_MM_YYYY(r.backloadRmDate);
+    if ((r as any).Date_In) return formatDateDD_MM_YYYY((r as any).Date_In);
+    if ((r as any).dateIn) return formatDateDD_MM_YYYY((r as any).dateIn);
+    if (r.jobId) {
+      const job = jobMap.get(r.jobId.trim().toUpperCase());
+      if (job?.demobDate) return formatDateDD_MM_YYYY(job.demobDate);
+      if (job?.lastRtDate) return formatDateDD_MM_YYYY(job.lastRtDate);
+      if (job?.mobDate) return formatDateDD_MM_YYYY(job.mobDate);
+    }
+    return '—';
+  };
+
+  const resolveRTBackloadDate = (r: RTBatch): string => {
+    if (r.backloadRmDate && r.backloadRmDate !== '—') return formatDateDD_MM_YYYY(r.backloadRmDate);
+    if (r.rtDate && r.rtDate !== '—') return formatDateDD_MM_YYYY(r.rtDate);
+    if ((r as any).Date_In) return formatDateDD_MM_YYYY((r as any).Date_In);
+    if ((r as any).dateIn) return formatDateDD_MM_YYYY((r as any).dateIn);
+    if (r.jobId) {
+      const job = jobMap.get(r.jobId.trim().toUpperCase());
+      if (job?.demobDate) return formatDateDD_MM_YYYY(job.demobDate);
+      if (job?.lastRtDate) return formatDateDD_MM_YYYY(job.lastRtDate);
+      if (job?.mobDate) return formatDateDD_MM_YYYY(job.mobDate);
+    }
+    return '—';
+  };
+
   // Next RT Number Generator
   const nextRtNumber = useMemo(() => {
     const curYr = new Date().getFullYear().toString().slice(-2);
@@ -617,10 +645,10 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                           )}
                         </td>
                         <td className="px-2.5 py-1.5 font-mono text-slate-500 text-[11px] whitespace-nowrap">
-                          {formatDateDD_MM_YYYY(r.backloadRmDate || r.rtDate)}
+                          {resolveRTBackloadDate(r)}
                         </td>
                         <td className="px-2.5 py-1.5 font-mono text-slate-700 whitespace-nowrap">
-                          {formatDateDD_MM_YYYY(r.rtDate || r.backloadRmDate)}
+                          {resolveRTDate(r)}
                         </td>
                         <td className="px-2.5 py-1.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           {r.isSigned || r.signedDocUrl ? (
@@ -1226,11 +1254,11 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                 </div>
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                   <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">RT Date</span>
-                  <span className="font-mono text-slate-700 text-xs">{formatDateDD_MM_YYYY(selectedRTDetail.rtDate || selectedRTDetail.backloadRmDate)}</span>
+                  <span className="font-mono text-slate-700 text-xs">{resolveRTDate(selectedRTDetail)}</span>
                 </div>
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                   <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Backload RM Date</span>
-                  <span className="font-mono text-slate-700 text-xs">{formatDateDD_MM_YYYY(selectedRTDetail.backloadRmDate || selectedRTDetail.rtDate)}</span>
+                  <span className="font-mono text-slate-700 text-xs">{resolveRTBackloadDate(selectedRTDetail)}</span>
                 </div>
               </div>
 

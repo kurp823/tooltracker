@@ -347,11 +347,39 @@ export function extractToolType(desc?: string, shortDesc?: string, invShortDesc?
 }
 
 /**
- * Normalizes a single row from tbl_DeliveryTicketLines (or nested tool line) into DTLine
+ * Universal date cleaner handling Date objects, ISO strings, timestamps, and Excel serial numbers
+ */
+export function cleanDateStr(d: any): string {
+  if (d === null || d === undefined || d === '') return '';
+  if (typeof d === 'number' || (typeof d === 'string' && /^\d+$/.test(d.trim()))) {
+    const num = typeof d === 'number' ? d : parseInt(d.trim(), 10);
+    // Excel serial date integer e.g. 25000 to 65000
+    if (num >= 25000 && num <= 65000) {
+      try {
+        const dateObj = new Date(Math.round((num - 25569) * 86400 * 1000));
+        if (!isNaN(dateObj.getTime())) {
+          return dateObj.toISOString().split('T')[0];
+        }
+      } catch {}
+    }
+  }
+  const s = String(d).trim();
+  if (!s || s === '—' || s === '-' || s === 'null' || s === 'undefined') return '';
+  if (s.includes('T')) return s.split('T')[0];
+  if (s.includes(' ')) return s.split(' ')[0];
+  const dmy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmy) {
+    return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+  }
+  return s;
+}
+
+/**
+ * Normalizes a single row from tbl_DeliveryTicketLines / tbl_DTLines into DTLine
  */
 export function normalizeDTLine(row: any): any {
   if (!row) return null;
-  const serial = String(row.serial || row.Serial || row.serialNo || row.SerialNo || '').trim();
+  const serial = String(row.serial || row.Serial || row.serialNo || row.SerialNo || row.PartNo || row.partNo || '').trim();
 
   const shortDesc = String(
     row.shortDesc ||
@@ -388,6 +416,35 @@ export function normalizeDTLine(row: any): any {
   const ownership = String(row.ownership || row.Ownership || 'EMDAD').trim();
   const isEmdad = Boolean(row.isEmdad ?? row.IsEmdad ?? (ownership.toUpperCase().includes('EMDAD')));
 
+  const rawReturnedRt = String(
+    row.returnedRtNumber ||
+    row.ReturnedRtNumber ||
+    row.returnedRTNumber ||
+    row.rtBatchId ||
+    row.RTBatchID ||
+    row.rtNumber ||
+    row.RTNumber ||
+    row.RGT_No ||
+    row.rgtNo ||
+    row.RGTNo ||
+    row.rgt_no ||
+    ''
+  ).trim();
+
+  const rawReturnDate = cleanDateStr(
+    row.returnDate ||
+    row.ReturnDate ||
+    row.dateIn ||
+    row.Date_In ||
+    row.DateIn ||
+    row.date_in ||
+    row.rtDate ||
+    row.RTDate ||
+    row.DateIn_Date ||
+    row.dateInDate ||
+    ''
+  );
+
   return {
     id: row.id || row.ID || row.LineID || row.itemNo || undefined,
     itemNo: Number(row.itemNo ?? row.ItemNo ?? 1),
@@ -399,7 +456,7 @@ export function normalizeDTLine(row: any): any {
     toolDescription: finalDesc,
     qty: Number(row.qty ?? row.Qty ?? 1),
     remarks: String(row.remarks || row.Remarks || '').trim(),
-    status,
+    status: (rawReturnedRt && rawReturnedRt !== '—') ? 'Returned' : status,
     ownership,
     isEmdad,
     used: row.used != null
@@ -409,7 +466,11 @@ export function normalizeDTLine(row: any): any {
         : row.usedStatus === 'not used'
           ? false
           : null,
-    rtBatchId: row.rtBatchId || row.RTBatchID || null,
+    rtBatchId: rawReturnedRt || null,
+    returnedRtNumber: rawReturnedRt,
+    returnDate: rawReturnDate,
+    dateIn: rawReturnDate,
+    Date_In: rawReturnDate,
   };
 }
 
@@ -536,17 +597,13 @@ export function normalizeRTLine(row: any): any {
   const finalDesc = rawDesc || shortDesc || 'Downhole Tool';
   const finalShortDesc = extractToolType(finalDesc, shortDesc);
 
-  const cleanDateStr = (d: any) => {
-    if (!d) return '';
-    const s = String(d).trim();
-    return s.includes('T') ? s.split('T')[0] : s;
-  };
-
   const lineDate = cleanDateStr(
     row.dateIn ||
     row.Date_In ||
     row.DateIn ||
     row.date_in ||
+    row.returnDate ||
+    row.ReturnDate ||
     row.RTDate ||
     row.rtDate ||
     row.Date ||
@@ -570,6 +627,7 @@ export function normalizeRTLine(row: any): any {
     Date_In: lineDate,
     DateIn: lineDate,
     rtDate: lineDate,
+    returnDate: lineDate,
     rtNumber: String(row.rtNumber || row.RTNumber || row.TicketNumber || row.ticketNumber || row.RGT_No || row.rgtNo || ''),
     used: row.used != null
       ? Boolean(row.used)
@@ -599,12 +657,6 @@ export function normalizeRTBatch(row: any): any {
     : [];
 
   const lines = rawLines.map(normalizeRTLine).filter(Boolean);
-
-  const cleanDateStr = (d: any) => {
-    if (!d) return '';
-    const s = String(d).trim();
-    return s.includes('T') ? s.split('T')[0] : s;
-  };
 
   const rawDate = cleanDateStr(
     row.RTDate ||
@@ -939,6 +991,87 @@ export function reconcileJobsDTRTAndInventory(
         b.contract = j.contract || j.client || (j.poNumber ? `PO-${j.poNumber}` : '');
       }
     }
+  });
+
+  // 0. Cross-index and synthesize RT Batches from DT lines that have returnedRtNumber or rtBatchId
+  const rtsByRtNumber = new Map<string, any>();
+  rtBatches.forEach((rt) => {
+    const num = String(rt.rtNumber || rt.id || '').trim().toUpperCase();
+    if (num) rtsByRtNumber.set(num, rt);
+  });
+
+  dtBatches.forEach((dt) => {
+    const job = dt.jobId ? jobsById.get(String(dt.jobId).trim().toUpperCase()) : null;
+    (dt.toolLines || []).forEach((tl: any) => {
+      const rtNum = String(tl.returnedRtNumber || tl.rtBatchId || '').trim();
+      if (rtNum && rtNum !== '—' && rtNum !== '-' && !rtNum.toUpperCase().startsWith('RT-AUTO')) {
+        const rtKey = rtNum.toUpperCase();
+        let targetRT = rtsByRtNumber.get(rtKey);
+        const lineDate = cleanDateStr(tl.returnDate || tl.dateIn || tl.Date_In || dt.dispatchDate || job?.demobDate || job?.lastRtDate || '');
+        
+        if (!targetRT) {
+          targetRT = {
+            id: `RTB-${rtNum.replace(/[^a-zA-Z0-9]/g, '')}`,
+            rtNumber: rtNum,
+            jobId: dt.jobId || job?.id || '',
+            rig: dt.rig || job?.rig || '',
+            well: dt.well || job?.well || '',
+            contract: dt.contract || job?.contract || '',
+            rtDate: lineDate,
+            backloadRmDate: lineDate,
+            loadingNoteNo: `LN-${rtNum.replace(/^RT-?/i, '')}`,
+            loadingNoteDate: lineDate,
+            lNoteNo: `LN-${rtNum.replace(/^RT-?/i, '')}`,
+            lNoteDate: lineDate,
+            carrier: 'EMDAD Logistics',
+            shippedVia: 'EMDAD Logistics',
+            receivedBy: 'QC Inspector',
+            condition: 'Good condition',
+            toolLines: [],
+            isSigned: true,
+            isLocked: true,
+          };
+          rtBatches.push(targetRT);
+          rtsByRtNumber.set(rtKey, targetRT);
+        } else {
+          if (!targetRT.rtDate || targetRT.rtDate === '—') targetRT.rtDate = lineDate;
+          if (!targetRT.backloadRmDate || targetRT.backloadRmDate === '—') targetRT.backloadRmDate = lineDate;
+          if (!targetRT.jobId) targetRT.jobId = dt.jobId || job?.id || '';
+          if (!targetRT.rig) targetRT.rig = dt.rig || job?.rig || '';
+          if (!targetRT.well) targetRT.well = dt.well || job?.well || '';
+          if (!targetRT.contract) targetRT.contract = dt.contract || job?.contract || '';
+        }
+
+        const hasTool = (targetRT.toolLines || []).some(
+          (rtl: any) => rtl.serial && String(rtl.serial).trim().toUpperCase() === String(tl.serial).trim().toUpperCase()
+        );
+        if (!hasTool) {
+          if (!targetRT.toolLines) targetRT.toolLines = [];
+          targetRT.toolLines.push({
+            id: tl.id || `RTL-${Date.now()}-${targetRT.toolLines.length}`,
+            itemNo: targetRT.toolLines.length + 1,
+            serial: tl.serial,
+            assetNo: tl.assetNo || tl.serial,
+            shortDesc: tl.shortDesc,
+            desc: tl.desc,
+            toolDescription: tl.toolDescription || tl.desc || tl.shortDesc,
+            size: tl.size,
+            dateIn: lineDate,
+            Date_In: lineDate,
+            rtDate: lineDate,
+            returnDate: lineDate,
+            rtNumber: rtNum,
+            used: tl.used != null ? tl.used : (tl.usedStatus === 'used'),
+            routedTo: tl.used ? 'Inspection Bay' : 'Available Inventory',
+            condition: tl.condition || (tl.used ? 'USED' : 'NOT USED'),
+            ownership: tl.ownership || 'EMDAD',
+            remarks: tl.remarks || '',
+            qty: tl.qty || 1,
+            dtBatchId: dt.id || dt.dtNumber,
+          });
+        }
+      }
+    });
   });
 
   // Index DTs and RTs by Job ID
@@ -1280,7 +1413,9 @@ export async function fetchLiveDatabaseData(): Promise<{
         .catch(() => fetch(`${endpoint}/DTBatches?$top=5000`))
         .catch(() => null);
 
-      const dtLinesPromise = fetch(`${endpoint}/tbl_DeliveryTicketLines?$top=50000`)
+      const dtLinesPromise = fetch(`${endpoint}/tbl_DTLines?$top=50000`)
+        .catch(() => fetch(`${endpoint}/DTLines?$top=50000`))
+        .catch(() => fetch(`${endpoint}/tbl_DeliveryTicketLines?$top=50000`))
         .catch(() => fetch(`${endpoint}/DeliveryTicketLines?$top=50000`))
         .catch(() => fetch(`${endpoint}/tbl_DTBatchLines?$top=50000`))
         .catch(() => fetch(`${endpoint}/DTBatchLines?$top=50000`))
@@ -1292,7 +1427,9 @@ export async function fetchLiveDatabaseData(): Promise<{
         .catch(() => fetch(`${endpoint}/RTBatches?$top=5000`))
         .catch(() => null);
 
-      const rtLinesPromise = fetch(`${endpoint}/tbl_ReceivingTicketLines?$top=50000`)
+      const rtLinesPromise = fetch(`${endpoint}/tbl_RTLines?$top=50000`)
+        .catch(() => fetch(`${endpoint}/RTLines?$top=50000`))
+        .catch(() => fetch(`${endpoint}/tbl_ReceivingTicketLines?$top=50000`))
         .catch(() => fetch(`${endpoint}/ReceivingTicketLines?$top=50000`))
         .catch(() => fetch(`${endpoint}/tbl_RTBatchLines?$top=50000`))
         .catch(() => fetch(`${endpoint}/RTBatchLines?$top=50000`))
@@ -1537,11 +1674,13 @@ export async function fetchLiveDatabaseData(): Promise<{
             payload.deliveryTickets ||
             [];
           const rawDtLines =
+            payload.tbl_DTLines ||
+            payload.DTLines ||
+            payload.tbl_DTBatchLines ||
+            payload.DTBatchLines ||
             payload.deliveryTicketLines ||
             payload.tbl_DeliveryTicketLines ||
             payload.DeliveryTicketLines ||
-            payload.tbl_DTBatchLines ||
-            payload.DTBatchLines ||
             payload.dtLines ||
             [];
 
@@ -1555,11 +1694,13 @@ export async function fetchLiveDatabaseData(): Promise<{
             payload.returnTickets ||
             [];
           const rawRtLines =
+            payload.tbl_RTLines ||
+            payload.RTLines ||
+            payload.tbl_RTBatchLines ||
+            payload.RTBatchLines ||
             payload.receivingTicketLines ||
             payload.tbl_ReceivingTicketLines ||
             payload.ReceivingTicketLines ||
-            payload.tbl_RTBatchLines ||
-            payload.RTBatchLines ||
             payload.rtLines ||
             [];
 

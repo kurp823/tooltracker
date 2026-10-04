@@ -42,8 +42,22 @@ type DossierTabKey =
   | 'utilization';
 
 // Strict Date Formatter (DD-MM-YYYY)
-export const formatDateDD_MM_YYYY = (val?: string | Date | null): string => {
-  if (!val) return '—';
+export const formatDateDD_MM_YYYY = (val?: string | Date | number | null): string => {
+  if (val === null || val === undefined || val === '') return '—';
+  if (typeof val === 'number' || (typeof val === 'string' && /^\d{5}$/.test(val.trim()))) {
+    const num = typeof val === 'number' ? val : parseInt(val.trim(), 10);
+    if (num >= 25000 && num <= 65000) {
+      try {
+        const d = new Date(Math.round((num - 25569) * 86400 * 1000));
+        if (!isNaN(d.getTime())) {
+          const day = String(d.getUTCDate()).padStart(2, '0');
+          const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+          const year = d.getUTCFullYear();
+          return `${day}-${month}-${year}`;
+        }
+      } catch {}
+    }
+  }
   const str = String(val).trim();
   if (!str || str === '—' || str === '-' || str === 'null' || str === 'undefined') return '—';
 
@@ -467,38 +481,27 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const jobRTs = useMemo(() => {
     const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
     const normId = normalizeJobKey(jobData.id || jobData.jobNumber);
-    const jRig = (jobData.rig || '').trim().toUpperCase();
-    const jWell = (jobData.well || '').trim().toUpperCase();
 
-    // Collect all tool serials & asset numbers dispatched on this job
-    const jobDispatchedSerials = new Set<string>();
+    // 1. Collect all explicit RT references from this job's DT lines
+    const jobReferencedRTs = new Set<string>();
     jobDTs.forEach((dt) => {
-      (dt.toolLines || []).forEach((tl) => {
-        if (tl.serial) jobDispatchedSerials.add(tl.serial.trim().toUpperCase());
-        if (tl.assetNo) jobDispatchedSerials.add(tl.assetNo.trim().toUpperCase());
+      (dt.toolLines || []).forEach((tl: any) => {
+        const ref = (tl.rtBatchId || tl.returnedRtNumber || (tl as any).rgtNo || '').trim().toUpperCase();
+        if (ref && ref !== '—' && ref !== '-') {
+          jobReferencedRTs.add(ref);
+        }
       });
     });
 
     const matched = rtBatches.filter((b) => {
       const bJob = (b.jobId || b.jobNumber || '').trim().toUpperCase();
       const bNorm = normalizeJobKey(b.jobId || b.jobNumber);
+      const bNum = (b.rtNumber || b.id || '').trim().toUpperCase();
+
       if (rawId && bJob && (bJob === rawId || bJob.includes(rawId) || rawId.includes(bJob))) return true;
       if (normId && bNorm && normId === bNorm) return true;
-      if (jRig && jWell && b.rig && b.well) {
-        const bRig = b.rig.trim().toUpperCase();
-        const bWell = b.well.trim().toUpperCase();
-        if (bRig === jRig && (bWell === jWell || bWell.includes(jWell) || jWell.includes(bWell))) {
-          return true;
-        }
-      }
-      // Match if this RT batch contains any tools dispatched on this job
-      if (jobDispatchedSerials.size > 0 && (b.toolLines || []).some((rtl) => {
-        const rSerial = (rtl.serial || '').trim().toUpperCase();
-        const rAsset = (rtl.assetNo || '').trim().toUpperCase();
-        return (rSerial && jobDispatchedSerials.has(rSerial)) || (rAsset && jobDispatchedSerials.has(rAsset));
-      })) {
-        return true;
-      }
+      if (bNum && jobReferencedRTs.has(bNum)) return true;
+
       return false;
     });
 
@@ -532,8 +535,26 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [jobDTs]);
 
   const totalReturned = useMemo(() => {
+    let count = 0;
+    const returnedSerialsOnJob = new Set<string>();
+
+    jobDTs.forEach((dt) => {
+      (dt.toolLines || []).forEach((tl: any) => {
+        const isRet = tl.status === 'Returned' || Boolean(tl.rtBatchId || tl.returnedRtNumber);
+        if (isRet) {
+          const s = (tl.serial || tl.assetNo || '').trim().toUpperCase();
+          if (s) returnedSerialsOnJob.add(s);
+          else count++;
+        }
+      });
+    });
+
+    if (returnedSerialsOnJob.size > 0) {
+      return returnedSerialsOnJob.size + count;
+    }
+
     return jobRTs.reduce((acc, rt) => acc + (rt.toolLines?.length || 0), 0);
-  }, [jobRTs]);
+  }, [jobDTs, jobRTs]);
 
   const activeOnRig = useMemo(() => {
     return Math.max(0, totalDispatched - totalReturned);
@@ -2845,20 +2866,27 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       {activeDT.toolLines?.map((t, idx) => {
                         const tSerial = (t.serial || '').trim().toUpperCase();
                         const tAsset = (t.assetNo || '').trim().toUpperCase();
-                        const returnBatch = rtBatches.find((rt) =>
-                          (rt.toolLines || []).some((rtl) => {
+                        const directRtRef = String((t as any).returnedRtNumber || t.rtBatchId || (t as any).rgtNo || '').trim();
+
+                        const returnBatch = rtBatches.find((rt) => {
+                          const rNum = (rt.rtNumber || rt.id || '').trim().toUpperCase();
+                          if (directRtRef && directRtRef !== '—' && (rNum === directRtRef.toUpperCase() || rNum.includes(directRtRef.toUpperCase()))) return true;
+                          return (rt.toolLines || []).some((rtl) => {
                             const rSerial = (rtl.serial || '').trim().toUpperCase();
                             const rAsset = (rtl.assetNo || '').trim().toUpperCase();
                             return (tSerial && (rSerial === tSerial || rAsset === tSerial)) || (tAsset && (rSerial === tAsset || rAsset === tAsset));
-                          }) ||
-                          rt.id === t.rtBatchId ||
-                          rt.rtNumber === t.rtBatchId ||
-                          (rt as any).rgtNo === t.rtBatchId
-                        );
-                        const rgtNo = returnBatch ? returnBatch.rtNumber || (returnBatch as any).rgtNo : t.rtBatchId || null;
-                        const rgtDate = returnBatch
-                          ? returnBatch.rtDate || returnBatch.backloadRmDate || (returnBatch as any).Date_In || (returnBatch as any).dateIn || jobData.demobDate || jobData.lastRtDate
-                          : (t as any).rtDate || (t as any).returnDate || (t as any).Date_In || (t as any).dateIn || (rgtNo ? jobData.demobDate : null);
+                          });
+                        });
+
+                        const rgtNo = (directRtRef && directRtRef !== '—') ? directRtRef : (returnBatch ? returnBatch.rtNumber || (returnBatch as any).rgtNo : null);
+                        const rgtDate = (t as any).returnDate ||
+                          (t as any).dateIn ||
+                          (t as any).Date_In ||
+                          returnBatch?.rtDate ||
+                          returnBatch?.backloadRmDate ||
+                          (returnBatch as any)?.Date_In ||
+                          (returnBatch as any)?.dateIn ||
+                          (rgtNo ? (jobData.demobDate || jobData.lastRtDate || activeDT.dispatchDate) : null);
 
                         return (
                           <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
