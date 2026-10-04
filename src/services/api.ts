@@ -503,7 +503,7 @@ export function normalizeDTBatch(row: any): any {
  */
 export function normalizeRTLine(row: any): any {
   if (!row) return null;
-  const serial = String(row.serial || row.Serial || row.serialNo || row.SerialNo || '').trim();
+  const serial = String(row.serial || row.Serial || row.serialNo || row.SerialNo || row.Serial_No || row.PartNo || row.partNo || '').trim();
 
   const shortDesc = String(
     row.shortDesc ||
@@ -536,15 +536,41 @@ export function normalizeRTLine(row: any): any {
   const finalDesc = rawDesc || shortDesc || 'Downhole Tool';
   const finalShortDesc = extractToolType(finalDesc, shortDesc);
 
+  const cleanDateStr = (d: any) => {
+    if (!d) return '';
+    const s = String(d).trim();
+    return s.includes('T') ? s.split('T')[0] : s;
+  };
+
+  const lineDate = cleanDateStr(
+    row.dateIn ||
+    row.Date_In ||
+    row.DateIn ||
+    row.date_in ||
+    row.RTDate ||
+    row.rtDate ||
+    row.Date ||
+    row.date ||
+    row.ReceivedDate ||
+    row.receivedDate ||
+    row.BackloadDate ||
+    row.backloadDate
+  );
+
   return {
-    id: row.id || row.ID || row.LineID || row.itemNo || undefined,
-    itemNo: Number(row.itemNo ?? row.ItemNo ?? 1),
+    id: row.id || row.ID || row.LineID || row.lineId || row.itemNo || undefined,
+    itemNo: Number(row.itemNo ?? row.ItemNo ?? row.Item_No ?? row.seq ?? row.Seq ?? 1),
     serial,
-    assetNo: String(row.assetNo || row.AssetNo || serial).trim(),
+    assetNo: String(row.assetNo || row.AssetNo || row.Asset_No || row.asset_no || serial).trim(),
     shortDesc: finalShortDesc,
     desc: finalDesc,
     toolDescription: finalDesc,
     size,
+    dateIn: lineDate,
+    Date_In: lineDate,
+    DateIn: lineDate,
+    rtDate: lineDate,
+    rtNumber: String(row.rtNumber || row.RTNumber || row.TicketNumber || row.ticketNumber || row.RGT_No || row.rgtNo || ''),
     used: row.used != null
       ? Boolean(row.used)
       : row.Used != null
@@ -554,10 +580,10 @@ export function normalizeRTLine(row: any): any {
           : row.usedStatus === 'not used'
             ? false
             : false,
-    routedTo: String(row.routedTo || row.RoutedTo || (row.used || row.Used || row.usedStatus === 'used' ? 'Inspection Bay' : 'Base Stock')),
-    condition: String(row.condition || row.Condition || 'Good condition'),
+    routedTo: String(row.routedTo || row.RoutedTo || (row.used || row.Used || row.usedStatus === 'used' ? 'Inspection Bay' : 'Available Inventory')),
+    condition: String(row.condition || row.Condition || (row.used ? 'USED' : 'NOT USED') || 'Good condition'),
     ownership: String(row.ownership || row.Ownership || 'EMDAD'),
-    remarks: String(row.remarks || row.Remarks || ''),
+    remarks: String(row.remarks || row.Remarks || row.Comments || row.comments || ''),
     qty: Number(row.qty ?? row.Qty ?? 1),
     dtBatchId: row.dtBatchId || row.DTBatchID || null,
   };
@@ -590,19 +616,118 @@ export function normalizeRTBatch(row: any): any {
     row.ReceivedDate ||
     row.receivedDate ||
     row.CreatedDate ||
-    row.createdDate
+    row.createdDate ||
+    row.Date_In ||
+    row.DateIn ||
+    row.dateIn ||
+    row.RMDate ||
+    row.rmDate ||
+    row.DemobDate ||
+    row.demobDate ||
+    row.BackloadDate ||
+    row.backloadDate ||
+    row.ReturnDate ||
+    row.returnDate
   );
 
+  const backloadDate = cleanDateStr(
+    row.BackloadRMDate ||
+    row.backloadRmDate ||
+    row.BackloadDate ||
+    row.backloadDate ||
+    row.RMDate ||
+    row.rmDate ||
+    row.ReturnDate ||
+    row.returnDate ||
+    rawDate
+  );
+
+  const loadingNoteNo = String(
+    row.LoadingNoteNo ||
+    row.loadingNoteNo ||
+    row.LNoteNo ||
+    row.lNoteNo ||
+    row.L_Note_No ||
+    row.l_note_no ||
+    row.LoadingNote ||
+    row.loadingNote ||
+    row.LNote ||
+    row.lNote ||
+    row.LN_No ||
+    row.lnNo ||
+    row.LNNo ||
+    row.DeliveryNoteNo ||
+    row.deliveryNoteNo ||
+    row.WaybillNo ||
+    row.waybillNo ||
+    row.ManifestNo ||
+    row.manifestNo ||
+    ''
+  ).trim();
+
+  const loadingNoteDate = cleanDateStr(
+    row.LoadingNoteDate ||
+    row.loadingNoteDate ||
+    row.LNoteDate ||
+    row.lNoteDate ||
+    row.L_Note_Date ||
+    row.l_note_date ||
+    row.LN_Date ||
+    row.lnDate ||
+    row.LNDate ||
+    row.DeliveryNoteDate ||
+    row.deliveryNoteDate ||
+    row.WaybillDate ||
+    row.waybillDate ||
+    backloadDate ||
+    rawDate
+  );
+
+  const carrier = String(
+    row.Carrier ||
+    row.carrier ||
+    row.ShippedVia ||
+    row.shippedVia ||
+    row.TransportCompany ||
+    row.transportCompany ||
+    row.Transporter ||
+    row.transporter ||
+    'EMDAD Logistics'
+  ).trim();
+
+  const driverName = String(row.DriverName || row.driverName || row.Driver || row.driver || '').trim();
+  const truckNo = String(row.TruckNo || row.truckNo || row.VehicleNo || row.vehicleNo || '').trim();
+
+  const rtNum = String(
+    row.RTNumber ||
+    row.rtNumber ||
+    row.TicketNumber ||
+    row.ticketNumber ||
+    row.id ||
+    row.ID ||
+    row.RTBatchID ||
+    row.rtBatchId ||
+    ''
+  ).trim();
+
   return {
-    id: String(row.RTBatchID || row.rtBatchId || row.id || row.ID || row.rtNumber || row.RTNumber || ''),
-    rtNumber: String(row.RTNumber || row.rtNumber || row.TicketNumber || row.ticketNumber || row.id || ''),
+    id: String(row.RTBatchID || row.rtBatchId || row.id || row.ID || rtNum),
+    rtNumber: rtNum,
     jobId: String(row.JobID || row.jobId || row.JobNumber || row.jobNumber || row.JobNo || row.jobNo || ''),
     rtDate: rawDate,
-    backloadRmDate: cleanDateStr(row.BackloadRMDate || row.backloadRmDate || row.BackloadDate || rawDate),
-    contract: String(row.Contract || row.contract || row.ContractRef || row.contractRef || ''),
-    rig: String(row.Rig || row.rig || ''),
-    well: String(row.Well || row.well || ''),
-    receivedBy: String(row.ReceivedBy || row.receivedBy || row.Inspector || row.DispatchedBy || 'Receiving Staff'),
+    backloadRmDate: backloadDate || rawDate,
+    loadingNoteNo,
+    lNoteNo: loadingNoteNo,
+    loadingNoteDate,
+    lNoteDate: loadingNoteDate,
+    carrier,
+    shippedVia: carrier,
+    driverName,
+    truckNo,
+    contract: String(row.Contract || row.contract || row.ContractRef || row.contractRef || row.ContractNo || row.contractNo || ''),
+    rig: String(row.Rig || row.rig || row.RigName || row.rigName || ''),
+    well: String(row.Well || row.well || row.WellName || row.wellName || ''),
+    receivedBy: String(row.ReceivedBy || row.receivedBy || row.Inspector || row.inspector || row.QCInspector || row.qcInspector || row.DispatchedBy || 'QC Inspector'),
     condition: String(row.Condition || row.condition || row.Notes || row.notes || ''),
     notes: String(row.Notes || row.notes || ''),
     isSigned: Boolean(row.isSigned || row.IsSigned || row.signedDocUrl || row.SignedDocUrl),
@@ -907,6 +1032,8 @@ export function reconcileJobsDTRTAndInventory(
         );
 
         if (!existingAuto) {
+          const autoDate = job.demobDate || job.lastRtDate || job.finalInvoicedDate || job.mobDate || '2023-12-31';
+          const lnNo = `LN-${String(job.id).replace(/^Job[-_]?/i, '')}`;
           const autoRT = {
             id: dummyRTId,
             rtNumber: dummyRTNum,
@@ -914,12 +1041,23 @@ export function reconcileJobsDTRTAndInventory(
             rig: job.rig || 'Rig Unassigned',
             well: job.well || '—',
             contract: job.contract || '',
-            rtDate: job.demobDate || job.finalInvoicedDate || job.lastRtDate || '2023-12-31',
+            rtDate: autoDate,
+            backloadRmDate: autoDate,
+            loadingNoteNo: lnNo,
+            loadingNoteDate: autoDate,
+            lNoteNo: lnNo,
+            lNoteDate: autoDate,
+            carrier: 'EMDAD Logistics',
+            shippedVia: 'EMDAD Logistics',
             receivedBy: 'Operations Base (Closed)',
             recipient: 'Emdad Base QC',
             notes: `Auto-closure receiving clearance for completed job ${job.id} (Legal Inv #${job.legalInvoiceNumber || job.invoiceNumber})`,
             toolLines: unreturned.map((tl: any) => ({
               ...tl,
+              dateIn: autoDate,
+              Date_In: autoDate,
+              rtDate: autoDate,
+              rtNumber: dummyRTNum,
               status: 'Returned',
               used: Boolean(tl.used),
               rtBatchId: dummyRTId,

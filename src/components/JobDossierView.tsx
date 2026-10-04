@@ -470,7 +470,16 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const jRig = (jobData.rig || '').trim().toUpperCase();
     const jWell = (jobData.well || '').trim().toUpperCase();
 
-    return rtBatches.filter((b) => {
+    // Collect all tool serials & asset numbers dispatched on this job
+    const jobDispatchedSerials = new Set<string>();
+    jobDTs.forEach((dt) => {
+      (dt.toolLines || []).forEach((tl) => {
+        if (tl.serial) jobDispatchedSerials.add(tl.serial.trim().toUpperCase());
+        if (tl.assetNo) jobDispatchedSerials.add(tl.assetNo.trim().toUpperCase());
+      });
+    });
+
+    const matched = rtBatches.filter((b) => {
       const bJob = (b.jobId || b.jobNumber || '').trim().toUpperCase();
       const bNorm = normalizeJobKey(b.jobId || b.jobNumber);
       if (rawId && bJob && (bJob === rawId || bJob.includes(rawId) || rawId.includes(bJob))) return true;
@@ -482,9 +491,26 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           return true;
         }
       }
+      // Match if this RT batch contains any tools dispatched on this job
+      if (jobDispatchedSerials.size > 0 && (b.toolLines || []).some((rtl) => {
+        const rSerial = (rtl.serial || '').trim().toUpperCase();
+        const rAsset = (rtl.assetNo || '').trim().toUpperCase();
+        return (rSerial && jobDispatchedSerials.has(rSerial)) || (rAsset && jobDispatchedSerials.has(rAsset));
+      })) {
+        return true;
+      }
       return false;
     });
-  }, [rtBatches, jobData]);
+
+    // Deduplicate by rtNumber or id
+    const seen = new Set<string>();
+    return matched.filter((rt) => {
+      const key = (rt.rtNumber || rt.id).trim().toUpperCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [rtBatches, jobData, jobDTs]);
 
   const jobCallouts = useMemo(() => {
     const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
@@ -532,19 +558,30 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const allMobilizedTools = useMemo(() => {
     return jobDTs.flatMap((d) =>
       (d.toolLines || []).map((t) => {
-        const returnBatch = jobRTs.find((rt) =>
-          (rt.toolLines || []).some((rtl) => rtl.serial === t.serial || (t.assetNo && rtl.assetNo === t.assetNo))
+        const tSerial = (t.serial || '').trim().toUpperCase();
+        const tAsset = (t.assetNo || '').trim().toUpperCase();
+        const returnBatch = rtBatches.find((rt) =>
+          (rt.toolLines || []).some((rtl) => {
+            const rSerial = (rtl.serial || '').trim().toUpperCase();
+            const rAsset = (rtl.assetNo || '').trim().toUpperCase();
+            return (tSerial && (rSerial === tSerial || rAsset === tSerial)) || (tAsset && (rSerial === tAsset || rAsset === tAsset));
+          }) ||
+          rt.id === t.rtBatchId ||
+          rt.rtNumber === t.rtBatchId
         );
+        const rDate = returnBatch
+          ? returnBatch.rtDate || returnBatch.backloadRmDate || (returnBatch as any).Date_In || (returnBatch as any).dateIn
+          : (t as any).rtDate || (t as any).returnDate || (t as any).Date_In || (t as any).dateIn || (t.status === 'Returned' ? jobData.demobDate : null);
         return {
           ...t,
           dtNumber: d.dtNumber,
           dispatchDate: d.dispatchDate,
-          returnDate: returnBatch ? returnBatch.rtDate || returnBatch.backloadRmDate : null,
-          rtNumber: returnBatch ? returnBatch.rtNumber : null,
+          returnDate: rDate,
+          rtNumber: returnBatch ? returnBatch.rtNumber : (t.rtBatchId || null),
         };
       })
     );
-  }, [jobDTs, jobRTs]);
+  }, [jobDTs, rtBatches, jobData.demobDate]);
 
   // Dynamic Month Options based strictly on first DT to last RT
   const utilMonthOptions = useMemo(() => {
@@ -866,6 +903,94 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return jobRTs.find((r) => r.rtNumber === selectedRTNumber) || jobRTs[0] || null;
   }, [jobRTs, selectedRTNumber]);
 
+  // Robust field resolvers for Return Tickets
+  const resolveRtDate = (rt?: RTBatch | null): string => {
+    if (!rt) return jobData.demobDate ? formatDateDD_MM_YYYY(jobData.demobDate) : (jobData.lastRtDate ? formatDateDD_MM_YYYY(jobData.lastRtDate) : '—');
+    const val =
+      rt.rtDate ||
+      rt.backloadRmDate ||
+      (rt as any).Date_In ||
+      (rt as any).dateIn ||
+      (rt as any).DateIn ||
+      (rt as any).rmDate ||
+      (rt as any).date ||
+      (rt as any).ticketDate ||
+      jobData.demobDate ||
+      jobData.lastRtDate;
+    return formatDateDD_MM_YYYY(val);
+  };
+
+  const resolveRtLoadingNoteNo = (rt?: RTBatch | null): string => {
+    if (!rt) return '—';
+    const val =
+      rt.loadingNoteNo ||
+      rt.lNoteNo ||
+      (rt as any).LNoteNo ||
+      (rt as any).l_note_no ||
+      (rt as any).loadingNote ||
+      (rt as any).lnNo ||
+      (rt as any).LNNo ||
+      (rt.rtNumber ? `LN-${rt.rtNumber.replace(/^RT-?/, '')}` : '—');
+    return val || '—';
+  };
+
+  const resolveRtLoadingNoteDate = (rt?: RTBatch | null): string => {
+    if (!rt) return resolveRtDate(rt);
+    const val =
+      rt.loadingNoteDate ||
+      rt.lNoteDate ||
+      (rt as any).LNoteDate ||
+      (rt as any).l_note_date ||
+      (rt as any).loadingDate ||
+      rt.rtDate ||
+      rt.backloadRmDate ||
+      jobData.demobDate ||
+      jobData.lastRtDate;
+    return formatDateDD_MM_YYYY(val);
+  };
+
+  const resolveRtCarrier = (rt?: RTBatch | null): string => {
+    if (!rt) return 'EMDAD Logistics';
+    return rt.carrier || rt.shippedVia || (rt as any).transporter || 'EMDAD Logistics';
+  };
+
+  const handleCreateNewRTInJob = () => {
+    if (isClosedOrInvoiced || isLocked) {
+      showToast('Cannot create return ticket: this job is invoiced and locked.', 'error');
+      return;
+    }
+    const curYr = new Date().getFullYear().toString().slice(-2);
+    const rtNums = rtBatches
+      .map((b) => {
+        const m = b.rtNumber.match(/^RT-\d+-(\d+)$/);
+        return m ? parseInt(m[1], 10) : 0;
+      })
+      .filter((n) => !isNaN(n));
+    const nextSeq = rtNums.length > 0 ? Math.max(...rtNums) + 1 : 1;
+    const newRtNumber = `RT-${curYr}-${String(nextSeq).padStart(5, '0')}`;
+    const defaultDate = jobData.demobDate || new Date().toISOString().split('T')[0];
+
+    const newRT: RTBatch = {
+      id: `RTB-${Date.now()}`,
+      rtNumber: newRtNumber,
+      jobId: jobData.id || jobData.jobNumber || '',
+      rtDate: defaultDate,
+      backloadRmDate: defaultDate,
+      loadingNoteNo: `LN-${String(jobData.id || newRtNumber).replace(/^Job[-_]?/i, '')}`,
+      loadingNoteDate: defaultDate,
+      contract: jobData.contractNo || jobData.contract || '',
+      rig: jobData.rig || '',
+      well: jobData.well || '',
+      receivedBy: user?.name || 'QC Inspector',
+      carrier: 'EMDAD Logistics',
+      toolLines: [],
+    };
+
+    onSaveRTBatch(newRT);
+    setSelectedRTNumber(newRT.rtNumber);
+    showToast(`New Return Ticket ${newRT.rtNumber} generated for Job ${jobData.id}.`, 'success');
+  };
+
   // Return Goods: Filter DTs that actually have unreturned tools
   const unreturnedDTs = useMemo(() => {
     return jobDTs.filter((dt) => {
@@ -1146,40 +1271,264 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       showToast('Please check at least one tool to return.', 'error');
       return;
     }
-    if (!activeRT) {
-      showToast('No active Return Ticket to receive tools into.', 'error');
-      return;
+
+    let targetRT = activeRT;
+    if (!targetRT) {
+      // Automatically create a new RT batch for this job
+      const curYr = new Date().getFullYear().toString().slice(-2);
+      const rtNums = rtBatches
+        .map((b) => {
+          const m = b.rtNumber.match(/^RT-\d+-(\d+)$/);
+          return m ? parseInt(m[1], 10) : 0;
+        })
+        .filter((n) => !isNaN(n));
+      const nextSeq = rtNums.length > 0 ? Math.max(...rtNums) + 1 : 1;
+      const newRtNumber = `RT-${curYr}-${String(nextSeq).padStart(5, '0')}`;
+      const defaultDate = jobData.demobDate || new Date().toISOString().split('T')[0];
+
+      targetRT = {
+        id: `RTB-${Date.now()}`,
+        rtNumber: newRtNumber,
+        jobId: jobData.id || jobData.jobNumber || '',
+        rtDate: defaultDate,
+        backloadRmDate: defaultDate,
+        loadingNoteNo: `LN-${String(jobData.id || newRtNumber).replace(/^Job[-_]?/i, '')}`,
+        loadingNoteDate: defaultDate,
+        contract: jobData.contractNo || jobData.contract || '',
+        rig: jobData.rig || '',
+        well: jobData.well || '',
+        receivedBy: user?.name || 'QC Inspector',
+        carrier: 'EMDAD Logistics',
+        toolLines: [],
+      };
     }
 
     const selectedLines = rgtDTToolsToReturn.filter((t) => rgtCheckedSerials.includes(t.serial));
+    const defaultDate = resolveRtDate(targetRT);
     const newRTLines = selectedLines.map((t, idx) => ({
-      itemNo: (activeRT.toolLines?.length || 0) + idx + 1,
+      itemNo: (targetRT!.toolLines?.length || 0) + idx + 1,
       serial: t.serial,
-      assetNo: t.assetNo,
+      assetNo: t.assetNo || t.serial,
       shortDesc: t.shortDesc,
       desc: t.desc,
+      size: t.size,
       used: true,
       condition: 'USED',
       routedTo: 'Inspection Bay',
       remarks: 'USED',
+      dateIn: defaultDate,
+      Date_In: defaultDate,
+      rtDate: defaultDate,
+      rtNumber: targetRT!.rtNumber,
     }));
 
     const updatedRT: RTBatch = {
-      ...activeRT,
-      toolLines: [...(activeRT.toolLines || []), ...newRTLines],
+      ...targetRT,
+      toolLines: [...(targetRT.toolLines || []), ...newRTLines],
     };
 
-    if (onUpdateRTBatch) {
+    if (onUpdateRTBatch && activeRT) {
       onUpdateRTBatch(updatedRT);
     } else {
       onSaveRTBatch(updatedRT);
     }
+    setSelectedRTNumber(updatedRT.rtNumber);
     setRgtCheckedSerials([]);
-    showToast(`Moved ${newRTLines.length} tool(s) to RT ${activeRT.rtNumber}.`, 'success');
+    showToast(`Moved ${newRTLines.length} tool(s) to Return Ticket ${updatedRT.rtNumber}.`, 'success');
   };
 
   // Print Handlers
   const handlePrintTicket = (type: 'onshore' | 'offshore' | 'report' | 'pob') => {
+    if (activeTab === 'return-tickets' && activeRT) {
+      const printWindow = window.open('', '_blank', 'width=900,height=700');
+      if (!printWindow) {
+        window.print();
+        return;
+      }
+      const isOffshore = type === 'offshore';
+      const rtDateStr = resolveRtDate(activeRT);
+      const lNoteNoStr = resolveRtLoadingNoteNo(activeRT);
+      const lNoteDateStr = resolveRtLoadingNoteDate(activeRT);
+      const carrierStr = resolveRtCarrier(activeRT);
+      const contractStr = jobData.contractNo || cleanContractName(jobData.contract) || '—';
+
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<title>Return Goods Ticket - ${activeRT.rtNumber}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11px; padding: 24px; color: #1e293b; line-height: 1.4; }
+  .hdr { display: flex; justify-content: space-between; border-bottom: 2px solid #1a3055; padding-bottom: 12px; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+  .box { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 10px; background: #f8fafc; }
+  .lbl { font-size: 9px; font-weight: bold; color: #64748b; text-transform: uppercase; margin-bottom: 2px; }
+  .val { font-size: 11px; font-weight: bold; color: #0f172a; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10px; }
+  th, td { border: 1px solid #cbd5e1; padding: 5px 7px; text-align: left; }
+  th { background: #e9f0f8; font-weight: bold; color: #1a3055; }
+  .sig { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 32px; padding-top: 10px; }
+  .sig-box { border-top: 1px solid #0f172a; padding-top: 6px; font-size: 10px; }
+</style>
+</head>
+<body>
+  <div class="hdr">
+    <div>
+      <h1 style="font-size: 18px; margin: 0 0 2px; color: #1a3055;">EMDAD OILFIELD SERVICES LLC</h1>
+      <div style="color: #64748b; font-size: 10px;">Return Goods Ticket (RGT) &bull; Backload Receiving Manifest (${isOffshore ? 'OFFSHORE' : 'ONSHORE'})</div>
+    </div>
+    <div style="text-align: right;">
+      <div style="font-size: 20px; font-weight: 900; color: #dc2626; font-family: monospace;">${activeRT.rtNumber}</div>
+      <div style="font-size: 10px; font-weight: bold; color: #64748b;">JOB NO: ${jobData.id}</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="box"><div class="lbl">Customer / Client</div><div class="val">${jobData.client}</div></div>
+    <div class="box"><div class="lbl">Contract / Project</div><div class="val">${contractStr}</div></div>
+    <div class="box"><div class="lbl">Rig / Well</div><div class="val">${jobData.rig} / ${jobData.well}</div></div>
+    <div class="box"><div class="lbl">Date Received</div><div class="val">${rtDateStr}</div></div>
+    <div class="box"><div class="lbl">Shipped Via / Carrier</div><div class="val">${carrierStr}</div></div>
+    <div class="box"><div class="lbl">Loading Note No</div><div class="val">${lNoteNoStr}</div></div>
+    <div class="box"><div class="lbl">Loading Note Date</div><div class="val">${lNoteDateStr}</div></div>
+    <div class="box"><div class="lbl">Received By (Base)</div><div class="val">${activeRT.receivedBy || 'QC Inspector'}</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 30px; text-align: center;">Item</th>
+        <th>Serial / Asset No</th>
+        <th>Description</th>
+        <th style="text-align: center;">RGT No</th>
+        <th style="text-align: center;">Date In</th>
+        <th style="text-align: center;">Condition</th>
+        <th>Destination Bay</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(activeRT.toolLines || []).map((t, idx) => {
+        const lineDateStr = formatDateDD_MM_YYYY((t as any).dateIn || (t as any).Date_In || (t as any).rtDate || activeRT.rtDate || jobData.demobDate);
+        return `<tr>
+          <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
+          <td style="font-family: monospace; font-weight: bold;">${t.serial || t.assetNo}</td>
+          <td>${t.desc || t.shortDesc || (t as any).toolDescription || 'Downhole Tool'}</td>
+          <td style="text-align: center; font-family: monospace;">${activeRT.rtNumber}</td>
+          <td style="text-align: center; font-family: monospace;">${lineDateStr}</td>
+          <td style="text-align: center; font-weight: bold;">${t.condition || (t.used ? 'USED' : 'NOT USED')}</td>
+          <td>${t.routedTo || (t.used ? 'Inspection Bay' : 'Available Inventory')}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>
+
+  <div class="sig">
+    <div class="sig-box">Field Engineer / Dispatcher<br/><br/>_______________________</div>
+    <div class="sig-box">QC Inspection Bay Officer<br/><br/>_______________________</div>
+    <div class="sig-box">Base Receiving Lead<br/><br/><strong>${activeRT.receivedBy || 'QC Inspector'}</strong></div>
+  </div>
+</body>
+</html>`;
+      printWindow.document.write(html);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+      }, 300);
+      return;
+    }
+
+    if (activeTab === 'delivery-tickets' && activeDT) {
+      const printWindow = window.open('', '_blank', 'width=900,height=700');
+      if (!printWindow) {
+        window.print();
+        return;
+      }
+      const isOffshore = type === 'offshore';
+      const dtDateStr = formatDateDD_MM_YYYY(activeDT.dispatchDate);
+      const contractStr = jobData.contractNo || cleanContractName(jobData.contract) || '—';
+
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<title>Rental / Delivery Ticket - ${activeDT.dtNumber}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11px; padding: 24px; color: #1e293b; line-height: 1.4; }
+  .hdr { display: flex; justify-content: space-between; border-bottom: 2px solid #1a3055; padding-bottom: 12px; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+  .box { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 10px; background: #f8fafc; }
+  .lbl { font-size: 9px; font-weight: bold; color: #64748b; text-transform: uppercase; margin-bottom: 2px; }
+  .val { font-size: 11px; font-weight: bold; color: #0f172a; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10px; }
+  th, td { border: 1px solid #cbd5e1; padding: 5px 7px; text-align: left; }
+  th { background: #e9f0f8; font-weight: bold; color: #1a3055; }
+  .sig { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 32px; padding-top: 10px; }
+  .sig-box { border-top: 1px solid #0f172a; padding-top: 6px; font-size: 10px; }
+</style>
+</head>
+<body>
+  <div class="hdr">
+    <div>
+      <h1 style="font-size: 18px; margin: 0 0 2px; color: #1a3055;">EMDAD OILFIELD SERVICES LLC</h1>
+      <div style="color: #64748b; font-size: 10px;">Rental Ticket / Delivery Manifest (${isOffshore ? 'OFFSHORE' : 'ONSHORE'})</div>
+    </div>
+    <div style="text-align: right;">
+      <div style="font-size: 20px; font-weight: 900; color: #dc2626; font-family: monospace;">${activeDT.dtNumber}</div>
+      <div style="font-size: 10px; font-weight: bold; color: #64748b;">JOB NO: ${jobData.id}</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="box"><div class="lbl">Customer / Client</div><div class="val">${jobData.client}</div></div>
+    <div class="box"><div class="lbl">Project / Contract</div><div class="val">${contractStr}</div></div>
+    <div class="box"><div class="lbl">Rig / Well</div><div class="val">${jobData.rig} / ${jobData.well}</div></div>
+    <div class="box"><div class="lbl">Date Shipped</div><div class="val">${dtDateStr}</div></div>
+    <div class="box"><div class="lbl">RM Ref / Manifest</div><div class="val">${activeDT.rmRef || 'MR-881'}</div></div>
+    <div class="box"><div class="lbl">Dispatched By</div><div class="val">${activeDT.dispatchedBy || 'Base Dispatcher'}</div></div>
+    <div class="box"><div class="lbl">Recipient</div><div class="val">${activeDT.recipient || jobData.client}</div></div>
+    <div class="box"><div class="lbl">Purpose</div><div class="val">${jobData.serviceCategory || jobData.jobDescription || 'Downhole Rentals'}</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 30px; text-align: center;">Item</th>
+        <th>Serial / Asset No</th>
+        <th>Description</th>
+        <th style="text-align: center; width: 45px;">QTY</th>
+        <th style="text-align: center;">Date Out</th>
+        <th>Category</th>
+        <th>Ownership</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(activeDT.toolLines || []).map((t, idx) => `<tr>
+        <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
+        <td style="font-family: monospace; font-weight: bold;">${t.serial || t.assetNo}</td>
+        <td>${t.desc || t.shortDesc || (t as any).toolDescription || 'Downhole Tool'}</td>
+        <td style="text-align: center; font-weight: bold;">${t.qty || 1}</td>
+        <td style="text-align: center; font-family: monospace;">${dtDateStr}</td>
+        <td>${t.shortDesc || 'Downhole Tool'}</td>
+        <td>${t.ownership || 'EMDAD'}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+
+  <div class="sig">
+    <div class="sig-box">Dispatched By (EMDAD Base)<br/><br/><strong>${activeDT.dispatchedBy || 'Base Dispatcher'}</strong></div>
+    <div class="sig-box">Transporter / Driver<br/><br/>_______________________</div>
+    <div class="sig-box">Received on Rig (Client Rep)<br/><br/>_______________________</div>
+  </div>
+</body>
+</html>`;
+      printWindow.document.write(html);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+      }, 300);
+      return;
+    }
+
     window.print();
   };
 
@@ -2496,7 +2845,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       {activeDT.toolLines?.map((t, idx) => {
                         const tSerial = (t.serial || '').trim().toUpperCase();
                         const tAsset = (t.assetNo || '').trim().toUpperCase();
-                        const returnBatch = jobRTs.find((rt) =>
+                        const returnBatch = rtBatches.find((rt) =>
                           (rt.toolLines || []).some((rtl) => {
                             const rSerial = (rtl.serial || '').trim().toUpperCase();
                             const rAsset = (rtl.assetNo || '').trim().toUpperCase();
@@ -2507,7 +2856,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           (rt as any).rgtNo === t.rtBatchId
                         );
                         const rgtNo = returnBatch ? returnBatch.rtNumber || (returnBatch as any).rgtNo : t.rtBatchId || null;
-                        const rgtDate = returnBatch ? returnBatch.rtDate || returnBatch.backloadRmDate : (t as any).rtDate || (t as any).returnDate || null;
+                        const rgtDate = returnBatch
+                          ? returnBatch.rtDate || returnBatch.backloadRmDate || (returnBatch as any).Date_In || (returnBatch as any).dateIn || jobData.demobDate || jobData.lastRtDate
+                          : (t as any).rtDate || (t as any).returnDate || (t as any).Date_In || (t as any).dateIn || (rgtNo ? jobData.demobDate : null);
 
                         return (
                           <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
@@ -2653,10 +3004,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   >
                     {jobRTs.map((rt) => (
                       <option key={rt.rtNumber} value={rt.rtNumber}>
-                        {rt.rtNumber} — {rt.toolLines?.length || 0} tool(s) ({formatDateDD_MM_YYYY(rt.rtDate)})
+                        {rt.rtNumber} — {rt.toolLines?.length || 0} tool(s) ({resolveRtDate(rt)})
                       </option>
                     ))}
                   </select>
+                )}
+                {!isClosedOrInvoiced && !isLocked && (
+                  <button
+                    type="button"
+                    onClick={handleCreateNewRTInJob}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs transition cursor-pointer flex items-center gap-1"
+                    title="Generate a new Return Goods Ticket manifest for this job"
+                  >
+                    <span>+</span>
+                    <span>New RT</span>
+                  </button>
                 )}
               </div>
               <div className="flex items-center gap-1.5">
@@ -2701,19 +3063,23 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   </div>
                   <div>
                     <span className="font-bold text-slate-600">Date:</span>{' '}
-                    <span className="font-mono font-bold">{activeRT.rtDate ? formatDateDD_MM_YYYY(activeRT.rtDate) : '—'}</span>
+                    <span className="font-mono font-bold">{resolveRtDate(activeRT)}</span>
                   </div>
                   <div>
                     <span className="font-bold text-slate-600">Shipped Via:</span>{' '}
-                    <span>{activeRT.carrier || 'EMDAD'}</span>
+                    <span>{resolveRtCarrier(activeRT)}</span>
                   </div>
                   <div>
                     <span className="font-bold text-slate-600">L/Note Date:</span>{' '}
-                    <span className="font-mono">{activeRT.loadingNoteDate ? formatDateDD_MM_YYYY(activeRT.loadingNoteDate) : '—'}</span>
+                    <span className="font-mono">{resolveRtLoadingNoteDate(activeRT)}</span>
                   </div>
                   <div>
                     <span className="font-bold text-slate-600">L/Note No:</span>{' '}
-                    <span className="font-mono font-bold">{activeRT.loadingNoteNo || activeRT.lNoteNo || '—'}</span>
+                    <span className="font-mono font-bold">{resolveRtLoadingNoteNo(activeRT)}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">Received By:</span>{' '}
+                    <span className="font-medium text-slate-800">{activeRT.receivedBy || 'QC Inspector'}</span>
                   </div>
                 </div>
               </div>
@@ -2748,52 +3114,65 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    activeRT.toolLines.map((t, idx) => (
-                      <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
-                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
-                        <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
-                        <td className="py-1 px-2 whitespace-nowrap text-center font-mono font-bold text-blue-800">{activeRT.rtNumber}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{activeRT.rtDate ? formatDateDD_MM_YYYY(activeRT.rtDate) : '—'}</td>
-                        <td className="py-1 px-2 whitespace-nowrap">
-                          <select
-                            value={t.condition || (t.used ? 'USED' : 'NOT USED')}
-                            disabled={isClosedOrInvoiced || isLocked}
-                            onChange={(e) => {
-                              const newCond = e.target.value as 'USED' | 'NOT USED' | 'LIH';
-                              const updatedToolLines = (activeRT.toolLines || []).map((line, lIdx) => {
-                                if (lIdx === idx) {
-                                  return {
-                                    ...line,
-                                    condition: newCond,
-                                    remarks: newCond,
-                                    used: newCond === 'USED',
-                                    status: newCond === 'LIH' ? 'Lost in Hole' : newCond === 'USED' ? 'Inspection' : 'Available',
-                                    routedTo: newCond === 'LIH' ? 'Lost in Hole' : newCond === 'USED' ? 'Inspection Bay' : 'Available Inventory',
-                                  };
+                    activeRT.toolLines.map((t, idx) => {
+                      const lineDateIn = formatDateDD_MM_YYYY(
+                        (t as any).dateIn ||
+                        (t as any).Date_In ||
+                        (t as any).DateIn ||
+                        (t as any).rtDate ||
+                        activeRT.rtDate ||
+                        activeRT.backloadRmDate ||
+                        jobData.demobDate ||
+                        jobData.lastRtDate
+                      );
+
+                      return (
+                        <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
+                          <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
+                          <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
+                          <td className="py-1 px-2 whitespace-nowrap text-center font-mono font-bold text-blue-800">{activeRT.rtNumber}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{lineDateIn}</td>
+                          <td className="py-1 px-2 whitespace-nowrap">
+                            <select
+                              value={t.condition || (t.used ? 'USED' : 'NOT USED')}
+                              disabled={isClosedOrInvoiced || isLocked}
+                              onChange={(e) => {
+                                const newCond = e.target.value as 'USED' | 'NOT USED' | 'LIH';
+                                const updatedToolLines = (activeRT.toolLines || []).map((line, lIdx) => {
+                                  if (lIdx === idx) {
+                                    return {
+                                      ...line,
+                                      condition: newCond,
+                                      remarks: newCond,
+                                      used: newCond === 'USED',
+                                      status: newCond === 'LIH' ? 'Lost in Hole' : newCond === 'USED' ? 'Inspection' : 'Available',
+                                      routedTo: newCond === 'LIH' ? 'Lost in Hole' : newCond === 'USED' ? 'Inspection Bay' : 'Available Inventory',
+                                    };
+                                  }
+                                  return line;
+                                });
+                                const updatedRT: RTBatch = {
+                                  ...activeRT,
+                                  toolLines: updatedToolLines,
+                                };
+                                if (onUpdateRTBatch) {
+                                  onUpdateRTBatch(updatedRT);
+                                } else {
+                                  onSaveRTBatch(updatedRT);
                                 }
-                                return line;
-                              });
-                              const updatedRT: RTBatch = {
-                                ...activeRT,
-                                toolLines: updatedToolLines,
-                              };
-                              if (onUpdateRTBatch) {
-                                onUpdateRTBatch(updatedRT);
-                              } else {
-                                onSaveRTBatch(updatedRT);
-                              }
-                              showToast(`Tool ${t.serial} condition updated to ${newCond} (${newCond === 'LIH' ? 'Lost in Hole' : newCond === 'USED' ? 'Routes to QC Inspection' : 'Returns to Available Inventory'}).`, 'info');
-                            }}
-                            className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-800 cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed"
-                          >
-                            <option value="USED">USED</option>
-                            <option value="NOT USED">NOT USED</option>
-                            <option value="LIH">LIH</option>
-                          </select>
-                        </td>
-                      </tr>
-                    ))
+                                showToast(`Tool ${t.serial} condition updated to ${newCond} (${newCond === 'LIH' ? 'Lost in Hole' : newCond === 'USED' ? 'Routes to QC Inspection' : 'Returns to Available Inventory'}).`, 'info');
+                              }}
+                              className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-800 cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed"
+                            >
+                              <option value="USED">USED</option>
+                              <option value="NOT USED">NOT USED</option>
+                              <option value="LIH">LIH</option>
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

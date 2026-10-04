@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { RTBatch, RTLine, DTBatch, ToolItem, User, DrillingJob, Callout } from '../types';
 import { extractSizeFromDescription, extractToolType } from '../services/api';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
+import { formatDateDD_MM_YYYY } from './JobDossierView';
 
 interface ReceivingTicketsViewProps {
   user?: User | null;
@@ -616,10 +617,10 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                           )}
                         </td>
                         <td className="px-2.5 py-1.5 font-mono text-slate-500 text-[11px] whitespace-nowrap">
-                          {r.backloadRmDate || '—'}
+                          {formatDateDD_MM_YYYY(r.backloadRmDate || r.rtDate)}
                         </td>
                         <td className="px-2.5 py-1.5 font-mono text-slate-700 whitespace-nowrap">
-                          {r.rtDate}
+                          {formatDateDD_MM_YYYY(r.rtDate || r.backloadRmDate)}
                         </td>
                         <td className="px-2.5 py-1.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           {r.isSigned || r.signedDocUrl ? (
@@ -1225,11 +1226,11 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                 </div>
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                   <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">RT Date</span>
-                  <span className="font-mono text-slate-700 text-xs">{selectedRTDetail.rtDate}</span>
+                  <span className="font-mono text-slate-700 text-xs">{formatDateDD_MM_YYYY(selectedRTDetail.rtDate || selectedRTDetail.backloadRmDate)}</span>
                 </div>
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                   <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Backload RM Date</span>
-                  <span className="font-mono text-slate-700 text-xs">{selectedRTDetail.backloadRmDate || '—'}</span>
+                  <span className="font-mono text-slate-700 text-xs">{formatDateDD_MM_YYYY(selectedRTDetail.backloadRmDate || selectedRTDetail.rtDate)}</span>
                 </div>
               </div>
 

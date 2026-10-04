@@ -325,6 +325,13 @@ export interface RTLine {
   ownership?: string;
   qty?: number;
   remarks?: string;
+  dateIn?: string;
+  Date_In?: string;
+  DateIn?: string;
+  rtDate?: string;
+  rtNumber?: string;
+  loadingNoteNo?: string;
+  loadingNoteDate?: string;
 }
 
 export interface RTBatch {
@@ -335,6 +342,14 @@ export interface RTBatch {
   jobNumber?: string;
   rtDate: string;
   backloadRmDate?: string;
+  loadingNoteNo?: string;
+  loadingNoteDate?: string;
+  lNoteNo?: string;
+  lNoteDate?: string;
+  carrier?: string;
+  shippedVia?: string;
+  driverName?: string;
+  truckNo?: string;
   contract?: string;
   rig: string;
   well: string;
@@ -342,6 +357,8 @@ export interface RTBatch {
   toolLines: RTLine[];
   condition?: string;
   notes?: string;
+  isLocked?: boolean;
+  recipient?: string;
   // Document attachments (supports multiple attachments and combined documents)
   signedDocUrl?: string;
   signedDocName?: string;
