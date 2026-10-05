@@ -928,7 +928,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       (rt as any).DateIn ||
       (rt as any).rmDate ||
       (rt as any).date ||
-      (rt as any).ticketDate;
+      (rt as any).ticketDate ||
+      rt.loadingNoteDate ||
+      rt.lNoteDate ||
+      (rt as any).LNoteDate ||
+      (rt as any).l_note_date ||
+      (rt as any).loadingDate ||
+      (rt.toolLines || []).find((l: any) => l.dateIn || l.Date_In || l.returnDate || l.DateIn)?.dateIn ||
+      (rt.toolLines || []).find((l: any) => l.Date_In)?.Date_In;
     if (val && val !== '—') return formatDateDD_MM_YYYY(val);
     if (rt.rtNumber?.startsWith('RT-CLS-') || rt.id?.startsWith('RT-AUTO-')) {
       return formatDateDD_MM_YYYY(jobData.demobDate || jobData.lastRtDate);
@@ -1424,7 +1431,25 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     </thead>
     <tbody>
       ${(activeRT.toolLines || []).map((t, idx) => {
-        const lineDateStr = formatDateDD_MM_YYYY((t as any).dateIn || (t as any).Date_In || (t as any).rtDate || activeRT.rtDate || jobData.demobDate);
+        const matchedDTLine = jobDTs.flatMap((dt) => dt.toolLines || []).find(
+          (dtl: any) => dtl.serial && t.serial && String(dtl.serial).trim().toUpperCase() === String(t.serial).trim().toUpperCase()
+        );
+        const lineDateStr = formatDateDD_MM_YYYY(
+          (t as any).dateIn ||
+          (t as any).Date_In ||
+          (t as any).DateIn ||
+          (t as any).returnDate ||
+          (t as any).ReturnDate ||
+          (t as any).rtDate ||
+          (matchedDTLine as any)?.returnDate ||
+          (matchedDTLine as any)?.dateIn ||
+          (matchedDTLine as any)?.Date_In ||
+          activeRT.rtDate ||
+          activeRT.backloadRmDate ||
+          activeRT.loadingNoteDate ||
+          activeRT.lNoteDate ||
+          jobData.demobDate
+        );
         return `<tr>
           <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
           <td style="font-family: monospace; font-weight: bold;">${t.serial || t.assetNo}</td>
@@ -3148,6 +3173,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     </tr>
                   ) : (
                     activeRT.toolLines.map((t, idx) => {
+                      const matchedDTLine = jobDTs.flatMap((dt) => dt.toolLines || []).find(
+                        (dtl: any) => dtl.serial && t.serial && String(dtl.serial).trim().toUpperCase() === String(t.serial).trim().toUpperCase()
+                      );
+
                       const lineDateIn = formatDateDD_MM_YYYY(
                         (t as any).dateIn ||
                         (t as any).Date_In ||
@@ -3155,8 +3184,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         (t as any).returnDate ||
                         (t as any).ReturnDate ||
                         (t as any).rtDate ||
+                        (matchedDTLine as any)?.returnDate ||
+                        (matchedDTLine as any)?.dateIn ||
+                        (matchedDTLine as any)?.Date_In ||
                         activeRT.rtDate ||
                         activeRT.backloadRmDate ||
+                        activeRT.loadingNoteDate ||
+                        activeRT.lNoteDate ||
+                        (activeRT as any).Date_In ||
+                        (activeRT as any).dateIn ||
                         (activeRT.rtNumber?.startsWith('RT-CLS-') ? jobData.demobDate : null)
                       );
 

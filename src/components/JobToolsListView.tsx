@@ -165,7 +165,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
           serial: (rtl.serial || '').trim().toUpperCase(),
           assetNo: (rtl.assetNo || '').trim().toUpperCase(),
           rtNumber: rt.rtNumber || (rt as any).rgtNo || 'RT-GEN',
-          rtDate: rt.rtDate || rt.backloadRmDate || (rtl as any).rtDate || (rtl as any).dateIn || '',
+          rtDate: rt.rtDate || rt.backloadRmDate || rt.loadingNoteDate || rt.lNoteDate || (rtl as any).rtDate || (rtl as any).dateIn || (rtl as any).Date_In || (rtl as any).returnDate || '',
           used: Boolean(rtl.used || rtl.condition === 'USED'),
           condition: rtl.condition,
           jobKey: rtJob,
@@ -209,7 +209,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
               ((b.toolLines || []).some((rtl) => (rtl.serial && rtl.serial.trim().toUpperCase() === lineSerial) || (rtl.assetNo && rtl.assetNo.trim().toUpperCase() === lineSerial)))
           );
           retNum = directRt?.rtNumber || (directRt as any)?.rgtNo || line.rtBatchId || 'Returned';
-          retDate = directRt?.rtDate || directRt?.backloadRmDate || (line as any).rtDate || (line as any).returnDate || (line as any).dateIn || '';
+          retDate = directRt?.rtDate || directRt?.backloadRmDate || directRt?.loadingNoteDate || directRt?.lNoteDate || (line as any).rtDate || (line as any).returnDate || (line as any).dateIn || (line as any).Date_In || '';
           remark = line.used ? 'Used' : 'Not Used';
         }
 

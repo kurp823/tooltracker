@@ -136,8 +136,18 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
   const resolveRTDate = (r: RTBatch): string => {
     if (r.rtDate && r.rtDate !== '—') return formatDateDD_MM_YYYY(r.rtDate);
     if (r.backloadRmDate && r.backloadRmDate !== '—') return formatDateDD_MM_YYYY(r.backloadRmDate);
+    if (r.loadingNoteDate && r.loadingNoteDate !== '—') return formatDateDD_MM_YYYY(r.loadingNoteDate);
+    if (r.lNoteDate && r.lNoteDate !== '—') return formatDateDD_MM_YYYY(r.lNoteDate);
+    if ((r as any).LNoteDate) return formatDateDD_MM_YYYY((r as any).LNoteDate);
     if ((r as any).Date_In) return formatDateDD_MM_YYYY((r as any).Date_In);
     if ((r as any).dateIn) return formatDateDD_MM_YYYY((r as any).dateIn);
+    if ((r as any).DateIn) return formatDateDD_MM_YYYY((r as any).DateIn);
+    if ((r as any).rmDate) return formatDateDD_MM_YYYY((r as any).rmDate);
+    if ((r as any).ticketDate) return formatDateDD_MM_YYYY((r as any).ticketDate);
+    const lineWithDate = (r.toolLines || []).find((l: any) => l.dateIn || l.Date_In || l.returnDate || l.DateIn);
+    if (lineWithDate) {
+      return formatDateDD_MM_YYYY(lineWithDate.dateIn || (lineWithDate as any).Date_In || (lineWithDate as any).returnDate || (lineWithDate as any).DateIn);
+    }
     if (r.rtNumber && r.rtNumber.startsWith('RT-CLS-') && r.jobId) {
       const job = jobMap.get(r.jobId.trim().toUpperCase()) || jobMap.get(normalizeJobKey(r.jobId));
       if (job?.demobDate) return formatDateDD_MM_YYYY(job.demobDate);
@@ -149,8 +159,16 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
   const resolveRTBackloadDate = (r: RTBatch): string => {
     if (r.backloadRmDate && r.backloadRmDate !== '—') return formatDateDD_MM_YYYY(r.backloadRmDate);
     if (r.rtDate && r.rtDate !== '—') return formatDateDD_MM_YYYY(r.rtDate);
+    if (r.loadingNoteDate && r.loadingNoteDate !== '—') return formatDateDD_MM_YYYY(r.loadingNoteDate);
+    if (r.lNoteDate && r.lNoteDate !== '—') return formatDateDD_MM_YYYY(r.lNoteDate);
+    if ((r as any).LNoteDate) return formatDateDD_MM_YYYY((r as any).LNoteDate);
     if ((r as any).Date_In) return formatDateDD_MM_YYYY((r as any).Date_In);
     if ((r as any).dateIn) return formatDateDD_MM_YYYY((r as any).dateIn);
+    if ((r as any).DateIn) return formatDateDD_MM_YYYY((r as any).DateIn);
+    const lineWithDate = (r.toolLines || []).find((l: any) => l.dateIn || l.Date_In || l.returnDate || l.DateIn);
+    if (lineWithDate) {
+      return formatDateDD_MM_YYYY(lineWithDate.dateIn || (lineWithDate as any).Date_In || (lineWithDate as any).returnDate || (lineWithDate as any).DateIn);
+    }
     if (r.rtNumber && r.rtNumber.startsWith('RT-CLS-') && r.jobId) {
       const job = jobMap.get(r.jobId.trim().toUpperCase()) || jobMap.get(normalizeJobKey(r.jobId));
       if (job?.demobDate) return formatDateDD_MM_YYYY(job.demobDate);
@@ -429,8 +447,8 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
     <div class="box"><div class="lbl">Drilling Job Number</div><div class="val">${b.jobId || '—'}</div></div>
     <div class="box"><div class="lbl">Rig &amp; Well</div><div class="val">${b.rig} / ${b.well}</div></div>
     <div class="box"><div class="lbl">Master Contract</div><div class="val">${getDisplayContract(b)}</div></div>
-    <div class="box"><div class="lbl">Receiving Date</div><div class="val">${b.rtDate}</div></div>
-    <div class="box"><div class="lbl">Backload RM (Rental Stop) Date</div><div class="val">${b.backloadRmDate || b.rtDate}</div></div>
+    <div class="box"><div class="lbl">Receiving Date</div><div class="val">${resolveRTDate(b)}</div></div>
+    <div class="box"><div class="lbl">Backload RM (Rental Stop) Date</div><div class="val">${resolveRTBackloadDate(b)}</div></div>
     <div class="box"><div class="lbl">Received By (Base Officer)</div><div class="val">${b.receivedBy}</div></div>
   </div>
 
@@ -441,6 +459,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
         <th>Serial / System ID</th>
         <th>Size</th>
         <th>Tool Category</th>
+        <th>Date In</th>
         <th>Condition &amp; Usage</th>
         <th>Routed Destination</th>
       </tr>
@@ -448,14 +467,18 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
     <tbody>
       ${(b.toolLines || [])
         .map(
-          (t, i) => `<tr>
-        <td>${i + 1}</td>
-        <td style="font-family: monospace; font-weight: bold;">${t.serial}</td>
-        <td style="font-family: monospace;">${t.size || '—'}</td>
-        <td>${t.shortDesc || (t as any).toolDescription || 'Downhole Tool'}</td>
-        <td><strong>${t.used ? 'Used' : 'Not Used'}</strong> - ${t.condition || 'Good'}</td>
-        <td>${t.routedTo}</td>
-      </tr>`
+          (t, i) => {
+            const lDate = formatDateDD_MM_YYYY((t as any).dateIn || (t as any).Date_In || (t as any).returnDate || (t as any).DateIn || b.rtDate || b.backloadRmDate || b.loadingNoteDate);
+            return `<tr>
+          <td>${i + 1}</td>
+          <td style="font-family: monospace; font-weight: bold;">${t.serial}</td>
+          <td style="font-family: monospace;">${t.size || '—'}</td>
+          <td>${t.shortDesc || (t as any).toolDescription || 'Downhole Tool'}</td>
+          <td style="font-family: monospace;">${lDate}</td>
+          <td><strong>${t.used ? 'Used' : 'Not Used'}</strong> - ${t.condition || 'Good'}</td>
+          <td>${t.routedTo}</td>
+        </tr>`;
+          }
         )
         .join('')}
     </tbody>
@@ -1286,6 +1309,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                         <th className="px-3 py-2">Size</th>
                         <th className="px-3 py-2">Tool Category</th>
                         <th className="px-3 py-2">Description</th>
+                        <th className="px-3 py-2">Date In</th>
                         <th className="px-3 py-2">Ownership</th>
                         <th className="px-3 py-2 text-center">Usage</th>
                         <th className="px-3 py-2">Routing Destination</th>
@@ -1296,6 +1320,18 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                         const invTool = t.serial ? inventoryMap.get(t.serial.trim().toUpperCase()) : undefined;
                         const toolType = extractToolType(t.shortDesc || invTool?.shortDesc || '');
                         const displaySize = t.size || invTool?.size || extractSizeFromDescription(t.shortDesc || '') || '—';
+                        const lineDateIn = formatDateDD_MM_YYYY(
+                          (t as any).dateIn ||
+                          (t as any).Date_In ||
+                          (t as any).DateIn ||
+                          (t as any).returnDate ||
+                          (t as any).ReturnDate ||
+                          (t as any).rtDate ||
+                          selectedRTDetail.rtDate ||
+                          selectedRTDetail.backloadRmDate ||
+                          selectedRTDetail.loadingNoteDate ||
+                          selectedRTDetail.lNoteDate
+                        );
 
                         return (
                           <tr key={idx} className="hover:bg-slate-50 transition">
@@ -1304,6 +1340,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                             <td className="px-3 py-2 font-mono font-semibold text-slate-800">{displaySize}</td>
                             <td className="px-3 py-2 font-bold text-[#1a3055] whitespace-nowrap">{toolType}</td>
                             <td className="px-3 py-2 text-slate-700 text-xs">{t.shortDesc || (t as any).toolDescription || 'Downhole Tool'}</td>
+                            <td className="px-3 py-2 font-mono text-[11px] text-slate-700 whitespace-nowrap">{lineDateIn}</td>
                             <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{t.ownership || invTool?.ownership || 'EMDAD'}</td>
                             <td className="px-3 py-2 text-center whitespace-nowrap">
                               <span

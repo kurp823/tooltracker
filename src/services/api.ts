@@ -655,8 +655,6 @@ export function normalizeRTBatch(row: any): any {
     ? row.lines
     : [];
 
-  const lines = rawLines.map(normalizeRTLine).filter(Boolean);
-
   const rawDate = cleanDateStr(
     row.RTDate ||
     row.rtDate ||
@@ -671,12 +669,28 @@ export function normalizeRTBatch(row: any): any {
     row.Date_In ||
     row.DateIn ||
     row.dateIn ||
+    row.date_in ||
     row.RMDate ||
     row.rmDate ||
     row.BackloadDate ||
     row.backloadDate ||
     row.ReturnDate ||
-    row.returnDate
+    row.returnDate ||
+    row.LoadingNoteDate ||
+    row.loadingNoteDate ||
+    row.LNoteDate ||
+    row.lNoteDate ||
+    row.L_Note_Date ||
+    row.l_note_date ||
+    row.LN_Date ||
+    row.lnDate ||
+    row.LNDate ||
+    row.DeliveryNoteDate ||
+    row.deliveryNoteDate ||
+    row.WaybillDate ||
+    row.waybillDate ||
+    row.DateIn_Date ||
+    row.dateInDate
   );
 
   const backloadDate = cleanDateStr(
@@ -728,9 +742,24 @@ export function normalizeRTBatch(row: any): any {
     row.deliveryNoteDate ||
     row.WaybillDate ||
     row.waybillDate ||
-    backloadDate ||
-    rawDate
+    rawDate ||
+    backloadDate
   );
+
+  const effectiveRtDate = rawDate || loadingNoteDate || backloadDate;
+  const effectiveBackloadDate = backloadDate || effectiveRtDate;
+
+  const lines = rawLines.map((l: any) => {
+    const norm = normalizeRTLine(l);
+    if ((!norm.dateIn || norm.dateIn === '—') && effectiveRtDate) {
+      norm.dateIn = effectiveRtDate;
+      norm.Date_In = effectiveRtDate;
+      norm.DateIn = effectiveRtDate;
+      norm.rtDate = effectiveRtDate;
+      norm.returnDate = effectiveRtDate;
+    }
+    return norm;
+  }).filter(Boolean);
 
   const carrier = String(
     row.Carrier ||
@@ -763,12 +792,12 @@ export function normalizeRTBatch(row: any): any {
     id: String(row.RTBatchID || row.rtBatchId || row.id || row.ID || rtNum),
     rtNumber: rtNum,
     jobId: String(row.JobID || row.jobId || row.JobNumber || row.jobNumber || row.JobNo || row.jobNo || ''),
-    rtDate: rawDate,
-    backloadRmDate: backloadDate || rawDate,
-    loadingNoteNo,
-    lNoteNo: loadingNoteNo,
-    loadingNoteDate,
-    lNoteDate: loadingNoteDate,
+    rtDate: effectiveRtDate,
+    backloadRmDate: effectiveBackloadDate,
+    loadingNoteNo: loadingNoteNo || (rtNum ? `LN-${rtNum.replace(/^RT-?/i, '')}` : ''),
+    lNoteNo: loadingNoteNo || (rtNum ? `LN-${rtNum.replace(/^RT-?/i, '')}` : ''),
+    loadingNoteDate: loadingNoteDate || effectiveRtDate,
+    lNoteDate: loadingNoteDate || effectiveRtDate,
     carrier,
     shippedVia: carrier,
     driverName,
@@ -1003,7 +1032,18 @@ export function reconcileJobsDTRTAndInventory(
       if (rtNum && rtNum !== '—' && rtNum !== '-' && !rtNum.toUpperCase().startsWith('RT-AUTO') && !rtNum.toUpperCase().startsWith('RT-CLS')) {
         const rtKey = rtNum.toUpperCase();
         let targetRT = rtsByRtNumber.get(rtKey);
-        const lineDate = cleanDateStr(tl.returnDate || tl.dateIn || tl.Date_In || targetRT?.rtDate || targetRT?.backloadRmDate || '');
+        const lineDate = cleanDateStr(
+          tl.returnDate ||
+          tl.dateIn ||
+          tl.Date_In ||
+          (tl as any).DateIn ||
+          targetRT?.rtDate ||
+          targetRT?.backloadRmDate ||
+          targetRT?.loadingNoteDate ||
+          targetRT?.lNoteDate ||
+          dt.dispatchDate ||
+          ''
+        );
         
         if (!targetRT) {
           targetRT = {
@@ -1030,21 +1070,51 @@ export function reconcileJobsDTRTAndInventory(
           rtBatches.push(targetRT);
           rtsByRtNumber.set(rtKey, targetRT);
         } else {
-          // If the existing targetRT from SQL has an empty date, fill it only if line has an explicit return date
+          // If the existing targetRT from SQL has an empty date, fill it
           if ((!targetRT.rtDate || targetRT.rtDate === '—') && lineDate) {
             targetRT.rtDate = lineDate;
             targetRT.backloadRmDate = lineDate;
           }
+          if ((!targetRT.loadingNoteDate || targetRT.loadingNoteDate === '—') && lineDate) {
+            targetRT.loadingNoteDate = lineDate;
+            targetRT.lNoteDate = lineDate;
+          }
           if (!targetRT.jobId && dt.jobId) {
             targetRT.jobId = dt.jobId;
           }
+          if (!targetRT.rig && dt.rig) {
+            targetRT.rig = dt.rig;
+          }
+          if (!targetRT.well && dt.well) {
+            targetRT.well = dt.well;
+          }
         }
 
-        const hasTool = (targetRT.toolLines || []).some(
-          (rtl: any) => rtl.serial && String(rtl.serial).trim().toUpperCase() === String(tl.serial).trim().toUpperCase()
+        const existingTool = (targetRT.toolLines || []).find(
+          (rtl: any) => rtl.serial && tl.serial && String(rtl.serial).trim().toUpperCase() === String(tl.serial).trim().toUpperCase()
         );
-        if (!hasTool) {
+        if (existingTool) {
+          const effDate = cleanDateStr(
+            existingTool.dateIn ||
+            existingTool.Date_In ||
+            existingTool.DateIn ||
+            existingTool.returnDate ||
+            existingTool.rtDate ||
+            lineDate ||
+            targetRT.rtDate ||
+            targetRT.loadingNoteDate
+          );
+          if (effDate) {
+            existingTool.dateIn = effDate;
+            existingTool.Date_In = effDate;
+            existingTool.DateIn = effDate;
+            existingTool.rtDate = effDate;
+            existingTool.returnDate = effDate;
+          }
+          if (!existingTool.rtNumber) existingTool.rtNumber = rtNum;
+        } else {
           if (!targetRT.toolLines) targetRT.toolLines = [];
+          const effDate = lineDate || targetRT.rtDate || targetRT.loadingNoteDate;
           targetRT.toolLines.push({
             id: tl.id || `RTL-${Date.now()}-${targetRT.toolLines.length}`,
             itemNo: targetRT.toolLines.length + 1,
@@ -1054,10 +1124,11 @@ export function reconcileJobsDTRTAndInventory(
             desc: tl.desc,
             toolDescription: tl.toolDescription || tl.desc || tl.shortDesc,
             size: tl.size,
-            dateIn: lineDate,
-            Date_In: lineDate,
-            rtDate: lineDate,
-            returnDate: lineDate,
+            dateIn: effDate,
+            Date_In: effDate,
+            DateIn: effDate,
+            rtDate: effDate,
+            returnDate: effDate,
             rtNumber: rtNum,
             used: tl.used != null ? tl.used : (tl.usedStatus === 'used'),
             routedTo: tl.used ? 'Inspection Bay' : 'Available Inventory',

@@ -127,9 +127,10 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
         const lineSerial = (rtl.serial || rtl.assetNo || '').trim().toUpperCase();
         if (!target || lineSerial === target) {
           const key = `${lineSerial}_${rt.rtNumber.trim().toUpperCase()}`;
+          const effDate = rt.rtDate || rt.backloadRmDate || rt.loadingNoteDate || rt.lNoteDate || (rtl as any).rtDate || (rtl as any).dateIn || (rtl as any).Date_In || (rtl as any).returnDate || '';
           rtLinesByTicket.set(key, {
             rtNumber: rt.rtNumber,
-            rtDate: rt.rtDate || '',
+            rtDate: effDate,
             used: Boolean(rtl.used),
             condition: rtl.condition,
           });
@@ -137,7 +138,7 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
           if (normJob) {
             rtLinesByTicket.set(`${lineSerial}_JOB_${normJob}`, {
               rtNumber: rt.rtNumber,
-              rtDate: rt.rtDate || '',
+              rtDate: effDate,
               used: Boolean(rtl.used),
               condition: rtl.condition,
             });

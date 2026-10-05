@@ -151,7 +151,7 @@ export const getJobEndDate = (job: DrillingJob, rtBatches?: RTBatch[]): string =
   if (rtBatches && rtBatches.length > 0) {
     const valid = rtBatches
       .map((rt) => {
-        const raw = rt.rtDate || rt.backloadRmDate;
+        const raw = rt.rtDate || rt.backloadRmDate || rt.loadingNoteDate || rt.lNoteDate || (rt as any).Date_In || (rt as any).dateIn;
         return { raw, ms: parseDateToMs(raw) };
       })
       .filter((d) => d.ms > 0)
