@@ -327,12 +327,40 @@ export function generateInvoicePackageForJob(
         const serial = tl.serial || tl.assetNo;
         if (!serial) return;
 
-        const rateLookup = CONTRACT_444558_RATES[serial] || {
-          contractRefOper: 'A.4.1',
-          contractRefStandby: 'A.4.1',
-          operRate: 0,
-          standbyRate: 25.0,
-        };
+        let rateLookup = CONTRACT_444558_RATES[serial];
+
+        // If contract has live / configured rates, match by description, category, size, or serial
+        if (contract?.rates && contract.rates.length > 0) {
+          const descUpper = String(tl.desc || tl.shortDesc || '').toUpperCase();
+          const catUpper = String((tl as any).category || '').toUpperCase();
+          const sizeUpper = String((tl as any).size || '').toUpperCase();
+          const matched = contract.rates.find((r) => {
+            const rDesc = (r.shortDesc || '').toUpperCase();
+            const rCat = (r.category || '').toUpperCase();
+            const rSize = (r.size || '').toUpperCase();
+            if (rDesc && descUpper.includes(rDesc)) return true;
+            if (rCat && (catUpper.includes(rCat) || descUpper.includes(rCat))) return true;
+            if (rSize && sizeUpper && rSize === sizeUpper) return true;
+            return false;
+          });
+          if (matched) {
+            rateLookup = {
+              contractRefOper: matched.contractRef || 'SCHEDULE 2',
+              contractRefStandby: matched.contractRef || 'SCHEDULE 2',
+              operRate: matched.opsRate,
+              standbyRate: matched.standbyRate,
+            };
+          }
+        }
+
+        if (!rateLookup) {
+          rateLookup = {
+            contractRefOper: 'A.4.1',
+            contractRefStandby: 'A.4.1',
+            operRate: 0,
+            standbyRate: 25.0,
+          };
+        }
 
         const rtBatch = jobRTs.find((rt) =>
           (rt.toolLines || []).some((rtl) => rtl.serial === serial)

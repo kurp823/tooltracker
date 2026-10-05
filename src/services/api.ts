@@ -378,7 +378,35 @@ export function cleanDateStr(d: any): string {
  */
 export function normalizeDTLine(row: any): any {
   if (!row) return null;
-  const serial = String(row.serial || row.Serial || row.serialNo || row.SerialNo || row.PartNo || row.partNo || '').trim();
+  const serial = String(
+    row.serial ||
+    row.Serial ||
+    row.serialNo ||
+    row.SerialNo ||
+    row.SerialNumber ||
+    row.serialNumber ||
+    row.Serial_Number ||
+    row.serial_number ||
+    row.PartNo ||
+    row.partNo ||
+    row.Part_No ||
+    row.part_no ||
+    row.AssetNo ||
+    row.assetNo ||
+    row.Asset_No ||
+    row.asset_no ||
+    row.ToolSerial ||
+    row.toolSerial ||
+    row.Tool_Serial ||
+    row.tool_serial ||
+    row.ToolID ||
+    row.toolId ||
+    row.Tool_ID ||
+    row.tool_id ||
+    row.ToolCode ||
+    row.toolCode ||
+    ''
+  ).trim();
 
   const shortDesc = String(
     row.shortDesc ||
@@ -394,16 +422,27 @@ export function normalizeDTLine(row: any): any {
     row.desc ||
     row.Description ||
     row.description ||
-    row.toolDescription ||
+    row.ItemDescription ||
+    row.Item_Description ||
     row.ToolDescription ||
-    row.toolDesc ||
+    row.Tool_Description ||
+    row.toolDescription ||
     row.ToolDesc ||
+    row.toolDesc ||
     row.ToolName ||
+    row.toolName ||
+    row.Tool_Name ||
+    row.ItemName ||
+    row.Item_Name ||
+    row.PartDescription ||
+    row.Part_Description ||
+    row.Item ||
+    row.item ||
     shortDesc ||
     ''
   ).trim();
 
-  let size = String(row.size || row.Size || '').trim();
+  let size = String(row.size || row.Size || row.ToolSize || row.toolSize || '').trim();
   if (!size && rawDesc) {
     size = extractSizeFromDescription(rawDesc);
   }
@@ -441,20 +480,26 @@ export function normalizeDTLine(row: any): any {
     row.RTDate ||
     row.DateIn_Date ||
     row.dateInDate ||
+    row.ReceivedDate ||
+    row.receivedDate ||
+    row.BackloadDate ||
+    row.backloadDate ||
+    row.LoadingNoteDate ||
+    row.loadingNoteDate ||
     ''
   );
 
   return {
-    id: row.id || row.ID || row.LineID || row.itemNo || undefined,
-    itemNo: Number(row.itemNo ?? row.ItemNo ?? 1),
+    id: row.id || row.ID || row.LineID || row.lineId || row.itemNo || undefined,
+    itemNo: Number(row.itemNo ?? row.ItemNo ?? row.Item_No ?? row.item_no ?? row.seq ?? row.Seq ?? row.LineNo ?? row.lineNo ?? 1),
     serial,
     assetNo: String(row.assetNo || row.AssetNo || serial).trim(),
     size,
     shortDesc: finalShortDesc,
     desc: finalDesc,
     toolDescription: finalDesc,
-    qty: Number(row.qty ?? row.Qty ?? 1),
-    remarks: String(row.remarks || row.Remarks || '').trim(),
+    qty: Number(row.qty ?? row.Qty ?? row.DTQTY ?? row.dtQty ?? row.Quantity ?? row.quantity ?? 1),
+    remarks: String(row.remarks || row.Remarks || row.Comments || row.comments || '').trim(),
     status: (rawReturnedRt && rawReturnedRt !== '—') ? 'Returned' : status,
     ownership,
     isEmdad,
@@ -480,6 +525,20 @@ export function normalizeDTBatch(row: any): any {
     ? row.tools
     : Array.isArray(row.lines)
     ? row.lines
+    : Array.isArray(row.items)
+    ? row.items
+    : Array.isArray(row.DTLines)
+    ? row.DTLines
+    : Array.isArray(row.dtLines)
+    ? row.dtLines
+    : Array.isArray(row.DeliveryTicketLines)
+    ? row.DeliveryTicketLines
+    : Array.isArray(row.deliveryTicketLines)
+    ? row.deliveryTicketLines
+    : Array.isArray(row.tbl_DTLines)
+    ? row.tbl_DTLines
+    : Array.isArray(row.tbl_DeliveryTicketLines)
+    ? row.tbl_DeliveryTicketLines
     : [];
 
   const lines = rawLines.map(normalizeDTLine).filter(Boolean);
@@ -563,7 +622,37 @@ export function normalizeDTBatch(row: any): any {
  */
 export function normalizeRTLine(row: any): any {
   if (!row) return null;
-  const serial = String(row.serial || row.Serial || row.serialNo || row.SerialNo || row.Serial_No || row.PartNo || row.partNo || '').trim();
+  const serial = String(
+    row.serial ||
+    row.Serial ||
+    row.serialNo ||
+    row.SerialNo ||
+    row.Serial_No ||
+    row.serial_no ||
+    row.SerialNumber ||
+    row.serialNumber ||
+    row.Serial_Number ||
+    row.serial_number ||
+    row.PartNo ||
+    row.partNo ||
+    row.Part_No ||
+    row.part_no ||
+    row.AssetNo ||
+    row.assetNo ||
+    row.Asset_No ||
+    row.asset_no ||
+    row.ToolSerial ||
+    row.toolSerial ||
+    row.Tool_Serial ||
+    row.tool_serial ||
+    row.ToolID ||
+    row.toolId ||
+    row.Tool_ID ||
+    row.tool_id ||
+    row.ToolCode ||
+    row.toolCode ||
+    ''
+  ).trim();
 
   const shortDesc = String(
     row.shortDesc ||
@@ -579,16 +668,27 @@ export function normalizeRTLine(row: any): any {
     row.desc ||
     row.Description ||
     row.description ||
-    row.toolDescription ||
+    row.ItemDescription ||
+    row.Item_Description ||
     row.ToolDescription ||
-    row.toolDesc ||
+    row.Tool_Description ||
+    row.toolDescription ||
     row.ToolDesc ||
+    row.toolDesc ||
     row.ToolName ||
+    row.toolName ||
+    row.Tool_Name ||
+    row.ItemName ||
+    row.Item_Name ||
+    row.PartDescription ||
+    row.Part_Description ||
+    row.Item ||
+    row.item ||
     shortDesc ||
     ''
   ).trim();
 
-  let size = String(row.size || row.Size || '').trim();
+  let size = String(row.size || row.Size || row.ToolSize || row.toolSize || '').trim();
   if (!size && rawDesc) {
     size = extractSizeFromDescription(rawDesc);
   }
@@ -603,19 +703,25 @@ export function normalizeRTLine(row: any): any {
     row.date_in ||
     row.returnDate ||
     row.ReturnDate ||
-    row.RTDate ||
     row.rtDate ||
+    row.RTDate ||
     row.Date ||
     row.date ||
     row.ReceivedDate ||
     row.receivedDate ||
     row.BackloadDate ||
-    row.backloadDate
+    row.backloadDate ||
+    row.LoadingNoteDate ||
+    row.loadingNoteDate ||
+    row.LNoteDate ||
+    row.lNoteDate ||
+    row.DateIn_Date ||
+    row.dateInDate
   );
 
   return {
     id: row.id || row.ID || row.LineID || row.lineId || row.itemNo || undefined,
-    itemNo: Number(row.itemNo ?? row.ItemNo ?? row.Item_No ?? row.seq ?? row.Seq ?? 1),
+    itemNo: Number(row.itemNo ?? row.ItemNo ?? row.Item_No ?? row.item_no ?? row.seq ?? row.Seq ?? row.LineNo ?? row.lineNo ?? 1),
     serial,
     assetNo: String(row.assetNo || row.AssetNo || row.Asset_No || row.asset_no || serial).trim(),
     shortDesc: finalShortDesc,
@@ -627,7 +733,7 @@ export function normalizeRTLine(row: any): any {
     DateIn: lineDate,
     rtDate: lineDate,
     returnDate: lineDate,
-    rtNumber: String(row.rtNumber || row.RTNumber || row.TicketNumber || row.ticketNumber || row.RGT_No || row.rgtNo || ''),
+    rtNumber: String(row.rtNumber || row.RTNumber || row.RT_Number || row.rt_number || row.TicketNumber || row.ticketNumber || row.RGT_No || row.rgtNo || row.RGTNo || row.rgt_no || row.RTNo || row.rtNo || row.RT_No || row.rt_no || ''),
     used: row.used != null
       ? Boolean(row.used)
       : row.Used != null
@@ -653,6 +759,20 @@ export function normalizeRTBatch(row: any): any {
     ? row.tools
     : Array.isArray(row.lines)
     ? row.lines
+    : Array.isArray(row.items)
+    ? row.items
+    : Array.isArray(row.RTLines)
+    ? row.RTLines
+    : Array.isArray(row.rtLines)
+    ? row.rtLines
+    : Array.isArray(row.ReceivingTicketLines)
+    ? row.ReceivingTicketLines
+    : Array.isArray(row.receivingTicketLines)
+    ? row.receivingTicketLines
+    : Array.isArray(row.tbl_RTLines)
+    ? row.tbl_RTLines
+    : Array.isArray(row.tbl_ReceivingTicketLines)
+    ? row.tbl_ReceivingTicketLines
     : [];
 
   const rawDate = cleanDateStr(
@@ -1424,6 +1544,53 @@ export function reconcileJobsDTRTAndInventory(
   return { jobs, dtBatches, rtBatches, inventory };
 }
 
+// Helper function for Data API Builder with fallback table names, pagination, and top parameter tuning
+async function fetchAllTablePages(
+  baseEndpoint: string,
+  tableVariants: string[],
+  maxPages = 30
+): Promise<any[]> {
+  for (const tbl of tableVariants) {
+    try {
+      let allRows: any[] = [];
+      let nextUrl: string | null = `${baseEndpoint}/${tbl}?$top=5000`;
+      let pages = 0;
+
+      while (nextUrl && pages < maxPages) {
+        pages++;
+        let r = await fetch(nextUrl);
+        if (!r.ok && r.status === 400 && pages === 1) {
+          nextUrl = `${baseEndpoint}/${tbl}?$top=1000`;
+          r = await fetch(nextUrl);
+          if (!r.ok && r.status === 400) {
+            nextUrl = `${baseEndpoint}/${tbl}?$top=500`;
+            r = await fetch(nextUrl);
+          }
+        }
+        if (!r.ok) break;
+        const json = await r.json();
+        const rows = json.value || json;
+        if (Array.isArray(rows) && rows.length > 0) {
+          allRows = allRows.concat(rows);
+          nextUrl = json['@nextLink'] || json['nextLink'] || null;
+          if (nextUrl && !nextUrl.startsWith('http')) {
+            nextUrl = `${baseEndpoint}/${nextUrl.replace(/^\//, '')}`;
+          }
+        } else {
+          break;
+        }
+      }
+
+      if (allRows.length > 0) {
+        return allRows;
+      }
+    } catch {
+      // Try next table variant
+    }
+  }
+  return [];
+}
+
 /**
  * Attempts to fetch live data from Azure Static Web Apps Data API or Azure Functions
  */
@@ -1441,85 +1608,161 @@ export async function fetchLiveDatabaseData(): Promise<{
 }> {
   const endpoint = getApiEndpoint();
 
+  function buildMultiKeyLineIndex(lines: any[], type: 'DT' | 'RT'): Map<string, any[]> {
+    const map = new Map<string, any[]>();
+
+    lines.forEach((line) => {
+      const keys = new Set<string>();
+
+      const rawRefs = type === 'DT'
+        ? [
+            line.dtNumber, line.DTNumber, line.DT_Number, line.dt_number,
+            line.TicketNumber, line.ticketNumber, line.Ticket_Number, line.ticket_number,
+            line.DTNo, line.dtNo, line.DT_No, line.dt_no,
+            line.DTBatchID, line.dtBatchId, line.DT_Batch_ID, line.dt_batch_id,
+            line.BatchID, line.batchId,
+            line.DeliveryTicketNo, line.deliveryTicketNo, line.DeliveryTicketNumber, line.deliveryTicketNumber,
+            line.DeliveryTicketID, line.deliveryTicketId, line.DT_ID, line.dt_id,
+            line.HeaderID, line.headerId, line.DTHeaderID, line.dtHeaderId,
+            line.TicketID, line.ticketId, line.ID, line.id,
+          ]
+        : [
+            line.rtNumber, line.RTNumber, line.RT_Number, line.rt_number,
+            line.TicketNumber, line.ticketNumber, line.Ticket_Number, line.ticket_number,
+            line.RTNo, line.rtNo, line.RT_No, line.rt_no,
+            line.RGT_No, line.rgtNo, line.RGTNo, line.rgt_no,
+            line.RTBatchID, line.rtBatchId, line.RT_Batch_ID, line.rt_batch_id,
+            line.BatchID, line.batchId,
+            line.ReceivingTicketNo, line.receivingTicketNo, line.ReceivingTicketNumber, line.receivingTicketNumber,
+            line.ReceivingTicketID, line.receivingTicketId, line.RT_ID, line.rt_id,
+            line.HeaderID, line.headerId, line.RTHeaderID, line.rtHeaderId,
+            line.TicketID, line.ticketId, line.ID, line.id,
+          ];
+
+      rawRefs.forEach((r) => {
+        if (r != null && r !== '') {
+          const s = String(r).trim();
+          if (s) {
+            keys.add(s);
+            keys.add(s.toUpperCase());
+            const norm = s.toUpperCase().replace(/^(DT|RT|RGT)[-_]?/i, '');
+            if (norm) {
+              keys.add(norm);
+              keys.add(`${type}-${norm}`);
+              keys.add(`${type}${norm}`);
+              const withoutZeros = norm.replace(/^0+/, '');
+              if (withoutZeros) {
+                keys.add(withoutZeros);
+                keys.add(`${type}-${withoutZeros}`);
+              }
+            }
+          }
+        }
+      });
+
+      const jId = String(line.jobId || line.JobID || line.jobNumber || line.JobNumber || line.JobNo || line.jobNo || line.Job || line.job || '').trim();
+      if (jId) {
+        const normJ = normalizeJobKey(jId);
+        if (normJ) {
+          keys.add(`JOB_${normJ}`);
+        }
+        keys.add(`JOB_${jId.toUpperCase()}`);
+      }
+
+      keys.forEach((k) => {
+        if (!map.has(k)) map.set(k, []);
+        map.get(k)!.push(line);
+      });
+    });
+
+    return map;
+  }
+
+  function attachLinesToBatches(tickets: any[], lines: any[], type: 'DT' | 'RT'): any[] {
+    if (!lines || lines.length === 0) return tickets;
+    const lineIndex = buildMultiKeyLineIndex(lines, type);
+
+    return tickets.map((ticket) => {
+      if (Array.isArray(ticket.toolLines) && ticket.toolLines.length > 0) {
+        return ticket;
+      }
+      if (Array.isArray(ticket.tools) && ticket.tools.length > 0) {
+        ticket.toolLines = ticket.tools;
+        return ticket;
+      }
+      if (Array.isArray(ticket.lines) && ticket.lines.length > 0) {
+        ticket.toolLines = ticket.lines;
+        return ticket;
+      }
+
+      const candidateKeys = type === 'DT'
+        ? [
+            ticket.dtNumber, ticket.DTNumber, ticket.DT_Number, ticket.dt_number,
+            ticket.TicketNumber, ticket.ticketNumber, ticket.Ticket_Number, ticket.ticket_number,
+            ticket.DTNo, ticket.dtNo, ticket.DT_No, ticket.dt_no,
+            ticket.DTBatchID, ticket.dtBatchId, ticket.DT_Batch_ID, ticket.dt_batch_id,
+            ticket.BatchID, ticket.batchId,
+            ticket.id, ticket.ID,
+            ticket.DeliveryTicketNo, ticket.deliveryTicketNo, ticket.DeliveryTicketNumber, ticket.deliveryTicketNumber,
+            ticket.DeliveryTicketID, ticket.deliveryTicketId, ticket.DT_ID, ticket.dt_id,
+            ticket.HeaderID, ticket.headerId, ticket.DTHeaderID, ticket.dtHeaderId,
+          ]
+        : [
+            ticket.rtNumber, ticket.RTNumber, ticket.RT_Number, ticket.rt_number,
+            ticket.TicketNumber, ticket.ticketNumber, ticket.Ticket_Number, ticket.ticket_number,
+            ticket.RTNo, ticket.rtNo, ticket.RT_No, ticket.rt_no,
+            ticket.RGT_No, ticket.rgtNo, ticket.RGTNo, ticket.rgt_no,
+            ticket.RTBatchID, ticket.rtBatchId, ticket.RT_Batch_ID, ticket.rt_batch_id,
+            ticket.BatchID, ticket.batchId,
+            ticket.id, ticket.ID,
+            ticket.ReceivingTicketNo, ticket.receivingTicketNo, ticket.ReceivingTicketNumber, ticket.receivingTicketNumber,
+            ticket.ReceivingTicketID, ticket.receivingTicketId, ticket.RT_ID, ticket.rt_id,
+            ticket.HeaderID, ticket.headerId, ticket.RTHeaderID, ticket.rtHeaderId,
+          ];
+
+      let foundLines: any[] | null = null;
+      for (const raw of candidateKeys) {
+        if (raw != null && raw !== '') {
+          const s = String(raw).trim();
+          if (lineIndex.has(s)) { foundLines = lineIndex.get(s)!; break; }
+          if (lineIndex.has(s.toUpperCase())) { foundLines = lineIndex.get(s.toUpperCase())!; break; }
+          const norm = s.toUpperCase().replace(/^(DT|RT|RGT)[-_]?/i, '');
+          if (norm && lineIndex.has(norm)) { foundLines = lineIndex.get(norm)!; break; }
+          if (norm && lineIndex.has(`${type}-${norm}`)) { foundLines = lineIndex.get(`${type}-${norm}`)!; break; }
+          const withoutZeros = norm.replace(/^0+/, '');
+          if (withoutZeros && lineIndex.has(withoutZeros)) { foundLines = lineIndex.get(withoutZeros)!; break; }
+          if (withoutZeros && lineIndex.has(`${type}-${withoutZeros}`)) { foundLines = lineIndex.get(`${type}-${withoutZeros}`)!; break; }
+        }
+      }
+
+      if (!foundLines) {
+        const jId = String(ticket.jobId || ticket.JobID || ticket.jobNumber || ticket.JobNumber || ticket.JobNo || ticket.jobNo || '').trim();
+        if (jId) {
+          const normJ = normalizeJobKey(jId);
+          if (normJ && lineIndex.has(`JOB_${normJ}`)) {
+            foundLines = lineIndex.get(`JOB_${normJ}`)!;
+          }
+        }
+      }
+
+      if (foundLines && foundLines.length > 0) {
+        ticket.toolLines = foundLines;
+      }
+
+      return ticket;
+    });
+  }
+
   // Strategy 1: If endpoint is /data-api/rest (Azure Static Web Apps Linked Database)
   if (endpoint.includes('/data-api/rest') || endpoint.endsWith('/rest')) {
     try {
-      // Fetch up to 10,000 inventory items, supporting both nextLink pagination and high $top limits
-      async function fetchAllInventoryPages(baseEndpoint: string): Promise<any[]> {
-        const tableVariants = ['tbl_Inventory', 'Inventory', 'tblInventory', 'ToolInventory', 'tools'];
-        for (const tbl of tableVariants) {
-          try {
-            let allRows: any[] = [];
-            let nextUrl: string | null = `${baseEndpoint}/${tbl}?$top=5000`;
-            let pages = 0;
-
-            while (nextUrl && pages < 10) {
-              pages++;
-              const r = await fetch(nextUrl);
-              if (!r.ok) break;
-              const json = await r.json();
-              const rows = json.value || json;
-              if (Array.isArray(rows) && rows.length > 0) {
-                allRows = allRows.concat(rows);
-                // Check if Data API Builder returned nextLink for pagination
-                nextUrl = json['@nextLink'] || json['nextLink'] || null;
-                if (nextUrl && !nextUrl.startsWith('http')) {
-                  nextUrl = `${baseEndpoint}/${nextUrl.replace(/^\//, '')}`;
-                }
-              } else {
-                break;
-              }
-            }
-
-            if (allRows.length > 0) {
-              return allRows;
-            }
-          } catch {
-            // Try next table variant
-          }
-        }
-        return [];
-      }
-
-      const invRows = await fetchAllInventoryPages(endpoint);
-      const jobsPromise = fetch(`${endpoint}/tbl_Jobs?$top=1000`)
-        .catch(() => fetch(`${endpoint}/Jobs?$top=1000`))
-        .catch(() => null);
-
-      const dtPromise = fetch(`${endpoint}/tbl_DeliveryTickets?$top=5000`)
-        .catch(() => fetch(`${endpoint}/DeliveryTickets?$top=5000`))
-        .catch(() => fetch(`${endpoint}/tbl_DTBatches?$top=5000`))
-        .catch(() => fetch(`${endpoint}/DTBatches?$top=5000`))
-        .catch(() => null);
-
-      const dtLinesPromise = fetch(`${endpoint}/tbl_DTLines?$top=50000`)
-        .catch(() => fetch(`${endpoint}/DTLines?$top=50000`))
-        .catch(() => fetch(`${endpoint}/tbl_DeliveryTicketLines?$top=50000`))
-        .catch(() => fetch(`${endpoint}/DeliveryTicketLines?$top=50000`))
-        .catch(() => fetch(`${endpoint}/tbl_DTBatchLines?$top=50000`))
-        .catch(() => fetch(`${endpoint}/DTBatchLines?$top=50000`))
-        .catch(() => null);
-
-      const rtPromise = fetch(`${endpoint}/tbl_ReceivingTickets?$top=5000`)
-        .catch(() => fetch(`${endpoint}/ReceivingTickets?$top=5000`))
-        .catch(() => fetch(`${endpoint}/tbl_RTBatches?$top=5000`))
-        .catch(() => fetch(`${endpoint}/RTBatches?$top=5000`))
-        .catch(() => null);
-
-      const rtLinesPromise = fetch(`${endpoint}/tbl_RTLines?$top=50000`)
-        .catch(() => fetch(`${endpoint}/RTLines?$top=50000`))
-        .catch(() => fetch(`${endpoint}/tbl_ReceivingTicketLines?$top=50000`))
-        .catch(() => fetch(`${endpoint}/ReceivingTicketLines?$top=50000`))
-        .catch(() => fetch(`${endpoint}/tbl_RTBatchLines?$top=50000`))
-        .catch(() => fetch(`${endpoint}/RTBatchLines?$top=50000`))
-        .catch(() => null);
-
-      const [jobsRes, dtRes, dtLinesRes, rtRes, rtLinesRes] = await Promise.allSettled([
-        jobsPromise,
-        dtPromise,
-        dtLinesPromise,
-        rtPromise,
-        rtLinesPromise,
+      const [invRows, jobRows, dtRows, dtLineRows, rtRows, rtLineRows] = await Promise.all([
+        fetchAllTablePages(endpoint, ['tbl_Inventory', 'Inventory', 'tblInventory', 'ToolInventory', 'tools', 'tbl_Tools', 'Tools']),
+        fetchAllTablePages(endpoint, ['tbl_Jobs', 'Jobs', 'tblJobs', 'DrillingJobs', 'tbl_DrillingJobs', 'tbl_JobHeader', 'JobHeader', 'tbl_JobRegister', 'JobRegister']),
+        fetchAllTablePages(endpoint, ['tbl_DeliveryTickets', 'DeliveryTickets', 'tbl_DTBatches', 'DTBatches', 'tbl_DT', 'DT', 'tbl_DeliveryTicket', 'DeliveryTicket', 'tbl_DT_Header', 'DTHeader']),
+        fetchAllTablePages(endpoint, ['tbl_DTLines', 'DTLines', 'tbl_DeliveryTicketLines', 'DeliveryTicketLines', 'tbl_DTBatchLines', 'DTBatchLines', 'tbl_DT_Lines', 'tblDTLines', 'tbl_DeliveryTickets_Lines', 'DeliveryTickets_Lines']),
+        fetchAllTablePages(endpoint, ['tbl_ReceivingTickets', 'ReceivingTickets', 'tbl_RTBatches', 'RTBatches', 'tbl_RT', 'RT', 'tbl_ReceivingTicket', 'ReceivingTicket', 'tbl_RT_Header', 'RTHeader']),
+        fetchAllTablePages(endpoint, ['tbl_RTLines', 'RTLines', 'tbl_ReceivingTicketLines', 'ReceivingTicketLines', 'tbl_RTBatchLines', 'RTBatchLines', 'tbl_RT_Lines', 'tblRTLines', 'tbl_ReceivingTickets_Lines', 'ReceivingTickets_Lines']),
       ]);
 
       let hasAnySuccess = false;
@@ -1533,81 +1776,21 @@ export async function fetchLiveDatabaseData(): Promise<{
         hasAnySuccess = true;
       }
 
-      if (jobsRes.status === 'fulfilled' && jobsRes.value && jobsRes.value.ok) {
-        const json = await jobsRes.value.json();
-        const rows = json.value || json;
-        if (Array.isArray(rows)) {
-          jobs = rows.map(normalizeJob);
-          hasAnySuccess = true;
-        }
+      if (jobRows.length > 0) {
+        jobs = jobRows.map(normalizeJob);
+        hasAnySuccess = true;
       }
 
-      const dtLinesByDt = new Map<string, any[]>();
-      if (dtLinesRes.status === 'fulfilled' && dtLinesRes.value && dtLinesRes.value.ok) {
-        try {
-          const json = await dtLinesRes.value.json();
-          const rows = json.value || json;
-          if (Array.isArray(rows)) {
-            rows.forEach((line: any) => {
-              const dtNum = String(line.dtNumber || line.DTNumber || line.dtBatchId || line.DTBatchID || '').trim();
-              if (dtNum) {
-                if (!dtLinesByDt.has(dtNum)) dtLinesByDt.set(dtNum, []);
-                dtLinesByDt.get(dtNum)!.push(line);
-              }
-            });
-          }
-        } catch {
-          // ignore parsing error
-        }
+      if (dtRows.length > 0) {
+        const withLines = attachLinesToBatches(dtRows, dtLineRows, 'DT');
+        dtBatches = withLines.map(normalizeDTBatch);
+        hasAnySuccess = true;
       }
 
-      if (dtRes.status === 'fulfilled' && dtRes.value && dtRes.value.ok) {
-        const json = await dtRes.value.json();
-        const rows = json.value || json;
-        if (Array.isArray(rows)) {
-          dtBatches = rows.map((r: any) => {
-            const dtNum = String(r.dtNumber || r.DTNumber || r.TicketNumber || r.ticketNumber || r.id || '').trim();
-            if ((!r.toolLines || r.toolLines.length === 0) && dtLinesByDt.has(dtNum)) {
-              r.toolLines = dtLinesByDt.get(dtNum);
-            }
-            return normalizeDTBatch(r);
-          });
-          hasAnySuccess = true;
-        }
-      }
-
-      const rtLinesByRt = new Map<string, any[]>();
-      if (rtLinesRes.status === 'fulfilled' && rtLinesRes.value && rtLinesRes.value.ok) {
-        try {
-          const json = await rtLinesRes.value.json();
-          const rows = json.value || json;
-          if (Array.isArray(rows)) {
-            rows.forEach((line: any) => {
-              const rtNum = String(line.rtNumber || line.RTNumber || line.rtBatchId || line.RTBatchID || '').trim();
-              if (rtNum) {
-                if (!rtLinesByRt.has(rtNum)) rtLinesByRt.set(rtNum, []);
-                rtLinesByRt.get(rtNum)!.push(line);
-              }
-            });
-          }
-        } catch {
-          // ignore parsing error
-        }
-      }
-
-      if (rtRes.status === 'fulfilled' && rtRes.value && rtRes.value.ok) {
-        const json = await rtRes.value.json();
-        const rows = json.value || json;
-        if (Array.isArray(rows)) {
-          rtBatches = rows.map((r: any) => {
-            const rtNum = String(r.rtNumber || r.RTNumber || r.TicketNumber || r.ticketNumber || r.id || '').trim();
-            if ((!r.toolLines || r.toolLines.length === 0) && rtLinesByRt.has(rtNum)) {
-              r.toolLines = rtLinesByRt.get(rtNum);
-            }
-            return normalizeRTBatch(r);
-          });
-          hasAnySuccess = true;
-        }
+      if (rtRows.length > 0) {
+        const withLines = attachLinesToBatches(rtRows, rtLineRows, 'RT');
+        rtBatches = withLines.map(normalizeRTBatch);
+        hasAnySuccess = true;
       }
 
       if (hasAnySuccess) {
@@ -1646,7 +1829,7 @@ export async function fetchLiveDatabaseData(): Promise<{
             dtBatches: reconciled.dtBatches,
             rtBatches: reconciled.rtBatches,
           },
-          message: `Loaded live from Azure Data API (${reconciled.inventory?.length ?? 0} tools, ${reconciled.jobs.length} jobs)`,
+          message: `Loaded live from Azure Data API (${reconciled.inventory?.length ?? 0} tools, ${reconciled.jobs.length} jobs, ${reconciled.dtBatches.length} DTs, ${reconciled.rtBatches.length} RTs)`,
         };
       }
     } catch (err: any) {
@@ -1784,37 +1967,11 @@ export async function fetchLiveDatabaseData(): Promise<{
             [];
 
           if (Array.isArray(rawDt) && Array.isArray(rawDtLines) && rawDtLines.length > 0) {
-            const linesByDt = new Map<string, any[]>();
-            rawDtLines.forEach((line: any) => {
-              const dtNum = String(line.dtNumber || line.DTNumber || line.dtBatchId || line.DTBatchID || '').trim();
-              if (dtNum) {
-                if (!linesByDt.has(dtNum)) linesByDt.set(dtNum, []);
-                linesByDt.get(dtNum)!.push(line);
-              }
-            });
-            rawDt.forEach((ticket: any) => {
-              const dtNum = String(ticket.dtNumber || ticket.DTNumber || ticket.TicketNumber || ticket.id || '').trim();
-              if ((!ticket.toolLines || ticket.toolLines.length === 0) && linesByDt.has(dtNum)) {
-                ticket.toolLines = linesByDt.get(dtNum);
-              }
-            });
+            rawDt = attachLinesToBatches(rawDt, rawDtLines, 'DT');
           }
 
           if (Array.isArray(rawRt) && Array.isArray(rawRtLines) && rawRtLines.length > 0) {
-            const linesByRt = new Map<string, any[]>();
-            rawRtLines.forEach((line: any) => {
-              const rtNum = String(line.rtNumber || line.RTNumber || line.rtBatchId || line.RTBatchID || '').trim();
-              if (rtNum) {
-                if (!linesByRt.has(rtNum)) linesByRt.set(rtNum, []);
-                linesByRt.get(rtNum)!.push(line);
-              }
-            });
-            rawRt.forEach((ticket: any) => {
-              const rtNum = String(ticket.rtNumber || ticket.RTNumber || ticket.TicketNumber || ticket.id || '').trim();
-              if ((!ticket.toolLines || ticket.toolLines.length === 0) && linesByRt.has(rtNum)) {
-                ticket.toolLines = linesByRt.get(rtNum);
-              }
-            });
+            rawRt = attachLinesToBatches(rawRt, rawRtLines, 'RT');
           }
         }
 
@@ -2162,6 +2319,124 @@ export async function fetchSecondaryModules(): Promise<{
   inspections?: any[];
   maintenance?: any[];
 }> {
+  const endpoint = getApiEndpoint();
+
+  // Strategy 1: If endpoint is Azure Data API Builder
+  if (endpoint.includes('/data-api/rest') || endpoint.endsWith('/rest')) {
+    try {
+      const [
+        calloutsRaw,
+        calloutItemsRaw,
+        gatePassesRaw,
+        gatePassLinesRaw,
+        contractsRaw,
+        contractRatesRaw,
+        inspectionsRaw,
+        maintenanceRaw,
+      ] = await Promise.all([
+        fetchAllTablePages(endpoint, ['tbl_Callouts', 'Callouts', 'tblCallouts']),
+        fetchAllTablePages(endpoint, ['tbl_CalloutItems', 'CalloutItems', 'tbl_CalloutLines', 'CalloutLines']),
+        fetchAllTablePages(endpoint, ['tbl_GatePasses', 'GatePasses', 'tbl_GatePass', 'GatePass']),
+        fetchAllTablePages(endpoint, ['tbl_GatePassLines', 'GatePassLines', 'tbl_GatePass_Lines']),
+        fetchAllTablePages(endpoint, ['tbl_Contracts', 'Contracts', 'tblContracts']),
+        fetchAllTablePages(endpoint, ['tbl_ContractRates', 'ContractRates', 'tblContractRates', 'rates']),
+        fetchAllTablePages(endpoint, ['tbl_Inspections', 'Inspections', 'tbl_Inspection', 'Inspection']),
+        fetchAllTablePages(endpoint, ['tbl_MaintenanceOrders', 'MaintenanceOrders', 'tbl_Maintenance', 'Maintenance']),
+      ]);
+
+      let callouts: any[] | undefined = undefined;
+      let gatePasses: any[] | undefined = undefined;
+      let contracts: any[] | undefined = undefined;
+      let inspections: any[] | undefined = undefined;
+      let maintenance: any[] | undefined = undefined;
+
+      if (calloutsRaw.length > 0) {
+        const itemsByCallout = new Map<string, any[]>();
+        calloutItemsRaw.forEach((ci: any) => {
+          const cId = String(ci.CalloutID || ci.calloutId || ci.calloutID || ci.id || '').trim().toUpperCase();
+          if (cId) {
+            if (!itemsByCallout.has(cId)) itemsByCallout.set(cId, []);
+            itemsByCallout.get(cId)!.push(ci);
+          }
+        });
+        callouts = calloutsRaw.map((c: any) => {
+          const cId = String(c.CalloutID || c.id || '').trim().toUpperCase();
+          if ((!c.items || c.items.length === 0) && itemsByCallout.has(cId)) {
+            c.items = itemsByCallout.get(cId);
+          }
+          return normalizeCallout(c);
+        });
+      }
+
+      if (gatePassesRaw.length > 0) {
+        const linesByGP = new Map<string, any[]>();
+        gatePassLinesRaw.forEach((gpl: any) => {
+          const gpNum = String(gpl.gpNumber || gpl.GPNumber || gpl.GatePassID || gpl.gatePassId || '').trim().toUpperCase();
+          if (gpNum) {
+            if (!linesByGP.has(gpNum)) linesByGP.set(gpNum, []);
+            linesByGP.get(gpNum)!.push(gpl);
+          }
+        });
+        gatePasses = gatePassesRaw.map((gp: any) => {
+          const gpNum = String(gp.gpNumber || gp.GPNumber || gp.id || '').trim().toUpperCase();
+          if ((!gp.toolLines || gp.toolLines.length === 0) && linesByGP.has(gpNum)) {
+            gp.toolLines = linesByGP.get(gpNum);
+          }
+          return normalizeGatePass(gp);
+        });
+      }
+
+      if (contractsRaw.length > 0) {
+        const ratesByContract = new Map<string, any[]>();
+        contractRatesRaw.forEach((r: any) => {
+          const code = String(r.ContractCode || r.contractCode || r.Contract_Code || r.Contract || r.contract || '').trim().toUpperCase();
+          if (code) {
+            if (!ratesByContract.has(code)) ratesByContract.set(code, []);
+            ratesByContract.get(code)!.push(r);
+          }
+        });
+        contracts = contractsRaw
+          .filter((r: any) => r && r.status !== 'Archived' && r.Status !== 'Archived')
+          .map((c: any) => {
+            const norm = normalizeContract(c);
+            const cCode = String(c.ContractCode || c.contractNo || c.contractRef || c.id || '').trim().toUpperCase();
+            if (ratesByContract.has(cCode)) {
+              norm.rates = ratesByContract.get(cCode)!.map((r: any) => ({
+                no: r.RateID || r.RateId || r.id || r.No || '',
+                contractRef: r.Notes || r.contractRef || r.ContractRef || '',
+                category: r.Category || r.category || '',
+                shortDesc: r.EMDADShortDesc || r.shortDesc || r.ShortDesc || r.Description || '',
+                size: r.Size || r.size || '',
+                holeSection: r.HoleSection || r.holeSection || '',
+                opsRate: Number(r.OpsRate || r.opsRate || r.OperatingRate) || 0,
+                standbyRate: Number(r.StandbyRate || r.standbyRate) || 0,
+                runCharges: r.RunCharges ?? r.runCharges ?? null,
+                monthlyCharges: r.MonthlyCharges ?? r.monthlyCharges ?? null,
+                redress: r.Redress ?? r.redress ?? null,
+                currency: r.Currency || r.currency || norm.currency || 'USD',
+              }));
+            }
+            return norm;
+          });
+      }
+
+      if (inspectionsRaw.length > 0) {
+        inspections = inspectionsRaw.map(normalizeInspection);
+      }
+
+      if (maintenanceRaw.length > 0) {
+        maintenance = maintenanceRaw.map(normalizeMaintenance);
+      }
+
+      if (callouts || gatePasses || contracts || inspections || maintenance) {
+        return { callouts, gatePasses, contracts, inspections, maintenance };
+      }
+    } catch (err) {
+      console.warn('Data API secondary modules notice:', err);
+    }
+  }
+
+  // Strategy 2: Azure Function fallback
   try {
     const [calloutsRaw, gatePassesRaw, contractsRaw, inspectionsRaw, maintenanceRaw] = await Promise.all([
       fetchFromApi<any[]>('getcallouts'),
@@ -2224,6 +2499,40 @@ export function jobToContractCode(job: { client?: string; contract?: string }): 
  * (AOF / AON / ADD / TWL / ADF-UZ / ADF-UDR).
  */
 export async function fetchContractRates(contractCode: string): Promise<import('../types').ContractRateItem[]> {
+  const endpoint = getApiEndpoint();
+
+  // Strategy 1: Data API
+  if (endpoint.includes('/data-api/rest') || endpoint.endsWith('/rest')) {
+    try {
+      const rows = await fetchAllTablePages(endpoint, ['tbl_ContractRates', 'ContractRates', 'tblContractRates', 'rates', 'Contract_Rates']);
+      if (rows.length > 0) {
+        const filtered = rows.filter((r: any) => {
+          const cCode = String(r.ContractCode || r.contractCode || r.Contract_Code || r.Contract || r.contract || '').trim().toUpperCase();
+          return !contractCode || cCode === contractCode.toUpperCase() || cCode.includes(contractCode.toUpperCase());
+        });
+        if (filtered.length > 0) {
+          return filtered.map((r: any) => ({
+            no: r.RateID || r.RateId || r.id || r.No || '',
+            contractRef: r.Notes || r.contractRef || r.ContractRef || '',
+            category: r.Category || r.category || '',
+            shortDesc: r.EMDADShortDesc || r.shortDesc || r.ShortDesc || r.Description || '',
+            size: r.Size || r.size || '',
+            holeSection: r.HoleSection || r.holeSection || '',
+            opsRate: Number(r.OpsRate || r.opsRate || r.OperatingRate) || 0,
+            standbyRate: Number(r.StandbyRate || r.standbyRate) || 0,
+            runCharges: r.RunCharges ?? r.runCharges ?? null,
+            monthlyCharges: r.MonthlyCharges ?? r.monthlyCharges ?? null,
+            redress: r.Redress ?? r.redress ?? null,
+            currency: r.Currency || r.currency || 'USD',
+          }));
+        }
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  // Strategy 2: Azure Function action
   const res = await fetchFromApi<any[]>('getcontractrates', { code: contractCode });
   if (!res || !Array.isArray(res)) return [];
   return res.map((r: any) => ({
