@@ -2628,6 +2628,39 @@ export async function saveReceivingTicketApi(rtBatch: any): Promise<{ success: b
   }
 }
 
+export async function saveDailyFieldLogsApi(logs: Array<{
+  jobId: string;
+  dtNumber?: string;
+  toolSerial: string;
+  date: string;
+  status: '1' | 'S' | string;
+  rate?: number;
+}>): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetchFromApi('savedailyfieldlogs', { logs });
+    return { success: res !== null, message: res ? 'Daily logs saved to Azure SQL' : 'Saved locally' };
+  } catch {
+    return { success: true, message: 'Saved locally' };
+  }
+}
+
+export async function fetchDailyFieldLogsApi(jobId?: string): Promise<any[]> {
+  const endpoint = getApiEndpoint();
+  if (endpoint.includes('/data-api/rest') || endpoint.endsWith('/rest')) {
+    try {
+      const rows = await fetchAllTablePages(endpoint, ['tbl_DailyFieldLogs', 'DailyFieldLogs', 'tbl_Utilization', 'tbl_JobFieldLogs']);
+      if (jobId) {
+        return rows.filter((r: any) => String(r.JobID || r.jobId || '').trim().toUpperCase() === jobId.trim().toUpperCase());
+      }
+      return rows;
+    } catch {
+      // fallback
+    }
+  }
+  const res = await fetchFromApi<any[]>('getdailyfieldlogs', { jobId });
+  return Array.isArray(res) ? res : [];
+}
+
 /**
  * Generates and downloads a clean, self-contained standalone index.html
  */

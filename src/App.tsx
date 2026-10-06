@@ -68,6 +68,7 @@ import { InvoicingView } from './components/InvoicingView';
 import { JobToolsListView } from './components/JobToolsListView';
 import { ToolHistoryView } from './components/ToolHistoryView';
 import { CategoriesSizesView } from './components/CategoriesSizesView';
+import { ToolRevenueReportView } from './components/ToolRevenueReportView';
 
 // Safe localStorage write — never lets a quota failure crash the app.
 //
@@ -1665,6 +1666,17 @@ export const App: React.FC = () => {
               onUpdateDTBatch={handleUpdateDTBatch}
               onUpdateRTBatch={handleUpdateRTBatch}
               onShowToast={showToast}
+            />
+          )}
+
+          {activeView === 'tool-revenue-report' && (
+            <ToolRevenueReportView
+              user={currentUser}
+              showToast={showToast}
+              onNavigate={(mod, serial) => {
+                if (serial) setPreSelectedSerialForToolHistory(serial);
+                setActiveView(mod as ViewKey);
+              }}
             />
           )}
 

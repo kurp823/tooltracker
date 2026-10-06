@@ -92,6 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'dashboard', label: 'Operations Dashboard', icon: '📊' },
         { id: 'jobs', label: 'Drilling Jobs', icon: '⚡' },
+        { id: 'utilization', label: 'Fleet Utilization Matrix', icon: '📅' },
         { id: 'job-tools-list', label: 'Job Tools List', icon: '📋' },
         { id: 'tool-history', label: 'Tool Movement History', icon: '⏱️' },
         { id: 'gatepass', label: 'Security Gate Pass', icon: '🛡️' },
@@ -136,6 +137,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'billing-dash', label: 'Billing Dashboard', icon: '📊' },
         { id: 'invoicing', label: 'Invoicing', icon: '📄' },
+        { id: 'tool-revenue-report', label: 'Tool Revenue & Utilization Report', icon: '💰' },
       ],
     },
     {
