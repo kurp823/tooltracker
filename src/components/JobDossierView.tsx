@@ -397,14 +397,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       if (j.client && j.client.trim()) set.add(j.client.trim().toUpperCase());
     });
     contracts.forEach((c) => {
-      if (c.clientName && c.clientName.trim()) set.add(c.clientName.trim().toUpperCase());
+      if ((c as any).clientName && (c as any).clientName.trim()) set.add((c as any).clientName.trim().toUpperCase());
       if (c.client && c.client.trim()) set.add(c.client.trim().toUpperCase());
     });
     dtBatches.forEach((d) => {
-      if (d.client && d.client.trim()) set.add(d.client.trim().toUpperCase());
+      if ((d as any).client && (d as any).client.trim()) set.add((d as any).client.trim().toUpperCase());
     });
     rtBatches.forEach((r) => {
-      if (r.client && r.client.trim()) set.add(r.client.trim().toUpperCase());
+      if ((r as any).client && (r as any).client.trim()) set.add((r as any).client.trim().toUpperCase());
     });
     callouts.forEach((c) => {
       if (c.client && c.client.trim()) set.add(c.client.trim().toUpperCase());
@@ -420,12 +420,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       if (cleanCurrent) map.set(cleanCurrent, jobData.contractNo || '');
     }
     contracts.forEach((c) => {
-      let name = c.name || c.shortDesc || c.title || c.contractName || '';
+      let name = c.name || c.shortDesc || (c as any).title || (c as any).contractName || '';
       name = cleanContractName(name);
       if (!name && c.description) {
         name = cleanContractName(c.description);
       }
-      const no = (c.contractNo || c.contractNumber || '').trim();
+      const no = (c.contractNo || (c as any).contractNumber || '').trim();
       if (!name) name = no;
       if (name) {
         map.set(name, no || map.get(name) || '');
@@ -462,8 +462,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     if (!rawId && !normId) return [];
 
     return dtBatches.filter((b) => {
-      const bJob = (b.jobId || b.jobNumber || '').trim().toUpperCase();
-      const bNorm = normalizeJobKey(b.jobId || b.jobNumber);
+      const bJob = (b.jobId || (b as any).jobNumber || '').trim().toUpperCase();
+      const bNorm = normalizeJobKey(b.jobId || (b as any).jobNumber);
       if (bJob && rawId && bJob === rawId) return true;
       if (bNorm && normId && bNorm === normId) return true;
       return false;
@@ -487,8 +487,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     });
 
     const matched = rtBatches.filter((b) => {
-      const bJob = (b.jobId || b.jobNumber || '').trim().toUpperCase();
-      const bNorm = normalizeJobKey(b.jobId || b.jobNumber);
+      const bJob = (b.jobId || (b as any).jobNumber || '').trim().toUpperCase();
+      const bNorm = normalizeJobKey(b.jobId || (b as any).jobNumber);
       const bNum = (b.rtNumber || b.id || '').trim().toUpperCase();
 
       if (bJob && rawId && bJob === rawId) return true;
@@ -513,8 +513,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const normId = normalizeJobKey(jobData.id || jobData.jobNumber);
 
     return callouts.filter((c) => {
-      const cJob = (c.jobId || c.jobNumber || '').trim().toUpperCase();
-      const cNorm = normalizeJobKey(c.jobId || c.jobNumber);
+      const cJob = (c.jobId || (c as any).jobNumber || '').trim().toUpperCase();
+      const cNorm = normalizeJobKey(c.jobId || (c as any).jobNumber);
       if (rawId && cJob && cJob === rawId) return true;
       if (normId && cNorm && normId === cNorm) return true;
       if (jobData.calloutId && (c.id === jobData.calloutId || (c as any).calloutNumber === jobData.calloutId)) return true;
@@ -708,7 +708,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const activeCallout = useMemo(() => {
     const found = jobCallouts.find((c) => c.id === selectedCalloutId) || jobCallouts[0];
     if (found) {
-      const safeTicket = sanitizeTicketNumber(found.ticketNo) || sanitizeTicketNumber(found.calloutNumber) || sanitizeTicketNumber(jobData.clientRef);
+      const safeTicket = sanitizeTicketNumber(found.ticketNo) || sanitizeTicketNumber((found as any).calloutNumber) || sanitizeTicketNumber(jobData.clientRef);
       return {
         ...found,
         ticketNo: safeTicket,
@@ -1068,10 +1068,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Update Callout Header Values
   const handleUpdateCalloutHeader = (field: string, val: string) => {
     if (isClosedOrInvoiced || isLocked) return;
-    const updatedCallout: Callout = {
+    const updatedCallout = {
       ...activeCallout,
       [field]: val,
-    };
+    } as Callout;
     if (onSaveCallout) {
       onSaveCallout(updatedCallout);
     }
@@ -1149,12 +1149,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     setCheckedToolSerials([]);
     setIsToolSelectOpen(false);
 
-    const calloutToSave: Callout = {
+    const calloutToSave = ({
       ...activeCallout,
       jobId: jobData.id,
       jobNumber: jobData.id,
       items: updated,
-    };
+    } as unknown) as Callout;
 
     setSelectedCalloutId(calloutToSave.id);
 
@@ -1176,12 +1176,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     if (isClosedOrInvoiced || isLocked) return;
     const updated = checklistItems.filter((item) => item.seq !== seq);
     setChecklistItems(updated);
-    const calloutToSave: Callout = {
+    const calloutToSave = ({
       ...activeCallout,
       jobId: jobData.id,
       jobNumber: jobData.id,
       items: updated,
-    };
+    } as unknown) as Callout;
     if (onSaveCallout) {
       onSaveCallout(calloutToSave);
     }
@@ -1277,7 +1277,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     if (onSaveCallout) {
       onSaveCallout({
         ...activeCallout,
-        status: 'Delivery Ticket - Dispatched to Rig',
+        status: 'Delivery Ticket - Dispatched to Rig' as any,
       });
     }
 
@@ -1661,7 +1661,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       // Dynamic rate lookup from active contract rates (c.rates) or tool properties
       const jobContractKey = (jobData.contractNo || jobData.contract || '').trim().toLowerCase();
       const matchedContract = contracts.find((c) => {
-        const cNum = (c.contractNumber || c.contractNo || c.contractRef || c.id || '').trim().toLowerCase();
+        const cNum = ((c as any).contractNumber || c.contractNo || c.contractRef || c.id || '').trim().toLowerCase();
         return cNum && (cNum === jobContractKey || normalizeJobKey(cNum) === normalizeJobKey(jobContractKey));
       });
       const contractRate = matchedContract?.rates?.find((r) => {

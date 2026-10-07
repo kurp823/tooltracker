@@ -1065,7 +1065,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                   </tr>
                   <tr>
                     <td colSpan={5} className="p-1 px-2 italic text-[11px] text-slate-600 bg-slate-50">
-                      Rentals from {packageData.dateOfSupply} TO {packageData.verificationPackage?.manifest?.releaseDate || '09-03-2026'}
+                      Rentals from {packageData.dateOfSupply} TO {(packageData as any).verificationPackage?.manifest?.releaseDate || '09-03-2026'}
                     </td>
                   </tr>
                 </tbody>

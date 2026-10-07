@@ -68,7 +68,11 @@ import { InvoicingView } from './components/InvoicingView';
 import { JobToolsListView } from './components/JobToolsListView';
 import { ToolHistoryView } from './components/ToolHistoryView';
 import { CategoriesSizesView } from './components/CategoriesSizesView';
-import { ToolRevenueReportView } from './components/ToolRevenueReportView';
+
+const ToolRevenueReportView = React.lazy(() =>
+  import('./components/ToolRevenueReportView').then((module) => ({ default: module.ToolRevenueReportView }))
+);
+
 
 // Safe localStorage write — never lets a quota failure crash the app.
 //
@@ -1670,14 +1674,23 @@ export const App: React.FC = () => {
           )}
 
           {activeView === 'tool-revenue-report' && (
-            <ToolRevenueReportView
-              user={currentUser}
-              showToast={showToast}
-              onNavigate={(mod, serial) => {
-                if (serial) setPreSelectedSerialForToolHistory(serial);
-                setActiveView(mod as ViewKey);
-              }}
-            />
+            <React.Suspense
+              fallback={
+                <div className="bg-white border border-[#b8c9db] rounded p-12 text-center text-slate-500 font-semibold shadow-sm">
+                  <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                  Loading Tool Revenue &amp; Category Analytics Ledger...
+                </div>
+              }
+            >
+              <ToolRevenueReportView
+                user={currentUser}
+                showToast={showToast}
+                onNavigate={(mod, serial) => {
+                  if (serial) setPreSelectedSerialForToolHistory(serial);
+                  setActiveView(mod as ViewKey);
+                }}
+              />
+            </React.Suspense>
           )}
 
           {activeView === 'utilization' && (

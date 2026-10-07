@@ -571,7 +571,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         const isGranted =
                           selectedRoleForMatrix === 'Admin' ||
                           (rolePermissions[selectedRoleForMatrix] || []).includes(m.id);
-                        const isDisabled = selectedRoleForMatrix === 'Admin' || (m.id === 'settings' && selectedRoleForMatrix !== 'Admin');
+                        const isDisabled = (selectedRoleForMatrix as string) === 'Admin' || (m.id === 'settings' && (selectedRoleForMatrix as string) !== 'Admin');
 
                         return (
                           <label

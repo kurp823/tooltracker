@@ -48,7 +48,7 @@ export interface ToolItem {
   desc: string;        // Full technical description
   qty: number;
   location: string;    // Emdad Base, On Rig, Inspection Bay, Workshop, Returned to Supplier
-  status: 'Good' | 'Repair' | 'Inspection' | 'Redress' | 'Removed' | 'On Rig';
+  status: 'Good' | 'Repair' | 'Inspection' | 'Redress' | 'Removed' | 'On Rig' | 'Lost in Hole' | 'Scrapped' | string;
   ownership: string;   // EMDAD, MOTORMAX, EPIS, ELITE, SALTIRE, FLOW TOOLS, etc.
   isEmdad: boolean;
   oemSerial?: string;

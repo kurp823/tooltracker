@@ -299,11 +299,11 @@ export function generateInvoicePackageForJob(
     let itemSeq = 1;
 
     // Optional Personnel line if assigned
-    if (job.leadEngineer || job.serviceType?.toLowerCase().includes('engineer')) {
+    if ((job as any).leadEngineer || job.serviceType?.toLowerCase().includes('engineer')) {
       lines.push({
         itemNo: itemSeq++,
         serialNumber: 'SUBCTR-ENG',
-        toolDescription: `${job.leadEngineer || 'FISHING SPECIALIST'} - FIELD ENGINEER`,
+        toolDescription: `${(job as any).leadEngineer || 'FISHING SPECIALIST'} - FIELD ENGINEER`,
         qty: 1,
         deliveryTicketNo: '',
         deliveryDate: mobDateFormatted,

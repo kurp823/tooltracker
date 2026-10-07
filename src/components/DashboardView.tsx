@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   NavModule,
   User,
@@ -27,6 +27,29 @@ import {
   Area,
   CartesianGrid,
 } from 'recharts';
+import {
+  DollarSign,
+  TrendingUp,
+  Layers,
+  Building2,
+  ArrowRight,
+  PieChart as PieChartIcon,
+  BarChart3,
+  Sparkles,
+  FileSpreadsheet,
+  ExternalLink,
+  ChevronRight,
+  ArrowUpRight,
+  Zap,
+  CheckCircle2,
+  ShieldCheck,
+  Calendar,
+} from 'lucide-react';
+import {
+  REVENUE_SUMMARY,
+  TOP_CATEGORIES_REVENUE,
+  TOP_CONTRACTS_REVENUE,
+} from '../data/revenueSummary';
 
 interface DashboardViewProps {
   user?: User | null;
@@ -48,7 +71,7 @@ interface DashboardViewProps {
   onUpdateRTBatch?: (batch: RTBatch) => void;
 }
 
-const PALETTE = ['#1a3055', '#2563eb', '#0d9488', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b'];
+const PALETTE = ['#1a3055', '#2563eb', '#0d9488', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b', '#06b6d4'];
 
 export const getCanonicalOperator = (client?: string | null): string => {
   if (!client) return 'Other';
@@ -90,6 +113,25 @@ const isLegalInvoice = (inv?: string | null): boolean => {
   return s.startsWith('FSH') || s.startsWith('FR') || s.startsWith('WHP');
 };
 
+const formatUSD = (num: number): string => {
+  if (num >= 1_000_000) {
+    return `$${(num / 1_000_000).toFixed(2)}M`;
+  }
+  if (num >= 1_000) {
+    return `$${(num / 1_000).toFixed(1)}k`;
+  }
+  return `$${num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+};
+
+const formatFullUSD = (num: number): string => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num);
+};
+
 export const DashboardView: React.FC<DashboardViewProps> = ({
   user,
   inventory = [],
@@ -107,6 +149,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenAddAsset,
   onOpenAddCallout,
 }) => {
+  const [categoryChartMetric, setCategoryChartMetric] = useState<'total' | 'split'>('split');
+
   // 1. Completed jobs detection (FSH, FR, WHP prefixes)
   const completedJobIdSet = useMemo(() => {
     const set = new Set<string>();
@@ -444,10 +488,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return Object.values(rigMap);
   }, [activeJobs, dtBatches, returnedSerialsSet, inventory]);
 
-  return (
-    <div className="space-y-4 w-full">
+  // Format Top 8 Categories for Charting
+  const topCategoriesChartData = useMemo(() => {
+    return TOP_CATEGORIES_REVENUE.slice(0, 8).map((cat) => ({
+      name: cat.category.length > 14 ? `${cat.category.substring(0, 12)}...` : cat.category,
+      fullName: cat.category,
+      totalRevenue: cat.totalRevenue,
+      operRevenue: cat.operRevenue,
+      standbyRevenue: cat.standbyRevenue,
+      totalRevenueM: Number((cat.totalRevenue / 1_000_000).toFixed(2)),
+      operRevenueM: Number((cat.operRevenue / 1_000_000).toFixed(2)),
+      standbyRevenueM: Number((cat.standbyRevenue / 1_000_000).toFixed(2)),
+      operDays: cat.operDays,
+      standbyDays: cat.standbyDays,
+      toolsCount: cat.toolCount,
+      jobsCount: cat.jobsCount,
+    }));
+  }, []);
 
-      {/* 5 Primary Operational KPI Metric Cards */}
+  // Format Top 5 Contracts for Charting
+  const topContractsChartData = useMemo(() => {
+    return TOP_CONTRACTS_REVENUE.slice(0, 5).map((ct) => ({
+      name: ct.client.length > 18 ? `${ct.client.substring(0, 16)}...` : ct.client,
+      fullName: `${ct.contract} - ${ct.client}`,
+      value: ct.totalRevenue,
+      revenueM: Number((ct.totalRevenue / 1_000_000).toFixed(2)),
+      operRevenue: ct.operRevenue,
+      standbyRevenue: ct.standbyRevenue,
+    }));
+  }, []);
+
+  return (
+    <div className="space-y-5 w-full">
+
+      {/* 1. Primary Operational Field KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {/* Card 1: Active Rigs */}
         <div className="bg-white border border-[#b8c9db] rounded p-3.5 shadow-sm border-t-[3px] border-t-emerald-600">
@@ -539,7 +613,323 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Modern Smart Visual Charts Row */}
+      {/* 2. EXECUTIVE COMMERCIAL REVENUE & TOOL CATEGORY PERFORMANCE SECTION */}
+      <div className="bg-gradient-to-br from-[#12233f] via-[#1a3055] to-[#1e3a8a] rounded-lg p-4 sm:p-5 text-white shadow-md border border-blue-900/50">
+        
+        {/* Section Header with Navigation */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-blue-800/60">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                <DollarSign className="w-4 h-4" />
+              </div>
+              <h2 className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                Tool Fleet Commercial Revenue &amp; Category Analytics
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  SQL Invoicing &amp; Daily Logs Engine
+                </span>
+              </h2>
+            </div>
+            <p className="text-xs text-blue-200/80 mt-1">
+              Synthesized from 820,513 daily utilization records (1=Operating, S=Standby) across 6,882 serialized downhole tools &amp; 28 master operator contracts.
+            </p>
+          </div>
+
+          {/* Quick Action Navigation CTAs */}
+          <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+            <button
+              onClick={() => onNavigate('tool-revenue-report')}
+              className="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm cursor-pointer"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Full Revenue Report</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => onNavigate('categories-sizes')}
+              className="px-3 py-1.5 rounded-md bg-blue-900/60 hover:bg-blue-800/80 text-blue-100 border border-blue-700/60 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Categories &amp; Sizes</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 4 Financial Commercial KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mt-4">
+          
+          {/* KPI 1: Total Fleet Lifetime Revenue */}
+          <div className="bg-white/10 backdrop-blur-xs rounded-md p-3.5 border border-white/10 hover:border-emerald-400/40 transition">
+            <div className="flex items-center justify-between text-[11px] text-blue-200 font-bold uppercase tracking-wider">
+              <span>Total Fleet Revenue</span>
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <div className="mt-1 text-2xl font-black font-mono text-emerald-300">
+              {formatFullUSD(REVENUE_SUMMARY.totalRevenue)}
+            </div>
+            <div className="mt-1 text-[11px] text-blue-200/80 flex items-center justify-between">
+              <span>All Contracts &amp; Invoices</span>
+              <span className="font-mono text-emerald-400 font-semibold">100% Invoiced</span>
+            </div>
+          </div>
+
+          {/* KPI 2: Operating Revenue */}
+          <div className="bg-white/10 backdrop-blur-xs rounded-md p-3.5 border border-white/10 hover:border-blue-400/40 transition">
+            <div className="flex items-center justify-between text-[11px] text-blue-200 font-bold uppercase tracking-wider">
+              <span>Operating Revenue</span>
+              <TrendingUp className="w-3.5 h-3.5 text-blue-300" />
+            </div>
+            <div className="mt-1 text-2xl font-black font-mono text-blue-200">
+              {formatFullUSD(REVENUE_SUMMARY.totalOperRevenue)}
+            </div>
+            <div className="mt-1 text-[11px] text-blue-200/80 flex items-center justify-between">
+              <span>{REVENUE_SUMMARY.totalOperDays.toLocaleString()} Operating Days</span>
+              <span className="font-mono text-blue-300 font-semibold">
+                {((REVENUE_SUMMARY.totalOperRevenue / REVENUE_SUMMARY.totalRevenue) * 100).toFixed(1)}% Share
+              </span>
+            </div>
+          </div>
+
+          {/* KPI 3: Standby Revenue */}
+          <div className="bg-white/10 backdrop-blur-xs rounded-md p-3.5 border border-white/10 hover:border-amber-400/40 transition">
+            <div className="flex items-center justify-between text-[11px] text-blue-200 font-bold uppercase tracking-wider">
+              <span>Standby Revenue</span>
+              <Calendar className="w-3.5 h-3.5 text-amber-300" />
+            </div>
+            <div className="mt-1 text-2xl font-black font-mono text-amber-300">
+              {formatFullUSD(REVENUE_SUMMARY.totalStandbyRevenue)}
+            </div>
+            <div className="mt-1 text-[11px] text-blue-200/80 flex items-center justify-between">
+              <span>{REVENUE_SUMMARY.totalStandbyDays.toLocaleString()} Standby Days</span>
+              <span className="font-mono text-amber-300 font-semibold">
+                {((REVENUE_SUMMARY.totalStandbyRevenue / REVENUE_SUMMARY.totalRevenue) * 100).toFixed(1)}% Share
+              </span>
+            </div>
+          </div>
+
+          {/* KPI 4: Fleet Taxonomy Scope */}
+          <div className="bg-white/10 backdrop-blur-xs rounded-md p-3.5 border border-white/10 hover:border-purple-400/40 transition">
+            <div className="flex items-center justify-between text-[11px] text-blue-200 font-bold uppercase tracking-wider">
+              <span>Tracked Fleet Scope</span>
+              <Layers className="w-3.5 h-3.5 text-purple-300" />
+            </div>
+            <div className="mt-1 text-2xl font-black font-mono text-purple-200">
+              {REVENUE_SUMMARY.totalTools.toLocaleString()} Serials
+            </div>
+            <div className="mt-1 text-[11px] text-blue-200/80 flex items-center justify-between">
+              <span>{REVENUE_SUMMARY.totalCategories} Categories</span>
+              <span className="font-mono text-purple-300 font-semibold">{REVENUE_SUMMARY.totalSizes} Sizes</span>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Commercial Charts Row (Top Earning Categories & Revenue by Master Contract) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-4">
+          
+          {/* Chart A: Top Tool Categories Revenue Breakdown */}
+          <div className="lg:col-span-7 bg-[#0b172a]/70 border border-blue-800/50 rounded-md p-4 flex flex-col justify-between">
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+                    <BarChart3 className="w-3.5 h-3.5 text-emerald-400" />
+                    Top Revenue-Generating Tool Categories
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Cumulative commercial yield across top downhole tool families.
+                  </p>
+                </div>
+                
+                {/* Metric Toggle */}
+                <div className="flex items-center bg-blue-950/80 border border-blue-800/80 rounded p-0.5 text-[10px]">
+                  <button
+                    onClick={() => setCategoryChartMetric('split')}
+                    className={`px-2 py-0.5 rounded font-bold transition cursor-pointer ${
+                      categoryChartMetric === 'split' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Ops vs Standby
+                  </button>
+                  <button
+                    onClick={() => setCategoryChartMetric('total')}
+                    className={`px-2 py-0.5 rounded font-bold transition cursor-pointer ${
+                      categoryChartMetric === 'total' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Total Yield ($M)
+                  </button>
+                </div>
+              </div>
+
+              {/* Bar Chart Container */}
+              <div className="h-60 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={topCategoriesChartData}
+                    layout="vertical"
+                    margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+                    <XAxis
+                      type="number"
+                      tick={{ fontSize: 10, fill: '#94a3b8' }}
+                      unit="M"
+                      tickFormatter={(v) => `$${v}`}
+                    />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      width={100}
+                      tick={{ fontSize: 10, fill: '#cbd5e1', fontWeight: 600 }}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-[#0f172a] text-white p-2.5 rounded shadow-xl border border-blue-700/60 text-xs font-sans">
+                              <div className="font-bold text-emerald-400 text-sm">{data.fullName}</div>
+                              <div className="mt-1 text-slate-300">
+                                Total Revenue:{' '}
+                                <span className="font-mono font-bold text-white">
+                                  {formatFullUSD(data.totalRevenue)}
+                                </span>
+                              </div>
+                              <div className="text-slate-300">
+                                Operating Revenue:{' '}
+                                <span className="font-mono text-blue-300 font-semibold">
+                                  {formatFullUSD(data.operRevenue)} ({data.operDays.toLocaleString()} days)
+                                </span>
+                              </div>
+                              <div className="text-slate-300">
+                                Standby Revenue:{' '}
+                                <span className="font-mono text-amber-300 font-semibold">
+                                  {formatFullUSD(data.standbyRevenue)} ({data.standbyDays.toLocaleString()} days)
+                                </span>
+                              </div>
+                              <div className="mt-1 pt-1 border-t border-slate-700 text-[10px] text-slate-400 flex justify-between">
+                                <span>{data.toolsCount} Serialized Units</span>
+                                <span>{data.jobsCount} Historical Jobs</span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    {categoryChartMetric === 'split' ? (
+                      <>
+                        <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '4px' }} />
+                        <Bar
+                          dataKey="standbyRevenueM"
+                          name="Standby ($M)"
+                          stackId="a"
+                          fill="#f59e0b"
+                          radius={[0, 0, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="operRevenueM"
+                          name="Operating ($M)"
+                          stackId="a"
+                          fill="#3b82f6"
+                          radius={[0, 4, 4, 0]}
+                        />
+                      </>
+                    ) : (
+                      <Bar
+                        dataKey="totalRevenueM"
+                        name="Total Revenue ($M)"
+                        fill="#10b981"
+                        radius={[0, 4, 4, 0]}
+                      />
+                    )}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Quick Category Summary Footer */}
+            <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+              <span>Drilling Jars represent <strong>44.7%</strong> ($10.50M) of total commercial revenue.</span>
+              <button
+                onClick={() => onNavigate('tool-revenue-report')}
+                className="text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <span>Full Taxonomy Breakdown</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Chart B: Revenue by Master Operator Contract */}
+          <div className="lg:col-span-5 bg-[#0b172a]/70 border border-blue-800/50 rounded-md p-4 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-blue-400" />
+                  Top Revenue Operator Contracts
+                </h3>
+                <span className="text-[10px] text-slate-400 font-mono">28 Contracts</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mb-2">
+                Contract revenue concentration across major oilfield operators.
+              </p>
+
+              {/* Ranked Contracts List with Progress Meters */}
+              <div className="space-y-2.5 my-2">
+                {TOP_CONTRACTS_REVENUE.slice(0, 4).map((c, idx) => {
+                  const pct = ((c.totalRevenue / REVENUE_SUMMARY.totalRevenue) * 100).toFixed(1);
+                  return (
+                    <div key={c.contractKey || c.contract || idx} className="bg-slate-900/80 rounded p-2 border border-slate-800 text-xs">
+                      <div className="flex items-start justify-between gap-1">
+                        <div>
+                          <span className="font-bold text-white block truncate max-w-[190px]">
+                            {c.client}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            Ref: {c.contract} • {c.toolCount} Tools
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-mono font-bold text-emerald-400 block">
+                            {formatUSD(c.totalRevenue)}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-semibold">{pct}% share</span>
+                        </div>
+                      </div>
+                      
+                      {/* Share progress bar */}
+                      <div className="w-full bg-slate-800 h-1 rounded-full mt-1.5 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 rounded-full"
+                          style={{ width: `${Math.min(100, Math.max(5, Number(pct)))}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Quick Contract Footer Link */}
+            <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+              <span>ADNOC Drilling Rentals is primary ($19.71M).</span>
+              <button
+                onClick={() => onNavigate('contracts')}
+                className="text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <span>Manage Contracts</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* 3. OPERATIONAL RIG & DOWNHOLE TOOL DEPLOYMENT CHARTS ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Chart 1: Rig & Tools by Operator Client */}
         <div className="bg-white border border-[#b8c9db] rounded p-4 shadow-sm lg:col-span-2">
@@ -629,7 +1019,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Second Row: Monthly Fleet Velocity & Live Rig Operational Cards */}
+      {/* 4. FLEET VELOCITY & LIVE RIG OPERATIONAL CARDS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Chart 3: Monthly Movements (DT Dispatches vs RT Returns) */}
         <div className="bg-white border border-[#b8c9db] rounded p-4 shadow-sm lg:col-span-1">
@@ -689,7 +1079,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Live Active Rig Deployments Matrix (Replaces static jobs table with dynamic executive rig cards) */}
+        {/* Live Active Rig Deployments Matrix */}
         <div className="bg-white border border-[#b8c9db] rounded p-4 shadow-sm lg:col-span-2">
           <div className="flex justify-between items-center mb-3">
             <div>

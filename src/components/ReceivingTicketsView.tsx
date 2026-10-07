@@ -251,6 +251,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedRigKey, setSelectedRigKey] = useState<string>('');
   const [checkedSerialMap, setCheckedSerialMap] = useState<Record<string, boolean>>({});
+  const [usedStateMap, setUsedStateMap] = useState<Record<string, boolean>>({});
   const [toolConditionMap, setToolConditionMap] = useState<Record<string, 'USED' | 'NOT USED' | 'LIH'>>({});
   const [newRtNumber, setNewRtNumber] = useState('');
   const [newRtDate, setNewRtDate] = useState(new Date().toISOString().split('T')[0]);
