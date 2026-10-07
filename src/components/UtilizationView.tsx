@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { DrillingJob, DTBatch, RTBatch, ToolItem, User } from '../types';
 import { formatDateDDMMYY, formatQty } from '../utils';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
-import { normalizeJobKey } from '../services/api';
+import { normalizeJobKey, saveDailyFieldLogsApi } from '../services/api';
+import { getJobUtilizationRecords, generateDailyCellsForJob } from '../services/jobUtilizationData';
 import * as XLSX from 'xlsx';
 
 interface UtilizationViewProps {
@@ -227,8 +228,31 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
           });
         });
       });
-    } else {
-      // Standard Epicor representative fleet tools
+    }
+
+    // Check if historical invoice / field records exist for this job
+    const histRecords = getJobUtilizationRecords(currentJob.id);
+    if (items.length === 0 && histRecords.length > 0) {
+      histRecords.forEach((hr) => {
+        items.push({
+          id: `tool-hist-${hr.serial}-${lineSeq}`,
+          category: 'Tools',
+          lineNo: lineSeq++,
+          dtNumber: hr.dt || 'DT-INVOICED',
+          deliveryDate: hr.delDate || (currentJob.mobDate || '2024-01-01'),
+          assetNumber: hr.serial,
+          description: hr.desc || 'Downhole Rental Tool',
+          quantity: 1,
+          status: hr.retDate ? 'Returned' : 'On Rig',
+          rotHours: '',
+          returnDate: hr.retDate || '',
+          rtNumber: '',
+        });
+      });
+    }
+
+    if (items.length === 0) {
+      // Standard Epicor representative fleet tools fallback
       const sampleTools = [
         { asset: 'EW-024', desc: '16FT CARGO BASKET FOR DRILLING ASSEMBLY', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '' },
         { asset: 'OS818FS-1224', desc: '8-1/8" OD LOGAN SERIES 150 FULL STRENGTH RELEASING OVERSHOT', dt: 'DT-03161', dtDate: `${curYM}-03`, retDate: `${curYM}-24`, rt: 'RT-0042' },
@@ -328,84 +352,116 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
 
   // Daily cell values: key `${rowId}|${YYYY-MM-DD}` => 'S' | '1' | ''
   const [cells, setCells] = useState<Record<string, string>>(() => {
-    const prevYM = '2026-08';
-    const curYM = '2026-09';
-    const initial: Record<string, string> = {};
-
-    // Seed August records for manpower and early equipment mobilized in August
-    ['man-1', 'man-2', 'man-3'].forEach((rid) => {
-      for (let d = 20; d <= 31; d++) {
-        initial[`${rid}|${prevYM}-${pad(d)}`] = '1';
+    const cacheKey = `emdad_utilization_cells_${currentJob?.id || 'JOB-26-00001'}`;
+    try {
+      const saved = localStorage.getItem(cacheKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && Object.keys(parsed).length > 0) return parsed;
       }
-    });
-    // Early mobilized tools in August (sample-tool-1 to 5)
-    for (let l = 1; l <= 5; l++) {
-      const rowId = `sample-tool-${l}`;
-      for (let d = 24; d <= 31; d++) {
-        initial[`${rowId}|${prevYM}-${pad(d)}`] = d <= 26 ? 'S' : '1';
-      }
-    }
-
-    // Seed September records strictly within valid delivery/return bounds
-    // Tool 1: from 1st to 10th
-    for (let d = 1; d <= 10; d++) {
-      initial[`sample-tool-1|${curYM}-${pad(d)}`] = d <= 3 ? 'S' : '1';
-    }
-    // Tool 2 & 3 (OS818FS-1224 & OSEXT818FS-1): delivered on 03/09, so days 1-2 are empty/locked!
-    for (let d = 3; d <= 12; d++) {
-      initial[`sample-tool-2|${curYM}-${pad(d)}`] = d <= 5 ? 'S' : '1';
-      initial[`sample-tool-3|${curYM}-${pad(d)}`] = d <= 5 ? 'S' : '1';
-    }
-    // Tools 4 to 6
-    for (let l = 4; l <= 6; l++) {
-      for (let d = 1; d <= 10; d++) {
-        initial[`sample-tool-${l}|${curYM}-${pad(d)}`] = d <= 2 ? 'S' : '1';
-      }
-    }
-    // Tool 7 (FA612-001): delivered 04/09
-    for (let d = 4; d <= 12; d++) {
-      initial[`sample-tool-7|${curYM}-${pad(d)}`] = d <= 6 ? 'S' : '1';
-    }
-    // Tool 8 (SN-1134): delivered 05/09
-    for (let d = 5; d <= 14; d++) {
-      initial[`sample-tool-8|${curYM}-${pad(d)}`] = d <= 7 ? 'S' : '1';
-    }
-    // Tools 9 to 13
-    for (let l = 9; l <= 13; l++) {
-      for (let d = 1; d <= 10; d++) {
-        initial[`sample-tool-${l}|${curYM}-${pad(d)}`] = d <= 3 ? 'S' : '1';
-      }
-    }
-    // Tools 14 & 15: delivered 06/09
-    for (let l = 14; l <= 15; l++) {
-      for (let d = 6; d <= 15; d++) {
-        initial[`sample-tool-${l}|${curYM}-${pad(d)}`] = d <= 8 ? 'S' : '1';
-      }
-    }
-    // Tools 16 to 20
-    for (let l = 16; l <= 20; l++) {
-      const startD = l <= 18 ? 2 : 3;
-      for (let d = startD; d <= 10; d++) {
-        initial[`sample-tool-${l}|${curYM}-${pad(d)}`] = d <= (startD + 2) ? 'S' : '1';
-      }
-    }
-
-    // Manpower active in September
-    ['man-1', 'man-2', 'man-3', 'man-4'].forEach((rid) => {
-      for (let d = 1; d <= 10; d++) {
-        initial[`${rid}|${curYM}-${pad(d)}`] = '1';
-      }
-    });
-
-    // Inventory active in September
-    ['inv-1', 'inv-2'].forEach((rid) => {
-      for (let d = 1; d <= 10; d++) {
-        initial[`${rid}|${curYM}-${pad(d)}`] = 'S';
-      }
-    });
-
-    return initial;
+    } catch {}
+    const { cells: genCells } = generateDailyCellsForJob(currentJob?.id || 'JOB-26-00001', initialItems);
+    return genCells;
   });
+
+  const [isSavingDb, setIsSavingDb] = useState(false);
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+
+  // Sync / load cells when currentJob changes
+  useEffect(() => {
+    if (!currentJob) return;
+    const jKey = currentJob.id;
+    const cacheKey = `emdad_utilization_cells_${jKey}`;
+
+    try {
+      const saved = localStorage.getItem(cacheKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && Object.keys(parsed).length > 0) {
+          setCells(parsed);
+          return;
+        }
+      }
+    } catch {}
+
+    const { cells: genCells, earliestYear, earliestMonthIdx } = generateDailyCellsForJob(jKey, lineItems);
+    if (Object.keys(genCells).length > 0) {
+      setCells(genCells);
+      setSelectedYear(earliestYear);
+      setSelectedMonthIdx(earliestMonthIdx);
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(genCells));
+      } catch {}
+    }
+  }, [currentJob?.id, lineItems]);
+
+  // Save to Azure SQL and local storage
+  const handleSaveUtilizationToDb = async () => {
+    if (!currentJob) return;
+    setIsSavingDb(true);
+    const cacheKey = `emdad_utilization_cells_${currentJob.id}`;
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify(cells));
+    } catch (e) {
+      console.warn('LocalStorage quota limit reached:', e);
+    }
+
+    const logEntries: Array<{
+      jobId: string;
+      dtNumber?: string;
+      toolSerial: string;
+      date: string;
+      status: '1' | 'S';
+      rate?: number;
+    }> = [];
+
+    lineItems.forEach((item) => {
+      for (let d = 1; d <= daysInActiveMonth; d++) {
+        const dateStr = `${activeYM}-${pad(d)}`;
+        const k = `${item.id}|${dateStr}`;
+        const val = cells[k];
+        if (val === '1' || val === 'S') {
+          logEntries.push({
+            jobId: currentJob.id,
+            dtNumber: item.dtNumber,
+            toolSerial: item.assetNumber,
+            date: dateStr,
+            status: val as '1' | 'S',
+            rate: val === '1' ? rateConfig.ops : rateConfig.standby,
+          });
+        }
+      }
+    });
+
+    try {
+      if (logEntries.length > 0) {
+        await saveDailyFieldLogsApi(logEntries);
+      }
+      setLastSavedTime(new Date().toLocaleTimeString());
+      showToast(`Utilization records for Job ${currentJob.id} saved to Azure SQL and cached.`, 'ok');
+    } catch {
+      showToast(`Utilization cached locally for Job ${currentJob.id}.`, 'ok');
+    } finally {
+      setIsSavingDb(false);
+    }
+  };
+
+  const handleAutoFillFromInvoices = () => {
+    if (!currentJob) return;
+    const { cells: genCells, earliestYear, earliestMonthIdx } = generateDailyCellsForJob(currentJob.id, lineItems);
+    if (Object.keys(genCells).length === 0) {
+      showToast(`No historical invoice lines found for Job ${currentJob.id}.`, 'inf');
+      return;
+    }
+    setCells(genCells);
+    setSelectedYear(earliestYear);
+    setSelectedMonthIdx(earliestMonthIdx);
+    const cacheKey = `emdad_utilization_cells_${currentJob.id}`;
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify(genCells));
+    } catch {}
+    showToast(`Auto-generated '1' (Operating) and 'S' (Standby) from invoice lines for ${MONTH_NAMES[earliestMonthIdx]} ${earliestYear}!`, 'ok');
+  };
 
   // Submitted Invoices state (Tracks official submissions & generated tax invoices)
   const [submittedInvoices, setSubmittedInvoices] = useState<Record<string, {
@@ -1586,9 +1642,11 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                     onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
                     className="border border-slate-300 rounded px-2 py-0.5 bg-white font-mono font-bold text-slate-800 outline-none"
                   >
-                    <option value={2026}>2026</option>
-                    <option value={2025}>2025</option>
-                    <option value={2027}>2027</option>
+                    {[2021, 2022, 2023, 2024, 2025, 2026, 2027, 2028].map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1624,15 +1682,37 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                 </div>
               </div>
 
-              {/* Compact Legend */}
-              <div className="bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] font-mono text-slate-600">
-                <span className="font-bold text-emerald-800">1</span> = Ops &bull; <span className="font-bold text-blue-800">S</span> = Standby
+              {/* Compact Legend & Sync Status */}
+              <div className="flex items-center gap-2">
+                {lastSavedTime && (
+                  <span className="text-[10px] text-emerald-700 font-medium">
+                    ✓ Synced: {lastSavedTime}
+                  </span>
+                )}
+                <div className="bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] font-mono text-slate-600">
+                  <span className="font-bold text-emerald-800">1</span> = Ops &bull; <span className="font-bold text-blue-800">S</span> = Standby
+                </div>
               </div>
             </div>
 
             {/* Action Buttons Bar */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-1.5">
               <div className="flex flex-wrap items-center gap-1">
+                <button
+                  onClick={handleSaveUtilizationToDb}
+                  disabled={isSavingDb}
+                  title="Save daily utilization (1 and S) to Azure SQL Database and local storage"
+                  className="px-2.5 py-0.5 rounded bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                >
+                  <span>{isSavingDb ? '⏳' : '💾'}</span> {isSavingDb ? 'Saving...' : 'Save to DB'}
+                </button>
+                <button
+                  onClick={handleAutoFillFromInvoices}
+                  title="Auto-fill 1 (Ops) and S (Standby) from historical invoice lines"
+                  className="px-2.5 py-0.5 rounded bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1"
+                >
+                  <span>⚡</span> Auto-Fill Invoices
+                </button>
                 <button
                   onClick={handleCopy}
                   title="Copy active row or entire grid formatted for Excel (Ctrl+C)"
@@ -1678,7 +1758,7 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
 
                 <button
                   onClick={handleExportXLSX}
-                  className="px-2.5 py-0.5 rounded bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-2xs cursor-pointer"
+                  className="px-2.5 py-0.5 rounded bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs shadow-2xs cursor-pointer"
                 >
                   Export XLSX
                 </button>

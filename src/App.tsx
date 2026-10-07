@@ -56,7 +56,6 @@ import { ReceivingTicketsView } from './components/ReceivingTicketsView';
 import { GatePassView } from './components/GatePassView';
 import { InspectionView } from './components/InspectionView';
 import { MaintenanceView } from './components/MaintenanceView';
-import { UtilizationView } from './components/UtilizationView';
 import { ContractsView } from './components/ContractsView';
 import { SettingsView } from './components/SettingsView';
 import { DataManagementView, TableEntityKey } from './components/DataManagementView';
@@ -68,6 +67,10 @@ import { InvoicingView } from './components/InvoicingView';
 import { JobToolsListView } from './components/JobToolsListView';
 import { ToolHistoryView } from './components/ToolHistoryView';
 import { CategoriesSizesView } from './components/CategoriesSizesView';
+
+const UtilizationView = React.lazy(() =>
+  import('./components/UtilizationView').then((module) => ({ default: module.UtilizationView }))
+);
 
 const ToolRevenueReportView = React.lazy(() =>
   import('./components/ToolRevenueReportView').then((module) => ({ default: module.ToolRevenueReportView }))
@@ -1694,15 +1697,24 @@ export const App: React.FC = () => {
           )}
 
           {activeView === 'utilization' && (
-            <UtilizationView
-              user={currentUser}
-              inventory={inventory}
-              jobs={jobs}
-              dtBatches={dtBatches}
-              rtBatches={rtBatches}
-              onUpdateJob={handleSaveJob}
-              onNavigate={(mod) => setActiveView(mod as ViewKey)}
-            />
+            <React.Suspense
+              fallback={
+                <div className="bg-white border border-[#b8c9db] rounded p-12 text-center text-slate-500 font-semibold shadow-sm">
+                  <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                  Loading Utilization Grid &amp; Daily Records...
+                </div>
+              }
+            >
+              <UtilizationView
+                user={currentUser}
+                inventory={inventory}
+                jobs={jobs}
+                dtBatches={dtBatches}
+                rtBatches={rtBatches}
+                onUpdateJob={handleSaveJob}
+                onNavigate={(mod) => setActiveView(mod as ViewKey)}
+              />
+            </React.Suspense>
           )}
 
           {activeView === 'contracts' && (

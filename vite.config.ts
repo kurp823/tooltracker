@@ -23,6 +23,7 @@ export default defineConfig(() => {
               return 'vendor-core';
             }
             if (id.includes('masterJobs')) return 'data-master-jobs';
+            if (id.includes('jobUtilizationIndex')) return 'data-job-utilization';
           },
         },
       },
