@@ -3,6 +3,9 @@ import json
 import re
 from collections import defaultdict
 
+USD_AED_RATE = 3.6725
+AED_CONTRACTS = {"4700024096"}
+
 # 1. Load Categories
 categories = []
 with open("src/data/Category_list.csv", mode="r", encoding="utf-8-sig") as f:
@@ -83,9 +86,16 @@ tool_stats = defaultdict(lambda: {
     "desc": "",
     "category": "",
     "size": "",
-    "totalRevenue": 0.0,
-    "operRevenue": 0.0,
-    "standbyRevenue": 0.0,
+    "currency": "USD",
+    "nativeRevenue": 0.0,
+    "nativeOperRevenue": 0.0,
+    "nativeStandbyRevenue": 0.0,
+    "totalRevenueUSD": 0.0,
+    "operRevenueUSD": 0.0,
+    "standbyRevenueUSD": 0.0,
+    "totalRevenueAED": 0.0,
+    "operRevenueAED": 0.0,
+    "standbyRevenueAED": 0.0,
     "operDays": 0.0,
     "standbyDays": 0.0,
     "jobs": set(),
@@ -99,9 +109,12 @@ tool_stats = defaultdict(lambda: {
 
 cat_stats = defaultdict(lambda: {
     "category": "",
-    "totalRevenue": 0.0,
-    "operRevenue": 0.0,
-    "standbyRevenue": 0.0,
+    "totalRevenueUSD": 0.0,
+    "operRevenueUSD": 0.0,
+    "standbyRevenueUSD": 0.0,
+    "totalRevenueAED": 0.0,
+    "operRevenueAED": 0.0,
+    "standbyRevenueAED": 0.0,
     "operDays": 0.0,
     "standbyDays": 0.0,
     "toolsCount": 0,
@@ -112,9 +125,12 @@ cat_stats = defaultdict(lambda: {
 
 size_stats = defaultdict(lambda: {
     "size": "",
-    "totalRevenue": 0.0,
-    "operRevenue": 0.0,
-    "standbyRevenue": 0.0,
+    "totalRevenueUSD": 0.0,
+    "operRevenueUSD": 0.0,
+    "standbyRevenueUSD": 0.0,
+    "totalRevenueAED": 0.0,
+    "operRevenueAED": 0.0,
+    "standbyRevenueAED": 0.0,
     "operDays": 0.0,
     "standbyDays": 0.0,
     "toolsCount": 0,
@@ -126,9 +142,16 @@ size_stats = defaultdict(lambda: {
 contract_stats = defaultdict(lambda: {
     "contract": "",
     "client": "",
-    "totalRevenue": 0.0,
-    "operRevenue": 0.0,
-    "standbyRevenue": 0.0,
+    "currency": "USD",
+    "nativeRevenue": 0.0,
+    "nativeOperRevenue": 0.0,
+    "nativeStandbyRevenue": 0.0,
+    "totalRevenueUSD": 0.0,
+    "operRevenueUSD": 0.0,
+    "standbyRevenueUSD": 0.0,
+    "totalRevenueAED": 0.0,
+    "operRevenueAED": 0.0,
+    "standbyRevenueAED": 0.0,
     "operDays": 0.0,
     "standbyDays": 0.0,
     "toolsCount": 0,
@@ -137,9 +160,14 @@ contract_stats = defaultdict(lambda: {
     "jobs": set(),
 })
 
-total_revenue = 0.0
-total_oper_revenue = 0.0
-total_standby_revenue = 0.0
+total_revenue_usd = 0.0
+total_oper_revenue_usd = 0.0
+total_standby_revenue_usd = 0.0
+
+total_revenue_aed = 0.0
+total_oper_revenue_aed = 0.0
+total_standby_revenue_aed = 0.0
+
 total_oper_days = 0.0
 total_standby_days = 0.0
 
@@ -166,10 +194,10 @@ with open("src/data/invoice lines.csv", mode="r", encoding="utf-8-sig") as f:
             oper_days = 0.0
             total = 0.0
             
-        oper_rev = round(oper_days * oper_price, 2)
-        standby_rev = round(standby_days * standby_price, 2)
+        native_oper_rev = round(oper_days * oper_price, 2)
+        native_standby_rev = round(standby_days * standby_price, 2)
         if total <= 0:
-            total = round(oper_rev + standby_rev, 2)
+            total = round(native_oper_rev + native_standby_rev, 2)
             
         cat = match_category(desc)
         size = match_size(desc)
@@ -179,6 +207,28 @@ with open("src/data/invoice lines.csv", mode="r", encoding="utf-8-sig") as f:
         contract = meta.get("project", "") or "444558"
         rig = meta.get("rig", "")
         
+        is_aed = contract in AED_CONTRACTS
+        currency = "AED" if is_aed else "USD"
+        
+        if is_aed:
+            # Contract is in AED
+            tot_aed = total
+            oper_aed = native_oper_rev
+            sb_aed = native_standby_rev
+            
+            tot_usd = round(total / USD_AED_RATE, 2)
+            oper_usd = round(native_oper_rev / USD_AED_RATE, 2)
+            sb_usd = round(native_standby_rev / USD_AED_RATE, 2)
+        else:
+            # Contract is in USD
+            tot_usd = total
+            oper_usd = native_oper_rev
+            sb_usd = native_standby_rev
+            
+            tot_aed = round(total * USD_AED_RATE, 2)
+            oper_aed = round(native_oper_rev * USD_AED_RATE, 2)
+            sb_aed = round(native_standby_rev * USD_AED_RATE, 2)
+        
         # Tool aggregates
         t = tool_stats[serial]
         t["serial"] = serial
@@ -187,9 +237,19 @@ with open("src/data/invoice lines.csv", mode="r", encoding="utf-8-sig") as f:
             t["desc"] = desc
         t["category"] = cat
         t["size"] = size
-        t["totalRevenue"] += total
-        t["operRevenue"] += oper_rev
-        t["standbyRevenue"] += standby_rev
+        t["currency"] = currency
+        t["nativeRevenue"] += total
+        t["nativeOperRevenue"] += native_oper_rev
+        t["nativeStandbyRevenue"] += native_standby_rev
+        
+        t["totalRevenueUSD"] += tot_usd
+        t["operRevenueUSD"] += oper_usd
+        t["standbyRevenueUSD"] += sb_usd
+        
+        t["totalRevenueAED"] += tot_aed
+        t["operRevenueAED"] += oper_aed
+        t["standbyRevenueAED"] += sb_aed
+        
         t["operDays"] += oper_days
         t["standbyDays"] += standby_days
         if j_id: t["jobs"].add(j_id)
@@ -204,9 +264,12 @@ with open("src/data/invoice lines.csv", mode="r", encoding="utf-8-sig") as f:
         # Category aggregates
         c = cat_stats[cat]
         c["category"] = cat
-        c["totalRevenue"] += total
-        c["operRevenue"] += oper_rev
-        c["standbyRevenue"] += standby_rev
+        c["totalRevenueUSD"] += tot_usd
+        c["operRevenueUSD"] += oper_usd
+        c["standbyRevenueUSD"] += sb_usd
+        c["totalRevenueAED"] += tot_aed
+        c["operRevenueAED"] += oper_aed
+        c["standbyRevenueAED"] += sb_aed
         c["operDays"] += oper_days
         c["standbyDays"] += standby_days
         c["tools"].add(serial)
@@ -215,9 +278,12 @@ with open("src/data/invoice lines.csv", mode="r", encoding="utf-8-sig") as f:
         # Size aggregates
         s = size_stats[size]
         s["size"] = size
-        s["totalRevenue"] += total
-        s["operRevenue"] += oper_rev
-        s["standbyRevenue"] += standby_rev
+        s["totalRevenueUSD"] += tot_usd
+        s["operRevenueUSD"] += oper_usd
+        s["standbyRevenueUSD"] += sb_usd
+        s["totalRevenueAED"] += tot_aed
+        s["operRevenueAED"] += oper_aed
+        s["standbyRevenueAED"] += sb_aed
         s["operDays"] += oper_days
         s["standbyDays"] += standby_days
         s["tools"].add(serial)
@@ -228,17 +294,32 @@ with open("src/data/invoice lines.csv", mode="r", encoding="utf-8-sig") as f:
         cnt = contract_stats[c_key]
         cnt["contract"] = contract or "444558"
         cnt["client"] = client or "ADNOC OFFSHORE"
-        cnt["totalRevenue"] += total
-        cnt["operRevenue"] += oper_rev
-        cnt["standbyRevenue"] += standby_rev
+        cnt["currency"] = currency
+        cnt["nativeRevenue"] += total
+        cnt["nativeOperRevenue"] += native_oper_rev
+        cnt["nativeStandbyRevenue"] += native_standby_rev
+        
+        cnt["totalRevenueUSD"] += tot_usd
+        cnt["operRevenueUSD"] += oper_usd
+        cnt["standbyRevenueUSD"] += sb_usd
+        
+        cnt["totalRevenueAED"] += tot_aed
+        cnt["operRevenueAED"] += oper_aed
+        cnt["standbyRevenueAED"] += sb_aed
+        
         cnt["operDays"] += oper_days
         cnt["standbyDays"] += standby_days
         cnt["tools"].add(serial)
         if j_id: cnt["jobs"].add(j_id)
         
-        total_revenue += total
-        total_oper_revenue += oper_rev
-        total_standby_revenue += standby_rev
+        total_revenue_usd += tot_usd
+        total_oper_revenue_usd += oper_usd
+        total_standby_revenue_usd += sb_usd
+        
+        total_revenue_aed += tot_aed
+        total_oper_revenue_aed += oper_aed
+        total_standby_revenue_aed += sb_aed
+        
         total_oper_days += oper_days
         total_standby_days += standby_days
 
@@ -251,9 +332,20 @@ for serial, data in tool_stats.items():
         "desc": data["desc"],
         "category": data["category"],
         "size": data["size"],
-        "totalRevenue": round(data["totalRevenue"], 2),
-        "operRevenue": round(data["operRevenue"], 2),
-        "standbyRevenue": round(data["standbyRevenue"], 2),
+        "currency": data["currency"],
+        "nativeRevenue": round(data["nativeRevenue"], 2),
+        "nativeOperRevenue": round(data["nativeOperRevenue"], 2),
+        "nativeStandbyRevenue": round(data["nativeStandbyRevenue"], 2),
+        "totalRevenueUSD": round(data["totalRevenueUSD"], 2),
+        "operRevenueUSD": round(data["operRevenueUSD"], 2),
+        "standbyRevenueUSD": round(data["standbyRevenueUSD"], 2),
+        "totalRevenueAED": round(data["totalRevenueAED"], 2),
+        "operRevenueAED": round(data["operRevenueAED"], 2),
+        "standbyRevenueAED": round(data["standbyRevenueAED"], 2),
+        # Default backward-compatible fields
+        "totalRevenue": round(data["totalRevenueUSD"], 2),
+        "operRevenue": round(data["operRevenueUSD"], 2),
+        "standbyRevenue": round(data["standbyRevenueUSD"], 2),
         "operDays": data["operDays"],
         "standbyDays": data["standbyDays"],
         "jobsCount": len(data["jobs"]),
@@ -264,37 +356,51 @@ for serial, data in tool_stats.items():
         "rigs": list(data["rigs"]),
     })
 
-tools_list.sort(key=lambda x: x["totalRevenue"], reverse=True)
+tools_list.sort(key=lambda x: x["totalRevenueUSD"], reverse=True)
 
 # Format categories list
 categories_list = []
 for cat, data in cat_stats.items():
     categories_list.append({
         "category": cat,
-        "totalRevenue": round(data["totalRevenue"], 2),
-        "operRevenue": round(data["operRevenue"], 2),
-        "standbyRevenue": round(data["standbyRevenue"], 2),
+        "totalRevenueUSD": round(data["totalRevenueUSD"], 2),
+        "operRevenueUSD": round(data["operRevenueUSD"], 2),
+        "standbyRevenueUSD": round(data["standbyRevenueUSD"], 2),
+        "totalRevenueAED": round(data["totalRevenueAED"], 2),
+        "operRevenueAED": round(data["operRevenueAED"], 2),
+        "standbyRevenueAED": round(data["standbyRevenueAED"], 2),
+        # Default backward-compatible fields
+        "totalRevenue": round(data["totalRevenueUSD"], 2),
+        "operRevenue": round(data["operRevenueUSD"], 2),
+        "standbyRevenue": round(data["standbyRevenueUSD"], 2),
         "operDays": data["operDays"],
         "standbyDays": data["standbyDays"],
         "toolsCount": len(data["tools"]),
         "jobsCount": len(data["jobs"]),
     })
-categories_list.sort(key=lambda x: x["totalRevenue"], reverse=True)
+categories_list.sort(key=lambda x: x["totalRevenueUSD"], reverse=True)
 
 # Format sizes list
 sizes_list = []
 for sz, data in size_stats.items():
     sizes_list.append({
         "size": sz,
-        "totalRevenue": round(data["totalRevenue"], 2),
-        "operRevenue": round(data["operRevenue"], 2),
-        "standbyRevenue": round(data["standbyRevenue"], 2),
+        "totalRevenueUSD": round(data["totalRevenueUSD"], 2),
+        "operRevenueUSD": round(data["operRevenueUSD"], 2),
+        "standbyRevenueUSD": round(data["standbyRevenueUSD"], 2),
+        "totalRevenueAED": round(data["totalRevenueAED"], 2),
+        "operRevenueAED": round(data["operRevenueAED"], 2),
+        "standbyRevenueAED": round(data["standbyRevenueAED"], 2),
+        # Default backward-compatible fields
+        "totalRevenue": round(data["totalRevenueUSD"], 2),
+        "operRevenue": round(data["operRevenueUSD"], 2),
+        "standbyRevenue": round(data["standbyRevenueUSD"], 2),
         "operDays": data["operDays"],
         "standbyDays": data["standbyDays"],
         "toolsCount": len(data["tools"]),
         "jobsCount": len(data["jobs"]),
     })
-sizes_list.sort(key=lambda x: x["totalRevenue"], reverse=True)
+sizes_list.sort(key=lambda x: x["totalRevenueUSD"], reverse=True)
 
 # Format contracts list
 contracts_list = []
@@ -303,21 +409,40 @@ for c_key, data in contract_stats.items():
         "contractKey": c_key,
         "contract": data["contract"],
         "client": data["client"],
-        "totalRevenue": round(data["totalRevenue"], 2),
-        "operRevenue": round(data["operRevenue"], 2),
-        "standbyRevenue": round(data["standbyRevenue"], 2),
+        "currency": data["currency"],
+        "nativeRevenue": round(data["nativeRevenue"], 2),
+        "nativeOperRevenue": round(data["nativeOperRevenue"], 2),
+        "nativeStandbyRevenue": round(data["nativeStandbyRevenue"], 2),
+        "totalRevenueUSD": round(data["totalRevenueUSD"], 2),
+        "operRevenueUSD": round(data["operRevenueUSD"], 2),
+        "standbyRevenueUSD": round(data["standbyRevenueUSD"], 2),
+        "totalRevenueAED": round(data["totalRevenueAED"], 2),
+        "operRevenueAED": round(data["operRevenueAED"], 2),
+        "standbyRevenueAED": round(data["standbyRevenueAED"], 2),
+        # Default backward-compatible fields
+        "totalRevenue": round(data["totalRevenueUSD"], 2),
+        "operRevenue": round(data["operRevenueUSD"], 2),
+        "standbyRevenue": round(data["standbyRevenueUSD"], 2),
         "operDays": data["operDays"],
         "standbyDays": data["standbyDays"],
         "toolsCount": len(data["tools"]),
         "jobsCount": len(data["jobs"]),
     })
-contracts_list.sort(key=lambda x: x["totalRevenue"], reverse=True)
+contracts_list.sort(key=lambda x: x["totalRevenueUSD"], reverse=True)
 
 output = {
     "summary": {
-        "totalRevenue": round(total_revenue, 2),
-        "totalOperRevenue": round(total_oper_revenue, 2),
-        "totalStandbyRevenue": round(total_standby_revenue, 2),
+        "fxRateUSDToAED": USD_AED_RATE,
+        "totalRevenueUSD": round(total_revenue_usd, 2),
+        "totalOperRevenueUSD": round(total_oper_revenue_usd, 2),
+        "totalStandbyRevenueUSD": round(total_standby_revenue_usd, 2),
+        "totalRevenueAED": round(total_revenue_aed, 2),
+        "totalOperRevenueAED": round(total_oper_revenue_aed, 2),
+        "totalStandbyRevenueAED": round(total_standby_revenue_aed, 2),
+        # Default backward-compatible fields
+        "totalRevenue": round(total_revenue_usd, 2),
+        "totalOperRevenue": round(total_oper_revenue_usd, 2),
+        "totalStandbyRevenue": round(total_standby_revenue_usd, 2),
         "totalOperDays": total_oper_days,
         "totalStandbyDays": total_standby_days,
         "totalTools": len(tools_list),
@@ -334,6 +459,78 @@ output = {
 with open("src/data/toolRevenueData.json", "w", encoding="utf-8") as f:
     json.dump(output, f, indent=2)
 
-tot_rev = output["summary"]["totalRevenue"]
-tot_tools = output["summary"]["totalTools"]
-print(f"Generated src/data/toolRevenueData.json successfully! Total: ${tot_rev:,.2f} across {tot_tools} tools.")
+# Generate lightweight revenueSummary.ts
+summary_ts_content = f"""// Autogenerated lightweight commercial summary for Operations Dashboard and Analytics
+export interface RevenueSummaryData {{
+  fxRateUSDToAED: number;
+  totalRevenueUSD: number;
+  totalOperRevenueUSD: number;
+  totalStandbyRevenueUSD: number;
+  totalRevenueAED: number;
+  totalOperRevenueAED: number;
+  totalStandbyRevenueAED: number;
+  totalRevenue: number;
+  totalOperRevenue: number;
+  totalStandbyRevenue: number;
+  totalOperDays: number;
+  totalStandbyDays: number;
+  totalTools: number;
+  totalCategories: number;
+  totalSizes: number;
+  totalContracts: number;
+}}
+
+export interface CategoryRevenueSummary {{
+  category: string;
+  totalRevenueUSD: number;
+  operRevenueUSD: number;
+  standbyRevenueUSD: number;
+  totalRevenueAED: number;
+  operRevenueAED: number;
+  standbyRevenueAED: number;
+  totalRevenue: number;
+  operRevenue: number;
+  standbyRevenue: number;
+  operDays: number;
+  standbyDays: number;
+  toolCount?: number;
+  toolsCount?: number;
+  jobsCount: number;
+}}
+
+export interface ContractRevenueSummary {{
+  contractKey?: string;
+  contract: string;
+  client: string;
+  currency: 'AED' | 'USD';
+  nativeRevenue: number;
+  nativeOperRevenue: number;
+  nativeStandbyRevenue: number;
+  totalRevenueUSD: number;
+  operRevenueUSD: number;
+  standbyRevenueUSD: number;
+  totalRevenueAED: number;
+  operRevenueAED: number;
+  standbyRevenueAED: number;
+  totalRevenue: number;
+  operRevenue: number;
+  standbyRevenue: number;
+  operDays?: number;
+  standbyDays?: number;
+  toolCount?: number;
+  toolsCount?: number;
+  jobsCount: number;
+}}
+
+export const REVENUE_SUMMARY: RevenueSummaryData = {json.dumps(output["summary"], indent=2)};
+
+export const TOP_CATEGORIES_REVENUE: CategoryRevenueSummary[] = {json.dumps(categories_list[:10], indent=2)};
+
+export const TOP_CONTRACTS_REVENUE: ContractRevenueSummary[] = {json.dumps(contracts_list[:12], indent=2)};
+"""
+
+with open("src/data/revenueSummary.ts", "w", encoding="utf-8") as f:
+    f.write(summary_ts_content)
+
+print(f"Generated toolRevenueData.json and revenueSummary.ts successfully!")
+print(f"Total Revenue USD: ${output['summary']['totalRevenueUSD']:,.2f} | Total Revenue AED: AED {output['summary']['totalRevenueAED']:,.2f}")

@@ -24,6 +24,7 @@ export default defineConfig(() => {
             }
             if (id.includes('masterJobs')) return 'data-master-jobs';
             if (id.includes('jobUtilizationIndex')) return 'data-job-utilization';
+            if (id.includes('toolRevenueData')) return 'data-tool-revenue';
           },
         },
       },

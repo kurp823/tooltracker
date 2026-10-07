@@ -23,7 +23,8 @@ import {
   Sparkles,
   BarChart3,
   PieChart,
-  Eye
+  Eye,
+  Coins,
 } from 'lucide-react';
 
 interface ToolRevenueReportViewProps {
@@ -40,6 +41,7 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
   showToast,
 }) => {
   const [activeTab, setActiveTab] = useState<AnalyticsTab>('tools-ledger');
+  const [currencyMode, setCurrencyMode] = useState<'AED' | 'USD' | 'NATIVE'>('AED');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedSize, setSelectedSize] = useState('ALL');
@@ -56,6 +58,36 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
 
   const rawData = toolRevenueJson;
   const summary = rawData.summary;
+
+  const isAED = currencyMode === 'AED' || currencyMode === 'NATIVE';
+  const currencySymbol = isAED ? 'AED ' : '$';
+
+  const formatMoney = (valAED: number, valUSD: number, nativeCurrency?: 'AED' | 'USD' | string) => {
+    if (currencyMode === 'AED') {
+      return `AED ${(valAED || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    if (currencyMode === 'USD') {
+      return `$${(valUSD || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    if (nativeCurrency === 'AED') {
+      return `AED ${(valAED || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    return `$${(valUSD || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const formatCompact = (valAED: number, valUSD: number, nativeCurrency?: 'AED' | 'USD' | string) => {
+    const isCurrencyAED = currencyMode === 'AED' || (currencyMode === 'NATIVE' && nativeCurrency === 'AED');
+    const num = isCurrencyAED ? (valAED || 0) : (valUSD || 0);
+    const sym = isCurrencyAED ? 'AED ' : '$';
+
+    if (num >= 1_000_000) {
+      return `${sym}${(num / 1_000_000).toFixed(2)}M`;
+    }
+    if (num >= 1_000) {
+      return `${sym}${(num / 1_000).toFixed(1)}k`;
+    }
+    return `${sym}${num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  };
 
   // Filter options
   const categoryOptions = useMemo(() => {
@@ -99,9 +131,19 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
     return [...filteredTools].sort((a, b) => {
       let aVal = a[sortField] || 0;
       let bVal = b[sortField] || 0;
+      if (sortField === 'totalRevenue') {
+        aVal = isAED ? (a.totalRevenueAED || 0) : (a.totalRevenueUSD || 0);
+        bVal = isAED ? (b.totalRevenueAED || 0) : (b.totalRevenueUSD || 0);
+      } else if (sortField === 'operRevenue') {
+        aVal = isAED ? (a.operRevenueAED || 0) : (a.operRevenueUSD || 0);
+        bVal = isAED ? (b.operRevenueAED || 0) : (b.operRevenueUSD || 0);
+      } else if (sortField === 'standbyRevenue') {
+        aVal = isAED ? (a.standbyRevenueAED || 0) : (a.standbyRevenueUSD || 0);
+        bVal = isAED ? (b.standbyRevenueAED || 0) : (b.standbyRevenueUSD || 0);
+      }
       return sortAsc ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
     });
-  }, [filteredTools, sortField, sortAsc]);
+  }, [filteredTools, sortField, sortAsc, isAED]);
 
   // Paginated Tools
   const paginatedTools = useMemo(() => {
@@ -113,27 +155,36 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
 
   // Filtered summary metrics dynamically computed based on active filters
   const filteredMetrics = useMemo(() => {
-    let rev = 0;
-    let operRev = 0;
-    let stbyRev = 0;
+    let revAED = 0;
+    let revUSD = 0;
+    let operRevAED = 0;
+    let operRevUSD = 0;
+    let stbyRevAED = 0;
+    let stbyRevUSD = 0;
     let operD = 0;
     let stbyD = 0;
     let jobs = 0;
 
     filteredTools.forEach((t) => {
-      rev += t.totalRevenue;
-      operRev += t.operRevenue;
-      stbyRev += t.standbyRevenue;
-      operD += t.operDays;
-      stbyD += t.standbyDays;
-      jobs += t.jobsCount;
+      revAED += t.totalRevenueAED || 0;
+      revUSD += t.totalRevenueUSD || 0;
+      operRevAED += t.operRevenueAED || 0;
+      operRevUSD += t.operRevenueUSD || 0;
+      stbyRevAED += t.standbyRevenueAED || 0;
+      stbyRevUSD += t.standbyRevenueUSD || 0;
+      operD += t.operDays || 0;
+      stbyD += t.standbyDays || 0;
+      jobs += t.jobsCount || 0;
     });
 
     return {
       count: filteredTools.length,
-      revenue: rev,
-      operRevenue: operRev,
-      standbyRevenue: stbyRev,
+      revenueAED: revAED,
+      revenueUSD: revUSD,
+      operRevenueAED: operRevAED,
+      operRevenueUSD: operRevUSD,
+      standbyRevenueAED: stbyRevAED,
+      standbyRevenueUSD: stbyRevUSD,
       operDays: operD,
       standbyDays: stbyD,
       jobsCount: jobs,
@@ -149,11 +200,6 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
     }
   };
 
-  const formatCurrency = (val?: number | null) => {
-    if (val === null || val === undefined) return '$0.00';
-    return `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
   // Export to Excel / CSV
   const handleExportExcel = () => {
     const exportRows = sortedTools.map((t, idx) => ({
@@ -163,9 +209,13 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
       'Description': t.desc,
       'Category': t.category,
       'Size': t.size,
-      'Total Revenue (USD)': t.totalRevenue,
-      'Operating Revenue (USD)': t.operRevenue,
-      'Standby Revenue (USD)': t.standbyRevenue,
+      'Contract Currency': t.currency || 'USD',
+      'Total Revenue (AED)': t.totalRevenueAED,
+      'Total Revenue (USD)': t.totalRevenueUSD,
+      'Operating Revenue (AED)': t.operRevenueAED,
+      'Operating Revenue (USD)': t.operRevenueUSD,
+      'Standby Revenue (AED)': t.standbyRevenueAED,
+      'Standby Revenue (USD)': t.standbyRevenueUSD,
       'Operating Days': t.operDays,
       'Standby Days': t.standbyDays,
       'Total Rental Days': t.operDays + t.standbyDays,
@@ -187,29 +237,72 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
   return (
     <div className="space-y-4 text-slate-800">
       {/* Top Header Card */}
-      <div className="bg-gradient-to-r from-[#0d213a] via-[#1a3a60] to-[#0f2d4e] rounded-xl p-5 text-white shadow-md border border-slate-700/60">
+      <div className="bg-gradient-to-r from-[#0c182a] via-[#142642] to-[#1a3458] rounded-2xl p-5 text-white shadow-xl border border-slate-700/60">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
                 <Sparkles className="w-3 h-3" /> Live Financial Analytics
               </span>
               <span className="bg-blue-500/20 text-blue-200 border border-blue-400/30 text-xs px-2.5 py-0.5 rounded-full font-mono">
                 {summary.totalTools.toLocaleString()} Fleet Tools Tracked
               </span>
+              <span className="bg-amber-500/20 text-amber-200 border border-amber-400/30 text-xs px-2.5 py-0.5 rounded-full font-mono">
+                Adnoc Drilling (4700024096) in AED
+              </span>
             </div>
             <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
               <span>Tool Fleet Revenue &amp; Utilization Report</span>
             </h1>
-            <p className="text-xs text-slate-300 max-w-2xl">
-              Lifetime earning breakdown by tool serial, category (303 official classes), size (358 dimensions), and contract agreements.
+            <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
+              Lifetime earning breakdown by tool serial, category (116 classes), size (139 dimensions), and master contracts with accurate AED / USD conversion.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Currency Mode Switcher */}
+            <div className="flex items-center bg-slate-900/90 border border-slate-700 rounded-lg p-0.5 shadow-inner">
+              <button
+                type="button"
+                onClick={() => setCurrencyMode('AED')}
+                className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                  currencyMode === 'AED'
+                    ? 'bg-emerald-600 text-white shadow-sm font-black'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <span>د.إ</span>
+                <span>AED</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrencyMode('USD')}
+                className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                  currencyMode === 'USD'
+                    ? 'bg-blue-600 text-white shadow-sm font-black'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <span>$</span>
+                <span>USD</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrencyMode('NATIVE')}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                  currencyMode === 'NATIVE'
+                    ? 'bg-amber-600 text-white shadow-sm font-black'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <Coins className="w-3 h-3" />
+                <span>Native</span>
+              </button>
+            </div>
+
             <button
               onClick={handleExportExcel}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg transition shadow flex items-center gap-1.5 cursor-pointer"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 cursor-pointer"
               title="Download full analytics as Excel spreadsheet"
             >
               <FileSpreadsheet className="w-4 h-4" />
@@ -217,76 +310,76 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
             </button>
             <button
               onClick={() => window.print()}
-              className="bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-3.5 py-2 rounded-lg border border-white/20 transition flex items-center gap-1.5 cursor-pointer"
+              className="bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-3.5 py-1.5 rounded-lg border border-white/20 transition flex items-center gap-1.5 cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              <span>Print Report</span>
+              <span>Print</span>
             </button>
           </div>
         </div>
 
         {/* 4 Primary KPI Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
-          <div className="bg-white/10 backdrop-blur-md rounded-lg p-3 border border-white/10">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+          <div className="bg-white/10 backdrop-blur-md rounded-xl p-3.5 border border-white/10 hover:border-emerald-400/40 transition">
             <div className="flex items-center justify-between text-slate-300 text-xs font-semibold mb-1">
-              <span>Total Fleet Revenue</span>
+              <span>Total Revenue ({currencyMode})</span>
               <DollarSign className="w-4 h-4 text-emerald-400" />
             </div>
-            <div className="text-xl font-black text-emerald-300 font-mono">
-              {formatCurrency(filteredMetrics.revenue)}
+            <div className="text-xl font-black text-emerald-300 font-mono tracking-tight">
+              {formatMoney(filteredMetrics.revenueAED, filteredMetrics.revenueUSD)}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5">
-              Across {filteredMetrics.count.toLocaleString()} tools selected
+              Across {filteredMetrics.count.toLocaleString()} selected tools
             </div>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-md rounded-lg p-3 border border-white/10">
+          <div className="bg-white/10 backdrop-blur-md rounded-xl p-3.5 border border-white/10 hover:border-blue-400/40 transition">
             <div className="flex items-center justify-between text-slate-300 text-xs font-semibold mb-1">
               <span>Operating Revenue</span>
               <TrendingUp className="w-4 h-4 text-blue-400" />
             </div>
-            <div className="text-xl font-black text-blue-300 font-mono">
-              {formatCurrency(filteredMetrics.operRevenue)}
+            <div className="text-xl font-black text-blue-300 font-mono tracking-tight">
+              {formatMoney(filteredMetrics.operRevenueAED, filteredMetrics.operRevenueUSD)}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5 font-mono">
               {filteredMetrics.operDays.toLocaleString()} Operating Days ('1')
             </div>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-md rounded-lg p-3 border border-white/10">
+          <div className="bg-white/10 backdrop-blur-md rounded-xl p-3.5 border border-white/10 hover:border-amber-400/40 transition">
             <div className="flex items-center justify-between text-slate-300 text-xs font-semibold mb-1">
               <span>Standby Revenue</span>
               <Clock className="w-4 h-4 text-amber-400" />
             </div>
-            <div className="text-xl font-black text-amber-300 font-mono">
-              {formatCurrency(filteredMetrics.standbyRevenue)}
+            <div className="text-xl font-black text-amber-300 font-mono tracking-tight">
+              {formatMoney(filteredMetrics.standbyRevenueAED, filteredMetrics.standbyRevenueUSD)}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5 font-mono">
               {filteredMetrics.standbyDays.toLocaleString()} Standby Days ('S')
             </div>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-md rounded-lg p-3 border border-white/10">
+          <div className="bg-white/10 backdrop-blur-md rounded-xl p-3.5 border border-white/10 hover:border-purple-400/40 transition">
             <div className="flex items-center justify-between text-slate-300 text-xs font-semibold mb-1">
-              <span>Utilization Days</span>
+              <span>Total Utilization Days</span>
               <Award className="w-4 h-4 text-purple-400" />
             </div>
-            <div className="text-xl font-black text-purple-300 font-mono">
+            <div className="text-xl font-black text-purple-300 font-mono tracking-tight">
               {(filteredMetrics.operDays + filteredMetrics.standbyDays).toLocaleString()}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5">
-              Total billable days logged on rigs
+              Total billable days on rigs
             </div>
           </div>
         </div>
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center justify-between border-b border-slate-300 bg-white px-3 py-1.5 rounded-t-lg shadow-2xs">
+      <div className="flex items-center justify-between border-b border-slate-300 bg-white px-3 py-1.5 rounded-t-xl shadow-2xs">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setActiveTab('tools-ledger')}
-            className={`px-3.5 py-1.5 rounded text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'tools-ledger'
                 ? 'bg-blue-700 text-white shadow-xs'
                 : 'text-slate-600 hover:bg-slate-100'
@@ -297,7 +390,7 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('category-summary')}
-            className={`px-3.5 py-1.5 rounded text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'category-summary'
                 ? 'bg-blue-700 text-white shadow-xs'
                 : 'text-slate-600 hover:bg-slate-100'
@@ -308,7 +401,7 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('size-summary')}
-            className={`px-3.5 py-1.5 rounded text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'size-summary'
                 ? 'bg-blue-700 text-white shadow-xs'
                 : 'text-slate-600 hover:bg-slate-100'
@@ -319,7 +412,7 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('contract-summary')}
-            className={`px-3.5 py-1.5 rounded text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'contract-summary'
                 ? 'bg-blue-700 text-white shadow-xs'
                 : 'text-slate-600 hover:bg-slate-100'
@@ -332,7 +425,7 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
       </div>
 
       {/* Filter Toolbar */}
-      <div className="bg-slate-50 border border-slate-300 rounded-lg p-3 flex flex-wrap items-center justify-between gap-3 text-xs shadow-2xs">
+      <div className="bg-slate-50 border border-slate-300 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs shadow-2xs">
         <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[300px]">
           {/* Search */}
           <div className="relative flex-1 min-w-[200px]">
@@ -437,110 +530,122 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
 
       {/* TAB 1: TOOL REVENUE LEDGER */}
       {activeTab === 'tools-ledger' && (
-        <div className="bg-white border border-slate-300 rounded-lg shadow-2xs overflow-hidden">
+        <div className="bg-white border border-slate-300 rounded-xl shadow-2xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px] select-none">
                 <tr>
-                  <th className="p-2 text-center w-12">#</th>
-                  <th className="p-2 cursor-pointer hover:bg-blue-100" onClick={() => handleSort('totalRevenue')}>
+                  <th className="p-2.5 text-center w-12">#</th>
+                  <th className="p-2.5 cursor-pointer hover:bg-blue-100" onClick={() => handleSort('totalRevenue')}>
                     <div className="flex items-center gap-1">
-                      <span>Tool Serial / Asset</span>
+                      <span>Tool Serial</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
-                  <th className="p-2">Description</th>
-                  <th className="p-2">Category</th>
-                  <th className="p-2">Size</th>
-                  <th className="p-2 text-right cursor-pointer hover:bg-blue-100" onClick={() => handleSort('totalRevenue')}>
+                  <th className="p-2.5">Description</th>
+                  <th className="p-2.5">Category</th>
+                  <th className="p-2.5">Size</th>
+                  <th className="p-2.5 text-center">Rate Curr</th>
+                  <th className="p-2.5 text-right cursor-pointer hover:bg-blue-100" onClick={() => handleSort('totalRevenue')}>
                     <div className="flex items-center justify-end gap-1">
-                      <span>Total Revenue ($)</span>
+                      <span>Total Rev ({currencyMode})</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
-                  <th className="p-2 text-right cursor-pointer hover:bg-blue-100" onClick={() => handleSort('operRevenue')}>
+                  <th className="p-2.5 text-right cursor-pointer hover:bg-blue-100" onClick={() => handleSort('operRevenue')}>
                     <div className="flex items-center justify-end gap-1">
-                      <span>Ops Rev ($)</span>
+                      <span>Ops Rev</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
-                  <th className="p-2 text-right cursor-pointer hover:bg-blue-100" onClick={() => handleSort('standbyRevenue')}>
+                  <th className="p-2.5 text-right cursor-pointer hover:bg-blue-100" onClick={() => handleSort('standbyRevenue')}>
                     <div className="flex items-center justify-end gap-1">
-                      <span>Standby Rev ($)</span>
+                      <span>Standby Rev</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
-                  <th className="p-2 text-center cursor-pointer hover:bg-blue-100" onClick={() => handleSort('operDays')}>
+                  <th className="p-2.5 text-center cursor-pointer hover:bg-blue-100" onClick={() => handleSort('operDays')}>
                     <div className="flex items-center justify-center gap-1">
-                      <span>Ops Days ('1')</span>
+                      <span>Ops ('1')</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
-                  <th className="p-2 text-center cursor-pointer hover:bg-blue-100" onClick={() => handleSort('standbyDays')}>
+                  <th className="p-2.5 text-center cursor-pointer hover:bg-blue-100" onClick={() => handleSort('standbyDays')}>
                     <div className="flex items-center justify-center gap-1">
-                      <span>Stby Days ('S')</span>
+                      <span>Stby ('S')</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
-                  <th className="p-2 text-center cursor-pointer hover:bg-blue-100" onClick={() => handleSort('jobsCount')}>
+                  <th className="p-2.5 text-center cursor-pointer hover:bg-blue-100" onClick={() => handleSort('jobsCount')}>
                     <div className="flex items-center justify-center gap-1">
                       <span>Jobs</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
-                  <th className="p-2">Contracts</th>
-                  <th className="p-2 text-center">Action</th>
+                  <th className="p-2.5">Contracts</th>
+                  <th className="p-2.5 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-medium">
                 {paginatedTools.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="p-8 text-center text-slate-500 font-medium">
+                    <td colSpan={14} className="p-8 text-center text-slate-500 font-medium">
                       No tool records match your filter criteria.
                     </td>
                   </tr>
                 ) : (
                   paginatedTools.map((tool, idx) => {
                     const globalRank = (currentPage - 1) * pageSize + idx + 1;
+                    const isToolAED = tool.currency === 'AED';
+
                     return (
                       <tr key={tool.serial} className="hover:bg-blue-50/60 transition h-8 leading-none">
-                        <td className="py-1.5 px-2 text-center font-mono text-slate-400 font-bold">{globalRank}</td>
-                        <td className="py-1.5 px-2 whitespace-nowrap font-mono font-bold text-slate-900">
+                        <td className="py-1.5 px-2.5 text-center font-mono text-slate-400 font-bold">{globalRank}</td>
+                        <td className="py-1.5 px-2.5 whitespace-nowrap font-mono font-bold text-slate-900">
                           {tool.serial}
                         </td>
-                        <td className="py-1.5 px-2 truncate max-w-[280px] text-slate-800" title={tool.desc}>
+                        <td className="py-1.5 px-2.5 truncate max-w-[260px] text-slate-800" title={tool.desc}>
                           {tool.desc || '—'}
                         </td>
-                        <td className="py-1.5 px-2 whitespace-nowrap">
+                        <td className="py-1.5 px-2.5 whitespace-nowrap">
                           <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded text-[11px] font-semibold">
                             {tool.category || 'OTHER'}
                           </span>
                         </td>
-                        <td className="py-1.5 px-2 whitespace-nowrap font-mono text-slate-700 font-bold">
+                        <td className="py-1.5 px-2.5 whitespace-nowrap font-mono text-slate-700 font-bold">
                           {tool.size !== 'N/A' ? tool.size : '—'}
                         </td>
-                        <td className="py-1.5 px-2 text-right font-mono font-bold text-emerald-700">
-                          {formatCurrency(tool.totalRevenue)}
+                        <td className="py-1.5 px-2.5 text-center whitespace-nowrap">
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+                              isToolAED ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                            }`}
+                          >
+                            {tool.currency || 'USD'}
+                          </span>
                         </td>
-                        <td className="py-1.5 px-2 text-right font-mono text-blue-700">
-                          {formatCurrency(tool.operRevenue)}
+                        <td className="py-1.5 px-2.5 text-right font-mono font-bold text-emerald-700">
+                          {formatMoney(tool.totalRevenueAED, tool.totalRevenueUSD, tool.currency)}
                         </td>
-                        <td className="py-1.5 px-2 text-right font-mono text-amber-700">
-                          {formatCurrency(tool.standbyRevenue)}
+                        <td className="py-1.5 px-2.5 text-right font-mono text-blue-700">
+                          {formatMoney(tool.operRevenueAED, tool.operRevenueUSD, tool.currency)}
                         </td>
-                        <td className="py-1.5 px-2 text-center font-mono font-bold text-blue-900 bg-blue-50/40">
+                        <td className="py-1.5 px-2.5 text-right font-mono text-amber-700">
+                          {formatMoney(tool.standbyRevenueAED, tool.standbyRevenueUSD, tool.currency)}
+                        </td>
+                        <td className="py-1.5 px-2.5 text-center font-mono font-bold text-blue-900 bg-blue-50/40">
                           {tool.operDays}
                         </td>
-                        <td className="py-1.5 px-2 text-center font-mono font-bold text-amber-900 bg-amber-50/40">
+                        <td className="py-1.5 px-2.5 text-center font-mono font-bold text-amber-900 bg-amber-50/40">
                           {tool.standbyDays}
                         </td>
-                        <td className="py-1.5 px-2 text-center font-mono font-bold text-slate-700">
+                        <td className="py-1.5 px-2.5 text-center font-mono font-bold text-slate-700">
                           {tool.jobsCount}
                         </td>
-                        <td className="py-1.5 px-2 truncate max-w-[160px] text-slate-600 font-mono text-[11px]" title={(tool.contracts || []).join(', ')}>
+                        <td className="py-1.5 px-2.5 truncate max-w-[150px] text-slate-600 font-mono text-[11px]" title={(tool.contracts || []).join(', ')}>
                           {(tool.contracts || []).join(', ') || (tool.clients || []).join(', ') || '444558'}
                         </td>
-                        <td className="py-1.5 px-2 text-center whitespace-nowrap">
+                        <td className="py-1.5 px-2.5 text-center whitespace-nowrap">
                           <button
                             onClick={() => setSelectedToolDetail(tool)}
                             className="bg-slate-100 hover:bg-blue-100 text-blue-700 font-bold text-[11px] px-2 py-0.5 rounded border border-slate-300 cursor-pointer flex items-center gap-1 mx-auto"
@@ -567,7 +672,7 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
               <button
                 disabled={currentPage <= 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="px-3 py-1 bg-white border border-slate-300 rounded font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
+                className="px-3 py-1 bg-white border border-slate-300 rounded-lg font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
                 <span>Previous</span>
@@ -575,7 +680,7 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
               <button
                 disabled={currentPage >= totalPages}
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className="px-3 py-1 bg-white border border-slate-300 rounded font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
+                className="px-3 py-1 bg-white border border-slate-300 rounded-lg font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
               >
                 <span>Next</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -590,20 +695,23 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
         <div className="space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {rawData.categories.slice(0, 30).map((cat, idx) => {
-              const pctOfTotal = ((cat.totalRevenue / summary.totalRevenue) * 100).toFixed(1);
+              const totalFleet = isAED ? summary.totalRevenueAED : summary.totalRevenueUSD;
+              const catTotal = isAED ? cat.totalRevenueAED : cat.totalRevenueUSD;
+              const pctOfTotal = ((catTotal / totalFleet) * 100).toFixed(1);
+
               return (
-                <div key={cat.category} className="bg-white border border-slate-300 rounded-lg p-3 shadow-2xs hover:shadow-md transition">
+                <div key={cat.category} className="bg-white border border-slate-300 rounded-xl p-3.5 shadow-2xs hover:shadow-md transition">
                   <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-2">
                     <div className="flex items-center gap-2">
                       <span className="bg-blue-100 text-blue-900 font-mono font-bold text-xs w-6 h-6 rounded-full flex items-center justify-center">
                         {idx + 1}
                       </span>
-                      <h3 className="font-bold text-slate-900 text-xs truncate max-w-[200px]" title={cat.category}>
+                      <h3 className="font-bold text-slate-900 text-xs truncate max-w-[180px]" title={cat.category}>
                         {cat.category}
                       </h3>
                     </div>
                     <span className="font-mono font-bold text-emerald-700 text-xs">
-                      {formatCurrency(cat.totalRevenue)}
+                      {formatMoney(cat.totalRevenueAED, cat.totalRevenueUSD)}
                     </span>
                   </div>
 
@@ -618,18 +726,18 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
                     </div>
                     <div className="flex justify-between">
                       <span>Operating Revenue ('1'):</span>
-                      <span className="font-mono text-blue-700">{formatCurrency(cat.operRevenue)} ({cat.operDays} days)</span>
+                      <span className="font-mono text-blue-700">{formatMoney(cat.operRevenueAED, cat.operRevenueUSD)} ({cat.operDays} days)</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Standby Revenue ('S'):</span>
-                      <span className="font-mono text-amber-700">{formatCurrency(cat.standbyRevenue)} ({cat.standbyDays} days)</span>
+                      <span className="font-mono text-amber-700">{formatMoney(cat.standbyRevenueAED, cat.standbyRevenueUSD)} ({cat.standbyDays} days)</span>
                     </div>
                   </div>
 
                   {/* Visual percentage bar */}
                   <div className="mt-2.5 pt-2 border-t border-slate-100">
                     <div className="flex justify-between text-[10px] text-slate-500 mb-1">
-                      <span>Share of Total Revenue</span>
+                      <span>Share of Fleet Revenue</span>
                       <span className="font-mono font-bold">{pctOfTotal}%</span>
                     </div>
                     <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
@@ -648,15 +756,18 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {rawData.sizes.slice(0, 40).map((sz, idx) => {
-              const pctOfTotal = ((sz.totalRevenue / summary.totalRevenue) * 100).toFixed(1);
+              const totalFleet = isAED ? summary.totalRevenueAED : summary.totalRevenueUSD;
+              const szTotal = isAED ? sz.totalRevenueAED : sz.totalRevenueUSD;
+              const pctOfTotal = ((szTotal / totalFleet) * 100).toFixed(1);
+
               return (
-                <div key={sz.size} className="bg-white border border-slate-300 rounded-lg p-3 shadow-2xs hover:shadow-md transition">
+                <div key={sz.size} className="bg-white border border-slate-300 rounded-xl p-3 shadow-2xs hover:shadow-md transition">
                   <div className="flex items-center justify-between border-b border-slate-200 pb-1.5 mb-2">
                     <span className="font-mono font-bold text-blue-900 text-sm bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
                       {sz.size}
                     </span>
                     <span className="font-mono font-bold text-emerald-700 text-xs">
-                      {formatCurrency(sz.totalRevenue)}
+                      {formatMoney(sz.totalRevenueAED, sz.totalRevenueUSD)}
                     </span>
                   </div>
                   <div className="space-y-1 text-[11px] text-slate-600">
@@ -684,31 +795,42 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
       {activeTab === 'contract-summary' && (
         <div className="space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {rawData.contracts.map((cnt, idx) => {
+            {rawData.contracts.map((cnt) => {
+              const isContractAED = cnt.currency === 'AED';
+
               return (
-                <div key={cnt.contractKey} className="bg-white border border-slate-300 rounded-lg p-4 shadow-2xs hover:shadow-md transition">
+                <div key={cnt.contractKey} className="bg-white border border-slate-300 rounded-xl p-4 shadow-2xs hover:shadow-md transition">
                   <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-2">
                     <div>
-                      <h3 className="font-bold text-blue-950 text-sm">{cnt.client}</h3>
-                      <span className="font-mono text-xs text-slate-500">Contract / Project: <strong>{cnt.contract}</strong></span>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="font-bold text-blue-950 text-sm">{cnt.client}</h3>
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase ${
+                            isContractAED ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                          }`}
+                        >
+                          {cnt.currency}
+                        </span>
+                      </div>
+                      <span className="font-mono text-xs text-slate-500">Contract Ref: <strong>{cnt.contract}</strong></span>
                     </div>
                     <div className="text-right">
                       <div className="font-mono font-black text-emerald-700 text-base">
-                        {formatCurrency(cnt.totalRevenue)}
+                        {formatMoney(cnt.totalRevenueAED, cnt.totalRevenueUSD, cnt.currency)}
                       </div>
                       <span className="text-[10px] text-slate-400 font-mono">{cnt.jobsCount} Jobs Invoiced</span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded border border-slate-200 font-mono">
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 font-mono">
                     <div>
                       <span className="text-slate-500 text-[11px] block">Operating Revenue:</span>
-                      <span className="font-bold text-blue-800">{formatCurrency(cnt.operRevenue)}</span>
+                      <span className="font-bold text-blue-800">{formatMoney(cnt.operRevenueAED, cnt.operRevenueUSD, cnt.currency)}</span>
                       <span className="text-[10px] text-slate-400 block">({cnt.operDays} Ops Days)</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[11px] block">Standby Revenue:</span>
-                      <span className="font-bold text-amber-800">{formatCurrency(cnt.standbyRevenue)}</span>
+                      <span className="font-bold text-amber-800">{formatMoney(cnt.standbyRevenueAED, cnt.standbyRevenueUSD, cnt.currency)}</span>
                       <span className="text-[10px] text-slate-400 block">({cnt.standbyDays} Stby Days)</span>
                     </div>
                   </div>
@@ -722,11 +844,11 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
       {/* Tool Details Modal */}
       {selectedToolDetail && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-2xl w-full border border-slate-300 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-gradient-to-r from-[#0d213a] to-[#1a3a60] p-4 text-white flex items-center justify-between">
+          <div className="bg-white rounded-2xl max-w-2xl w-full border border-slate-300 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-gradient-to-r from-[#0c182a] to-[#142642] p-4 text-white flex items-center justify-between">
               <div>
                 <div className="text-xs text-blue-300 font-mono font-bold">TOOL FINANCIAL PROFILE</div>
-                <h3 className="text-lg font-bold font-mono text-white">{selectedToolDetail.serial}</h3>
+                <h3 className="text-lg font-black font-mono text-white">{selectedToolDetail.serial}</h3>
               </div>
               <button
                 onClick={() => setSelectedToolDetail(null)}
@@ -737,12 +859,12 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
             </div>
 
             <div className="p-5 space-y-4 text-xs">
-              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5">
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1.5">
                 <div>
                   <span className="font-bold text-slate-500">Description:</span>{' '}
                   <span className="font-semibold text-slate-900">{selectedToolDetail.desc}</span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 font-mono">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono">
                   <div>
                     <span className="text-slate-500 font-sans">Category:</span>{' '}
                     <strong className="text-blue-900">{selectedToolDetail.category}</strong>
@@ -750,6 +872,10 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
                   <div>
                     <span className="text-slate-500 font-sans">Size:</span>{' '}
                     <strong className="text-blue-900">{selectedToolDetail.size}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 font-sans">Contract Rate:</span>{' '}
+                    <strong className="text-emerald-900 font-bold">{selectedToolDetail.currency || 'USD'}</strong>
                   </div>
                   <div>
                     <span className="text-slate-500 font-sans">Jobs Count:</span>{' '}
@@ -760,25 +886,25 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
 
               {/* Financial Breakdown */}
               <div className="grid grid-cols-3 gap-3">
-                <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-center">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
                   <span className="text-[11px] text-emerald-800 font-bold block mb-1">Total Lifetime Revenue</span>
                   <span className="text-base font-black text-emerald-700 font-mono block">
-                    {formatCurrency(selectedToolDetail.totalRevenue)}
+                    {formatMoney(selectedToolDetail.totalRevenueAED, selectedToolDetail.totalRevenueUSD, selectedToolDetail.currency)}
                   </span>
                 </div>
-                <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center">
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
                   <span className="text-[11px] text-blue-800 font-bold block mb-1">Operating Revenue ('1')</span>
                   <span className="text-base font-black text-blue-700 font-mono block">
-                    {formatCurrency(selectedToolDetail.operRevenue)}
+                    {formatMoney(selectedToolDetail.operRevenueAED, selectedToolDetail.operRevenueUSD, selectedToolDetail.currency)}
                   </span>
                   <span className="text-[10px] text-blue-600 font-mono font-bold block mt-0.5">
                     {selectedToolDetail.operDays} Days
                   </span>
                 </div>
-                <div className="bg-amber-50 border border-amber-200 rounded p-3 text-center">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
                   <span className="text-[11px] text-amber-800 font-bold block mb-1">Standby Revenue ('S')</span>
                   <span className="text-base font-black text-amber-700 font-mono block">
-                    {formatCurrency(selectedToolDetail.standbyRevenue)}
+                    {formatMoney(selectedToolDetail.standbyRevenueAED, selectedToolDetail.standbyRevenueUSD, selectedToolDetail.currency)}
                   </span>
                   <span className="text-[10px] text-amber-600 font-mono font-bold block mt-0.5">
                     {selectedToolDetail.standbyDays} Days
@@ -817,7 +943,7 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
                       setSelectedToolDetail(null);
                       onNavigate('tool-history', selectedToolDetail.serial);
                     }}
-                    className="bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs px-3.5 py-1.5 rounded cursor-pointer flex items-center gap-1"
+                    className="bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg cursor-pointer flex items-center gap-1"
                   >
                     <span>View Full Tool Movement Trail</span>
                     <ChevronRight className="w-3.5 h-3.5" />
@@ -825,7 +951,7 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
                 )}
                 <button
                   onClick={() => setSelectedToolDetail(null)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-3 py-1.5 rounded border border-slate-300 cursor-pointer"
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-3 py-1.5 rounded-lg border border-slate-300 cursor-pointer"
                 >
                   Close
                 </button>
