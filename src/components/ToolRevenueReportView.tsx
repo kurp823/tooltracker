@@ -236,39 +236,39 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
 
   return (
     <div className="space-y-4 text-slate-800">
-      {/* Top Header Card */}
-      <div className="bg-gradient-to-r from-[#0c182a] via-[#142642] to-[#1a3458] rounded-2xl p-5 text-white shadow-xl border border-slate-700/60">
+      {/* Top Header Card (Unified Light Enterprise Theme) */}
+      <div className="bg-white rounded-2xl p-5 text-slate-800 shadow-2xs border border-slate-200/90 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
                 <Sparkles className="w-3 h-3" /> Live Financial Analytics
               </span>
-              <span className="bg-blue-500/20 text-blue-200 border border-blue-400/30 text-xs px-2.5 py-0.5 rounded-full font-mono">
+              <span className="bg-blue-50 text-blue-700 border border-blue-200 text-xs px-2.5 py-0.5 rounded-full font-mono">
                 {summary.totalTools.toLocaleString()} Fleet Tools Tracked
               </span>
-              <span className="bg-amber-500/20 text-amber-200 border border-amber-400/30 text-xs px-2.5 py-0.5 rounded-full font-mono">
+              <span className="bg-amber-50 text-amber-800 border border-amber-200 text-xs px-2.5 py-0.5 rounded-full font-mono">
                 Adnoc Drilling (4700024096) in AED
               </span>
             </div>
-            <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
               <span>Tool Fleet Revenue &amp; Utilization Report</span>
             </h1>
-            <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
+            <p className="text-xs text-slate-500 max-w-3xl leading-relaxed">
               Lifetime earning breakdown by tool serial, category (116 classes), size (139 dimensions), and master contracts with accurate AED / USD conversion.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {/* Currency Mode Switcher */}
-            <div className="flex items-center bg-slate-900/90 border border-slate-700 rounded-lg p-0.5 shadow-inner">
+            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl p-0.5 shadow-2xs">
               <button
                 type="button"
                 onClick={() => setCurrencyMode('AED')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
                   currencyMode === 'AED'
-                    ? 'bg-emerald-600 text-white shadow-sm font-black'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-white text-emerald-700 shadow-xs font-black border border-slate-200/80'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <span>د.إ</span>
@@ -277,10 +277,10 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
               <button
                 type="button"
                 onClick={() => setCurrencyMode('USD')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
                   currencyMode === 'USD'
-                    ? 'bg-blue-600 text-white shadow-sm font-black'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-white text-blue-700 shadow-xs font-black border border-slate-200/80'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <span>$</span>
@@ -289,20 +289,20 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
               <button
                 type="button"
                 onClick={() => setCurrencyMode('NATIVE')}
-                className={`px-2.5 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
                   currencyMode === 'NATIVE'
-                    ? 'bg-amber-600 text-white shadow-sm font-black'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-white text-amber-700 shadow-xs font-black border border-slate-200/80'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <Coins className="w-3 h-3" />
+                <Coins className="w-3 h-3 text-amber-600" />
                 <span>Native</span>
               </button>
             </div>
 
             <button
               onClick={handleExportExcel}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 cursor-pointer"
+              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg transition shadow-2xs flex items-center gap-1.5 cursor-pointer"
               title="Download full analytics as Excel spreadsheet"
             >
               <FileSpreadsheet className="w-4 h-4" />
@@ -310,7 +310,7 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
             </button>
             <button
               onClick={() => window.print()}
-              className="bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-3.5 py-1.5 rounded-lg border border-white/20 transition flex items-center gap-1.5 cursor-pointer"
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3.5 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1.5 cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               <span>Print</span>
@@ -319,13 +319,15 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
         </div>
 
         {/* 4 Primary KPI Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-          <div className="bg-white/10 backdrop-blur-md rounded-xl p-3.5 border border-white/10 hover:border-emerald-400/40 transition">
-            <div className="flex items-center justify-between text-slate-300 text-xs font-semibold mb-1">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-gradient-to-br from-emerald-50/50 via-white to-white rounded-xl p-3.5 border border-emerald-100 hover:border-emerald-300 transition shadow-2xs">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-semibold mb-1">
               <span>Total Revenue ({currencyMode})</span>
-              <DollarSign className="w-4 h-4 text-emerald-400" />
+              <div className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <DollarSign className="w-3.5 h-3.5" />
+              </div>
             </div>
-            <div className="text-xl font-black text-emerald-300 font-mono tracking-tight">
+            <div className="text-xl font-black text-emerald-700 font-mono tracking-tight">
               {formatMoney(filteredMetrics.revenueAED, filteredMetrics.revenueUSD)}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5">
@@ -333,12 +335,14 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
             </div>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-md rounded-xl p-3.5 border border-white/10 hover:border-blue-400/40 transition">
-            <div className="flex items-center justify-between text-slate-300 text-xs font-semibold mb-1">
+          <div className="bg-gradient-to-br from-blue-50/50 via-white to-white rounded-xl p-3.5 border border-blue-100 hover:border-blue-300 transition shadow-2xs">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-semibold mb-1">
               <span>Operating Revenue</span>
-              <TrendingUp className="w-4 h-4 text-blue-400" />
+              <div className="w-6 h-6 rounded-md bg-blue-100 text-blue-700 flex items-center justify-center">
+                <TrendingUp className="w-3.5 h-3.5" />
+              </div>
             </div>
-            <div className="text-xl font-black text-blue-300 font-mono tracking-tight">
+            <div className="text-xl font-black text-blue-700 font-mono tracking-tight">
               {formatMoney(filteredMetrics.operRevenueAED, filteredMetrics.operRevenueUSD)}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5 font-mono">
@@ -346,12 +350,14 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
             </div>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-md rounded-xl p-3.5 border border-white/10 hover:border-amber-400/40 transition">
-            <div className="flex items-center justify-between text-slate-300 text-xs font-semibold mb-1">
+          <div className="bg-gradient-to-br from-amber-50/50 via-white to-white rounded-xl p-3.5 border border-amber-100 hover:border-amber-300 transition shadow-2xs">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-semibold mb-1">
               <span>Standby Revenue</span>
-              <Clock className="w-4 h-4 text-amber-400" />
+              <div className="w-6 h-6 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center">
+                <Clock className="w-3.5 h-3.5" />
+              </div>
             </div>
-            <div className="text-xl font-black text-amber-300 font-mono tracking-tight">
+            <div className="text-xl font-black text-amber-700 font-mono tracking-tight">
               {formatMoney(filteredMetrics.standbyRevenueAED, filteredMetrics.standbyRevenueUSD)}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5 font-mono">
@@ -359,12 +365,14 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
             </div>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-md rounded-xl p-3.5 border border-white/10 hover:border-purple-400/40 transition">
-            <div className="flex items-center justify-between text-slate-300 text-xs font-semibold mb-1">
+          <div className="bg-gradient-to-br from-purple-50/50 via-white to-white rounded-xl p-3.5 border border-purple-100 hover:border-purple-300 transition shadow-2xs">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-semibold mb-1">
               <span>Total Utilization Days</span>
-              <Award className="w-4 h-4 text-purple-400" />
+              <div className="w-6 h-6 rounded-md bg-purple-100 text-purple-700 flex items-center justify-center">
+                <Award className="w-3.5 h-3.5" />
+              </div>
             </div>
-            <div className="text-xl font-black text-purple-300 font-mono tracking-tight">
+            <div className="text-xl font-black text-purple-700 font-mono tracking-tight">
               {(filteredMetrics.operDays + filteredMetrics.standbyDays).toLocaleString()}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5">

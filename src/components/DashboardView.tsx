@@ -47,6 +47,7 @@ import {
   Coins,
   Globe2,
   RefreshCw,
+  Clock,
 } from 'lucide-react';
 import {
   REVENUE_SUMMARY,
@@ -139,22 +140,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Currency formatting helper based on active currency mode
   const formatMoney = (valAED: number, valUSD: number, nativeCurrency?: 'AED' | 'USD') => {
     if (currencyMode === 'AED') {
-      return `AED ${valAED.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return `AED ${(valAED || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
     if (currencyMode === 'USD') {
-      return `$${valUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return `$${(valUSD || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
     // Native Mode
     if (nativeCurrency === 'AED') {
-      return `AED ${valAED.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return `AED ${(valAED || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
-    return `$${valUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `$${(valUSD || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatCompactMoney = (valAED: number, valUSD: number, nativeCurrency?: 'AED' | 'USD') => {
-    const isAED = currencyMode === 'AED' || (currencyMode === 'NATIVE' && nativeCurrency === 'AED');
-    const num = isAED ? valAED : valUSD;
-    const symbol = isAED ? 'AED ' : '$';
+    const isCurrencyAED = currencyMode === 'AED' || (currencyMode === 'NATIVE' && nativeCurrency === 'AED');
+    const num = isCurrencyAED ? (valAED || 0) : (valUSD || 0);
+    const symbol = isCurrencyAED ? 'AED ' : '$';
 
     if (num >= 1_000_000) {
       return `${symbol}${(num / 1_000_000).toFixed(2)}M`;
@@ -642,43 +643,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 2. EXECUTIVE COMMERCIAL REVENUE & TOOL CATEGORY PERFORMANCE HUB */}
-      <div className="bg-gradient-to-br from-[#0c182a] via-[#142642] to-[#1a3458] rounded-2xl p-4 sm:p-5 text-white shadow-xl border border-slate-700/60 relative overflow-hidden">
+      {/* 2. EXECUTIVE COMMERCIAL REVENUE & TOOL CATEGORY PERFORMANCE SECTION (UNIFIED LIGHT ENTERPRISE DESIGN) */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4">
         
-        {/* Subtle Background Radial Glow */}
-        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-
         {/* Section Header with Navigation & Currency Mode Controls */}
-        <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-4 border-b border-slate-700/80">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-xs">
+              <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
                 <DollarSign className="w-4 h-4" />
               </div>
-              <h2 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 flex items-center gap-2">
                 Tool Fleet Commercial Revenue &amp; Category Analytics
               </h2>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
                 SQL Invoicing &amp; Daily Logs Engine
               </span>
             </div>
-            <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
+            <p className="text-xs text-slate-500 mt-1 max-w-3xl leading-relaxed">
               Synthesized from 820,513 daily utilization records across 6,882 serialized downhole tools &amp; 28 master operator contracts.
             </p>
           </div>
 
           {/* Right Toolbar: Multi-Currency Toggle & CTAs */}
           <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
-            {/* Currency Mode Switcher */}
-            <div className="flex items-center bg-slate-900/90 border border-slate-700/90 rounded-lg p-0.5 shadow-inner">
+            {/* Currency Mode Switcher (Light Segmented Control) */}
+            <div className="flex items-center bg-slate-100/90 border border-slate-200 rounded-xl p-0.5 shadow-2xs">
               <button
                 type="button"
                 onClick={() => setCurrencyMode('AED')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
                   currencyMode === 'AED'
-                    ? 'bg-emerald-600 text-white shadow-sm font-black'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-white text-emerald-700 shadow-xs font-black border border-slate-200/80'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
                 title="View all figures in UAE Dirhams (AED)"
               >
@@ -688,10 +685,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <button
                 type="button"
                 onClick={() => setCurrencyMode('USD')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
                   currencyMode === 'USD'
-                    ? 'bg-blue-600 text-white shadow-sm font-black'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-white text-blue-700 shadow-xs font-black border border-slate-200/80'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
                 title="View all figures in US Dollars (USD)"
               >
@@ -701,14 +698,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <button
                 type="button"
                 onClick={() => setCurrencyMode('NATIVE')}
-                className={`px-2.5 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
                   currencyMode === 'NATIVE'
-                    ? 'bg-amber-600 text-white shadow-sm font-black'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-white text-amber-700 shadow-xs font-black border border-slate-200/80'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
                 title="Display native contract currencies (AED for 4700024096, USD for others)"
               >
-                <Coins className="w-3 h-3" />
+                <Coins className="w-3 h-3 text-amber-600" />
                 <span>Native</span>
               </button>
             </div>
@@ -716,7 +713,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {/* CTAs */}
             <button
               onClick={() => onNavigate('tool-revenue-report')}
-              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
               <span>Full Revenue Report</span>
@@ -724,119 +721,127 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
             <button
               onClick={() => onNavigate('categories-sizes')}
-              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 border border-white/15 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
             >
-              <Layers className="w-3.5 h-3.5" />
+              <Layers className="w-3.5 h-3.5 text-slate-500" />
               <span>Taxonomy</span>
             </button>
           </div>
         </div>
 
         {/* Currency FX Rate Banner Note */}
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-slate-900/60 border border-slate-700/50 text-[11px] text-slate-300">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
             <span>
               <strong>Adnoc Drilling Contract (4700024096)</strong> is natively calculated in <strong>AED</strong>.
             </span>
           </div>
-          <div className="font-mono text-slate-400">
-            Fixed Peg: 1 USD = 3.6725 AED • Active Display: <strong className="text-white uppercase">{currencyMode}</strong>
+          <div className="font-mono text-slate-500">
+            Fixed Peg: 1 USD = 3.6725 AED • Display Currency: <strong className="text-slate-800 uppercase">{currencyMode}</strong>
           </div>
         </div>
 
-        {/* 4 Financial Commercial KPI Cards (Bento Style) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mt-3.5">
+        {/* 4 Financial Commercial KPI Cards (Clean Light Theme) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
           
           {/* KPI 1: Total Fleet Lifetime Revenue */}
-          <div className="bg-gradient-to-b from-white/12 to-white/5 backdrop-blur-md rounded-xl p-4 border border-white/15 hover:border-emerald-400/50 transition shadow-sm">
-            <div className="flex items-center justify-between text-[11px] text-slate-300 font-bold uppercase tracking-wider">
+          <div className="bg-gradient-to-br from-emerald-50/50 via-white to-white rounded-xl p-4 border border-emerald-100/80 hover:border-emerald-300 transition-all shadow-2xs">
+            <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold uppercase tracking-wider">
               <span>Total Fleet Revenue</span>
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <div className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <Sparkles className="w-3.5 h-3.5" />
+              </div>
             </div>
-            <div className="mt-1.5 text-2xl sm:text-[26px] font-black font-mono text-emerald-300 tracking-tight">
+            <div className="mt-2 text-2xl sm:text-[25px] font-black font-mono text-emerald-700 tracking-tight">
               {formatMoney(REVENUE_SUMMARY.totalRevenueAED, REVENUE_SUMMARY.totalRevenueUSD)}
             </div>
-            <div className="mt-2 pt-2 border-t border-white/10 text-[11px] text-slate-300 flex items-center justify-between font-medium">
+            <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between font-medium">
               <span>All Contracts &amp; Invoices</span>
-              <span className="font-mono text-emerald-400 font-bold bg-emerald-500/20 px-1.5 py-0.5 rounded">100% Invoiced</span>
+              <span className="font-mono text-emerald-700 font-bold bg-emerald-100 px-1.5 py-0.5 rounded">100% Invoiced</span>
             </div>
           </div>
 
           {/* KPI 2: Operating Revenue */}
-          <div className="bg-gradient-to-b from-white/12 to-white/5 backdrop-blur-md rounded-xl p-4 border border-white/15 hover:border-blue-400/50 transition shadow-sm">
-            <div className="flex items-center justify-between text-[11px] text-slate-300 font-bold uppercase tracking-wider">
+          <div className="bg-gradient-to-br from-blue-50/50 via-white to-white rounded-xl p-4 border border-blue-100/80 hover:border-blue-300 transition-all shadow-2xs">
+            <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold uppercase tracking-wider">
               <span>Operating Revenue</span>
-              <TrendingUp className="w-3.5 h-3.5 text-blue-300" />
+              <div className="w-6 h-6 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                <TrendingUp className="w-3.5 h-3.5" />
+              </div>
             </div>
-            <div className="mt-1.5 text-2xl sm:text-[26px] font-black font-mono text-blue-300 tracking-tight">
+            <div className="mt-2 text-2xl sm:text-[25px] font-black font-mono text-blue-700 tracking-tight">
               {formatMoney(REVENUE_SUMMARY.totalOperRevenueAED, REVENUE_SUMMARY.totalOperRevenueUSD)}
             </div>
-            <div className="mt-2 pt-2 border-t border-white/10 text-[11px] text-slate-300 flex items-center justify-between font-medium">
+            <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between font-medium">
               <span>{REVENUE_SUMMARY.totalOperDays.toLocaleString()} Ops Days ('1')</span>
-              <span className="font-mono text-blue-300 font-bold">
+              <span className="font-mono text-blue-700 font-bold">
                 {((activeOperRevenue / activeTotalFleetRevenue) * 100).toFixed(1)}% Share
               </span>
             </div>
           </div>
 
           {/* KPI 3: Standby Revenue */}
-          <div className="bg-gradient-to-b from-white/12 to-white/5 backdrop-blur-md rounded-xl p-4 border border-white/15 hover:border-amber-400/50 transition shadow-sm">
-            <div className="flex items-center justify-between text-[11px] text-slate-300 font-bold uppercase tracking-wider">
+          <div className="bg-gradient-to-br from-amber-50/50 via-white to-white rounded-xl p-4 border border-amber-100/80 hover:border-amber-300 transition-all shadow-2xs">
+            <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold uppercase tracking-wider">
               <span>Standby Revenue</span>
-              <Calendar className="w-3.5 h-3.5 text-amber-300" />
+              <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                <Clock className="w-3.5 h-3.5" />
+              </div>
             </div>
-            <div className="mt-1.5 text-2xl sm:text-[26px] font-black font-mono text-amber-300 tracking-tight">
+            <div className="mt-2 text-2xl sm:text-[25px] font-black font-mono text-amber-700 tracking-tight">
               {formatMoney(REVENUE_SUMMARY.totalStandbyRevenueAED, REVENUE_SUMMARY.totalStandbyRevenueUSD)}
             </div>
-            <div className="mt-2 pt-2 border-t border-white/10 text-[11px] text-slate-300 flex items-center justify-between font-medium">
+            <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between font-medium">
               <span>{REVENUE_SUMMARY.totalStandbyDays.toLocaleString()} SB Days ('S')</span>
-              <span className="font-mono text-amber-300 font-bold">
+              <span className="font-mono text-amber-700 font-bold">
                 {((activeStandbyRevenue / activeTotalFleetRevenue) * 100).toFixed(1)}% Share
               </span>
             </div>
           </div>
 
           {/* KPI 4: Fleet Taxonomy Scope */}
-          <div className="bg-gradient-to-b from-white/12 to-white/5 backdrop-blur-md rounded-xl p-4 border border-white/15 hover:border-purple-400/50 transition shadow-sm">
-            <div className="flex items-center justify-between text-[11px] text-slate-300 font-bold uppercase tracking-wider">
+          <div className="bg-gradient-to-br from-indigo-50/50 via-white to-white rounded-xl p-4 border border-indigo-100/80 hover:border-indigo-300 transition-all shadow-2xs">
+            <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold uppercase tracking-wider">
               <span>Fleet Scope</span>
-              <Layers className="w-3.5 h-3.5 text-purple-300" />
+              <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                <Layers className="w-3.5 h-3.5" />
+              </div>
             </div>
-            <div className="mt-1.5 text-2xl sm:text-[26px] font-black font-mono text-purple-200 tracking-tight">
+            <div className="mt-2 text-2xl sm:text-[25px] font-black font-mono text-indigo-900 tracking-tight">
               {REVENUE_SUMMARY.totalTools.toLocaleString()} Serials
             </div>
-            <div className="mt-2 pt-2 border-t border-white/10 text-[11px] text-slate-300 flex items-center justify-between font-medium">
+            <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between font-medium">
               <span>{REVENUE_SUMMARY.totalCategories} Categories</span>
-              <span className="font-mono text-purple-300 font-bold">{REVENUE_SUMMARY.totalSizes} Sizes</span>
+              <span className="font-mono text-indigo-700 font-bold">{REVENUE_SUMMARY.totalSizes} Sizes</span>
             </div>
           </div>
 
         </div>
 
         {/* Commercial Charts Row (Top Earning Categories & Revenue by Master Contract) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           
           {/* Chart A: Top Tool Categories Revenue Breakdown */}
-          <div className="lg:col-span-7 bg-[#0b1626]/80 border border-slate-700/70 rounded-xl p-4 flex flex-col justify-between shadow-md">
+          <div className="lg:col-span-7 bg-slate-50/50 border border-slate-200/90 rounded-xl p-4 flex flex-col justify-between shadow-2xs">
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
-                    <BarChart3 className="w-3.5 h-3.5 text-emerald-400" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <BarChart3 className="w-3.5 h-3.5 text-blue-600" />
                     Top Revenue-Generating Tool Categories
                   </h3>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-slate-500">
                     Cumulative commercial yield across top downhole tool families ({currencySymbol}).
                   </p>
                 </div>
                 
                 {/* Metric Toggle */}
-                <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg p-0.5 text-[10px]">
+                <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 text-[10px] shadow-2xs">
                   <button
                     onClick={() => setCategoryChartMetric('split')}
                     className={`px-2.5 py-1 rounded-md font-bold transition cursor-pointer ${
-                      categoryChartMetric === 'split' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                      categoryChartMetric === 'split' ? 'bg-blue-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
                     Ops vs Standby
@@ -844,7 +849,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <button
                     onClick={() => setCategoryChartMetric('total')}
                     className={`px-2.5 py-1 rounded-md font-bold transition cursor-pointer ${
-                      categoryChartMetric === 'total' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                      categoryChartMetric === 'total' ? 'bg-blue-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
                     Total Yield ({currencyUnit})
@@ -860,10 +865,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     layout="vertical"
                     margin={{ top: 5, right: 25, left: 10, bottom: 5 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
                     <XAxis
                       type="number"
-                      tick={{ fontSize: 10, fill: '#94a3b8' }}
+                      tick={{ fontSize: 10, fill: '#64748b' }}
                       unit="M"
                       tickFormatter={(v) => `${currencySymbol}${v}`}
                     />
@@ -871,34 +876,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       dataKey="name"
                       type="category"
                       width={105}
-                      tick={{ fontSize: 10, fill: '#cbd5e1', fontWeight: 600 }}
+                      tick={{ fontSize: 10, fill: '#1e293b', fontWeight: 600 }}
                     />
                     <Tooltip
                       content={({ active, payload }) => {
                         if (active && payload && payload.length) {
                           const data = payload[0].payload;
                           return (
-                            <div className="bg-[#0b1626] text-white p-3 rounded-lg shadow-2xl border border-blue-600/50 text-xs font-sans space-y-1">
-                              <div className="font-bold text-emerald-400 text-sm">{data.fullName}</div>
-                              <div className="mt-1 text-slate-300">
+                            <div className="bg-white text-slate-900 p-3 rounded-xl shadow-xl border border-slate-200 text-xs font-sans space-y-1">
+                              <div className="font-bold text-blue-900 text-sm border-b border-slate-100 pb-1">{data.fullName}</div>
+                              <div className="mt-1 text-slate-700">
                                 Total Revenue:{' '}
-                                <strong className="font-mono text-white">
+                                <strong className="font-mono text-emerald-700 font-bold">
                                   {formatMoney(data.valAED, data.valUSD)}
                                 </strong>
                               </div>
-                              <div className="text-slate-300">
+                              <div className="text-slate-700">
                                 Operating:{' '}
-                                <span className="font-mono text-blue-300 font-semibold">
+                                <span className="font-mono text-blue-700 font-semibold">
                                   {formatMoney(data.operAED, data.operUSD)} ({data.operDays.toLocaleString()} days)
                                 </span>
                               </div>
-                              <div className="text-slate-300">
+                              <div className="text-slate-700">
                                 Standby:{' '}
-                                <span className="font-mono text-amber-300 font-semibold">
+                                <span className="font-mono text-amber-700 font-semibold">
                                   {formatMoney(data.sbAED, data.sbUSD)} ({data.standbyDays.toLocaleString()} days)
                                 </span>
                               </div>
-                              <div className="mt-1.5 pt-1.5 border-t border-slate-700 text-[10px] text-slate-400 flex justify-between gap-4">
+                              <div className="mt-1.5 pt-1.5 border-t border-slate-100 text-[10px] text-slate-500 flex justify-between gap-4 font-medium">
                                 <span>{data.toolsCount} Serialized Units</span>
                                 <span>{data.jobsCount} Historical Jobs</span>
                               </div>
@@ -922,7 +927,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           dataKey="operRevenueM"
                           name={`Operating (${currencyUnit})`}
                           stackId="a"
-                          fill="#3b82f6"
+                          fill="#2563eb"
                           radius={[0, 4, 4, 0]}
                         />
                       </>
@@ -930,7 +935,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <Bar
                         dataKey="totalRevenueM"
                         name={`Total Revenue (${currencyUnit})`}
-                        fill="#10b981"
+                        fill="#059669"
                         radius={[0, 4, 4, 0]}
                       />
                     )}
@@ -940,13 +945,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             {/* Quick Category Summary Footer */}
-            <div className="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+            <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-600">
               <span>
                 Drilling Jars represent <strong>31.7%</strong> ({formatCompactMoney(10634447.96, 2895695.06)}) of total commercial revenue.
               </span>
               <button
                 onClick={() => onNavigate('tool-revenue-report')}
-                className="text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+                className="text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1 cursor-pointer"
               >
                 <span>Full Taxonomy Breakdown</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -955,18 +960,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* Chart B: Revenue by Master Operator Contract */}
-          <div className="lg:col-span-5 bg-[#0b1626]/80 border border-slate-700/70 rounded-xl p-4 flex flex-col justify-between shadow-md">
+          <div className="lg:col-span-5 bg-slate-50/50 border border-slate-200/90 rounded-xl p-4 flex flex-col justify-between shadow-2xs">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-blue-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-blue-600" />
                   Top Revenue Operator Contracts
                 </h3>
-                <span className="text-[10px] text-slate-400 font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                <span className="text-[10px] text-slate-600 font-mono bg-white px-2 py-0.5 rounded-md border border-slate-200">
                   28 Contracts
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 mb-2">
+              <p className="text-[11px] text-slate-500 mb-2">
                 Contract revenue concentration with native currency attribution.
               </p>
 
@@ -977,39 +982,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   const isContractAED = c.currency === 'AED';
 
                   return (
-                    <div key={c.contractKey || c.contract || idx} className="bg-slate-900/90 rounded-lg p-2.5 border border-slate-800 text-xs">
+                    <div key={c.contractKey || c.contract || idx} className="bg-white rounded-xl p-3 border border-slate-200 shadow-2xs hover:border-slate-300 transition text-xs">
                       <div className="flex items-start justify-between gap-1.5">
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-white truncate max-w-[180px]">
+                            <span className="font-bold text-slate-900 truncate max-w-[180px]">
                               {c.client}
                             </span>
                             <span
                               className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase ${
                                 isContractAED
-                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                                  : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  : 'bg-blue-100 text-blue-800 border border-blue-200'
                               }`}
                             >
                               {c.currency} Rate
                             </span>
                           </div>
-                          <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                          <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
                             Ref: {c.contract} • {c.toolsCount || c.toolCount} Tools • {c.jobsCount} Jobs
                           </span>
                         </div>
                         <div className="text-right whitespace-nowrap">
-                          <span className="font-mono font-black text-emerald-400 block text-xs">
+                          <span className="font-mono font-black text-emerald-700 block text-xs">
                             {formatCompactMoney(c.totalRevenueAED, c.totalRevenueUSD, c.currency)}
                           </span>
-                          <span className="text-[10px] text-slate-400 font-semibold">{pct}% fleet share</span>
+                          <span className="text-[10px] text-slate-500 font-semibold">{pct}% fleet share</span>
                         </div>
                       </div>
                       
                       {/* Share progress bar */}
-                      <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                      <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden border border-slate-200">
                         <div
-                          className="h-full bg-gradient-to-r from-blue-500 via-teal-400 to-emerald-400 rounded-full"
+                          className="h-full bg-gradient-to-r from-blue-600 via-teal-500 to-emerald-600 rounded-full"
                           style={{ width: `${Math.min(100, Math.max(5, Number(pct)))}%` }}
                         />
                       </div>
@@ -1020,13 +1025,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             {/* Quick Contract Footer Link */}
-            <div className="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+            <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-600">
               <span>
                 Contract 4700024096 is primary (<strong>AED 19.71M</strong>).
               </span>
               <button
                 onClick={() => onNavigate('contracts')}
-                className="text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1 cursor-pointer"
+                className="text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1 cursor-pointer"
               >
                 <span>Manage Contracts</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -1063,14 +1068,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <YAxis tick={{ fontSize: 11, fill: '#475569' }} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#1a3055',
-                    color: '#fff',
+                    backgroundColor: '#ffffff',
+                    color: '#0f172a',
                     borderRadius: '8px',
                     fontSize: '11px',
-                    border: 'none',
-                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)',
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
                   }}
-                  itemStyle={{ color: '#f8fafc' }}
+                  itemStyle={{ color: '#0f172a' }}
                 />
                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
                 <Bar dataKey="tools" name="Tools on Rig" fill="#2563eb" radius={[4, 4, 0, 0]} />
@@ -1110,12 +1115,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </Pie>
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#1a3055',
-                    color: '#fff',
+                    backgroundColor: '#ffffff',
+                    color: '#0f172a',
                     borderRadius: '8px',
                     fontSize: '11px',
-                    border: 'none',
-                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)',
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
                   }}
                 />
                 <Legend
@@ -1162,11 +1167,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <YAxis tick={{ fontSize: 11, fill: '#475569' }} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#1a3055',
-                    color: '#fff',
+                    backgroundColor: '#ffffff',
+                    color: '#0f172a',
                     borderRadius: '8px',
                     fontSize: '11px',
-                    border: 'none',
+                    border: '1px solid #e2e8f0',
                   }}
                 />
                 <Area
