@@ -228,10 +228,45 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
 
     const ws = XLSX.utils.json_to_sheet(exportRows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Tool Revenue Report');
+    XLSX.utils.book_append_sheet(wb, ws, 'Tool Fleet Summary');
+
+    // Also append Category breakdown sheet
+    const catRows = (rawData.categories || []).map((c: any) => ({
+      'Category': c.category,
+      'Total Revenue (AED)': c.totalRevenueAED,
+      'Total Revenue (USD)': c.totalRevenueUSD,
+      'Operating Revenue (AED)': c.operRevenueAED,
+      'Operating Revenue (USD)': c.operRevenueUSD,
+      'Standby Revenue (AED)': c.standbyRevenueAED,
+      'Standby Revenue (USD)': c.standbyRevenueUSD,
+      'Operating Days': c.operDays,
+      'Standby Days': c.standbyDays,
+      'Tools Count': c.toolsCount,
+      'Jobs Count': c.jobsCount,
+    }));
+    const wsCat = XLSX.utils.json_to_sheet(catRows);
+    XLSX.utils.book_append_sheet(wb, wsCat, 'Category Breakdown');
+
+    // Also append Size breakdown sheet
+    const sizeRows = (rawData.sizes || []).map((s: any) => ({
+      'Size': s.size,
+      'Total Revenue (AED)': s.totalRevenueAED,
+      'Total Revenue (USD)': s.totalRevenueUSD,
+      'Operating Revenue (AED)': s.operRevenueAED,
+      'Operating Revenue (USD)': s.operRevenueUSD,
+      'Standby Revenue (AED)': s.standbyRevenueAED,
+      'Standby Revenue (USD)': s.standbyRevenueUSD,
+      'Operating Days': s.operDays,
+      'Standby Days': s.standbyDays,
+      'Tools Count': s.toolsCount,
+      'Jobs Count': s.jobsCount,
+    }));
+    const wsSize = XLSX.utils.json_to_sheet(sizeRows);
+    XLSX.utils.book_append_sheet(wb, wsSize, 'Size Breakdown');
+
     XLSX.writeFile(wb, `EMDAD_Tool_Revenue_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
 
-    if (showToast) showToast('Exported Tool Revenue Report to Excel', 'success');
+    if (showToast) showToast('Exported Tool Revenue Report (Multi-Sheet) to Excel', 'success');
   };
 
   return (
@@ -943,6 +978,52 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Invoiced Job Line Ledger Breakdown */}
+              {selectedToolDetail.lineItems && selectedToolDetail.lineItems.length > 0 && (
+                <div className="border-t border-slate-200 pt-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-700">Invoiced Job Lines ({selectedToolDetail.lineItems.length} records):</span>
+                    <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      Exact Audited Ledger
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto max-h-48 border border-slate-200 rounded-lg">
+                    <table className="w-full text-left text-[11px] font-mono">
+                      <thead className="bg-slate-100 text-slate-700 sticky top-0 border-b border-slate-200">
+                        <tr>
+                          <th className="p-2">Job Number</th>
+                          <th className="p-2">DT Number</th>
+                          <th className="p-2 text-center">Standby (Days @ Rate)</th>
+                          <th className="p-2 text-center">Operating (Days @ Rate)</th>
+                          <th className="p-2 text-right">Line Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {selectedToolDetail.lineItems.map((li: any, lIdx: number) => {
+                          const isAEDLine = li.currency === 'AED';
+                          const currSym = isAEDLine ? 'AED ' : '$';
+                          return (
+                            <tr key={lIdx} className="hover:bg-slate-50">
+                              <td className="p-2 font-bold text-blue-900">{li.jobId}</td>
+                              <td className="p-2 text-slate-600">{li.dtNumber || '—'}</td>
+                              <td className="p-2 text-center text-amber-800">
+                                {li.standbyDays}d @ {currSym}{li.standbyPrice}
+                              </td>
+                              <td className="p-2 text-center text-blue-800">
+                                {li.operDays}d @ {currSym}{li.operPrice}
+                              </td>
+                              <td className="p-2 text-right font-bold text-emerald-800">
+                                {currSym}{Number(li.lineTotal || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
                 {onNavigate && (
