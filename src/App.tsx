@@ -57,6 +57,7 @@ import { GatePassView } from './components/GatePassView';
 import { InspectionView } from './components/InspectionView';
 import { MaintenanceView } from './components/MaintenanceView';
 import { ContractsView } from './components/ContractsView';
+import { ContractsDashboardView } from './components/ContractsDashboardView';
 import { SettingsView } from './components/SettingsView';
 import { DataManagementView, TableEntityKey } from './components/DataManagementView';
 import { InventoryDashboardView } from './components/InventoryDashboardView';
@@ -1717,11 +1718,22 @@ export const App: React.FC = () => {
             </React.Suspense>
           )}
 
+          {activeView === 'contract-dash' && (
+            <ContractsDashboardView
+              user={currentUser}
+              contracts={contracts}
+              jobs={jobs}
+              onNavigate={(mod) => setActiveView(mod as ViewKey)}
+              showToast={showToast}
+            />
+          )}
+
           {activeView === 'contracts' && (
             <ContractsView
               user={currentUser}
               contracts={contracts}
               jobs={jobs}
+              onNavigate={(mod) => setActiveView(mod as ViewKey)}
               onSaveContract={handleSaveContract}
               onRefresh={async () => {
                 const sec = await fetchSecondaryModules();

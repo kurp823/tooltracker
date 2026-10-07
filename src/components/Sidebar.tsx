@@ -145,6 +145,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'Contracts Module',
       icon: '📄',
       items: [
+        { id: 'contract-dash', label: 'Contracts Dashboard', icon: '📊' },
         { id: 'contracts', label: 'Master Contract Register', icon: '📋' },
       ],
     },

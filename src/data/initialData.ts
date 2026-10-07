@@ -50,6 +50,7 @@ export const MODULE_PERMISSIONS: Record<UserRole, NavModule[]> = {
     'billing-dash',
     'invoicing',
     'tool-revenue-report',
+    'contract-dash',
     'contracts',
     'data-management',
     'settings',
@@ -73,6 +74,7 @@ export const MODULE_PERMISSIONS: Record<UserRole, NavModule[]> = {
     'billing-dash',
     'invoicing',
     'tool-revenue-report',
+    'contract-dash',
     'contracts',
   ],
   Handler: [
@@ -91,12 +93,13 @@ export const MODULE_PERMISSIONS: Record<UserRole, NavModule[]> = {
     'inspection',
     'maintenance',
     'tool-revenue-report',
+    'contract-dash',
     'contracts',
   ],
   QC: ['dashboard', 'inventory-dash', 'inventory', 'tool-history', 'maintenance-dash', 'inspection', 'maintenance'],
   Inspector: ['dashboard', 'inventory-dash', 'inventory', 'tool-history', 'maintenance-dash', 'inspection'],
-  Accounts: ['dashboard', 'billing-dash', 'invoicing', 'tool-revenue-report', 'inventory-dash', 'inventory', 'job-tools-list', 'tool-history', 'utilization', 'contracts'],
-  Viewer: ['dashboard', 'inventory-dash', 'inventory', 'jobs', 'dt', 'rt', 'job-tools-list', 'tool-history', 'utilization', 'invoicing', 'tool-revenue-report', 'contracts'],
+  Accounts: ['dashboard', 'billing-dash', 'invoicing', 'tool-revenue-report', 'inventory-dash', 'inventory', 'job-tools-list', 'tool-history', 'utilization', 'contract-dash', 'contracts'],
+  Viewer: ['dashboard', 'inventory-dash', 'inventory', 'jobs', 'dt', 'rt', 'job-tools-list', 'tool-history', 'utilization', 'invoicing', 'tool-revenue-report', 'contract-dash', 'contracts'],
 };
 
 export const WRITE_PERMISSIONS: Record<UserRole, NavModule[]> = {

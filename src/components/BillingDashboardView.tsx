@@ -373,6 +373,14 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => onNavigate('contract-dash')}
+            className="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-2xs transition cursor-pointer flex items-center gap-1.5"
+            title="Open Contracts Dashboard (Ceiling vs Invoiced Revenue)"
+          >
+            <span>📊</span>
+            <span>Contracts Dashboard &rarr;</span>
+          </button>
+          <button
             onClick={() => onNavigate('invoicing')}
             className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs transition cursor-pointer flex items-center gap-1.5"
             title="Open Invoicing Screen (Audit, Verification & Invoices)"

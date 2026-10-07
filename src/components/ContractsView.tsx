@@ -26,6 +26,7 @@ interface ContractsViewProps {
   jobs: DrillingJob[];
   onSaveContract: (contract: ContractRecord) => void;
   onRefresh?: () => Promise<void>;
+  onNavigate?: (mod: NavModule) => void;
 }
 
 export const ContractsView: React.FC<ContractsViewProps> = ({
@@ -34,6 +35,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
   jobs,
   onSaveContract,
   onRefresh,
+  onNavigate,
 }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'Active' | 'Closed'>('ALL');
@@ -253,6 +255,16 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {onNavigate && (
+              <button
+                onClick={() => onNavigate('contract-dash')}
+                className="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                title="View Contracts Commercial & Revenue Analytics Dashboard"
+              >
+                <span>📊 Contracts Dashboard</span>
+              </button>
+            )}
+
             {onRefresh && (
               <button
                 onClick={handleRefresh}

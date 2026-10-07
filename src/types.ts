@@ -33,7 +33,8 @@ export type NavModule =
   | 'invoicing'          // Invoicing Screen (Audit, Verification Ledger, Draft & Final Legal Invoices)
   | 'billing-package'    // Invoice & Billing Package Generator (Calculation Ticket + Draft Invoice)
   | 'tool-revenue-report' // Tool Fleet Revenue & Utilization Analytics Report
-  | 'contracts'          // Master Contracts
+  | 'contract-dash'      // Contracts Analytics Dashboard (Ceiling vs Legally Invoiced Revenue)
+  | 'contracts'          // Master Contracts Register
   | 'data-management'   // Data Management Tool (DMT)
   | 'settings';          // System & Azure SQL
 
