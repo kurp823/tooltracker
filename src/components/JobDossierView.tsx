@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   DrillingJob,
   DTBatch,
@@ -11,6 +11,12 @@ import {
   JobCrewMember,
   DailyFieldLog,
 } from '../types';
+import { saveJobToolHoleSectionApi } from '../services/api';
+import {
+  getContractRateOptionsForTool,
+  findBestMatchingOption,
+  ToolHoleSectionOption,
+} from '../services/contractRateResolver';
 
 interface JobDossierViewProps {
   job: DrillingJob;
@@ -1616,6 +1622,79 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     setCustomUtilStatuses((prev) => ({ ...prev, [key]: next }));
   };
 
+  // Active Contract matching for rate resolution
+  const activeContract = useMemo(() => {
+    const cKey = (jobData.contractNo || jobData.contract || '').trim().toLowerCase();
+    const clKey = (jobData.client || '').trim().toLowerCase();
+    return (
+      (contracts || []).find((c) => {
+        const cNo = (c.contractNo || c.contractRef || c.id || '').trim().toLowerCase();
+        const cCl = (c.client || '').trim().toLowerCase();
+        return (cKey && (cNo === cKey || cKey.includes(cNo))) || (clKey && (cCl === clKey || cCl.includes(clKey)));
+      }) || null
+    );
+  }, [jobData.contractNo, jobData.contract, jobData.client, contracts]);
+
+  // User-selected Hole Section & Contract Rate state per tool line (persisted per job)
+  const [toolHoleSectionSelections, setToolHoleSectionSelections] = useState<
+    Record<string, ToolHoleSectionOption>
+  >(() => {
+    try {
+      const saved = localStorage.getItem(`emdad_job_tool_sections_${jobData.id || jobData.jobNumber}`);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {};
+  });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`emdad_job_tool_sections_${jobData.id || jobData.jobNumber}`);
+      if (saved) {
+        setToolHoleSectionSelections(JSON.parse(saved));
+      } else {
+        setToolHoleSectionSelections({});
+      }
+    } catch {
+      setToolHoleSectionSelections({});
+    }
+  }, [jobData.id, jobData.jobNumber]);
+
+  const handleSelectToolHoleSection = useCallback(
+    (toolKey: string, tool: any, selectedRateKey: string) => {
+      const options = getContractRateOptionsForTool(
+        {
+          desc: tool.desc || tool.shortDesc || tool.toolDescription,
+          assetNo: tool.assetNo || tool.serial,
+          category: tool.category,
+          size: tool.size,
+        },
+        activeContract
+      );
+      const chosen = options.find((o) => o.key === selectedRateKey) || options[0];
+      if (!chosen) return;
+
+      setToolHoleSectionSelections((prev) => {
+        const next = { ...prev, [toolKey]: chosen };
+        try {
+          localStorage.setItem(`emdad_job_tool_sections_${jobData.id || jobData.jobNumber}`, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      // Synchronize directly to Azure SQL
+      saveJobToolHoleSectionApi(
+        jobData.id || jobData.jobNumber,
+        tool.serial || tool.assetNo || toolKey,
+        chosen.holeSection,
+        chosen.contractRef,
+        chosen.opsRate,
+        chosen.standbyRate,
+        chosen.currency
+      );
+    },
+    [activeContract, jobData.id, jobData.jobNumber]
+  );
+
   // Compute operational days and commercial breakdown for each tool in selected month
   const toolUtilizationRows = useMemo(() => {
     return allMobilizedTools.map((t, idx) => {
@@ -1658,18 +1737,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         }
       });
 
-      // Dynamic rate lookup from active contract rates (c.rates) or tool properties
-      const jobContractKey = (jobData.contractNo || jobData.contract || '').trim().toLowerCase();
-      const matchedContract = contracts.find((c) => {
-        const cNum = ((c as any).contractNumber || c.contractNo || c.contractRef || c.id || '').trim().toLowerCase();
-        return cNum && (cNum === jobContractKey || normalizeJobKey(cNum) === normalizeJobKey(jobContractKey));
-      });
-      const contractRate = matchedContract?.rates?.find((r) => {
-        const typeMatches = (r.shortDesc && (t.shortDesc || '').toLowerCase().includes(r.shortDesc.toLowerCase())) ||
-          (r.category && (t.shortDesc || '').toLowerCase().includes(r.category.toLowerCase()));
-        const sizeMatches = !r.size || !t.size || r.size.replace(/["\s]/g, '') === t.size.replace(/["\s]/g, '');
-        return typeMatches && sizeMatches;
-      });
+      // Dynamic rate lookup from Master Contract Schedules using category synonyms and range rules
+      const rateOptions = getContractRateOptionsForTool(
+        {
+          desc: t.desc || t.shortDesc,
+          assetNo: t.serial || t.assetNo,
+          category: (t as any).category,
+          size: (t as any).size,
+        },
+        activeContract
+      );
+
+      const chosenOption =
+        toolHoleSectionSelections[toolKey] ||
+        findBestMatchingOption(rateOptions, (t as any).holeSection || (jobData as any).holeSection) ||
+        rateOptions[0];
 
       const clientStr = String(jobData.client || '').toUpperCase();
       let billableSbCount = sbCount;
@@ -1679,12 +1761,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         billableSbCount = Math.min(sbCount, 10);
       }
 
-      const standbyRate = contractRate?.standbyRate || (t as any).standbyRate || (t as any).standby_rate || (t as any).dayRate || 0;
-      const opsRate = contractRate?.opsRate || (t as any).opsRate || (t as any).ops_rate || (t as any).dayRate || 0;
+      const standbyRate = chosenOption
+        ? chosenOption.standbyRate
+        : (t as any).standbyRate || (t as any).standby_rate || (t as any).dayRate || 0;
+      const opsRate = chosenOption
+        ? chosenOption.opsRate
+        : (t as any).opsRate || (t as any).ops_rate || (t as any).dayRate || 0;
+      const currency = chosenOption?.currency || activeContract?.currency || jobData.currency || 'AED';
+      const contractRef = chosenOption?.contractRef || '';
+      const holeSection = chosenOption?.holeSection || '';
+
       const totalStandbyRate = billableSbCount * standbyRate;
       const totalOpsRate = opsCount * opsRate;
-      const runCharge = (t as any).runCharge || (contractRate as any)?.runCharges || 0;
-      const redressCharge = (t as any).redressCharge || (contractRate as any)?.redress || 0;
+      const runCharge = (t as any).runCharge || chosenOption?.runCharges || 0;
+      const redressCharge = (t as any).redressCharge || chosenOption?.redress || 0;
       const totalMonthValue = totalStandbyRate + totalOpsRate + runCharge + redressCharge;
 
       return {
@@ -1694,6 +1784,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         dayStatuses,
         sbCount,
         opsCount,
+        rateOptions,
+        chosenOption,
+        holeSection,
+        contractRef,
+        currency,
         standbyRate,
         opsRate,
         totalStandbyRate,
@@ -1703,7 +1798,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         totalMonthValue,
       };
     });
-  }, [allMobilizedTools, selectedUtilMonth, selectedUtilYear, utilDaysList, contracts, customUtilStatuses, jobData.contractNo, jobData.contract]);
+  }, [
+    allMobilizedTools,
+    selectedUtilMonth,
+    selectedUtilYear,
+    utilDaysList,
+    activeContract,
+    customUtilStatuses,
+    toolHoleSectionSelections,
+    jobData.client,
+    jobData.currency,
+    (jobData as any).holeSection,
+  ]);
 
   const monthTotalSB = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.sbCount, 0), [toolUtilizationRows]);
   const monthTotalOps = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.opsCount, 0), [toolUtilizationRows]);
@@ -3517,16 +3623,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </span>
               </div>
               <div className="border border-slate-300 rounded-b overflow-x-auto bg-white shadow-inner">
-                <table className="w-full text-left text-[11px] border-collapse min-w-[2400px]">
+                <table className="w-full text-left text-[11px] border-collapse min-w-[2600px]">
                   <thead className="bg-[#e9f0f8] text-[#1a3055] font-bold border-b border-slate-300">
                     <tr>
                       <th className="p-1.5 text-center w-9 min-w-[36px]">#</th>
                       <th className="p-1.5 whitespace-nowrap min-w-[110px]">DT NO</th>
                       <th className="p-1.5 whitespace-nowrap min-w-[95px]">DEL DATE</th>
                       <th className="p-1.5 whitespace-nowrap min-w-[130px]">ASSET / SERIAL</th>
-                      <th className="p-1.5 whitespace-nowrap min-w-[240px]">DESCRIPTION</th>
+                      <th className="p-1.5 whitespace-nowrap min-w-[220px]">DESCRIPTION</th>
                       <th className="p-1.5 text-center w-12 min-w-[48px]">QTY</th>
-                      <th className="p-1.5 text-center whitespace-nowrap min-w-[90px]">STATUS</th>
+                      <th className="p-1.5 text-center whitespace-nowrap min-w-[80px]">STATUS</th>
+                      <th className="p-1.5 whitespace-nowrap min-w-[220px] bg-amber-100 text-amber-950 font-bold border-x border-slate-300">
+                        HOLE SECTION (CONTRACT RATE)
+                      </th>
                       {utilDaysList.map((d) => (
                         <th key={d} className="p-0.5 text-center w-7 min-w-[28px] font-mono text-[11px] bg-slate-200/70 border-x border-slate-300">
                           {d}
@@ -3546,7 +3655,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <tbody className="divide-y divide-slate-200">
                     {toolUtilizationRows.length === 0 ? (
                       <tr>
-                        <td colSpan={utilDaysList.length + 16} className="p-8 text-center text-slate-500 font-medium">
+                        <td colSpan={utilDaysList.length + 17} className="p-8 text-center text-slate-500 font-medium">
                           No mobilized tools found for Job {jobData.id} in {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}.
                         </td>
                       </tr>
@@ -3557,12 +3666,40 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           <td className="p-1 font-mono text-blue-700 font-bold whitespace-nowrap">{row.dtNumber}</td>
                           <td className="p-1 font-mono whitespace-nowrap text-[10px]">{formatDateDD_MM_YYYY(row.dispatchDate)}</td>
                           <td className="p-1 font-mono font-bold whitespace-nowrap">{row.serial || row.assetNo}</td>
-                          <td className="p-1 truncate max-w-[240px]" title={row.desc || row.shortDesc}>{row.desc || row.shortDesc}</td>
+                          <td className="p-1 truncate max-w-[220px]" title={row.desc || row.shortDesc}>{row.desc || row.shortDesc}</td>
                           <td className="p-1 text-center font-bold">{row.qty || 1}</td>
                           <td className="p-1 text-center whitespace-nowrap">
                             <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
                               {row.status || 'On Rig'}
                             </span>
+                          </td>
+                          {/* Hole Section & Contract Rate Selector Dropdown */}
+                          <td className="p-1 min-w-[220px] max-w-[270px] bg-amber-50/40 border-x border-slate-200">
+                            {row.rateOptions && row.rateOptions.length > 0 ? (
+                              <div className="flex flex-col gap-0.5">
+                                <select
+                                  value={row.chosenOption?.key || row.rateOptions[0]?.key || ''}
+                                  disabled={isLocked}
+                                  onChange={(e) => handleSelectToolHoleSection(row.toolKey, row, e.target.value)}
+                                  className="w-full text-[10px] font-medium bg-white border border-amber-300 rounded px-1 py-0.5 text-[#1a3055] focus:ring-1 focus:ring-amber-500 outline-none cursor-pointer disabled:bg-slate-100"
+                                  title="Select exact hole section / contract rate schedule for this tool"
+                                >
+                                  {row.rateOptions.map((opt: ToolHoleSectionOption) => (
+                                    <option key={opt.key} value={opt.key}>
+                                      {opt.contractRef ? `[${opt.contractRef}] ` : ''}{opt.holeSection} ({opt.currency} {opt.opsRate.toLocaleString()})
+                                    </option>
+                                  ))}
+                                </select>
+                                {row.chosenOption && (
+                                  <div className="flex justify-between text-[9px] text-slate-500 font-mono px-0.5">
+                                    <span>Ref: <strong className="text-blue-700">{row.chosenOption.contractRef || '—'}</strong></span>
+                                    <span>Ops: <strong>{row.chosenOption.currency} {row.chosenOption.opsRate.toLocaleString()}</strong></span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="font-mono text-[10px] text-slate-400 italic">No Contract Rate</span>
+                            )}
                           </td>
                           {utilDaysList.map((day) => {
                             const val = row.dayStatuses[day];
@@ -3593,7 +3730,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           <td className="p-1 text-right font-mono font-bold text-emerald-900 bg-emerald-50/30">{row.totalOpsRate.toLocaleString()}</td>
                           <td className="p-1 text-right font-mono text-slate-600">{row.runCharge.toLocaleString()}</td>
                           <td className="p-1 text-right font-mono text-slate-600">{row.redressCharge.toLocaleString()}</td>
-                          <td className="p-1 text-right font-mono font-bold pr-2 text-slate-900 bg-amber-50/50">{row.totalMonthValue.toLocaleString()} AED</td>
+                          <td className="p-1 text-right font-mono font-bold pr-2 text-slate-900 bg-amber-50/50">
+                            {row.totalMonthValue.toLocaleString()} {row.currency || 'AED'}
+                          </td>
                         </tr>
                       ))
                     )}
@@ -3601,7 +3740,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   {toolUtilizationRows.length > 0 && (
                     <tfoot className="bg-[#e9f0f8] font-bold text-[#1a3055] border-t-2 border-slate-300">
                       <tr>
-                        <td colSpan={7} className="p-1.5 text-right uppercase">Fleet Totals:</td>
+                        <td colSpan={8} className="p-1.5 text-right uppercase">Fleet Totals:</td>
                         {utilDaysList.map((day) => {
                           const dayActiveCount = toolUtilizationRows.filter((r) => r.dayStatuses[day] !== '').length;
                           return (
@@ -3619,7 +3758,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <td className="p-1.5 text-right font-mono text-slate-700">{monthTotalRunCharge.toLocaleString()}</td>
                         <td className="p-1.5 text-right font-mono text-slate-700">{monthTotalRedress.toLocaleString()}</td>
                         <td className="p-1.5 text-right font-mono text-base text-slate-900 pr-2">
-                          {totalToolRevenueAED.toLocaleString()} AED
+                          {totalToolRevenueAED.toLocaleString()} {activeContract?.currency || jobData.currency || 'AED'}
                         </td>
                       </tr>
                     </tfoot>

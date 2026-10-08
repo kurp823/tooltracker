@@ -1712,6 +1712,7 @@ export const App: React.FC = () => {
                 jobs={jobs}
                 dtBatches={dtBatches}
                 rtBatches={rtBatches}
+                contracts={contracts}
                 onUpdateJob={handleSaveJob}
                 onNavigate={(mod) => setActiveView(mod as ViewKey)}
               />

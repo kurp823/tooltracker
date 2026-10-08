@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { DrillingJob, DTBatch, RTBatch, ToolItem, User } from '../types';
+import { DrillingJob, DTBatch, RTBatch, ToolItem, User, ContractRecord } from '../types';
 import { formatDateDDMMYY, formatQty } from '../utils';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
-import { normalizeJobKey, saveDailyFieldLogsApi } from '../services/api';
+import { normalizeJobKey, saveDailyFieldLogsApi, saveJobToolHoleSectionApi } from '../services/api';
 import { getJobUtilizationRecords, generateDailyCellsForJob } from '../services/jobUtilizationData';
+import { getContractRateOptionsForTool, findBestMatchingOption, ToolHoleSectionOption } from '../services/contractRateResolver';
 import * as XLSX from 'xlsx';
 
 interface UtilizationViewProps {
@@ -12,6 +13,7 @@ interface UtilizationViewProps {
   jobs: DrillingJob[];
   dtBatches: DTBatch[];
   rtBatches?: RTBatch[];
+  contracts?: ContractRecord[];
   onUpdateJob?: (job: DrillingJob) => void;
   onNavigate?: (module: string) => void;
 }
@@ -88,6 +90,7 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
   jobs,
   dtBatches,
   rtBatches = [],
+  contracts = [],
   onUpdateJob,
   onNavigate,
 }) => {
@@ -96,6 +99,81 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
   const currentJob = useMemo(() => {
     return jobs.find((j) => j.id === selectedJobId) || jobs[0];
   }, [jobs, selectedJobId]);
+
+  // Active Contract matching
+  const activeContract = useMemo(() => {
+    if (!currentJob) return null;
+    const cKey = (currentJob.contractNo || currentJob.contract || '').trim().toLowerCase();
+    const clKey = (currentJob.client || '').trim().toLowerCase();
+    return (
+      (contracts || []).find((c) => {
+        const cNo = (c.contractNo || c.contractRef || c.id || '').trim().toLowerCase();
+        const cCl = (c.client || '').trim().toLowerCase();
+        return (cKey && (cNo === cKey || cKey.includes(cNo))) || (clKey && (cCl === clKey || cCl.includes(clKey)));
+      }) || null
+    );
+  }, [currentJob, contracts]);
+
+  // User-selected Hole Section & Contract Rate state per tool line (persisted per job)
+  const [toolHoleSectionSelections, setToolHoleSectionSelections] = useState<
+    Record<string, ToolHoleSectionOption>
+  >(() => {
+    try {
+      const saved = localStorage.getItem(`emdad_job_tool_sections_${selectedJobId}`);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {};
+  });
+
+  // Reload selections when selectedJobId changes
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`emdad_job_tool_sections_${selectedJobId}`);
+      if (saved) {
+        setToolHoleSectionSelections(JSON.parse(saved));
+      } else {
+        setToolHoleSectionSelections({});
+      }
+    } catch {
+      setToolHoleSectionSelections({});
+    }
+  }, [selectedJobId]);
+
+  // Handle explicit hole section selection from dropdown
+  const handleSelectHoleSection = useCallback(
+    (itemId: string, item: EpicorLineItem, selectedRateKey: string) => {
+      const options = getContractRateOptionsForTool(
+        {
+          desc: item.description,
+          assetNo: item.assetNumber,
+          category: item.category,
+        },
+        activeContract
+      );
+      const chosen = options.find((o) => o.key === selectedRateKey) || options[0];
+      if (!chosen) return;
+
+      setToolHoleSectionSelections((prev) => {
+        const next = { ...prev, [itemId]: chosen };
+        try {
+          localStorage.setItem(`emdad_job_tool_sections_${selectedJobId}`, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      // Synchronize directly to Azure SQL
+      saveJobToolHoleSectionApi(
+        selectedJobId,
+        item.assetNumber || itemId,
+        chosen.holeSection,
+        chosen.contractRef,
+        chosen.opsRate,
+        chosen.standbyRate,
+        chosen.currency
+      );
+    },
+    [activeContract, selectedJobId]
+  );
 
   // Searchable Active Job Combobox
   const [isJobDropdownOpen, setIsJobDropdownOpen] = useState(false);
@@ -553,15 +631,39 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
         else if (val === '1') opsCount++;
       }
 
+      // Check user-selected hole section rate or fallback to best match
+      const userSelected = toolHoleSectionSelections[item.id];
+      let itemRate = userSelected;
+      if (!itemRate && item.category === 'Tools') {
+        const options = getContractRateOptionsForTool(
+          { desc: item.description, assetNo: item.assetNumber, category: item.category },
+          activeContract
+        );
+        itemRate = findBestMatchingOption(options, currentJob?.holeSection) || undefined;
+      }
+
+      const effectiveOpsRate = itemRate ? itemRate.opsRate : rateConfig.ops;
+      const effectiveSbRate = itemRate ? itemRate.standbyRate : rateConfig.standby;
+
       const cap = rateConfig.cap;
       const billedSb = cap !== null ? Math.min(sbCount, cap) : sbCount;
-      const sbAmount = billedSb * rateConfig.standby;
-      const opsAmount = opsCount * rateConfig.ops;
+      const sbAmount = billedSb * effectiveSbRate;
+      const opsAmount = opsCount * effectiveOpsRate;
       const totalAmount = sbAmount + opsAmount;
 
-      return { sbCount, billedSb, opsCount, sbAmount, opsAmount, totalAmount };
+      return {
+        sbCount,
+        billedSb,
+        opsCount,
+        sbAmount,
+        opsAmount,
+        totalAmount,
+        effectiveOpsRate,
+        effectiveSbRate,
+        selectedRate: itemRate,
+      };
     },
-    [cells, rateConfig]
+    [cells, rateConfig, toolHoleSectionSelections, activeContract, currentJob]
   );
 
   // Totals for active month
@@ -1822,6 +1924,10 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                     <th className="px-1.5 py-1.5 text-center w-14">
                       Status
                     </th>
+                    {/* 8. Hole Section / Pricing Dropdown */}
+                    <th className="px-2 py-1.5 min-w-[190px] max-w-[240px] text-left text-amber-300 font-bold border-r border-[#2a436e]">
+                      Hole Section (Contract Rate)
+                    </th>
 
                     {/* Day Columns 1..daysInActiveMonth (Compact single day numbers 1, 2, 3...) */}
                     {Array.from({ length: daysInActiveMonth }).map((_, dIdx) => {
@@ -1918,14 +2024,57 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                             <span
                               className={`px-1 py-0.2 rounded text-[9px] font-bold ${
                                 item.status === 'On Rig'
-                                    ? 'bg-blue-100 text-blue-900'
-                                    : item.status === 'New'
-                                    ? 'bg-emerald-100 text-emerald-900'
-                                    : 'bg-slate-100 text-slate-700'
+                                  ? 'bg-blue-100 text-blue-900'
+                                  : item.status === 'New'
+                                  ? 'bg-emerald-100 text-emerald-900'
+                                  : 'bg-slate-100 text-slate-700'
                               }`}
                             >
                               {item.status}
                             </span>
+                          </td>
+
+                          {/* Hole Section & Contract Rate Selector Dropdown */}
+                          <td className="px-1.5 py-1 min-w-[190px] max-w-[240px] border-r border-slate-200 bg-white">
+                            {item.category === 'Tools' ? (
+                              (() => {
+                                const rateOpts = getContractRateOptionsForTool(
+                                  { desc: item.description, assetNo: item.assetNumber, category: item.category },
+                                  activeContract
+                                );
+                                const currentSelected = stats.selectedRate;
+                                const currentKey = currentSelected ? currentSelected.key : (rateOpts[0]?.key || '');
+
+                                return (
+                                  <div className="flex flex-col gap-0.5">
+                                    <select
+                                      value={currentKey}
+                                      onClick={(e) => e.stopPropagation()}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        handleSelectHoleSection(item.id, item, e.target.value);
+                                      }}
+                                      className="w-full text-[10px] font-medium bg-amber-50/50 border border-amber-300 rounded px-1.5 py-0.5 text-[#1a3055] focus:ring-1 focus:ring-amber-500 outline-none cursor-pointer"
+                                      title="Select exact hole section / contract rate for this tool"
+                                    >
+                                      {rateOpts.map((opt) => (
+                                        <option key={opt.key} value={opt.key}>
+                                          {opt.contractRef ? `[${opt.contractRef}] ` : ''}{opt.holeSection} ({opt.currency} {opt.opsRate.toLocaleString()})
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {currentSelected && (
+                                      <div className="flex justify-between text-[9px] text-slate-500 font-mono px-0.5">
+                                        <span>Ref: <strong className="text-blue-700">{currentSelected.contractRef}</strong></span>
+                                        <span>Ops: <strong>{currentSelected.currency} {currentSelected.opsRate.toLocaleString()}</strong></span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <span className="font-mono text-[10px] text-slate-400">N/A</span>
+                            )}
                           </td>
 
                           {/* Day Columns 1..daysInActiveMonth with continuous typing skipping locked dates */}
@@ -2019,12 +2168,17 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
 
                           {/* Day Rate */}
                           <td className="px-1.5 py-1 text-center font-mono text-slate-700 sticky right-[52px] bg-white z-10 text-[11px]">
-                            {rateConfig.ops}
+                            <div className="font-bold text-[#1a3055]">
+                              {stats.selectedRate?.currency || rateConfig.currency} {stats.effectiveOpsRate.toLocaleString()}
+                            </div>
+                            <div className="text-[9px] text-slate-400">
+                              Std: {stats.effectiveSbRate.toLocaleString()}
+                            </div>
                           </td>
 
                           {/* Total Line Amount */}
                           <td className="px-2 py-1 text-right font-mono font-bold text-[#1a3055] sticky right-0 bg-slate-50 z-10 text-[11px]">
-                            {stats.totalAmount.toLocaleString()}
+                            {stats.selectedRate?.currency || rateConfig.currency} {stats.totalAmount.toLocaleString()}
                           </td>
                         </tr>
                       );
@@ -2033,7 +2187,7 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
 
                   {/* Summary Footer Row */}
                   <tr className="bg-slate-100 font-bold border-t-2 border-slate-300 sticky bottom-0 z-20">
-                    <td colSpan={7} className="px-3 py-1.5 text-right uppercase tracking-wider text-slate-700 text-[10px] sticky left-0 bg-slate-100 z-20 border-r border-slate-300">
+                    <td colSpan={8} className="px-3 py-1.5 text-right uppercase tracking-wider text-slate-700 text-[10px] sticky left-0 bg-slate-100 z-20 border-r border-slate-300">
                       {MONTH_NAMES[selectedMonthIdx]} {selectedYear} Billing Totals ({displayedItems.length} Lines):
                     </td>
                     {/* Day columns clean separator without confusing random numbers */}

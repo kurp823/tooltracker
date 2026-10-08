@@ -1,4 +1,9 @@
 import { CalculationTicketLine, DraftInvoicePackageData, DrillingJob, ContractRecord, DTBatch, RTBatch, AttachedDoc } from '../types';
+import {
+  getContractRateOptionsForTool,
+  findBestMatchingOption,
+  ToolHoleSectionOption,
+} from './contractRateResolver';
 
 /**
  * Standard fixed conversion rate applied by EMDAD for UAE tax invoices
@@ -327,10 +332,44 @@ export function generateInvoicePackageForJob(
         const serial = tl.serial || tl.assetNo;
         if (!serial) return;
 
+        let selectedHoleSectionOpt: ToolHoleSectionOption | null = null;
+        try {
+          const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(`emdad_job_tool_sections_${job.id || job.jobNumber}`) : null;
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed[serial] || parsed[(tl as any).id]) {
+              selectedHoleSectionOpt = parsed[serial] || parsed[(tl as any).id];
+            }
+          }
+        } catch {}
+
+        if (!selectedHoleSectionOpt) {
+          const rateOpts = getContractRateOptionsForTool(
+            {
+              desc: tl.desc || tl.shortDesc,
+              assetNo: serial,
+              category: (tl as any).category,
+              size: (tl as any).size,
+            },
+            contract
+          );
+          if (rateOpts.length > 0) {
+            selectedHoleSectionOpt = findBestMatchingOption(rateOpts, (job as any).holeSection || (tl as any).holeSection) || rateOpts[0];
+          }
+        }
+
         let rateLookup = CONTRACT_444558_RATES[serial];
 
-        // If contract has live / configured rates, match by description, category, size, or serial
-        if (contract?.rates && contract.rates.length > 0) {
+        if (selectedHoleSectionOpt) {
+          const isAED = selectedHoleSectionOpt.currency === 'AED';
+          rateLookup = {
+            contractRefOper: selectedHoleSectionOpt.contractRef || 'SCHEDULE 2',
+            contractRefStandby: selectedHoleSectionOpt.contractRef || 'SCHEDULE 2',
+            operRate: isAED ? selectedHoleSectionOpt.opsRate / USD_TO_AED_EXCHANGE_RATE : selectedHoleSectionOpt.opsRate,
+            standbyRate: isAED ? selectedHoleSectionOpt.standbyRate / USD_TO_AED_EXCHANGE_RATE : selectedHoleSectionOpt.standbyRate,
+            description: selectedHoleSectionOpt.shortDesc,
+          };
+        } else if (contract?.rates && contract.rates.length > 0) {
           const descUpper = String(tl.desc || tl.shortDesc || '').toUpperCase();
           const catUpper = String((tl as any).category || '').toUpperCase();
           const sizeUpper = String((tl as any).size || '').toUpperCase();
@@ -344,11 +383,12 @@ export function generateInvoicePackageForJob(
             return false;
           });
           if (matched) {
+            const isAED = contract.currency === 'AED';
             rateLookup = {
               contractRefOper: matched.contractRef || 'SCHEDULE 2',
               contractRefStandby: matched.contractRef || 'SCHEDULE 2',
-              operRate: matched.opsRate,
-              standbyRate: matched.standbyRate,
+              operRate: isAED ? matched.opsRate / USD_TO_AED_EXCHANGE_RATE : matched.opsRate,
+              standbyRate: isAED ? matched.standbyRate / USD_TO_AED_EXCHANGE_RATE : matched.standbyRate,
             };
           }
         }
@@ -379,14 +419,19 @@ export function generateInvoicePackageForJob(
           standbyDays = Math.min(uncappedStandby, 10);
         }
 
-        const operTotalUSD = operDays * rateLookup.operRate;
+        const operTotalUSD = Math.round(operDays * rateLookup.operRate * 100) / 100;
         const standbyTotalUSD = Math.round(standbyDays * rateLookup.standbyRate * 100) / 100;
         const totalChargesUSD = Math.round((operTotalUSD + standbyTotalUSD) * 100) / 100;
+
+        let toolDescDisplay = tl.desc || tl.shortDesc || 'DOWNHOLE FISHING TOOL';
+        if (selectedHoleSectionOpt?.holeSection && selectedHoleSectionOpt.holeSection !== 'All Sizes' && selectedHoleSectionOpt.holeSection !== 'STANDARD') {
+          toolDescDisplay = `${toolDescDisplay} [${selectedHoleSectionOpt.holeSection}]`;
+        }
 
         lines.push({
           itemNo: itemSeq++,
           serialNumber: serial,
-          toolDescription: tl.desc || tl.shortDesc || 'DOWNHOLE FISHING TOOL',
+          toolDescription: toolDescDisplay,
           qty: tl.qty || 1,
           deliveryTicketNo: dt.dtNumber || deliveryTicketRefs,
           deliveryDate,
@@ -396,9 +441,9 @@ export function generateInvoicePackageForJob(
           contractRefOper: rateLookup.contractRefOper,
           contractRefStandby: rateLookup.contractRefStandby,
           operDays,
-          operRateUSD: rateLookup.operRate,
+          operRateUSD: Math.round(rateLookup.operRate * 100) / 100,
           standbyDays,
-          standbyRateUSD: rateLookup.standbyRate,
+          standbyRateUSD: Math.round(rateLookup.standbyRate * 100) / 100,
           operTotalUSD,
           standbyTotalUSD,
           totalChargesUSD,

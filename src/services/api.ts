@@ -2551,6 +2551,43 @@ export async function fetchContractRates(contractCode: string): Promise<import('
   }));
 }
 
+export async function saveContractRatesApi(
+  contractCode: string,
+  rates: import('../types').ContractRateItem[]
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetchFromApi('savecontractrates', { code: contractCode, rates });
+    return { success: res !== null, message: res ? 'Contract rates saved to Azure SQL' : 'Saved locally' };
+  } catch {
+    return { success: true, message: 'Saved locally' };
+  }
+}
+
+export async function saveJobToolHoleSectionApi(
+  jobId: string,
+  toolIdOrSerial: string,
+  holeSection: string,
+  contractRef: string,
+  opsRate: number,
+  standbyRate: number,
+  currency: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetchFromApi('savejobtoolsection', {
+      jobId,
+      toolIdOrSerial,
+      holeSection,
+      contractRef,
+      opsRate,
+      standbyRate,
+      currency,
+    });
+    return { success: res !== null, message: res ? 'Tool hole section saved to Azure SQL' : 'Saved locally' };
+  } catch {
+    return { success: true, message: 'Saved locally' };
+  }
+}
+
 export async function saveContractApi(contract: any): Promise<{ success: boolean; message: string }> {
   try {
     // Sanitize dates for SQL: pbgExpiryDate if "OPEN ENDED" must be sent as null to avoid SQL date parse error

@@ -1,3 +1,4 @@
+import { MASTER_CONTRACT_RATES } from "./masterContractRates";
 import {
   User,
   UserRole,
@@ -425,29 +426,7 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
     pbgExpiryDate: 'OPEN ENDED',
     description: 'Contract Description: Provision of Fishing & Downhole tool rental services, CONTRACT NO: 444558',
     notes: 'ADNOC OFFSHORE - Provision of Fishing & Downhole tool rental services. SAP 4700010052. PBG: ACLG1900238 (AED 626,510.69 - OPEN ENDED)',
-    rates: [
-      { no: 173, contractRef: 'SCHEDULE 2', category: 'FAST REAMER', shortDesc: 'FAST REAMER', size: '12-1/4"', holeSection: '12-1/4"', opsRate: 3445.00, standbyRate: 1722.50, runCharges: null, monthlyCharges: null, redress: null, currency: 'USD' },
-      { no: 174, contractRef: 'SCHEDULE 2', category: 'FAST REAMER', shortDesc: 'FAST REAMER', size: '16"', holeSection: '16"', opsRate: 3692.00, standbyRate: 1846.00, runCharges: null, monthlyCharges: null, redress: null, currency: 'USD' },
-      { no: 175, contractRef: 'SCHEDULE 2', category: 'FAST REAMER', shortDesc: 'FAST REAMER', size: '6"', holeSection: '6"', opsRate: 4160.00, standbyRate: 2080.00, runCharges: null, monthlyCharges: null, redress: null, currency: 'USD' },
-      { no: 176, contractRef: 'SCHEDULE 2', category: 'FAST REAMER', shortDesc: 'FAST REAMER', size: '8-1/2"', holeSection: '8-1/2"', opsRate: 4485.00, standbyRate: 2242.50, runCharges: null, monthlyCharges: null, redress: null, currency: 'USD' },
-      { no: 181, contractRef: 'A-2.6', category: 'FIELD ENGINEER', shortDesc: 'FIELD ENGINEER', size: 'N/A', holeSection: 'N/A', opsRate: 395.74, standbyRate: 395.74, runCharges: null, monthlyCharges: null, redress: null, currency: 'USD' },
-      { no: 183, contractRef: 'A.4.33', category: 'FISHING ENGINEER', shortDesc: 'FISHING ENGINEER', size: 'N/A', holeSection: 'N/A', opsRate: 787.94, standbyRate: 787.94, runCharges: null, monthlyCharges: null, redress: null, currency: 'USD' },
-      { no: 185, contractRef: 'A.3.6', category: 'GUNDRILL REAMER', shortDesc: 'GUNDRILL REAMER', size: '', holeSection: '12-1/4"', opsRate: 662.89, standbyRate: 331.45, runCharges: null, monthlyCharges: 12926.55, redress: 2840.94, currency: 'USD' },
-      { no: 186, contractRef: 'A.3.6', category: 'GUNDRILL REAMER', shortDesc: 'GUNDRILL REAMER', size: '', holeSection: '16"', opsRate: 1046.88, standbyRate: 523.44, runCharges: null, monthlyCharges: 15234.57, redress: 3219.73, currency: 'USD' },
-      { no: 187, contractRef: 'A.3.6', category: 'GUNDRILL REAMER', shortDesc: 'GUNDRILL REAMER', size: '', holeSection: '6"', opsRate: 332.00, standbyRate: 166.00, runCharges: null, monthlyCharges: 7575.84, redress: 1893.96, currency: 'USD' },
-      { no: 188, contractRef: 'A.3.6', category: 'GUNDRILL REAMER', shortDesc: 'GUNDRILL REAMER', size: '', holeSection: '8-1/2"', opsRate: 378.80, standbyRate: 189.40, runCharges: null, monthlyCharges: 8523.00, redress: 2367.45, currency: 'USD' },
-      { no: 193, contractRef: 'A-1.18', category: 'H.W.DRILL PIPE', shortDesc: 'HWDP', size: '4"', holeSection: '4"', opsRate: 10.80, standbyRate: 5.40, runCharges: null, monthlyCharges: null, redress: null, currency: 'USD' },
-      { no: 195, contractRef: 'A.3.2', category: 'HOLE OPENER', shortDesc: 'HOLE OPENER', size: '26"', holeSection: '26"', opsRate: 37.88, standbyRate: 18.94, runCharges: null, monthlyCharges: null, redress: 4261.00, currency: 'USD' },
-      { no: 196, contractRef: 'A.3.2', category: 'HOLE OPENER', shortDesc: 'HOLE OPENER', size: '36"', holeSection: '36"', opsRate: 42.61, standbyRate: 21.31, runCharges: null, monthlyCharges: null, redress: 3314.00, currency: 'USD' },
-      { no: 197, contractRef: 'A.3.1', category: 'HOLE OPENER', shortDesc: 'HOLE OPENER', size: '42"', holeSection: '42"', opsRate: 122.44, standbyRate: 61.22, runCharges: null, monthlyCharges: null, redress: 24306.48, currency: 'USD' },
-      { no: 201, contractRef: 'A.3.4', category: 'HOLE STRAIGHTENER', shortDesc: 'HOLE STRAIGHTENER', size: '', holeSection: '12-1/4"', opsRate: 1015.64, standbyRate: 507.82, runCharges: null, monthlyCharges: null, redress: null, currency: 'USD' },
-      { no: 202, contractRef: 'A.3.4', category: 'HOLE STRAIGHTENER', shortDesc: 'HOLE STRAIGHTENER', size: '', holeSection: '6"', opsRate: 1015.64, standbyRate: 507.82, runCharges: null, monthlyCharges: null, redress: null, currency: 'USD' },
-      { no: 203, contractRef: 'A.3.4', category: 'HOLE STRAIGHTENER', shortDesc: 'HOLE STRAIGHTENER', size: '', holeSection: '8-1/2"', opsRate: 1015.64, standbyRate: 507.82, runCharges: null, monthlyCharges: null, redress: null, currency: 'USD' },
-      { no: 207, contractRef: 'A.4.2', category: 'HOLLOW MILL GUIDE', shortDesc: 'HOLLOW MILL GUIDE', size: 'N/A', holeSection: 'N/A', opsRate: 48.53, standbyRate: 24.27, runCharges: null, monthlyCharges: null, redress: null, currency: 'USD' },
-      { no: 209, contractRef: 'A.3.7', category: 'HYPR HOLE SAVER', shortDesc: 'HYPR HOLE SAVER', size: '12-1/4"', holeSection: '12-1/4"', opsRate: 473.50, standbyRate: 236.75, runCharges: null, monthlyCharges: null, redress: null, currency: 'USD' },
-      { no: 210, contractRef: 'A.3.7', category: 'HYPR HOLE SAVER', shortDesc: 'HYPR HOLE SAVER', size: '6"', holeSection: '6"', opsRate: 276.99, standbyRate: 138.50, runCharges: null, monthlyCharges: null, redress: null, currency: 'USD' },
-      { no: 211, contractRef: 'A.3.7', category: 'HYPR HOLE SAVER', shortDesc: 'HYPR HOLE SAVER', size: '8-1/2"', holeSection: '8-1/2"', opsRate: 426.14, standbyRate: 213.07, runCharges: null, monthlyCharges: null, redress: null, currency: 'USD' }
-    ]
+    rates: MASTER_CONTRACT_RATES["444558"]?.rates || []
   },
   {
     id: '2',
@@ -567,12 +546,7 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
     pbgIssueDate: '2024-09-30',
     pbgExpiryDate: '2027-11-14',
     notes: 'ADNOC ONSHORE - RENTALS. PBG: OLGAE18024000958 (AED 931,855.35, Expiry: 14-Nov-2027)',
-    rates: [
-      { no: 1, contractRef: 'SCHED-1', category: 'DRILLING JAR', shortDesc: 'HYD-MECH DRILLING JAR', size: '8"', holeSection: '8-1/2"', opsRate: 950.00, standbyRate: 475.00, currency: 'USD' },
-      { no: 2, contractRef: 'SCHED-1', category: 'DRILLING JAR', shortDesc: 'HYD DRILLING JAR', size: '6-3/4"', holeSection: '8-1/2"', opsRate: 850.00, standbyRate: 425.00, currency: 'USD' },
-      { no: 3, contractRef: 'SCHED-1', category: 'SHOCK TOOL', shortDesc: 'SHOCK TOOL', size: '9-1/2"', holeSection: '12-1/4"', opsRate: 800.00, standbyRate: 400.00, currency: 'USD' },
-      { no: 4, contractRef: 'SCHED-1', category: 'FLOAT SUB', shortDesc: 'FLOAT SUB', size: '6-3/4"', holeSection: '8-1/2"', opsRate: 150.00, standbyRate: 75.00, currency: 'USD' }
-    ]
+    rates: MASTER_CONTRACT_RATES["4700023861"]?.rates || []
   },
   {
     id: '8',
@@ -592,7 +566,7 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
     pbgIssueDate: '2024-08-08',
     pbgExpiryDate: '2029-09-21',
     notes: 'ADNOC DRILLING - RENTALS. PBG: OLG2403146-30 (AED 954,889.00, Expiry: 21-Sep-2029)',
-    rates: []
+    rates: MASTER_CONTRACT_RATES["4700024096"]?.rates || []
   },
   {
     id: '9',
@@ -612,7 +586,7 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
     pbgIssueDate: '2024-09-30',
     pbgExpiryDate: '2026-11-13',
     notes: 'ADNOC DRILLING - FISHING. PBG: OLG2403645-30 (AED 144,476.88, Expiry: 13-Nov-2026)',
-    rates: []
+    rates: MASTER_CONTRACT_RATES["4700024608-UZ"]?.rates || []
   },
   {
     id: '10',
@@ -632,7 +606,7 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
     pbgIssueDate: '2025-05-12',
     pbgExpiryDate: '2026-12-27',
     notes: 'TURNWELL. PBG: OLG2503158-30 (AED 100,000.00, Expiry: 27-Dec-2026)',
-    rates: []
+    rates: MASTER_CONTRACT_RATES["TW-2025-1026"]?.rates || []
   },
   {
     id: '11',
