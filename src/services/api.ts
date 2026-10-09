@@ -4,6 +4,7 @@
  */
 
 import { MASTER_JOBS } from '../data/masterJobs';
+import { saveCustomTool } from './customTools';
 
 export const normalizeJobKey = (str?: string): string => {
   if (!str) return '';
@@ -2624,11 +2625,77 @@ export async function saveMaintenanceApi(maintenance: any): Promise<{ success: b
 }
 
 export async function saveInventoryApi(tool: any): Promise<{ success: boolean; message: string }> {
+  if (!tool) return { success: true, message: 'No tool provided' };
+
+  const sysId = String(tool.id || tool.serial || tool.SystemID || tool.Serial || '').trim();
+  const serial = String(tool.serial || tool.id || tool.Serial || tool.SystemID || '').trim();
+  const assetNo = String(tool.assetNo || tool.AssetNo || tool.partNo || tool.PartNo || '').trim();
+  const shortDesc = String(tool.shortDesc || tool.ShortDesc || tool.category || tool.Category || tool.ToolType || 'Downhole Tool').trim();
+  const desc = String(tool.desc || tool.Description || tool.toolDescription || `${tool.size || ''} ${shortDesc}`).trim();
+  const size = String(tool.size || tool.Size || tool.toolSize || '').trim();
+  const qty = Number(tool.qty ?? tool.Qty ?? 1);
+  const location = String(tool.location || tool.Location || 'Emdad Base').trim();
+  const status = String(tool.status || tool.Status || 'Good').trim();
+  const ownership = String(tool.ownership || tool.Ownership || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')).trim();
+  const isEmdad = Boolean(tool.isEmdad ?? (ownership.toUpperCase().includes('EMDAD')));
+  const supplier = String(tool.supplier || tool.Supplier || tool.vendor || tool.Vendor || ownership).trim();
+  const addedDate = String(tool.addedDate || tool.AddedDate || new Date().toISOString().split('T')[0]).trim();
+
+  const enrichedTool = {
+    ...tool,
+    id: sysId,
+    serial,
+    assetNo: assetNo || serial,
+    shortDesc,
+    desc,
+    size,
+    qty,
+    location,
+    status,
+    ownership,
+    isEmdad,
+    supplier,
+    addedDate,
+    SystemID: sysId,
+    Serial: serial,
+    AssetNo: assetNo || serial,
+    PartNo: assetNo || serial,
+    ShortDesc: shortDesc,
+    Category: shortDesc,
+    Description: desc,
+    ToolDescription: desc,
+    Size: size,
+    ToolSize: size,
+    Qty: qty,
+    Quantity: qty,
+    Location: location,
+    Status: status,
+    Ownership: ownership,
+    IsEmdad: isEmdad ? 1 : 0,
+    Supplier: supplier,
+    Vendor: supplier,
+    AddedDate: addedDate,
+    CreatedDate: addedDate,
+  };
+
+  // Always persist to local custom tools store so user additions and modifications never vanish
   try {
-    // The Azure Function supports 'updatetool' for existing tools and 'addtool' for new entries
-    let res = await fetchFromApi('updatetool', { tool });
+    saveCustomTool(enrichedTool);
+  } catch (err) {
+    console.warn('[saveInventoryApi] Could not save to custom tools store:', err);
+  }
+
+  try {
+    // Try multiple action aliases supported across Azure Function versions and Data API
+    let res = await fetchFromApi('savetool', { tool: enrichedTool, item: enrichedTool });
     if (!res) {
-      res = await fetchFromApi('addtool', { tool });
+      res = await fetchFromApi('updatetool', { tool: enrichedTool, item: enrichedTool });
+    }
+    if (!res) {
+      res = await fetchFromApi('addtool', { tool: enrichedTool, item: enrichedTool });
+    }
+    if (!res) {
+      res = await fetchFromApi('saveinventory', { tool: enrichedTool, item: enrichedTool, payload: enrichedTool });
     }
     return { success: res !== null, message: res ? 'Tool saved to Azure SQL' : 'Saved locally' };
   } catch {

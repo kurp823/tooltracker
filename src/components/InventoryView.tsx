@@ -306,12 +306,28 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       addedDate: new Date().toISOString().split('T')[0],
     };
 
+    const catUpper = newType.trim().toUpperCase();
+    if (catUpper && !customCategories.includes(catUpper)) {
+      const updatedCats = [...customCategories, catUpper];
+      setCustomCategories(updatedCats);
+      try {
+        localStorage.setItem('emdad_custom_categories', JSON.stringify(updatedCats));
+      } catch {}
+    }
+    const sizeClean = newSize.trim();
+    if (sizeClean && !customSizes.includes(sizeClean)) {
+      const updatedSizes = [...customSizes, sizeClean];
+      setCustomSizes(updatedSizes);
+      try {
+        localStorage.setItem('emdad_custom_sizes', JSON.stringify(updatedSizes));
+      } catch {}
+    }
+
     if (onAddTool) {
       onAddTool(newTool);
     } else if (onSaveInventory) {
       onSaveInventory([newTool, ...inventory]);
     }
-    showToast(`Asset ${id} registered successfully.`, 'success');
     handleCloseAddModal();
     // Reset
     setNewSerial('');

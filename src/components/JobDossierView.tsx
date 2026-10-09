@@ -890,9 +890,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [categoryInventory, customSizes]);
 
   const modalAvailableTools = useMemo(() => {
+    const cleanSz = (s: string) => (s || '').trim().toLowerCase().replace(/["″\s]/g, '');
     return categoryInventory.filter((t) => {
       if (!selectedToolSize) return true;
-      return (t.size || '').trim() === selectedToolSize.trim();
+      return cleanSz(t.size) === cleanSz(selectedToolSize);
     });
   }, [categoryInventory, selectedToolSize]);
 

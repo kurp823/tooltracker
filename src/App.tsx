@@ -40,6 +40,12 @@ import {
   saveInventoryApi,
 } from './services/api';
 import { loadDatasetFromCache, saveDatasetToCache } from './services/dbCache';
+import {
+  loadCustomTools,
+  saveCustomTool,
+  mergeInventoryWithCustomTools,
+  syncCustomToolsToIndexedDB,
+} from './services/customTools';
 import { MASTER_JOBS } from './data/masterJobs';
 import { Toast, ToastNotification } from './components/Toast';
 import { Header } from './components/Header';
@@ -154,9 +160,15 @@ export const App: React.FC = () => {
   // the app. The live fetch overwrites whatever placeholder is used here
   // within moments of mount.
   const [inventory, setInventory] = useState<ToolItem[]>(() => {
+    const custom = loadCustomTools();
     const s = localStorage.getItem('emdad_inventory');
-    if (s) return JSON.parse(s);
-    return isPureSqlMode ? [] : INITIAL_INVENTORY;
+    let base = isPureSqlMode ? [] : INITIAL_INVENTORY;
+    if (s) {
+      try {
+        base = JSON.parse(s);
+      } catch {}
+    }
+    return mergeInventoryWithCustomTools(base, custom);
   });
 
   const [callouts, setCallouts] = useState<Callout[]>(() => {
@@ -295,8 +307,14 @@ export const App: React.FC = () => {
       try {
         const res = await fetchLiveDatabaseData();
         if (res.success && res.data) {
+          const custom = loadCustomTools();
+          let mergedInv = inventory;
           if (res.data.inventory !== undefined) {
-            setInventory(res.data.inventory);
+            mergedInv = mergeInventoryWithCustomTools(res.data.inventory, custom);
+            setInventory(mergedInv);
+          } else if (custom.length > 0) {
+            mergedInv = mergeInventoryWithCustomTools(inventory, custom);
+            setInventory(mergedInv);
           }
           if (res.data.jobs !== undefined && res.data.jobs.length > 0) {
             setJobs(res.data.jobs);
@@ -309,8 +327,11 @@ export const App: React.FC = () => {
           if (res.data.rtBatches !== undefined) {
             setRtBatches(res.data.rtBatches);
           }
-          // Persist to local IndexedDB cache for instant startup next time
-          saveDatasetToCache(res.data);
+          // Persist merged dataset to local IndexedDB cache for instant startup next time
+          saveDatasetToCache({
+            ...res.data,
+            inventory: mergedInv,
+          });
 
           setDbStatus({
             isConnected: true,
@@ -318,7 +339,7 @@ export const App: React.FC = () => {
             lastChecked: new Date().toLocaleTimeString(),
             message: res.message,
             counts: {
-              inventory: res.data.inventory?.length ?? inventory.length,
+              inventory: mergedInv.length,
               jobs: res.data.jobs?.length ?? 0,
               dtBatches: res.data.dtBatches?.length ?? 0,
               rtBatches: res.data.rtBatches?.length ?? 0,
@@ -329,6 +350,8 @@ export const App: React.FC = () => {
             showToast(`Azure SQL: ${res.message}`, 'success');
           }
         } else {
+          const custom = loadCustomTools();
+          setInventory((prev) => mergeInventoryWithCustomTools(prev, custom));
           setDbStatus((prev) => ({
             ...prev,
             isConnected: false,
@@ -354,14 +377,19 @@ export const App: React.FC = () => {
         }
       }
     },
-    [showToast, inventory.length, jobs.length, dtBatches.length, rtBatches.length]
+    [showToast, inventory, jobs.length, dtBatches.length, rtBatches.length]
   );
 
   // Fast Instant Startup: Load cached dataset from IndexedDB in < 50ms
   useEffect(() => {
     loadDatasetFromCache().then((cached) => {
+      const custom = loadCustomTools();
       if (cached) {
-        if (cached.inventory && cached.inventory.length > 0) setInventory(cached.inventory);
+        if (cached.inventory && cached.inventory.length > 0) {
+          setInventory(mergeInventoryWithCustomTools(cached.inventory, custom));
+        } else if (custom.length > 0) {
+          setInventory((prev) => mergeInventoryWithCustomTools(prev, custom));
+        }
         if (cached.jobs && cached.jobs.length > 0) setJobs(cached.jobs);
         if (cached.dtBatches && cached.dtBatches.length > 0) setDtBatches(cached.dtBatches);
         if (cached.rtBatches && cached.rtBatches.length > 0) setRtBatches(cached.rtBatches);
@@ -371,12 +399,14 @@ export const App: React.FC = () => {
           source: 'azure-sql',
           message: 'Loaded instantly from local cache',
           counts: {
-            inventory: cached.inventory?.length || 0,
+            inventory: (cached.inventory?.length || 0) + custom.length,
             jobs: cached.jobs?.length || 0,
             dtBatches: cached.dtBatches?.length || 0,
             rtBatches: cached.rtBatches?.length || 0,
           },
         }));
+      } else if (custom.length > 0) {
+        setInventory((prev) => mergeInventoryWithCustomTools(prev, custom));
       }
     });
   }, []);
@@ -499,9 +529,44 @@ export const App: React.FC = () => {
     contracts,
   ]);
 
-  // Inventory Save
+  // Inventory Actions & Persistence
+  const handleAddTool = (newTool: ToolItem) => {
+    saveCustomTool(newTool);
+    setInventory((prev) => {
+      const updated = [newTool, ...prev.filter((t) => (t.id || t.serial) !== (newTool.id || newTool.serial))];
+      syncCustomToolsToIndexedDB(updated);
+      return updated;
+    });
+    saveInventoryApi(newTool).then((r) => {
+      if (!r.success) console.warn('Could not save tool to SQL:', r.message);
+    });
+    showToast(`Asset ${newTool.id || newTool.serial} registered and saved.`, 'success');
+  };
+
+  const handleUpdateTool = (id: string, updates: Partial<ToolItem>) => {
+    setInventory((prev) => {
+      const targetId = String(id).trim().toUpperCase();
+      const updated = prev.map((t) => {
+        const k = String(t.id || t.serial).trim().toUpperCase();
+        if (k === targetId) {
+          const merged = { ...t, ...updates };
+          saveCustomTool(merged);
+          saveInventoryApi(merged);
+          return merged;
+        }
+        return t;
+      });
+      syncCustomToolsToIndexedDB(updated);
+      return updated;
+    });
+    showToast(`Asset ${id} updated.`, 'success');
+  };
+
   const handleSaveInventory = (updated: ToolItem[]) => {
-    setInventory(updated);
+    const custom = loadCustomTools();
+    const merged = mergeInventoryWithCustomTools(updated, custom);
+    setInventory(merged);
+
     const currentMap = new Map(inventory.map((t) => [t.id || t.serial, t]));
     const changedTools = updated.filter((item) => {
       const prev = currentMap.get(item.id || item.serial);
@@ -512,16 +577,21 @@ export const App: React.FC = () => {
         prev.currentJobId !== item.currentJobId ||
         prev.assetNo !== item.assetNo ||
         prev.shortDesc !== item.shortDesc ||
-        prev.size !== item.size
+        prev.size !== item.size ||
+        prev.desc !== item.desc ||
+        prev.ownership !== item.ownership ||
+        prev.supplier !== item.supplier
       );
     });
     if (changedTools.length > 0) {
       changedTools.forEach((tool) => {
+        saveCustomTool(tool);
         saveInventoryApi(tool).then((r) => {
           if (!r.success) console.warn('Could not save tool to SQL:', r.message);
         });
       });
     }
+    syncCustomToolsToIndexedDB(merged);
     showToast('Inventory catalog updated.', 'success');
   };
 
@@ -1439,6 +1509,8 @@ export const App: React.FC = () => {
               user={currentUser}
               inventory={inventory}
               onSaveInventory={handleSaveInventory}
+              onAddTool={handleAddTool}
+              onUpdateTool={handleUpdateTool}
               showToast={showToast}
               onOpenToolHistory={(serial) => {
                 setPreSelectedSerialForToolHistory(serial);
