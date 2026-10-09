@@ -124,7 +124,17 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
   >(() => {
     try {
       const saved = localStorage.getItem(`emdad_job_tool_sections_${selectedJobId}`);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const cleaned: Record<string, ToolHoleSectionOption> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          const opt = v as ToolHoleSectionOption;
+          if (opt && opt.contractRef !== 'Ref' && opt.holeSection !== 'Hole Section' && opt.category !== 'From ERP') {
+            cleaned[k] = opt;
+          }
+        }
+        return cleaned;
+      }
     } catch {}
     return {};
   });
@@ -134,7 +144,15 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
     try {
       const saved = localStorage.getItem(`emdad_job_tool_sections_${selectedJobId}`);
       if (saved) {
-        setToolHoleSectionSelections(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        const cleaned: Record<string, ToolHoleSectionOption> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          const opt = v as ToolHoleSectionOption;
+          if (opt && opt.contractRef !== 'Ref' && opt.holeSection !== 'Hole Section' && opt.category !== 'From ERP') {
+            cleaned[k] = opt;
+          }
+        }
+        setToolHoleSectionSelections(cleaned);
       } else {
         setToolHoleSectionSelections({});
       }
