@@ -134,6 +134,27 @@ export function isHoleSectionMatch(contractHoleSection: string, targetSection: s
 }
 
 /**
+ * Checks if a contract is specifically ADNOC Drilling Rental Contract 4700024096
+ */
+export function isAdnocDrillingRentalContract(
+  contract?: ContractRecord | null | string,
+  client?: string | null
+): boolean {
+  if (!contract && !client) return false;
+  const cNo = typeof contract === 'string' ? contract : (contract?.contractNo || contract?.contractRef || contract?.id || '');
+  const cStr = String(cNo).trim().toLowerCase();
+  const clStr = String(client || (typeof contract === 'object' ? contract?.client : '') || '').trim().toLowerCase();
+
+  if (cStr.includes('4700024096')) return true;
+  if (clStr.includes('drilling') && (cStr.includes('rental') || cStr === '' || cStr.includes('4700024096'))) {
+    if (!cStr.includes('4700024608') && !cStr.includes('uz') && !cStr.includes('udr')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Retrieves all available Contract Rate / Hole Section options for a specific tool under a contract
  */
 export function getContractRateOptionsForTool(
@@ -151,6 +172,7 @@ export function getContractRateOptionsForTool(
   const toolDesc = normalizeString(tool.desc || tool.description || tool.shortDesc || tool.category || '');
   const toolSize = (tool.size || '').replace(/["\s]/g, '');
   const toolDim = parseHoleDimension(tool.size);
+  const isAdnocDrilling = isAdnocDrillingRentalContract(contract);
 
   // Retrieve rate lines from contract or fallback master rates
   let ratesList: ContractRateItem[] = [];
@@ -158,9 +180,10 @@ export function getContractRateOptionsForTool(
     ratesList = contract.rates;
   } else if (contract?.contractNo && MASTER_CONTRACT_RATES[contract.contractNo]) {
     ratesList = MASTER_CONTRACT_RATES[contract.contractNo].rates;
+  } else if (isAdnocDrilling) {
+    ratesList = MASTER_CONTRACT_RATES['4700024096']?.rates || [];
   } else {
-    // Default across master rates
-    ratesList = MASTER_CONTRACT_RATES['4700024096']?.rates || MASTER_CONTRACT_RATES['444558']?.rates || [];
+    ratesList = MASTER_CONTRACT_RATES['444558']?.rates || MASTER_CONTRACT_RATES['4700023861']?.rates || [];
   }
 
   // Find candidate matches
@@ -170,7 +193,6 @@ export function getContractRateOptionsForTool(
   for (const r of ratesList) {
     const rCat = normalizeString(r.category || '');
     const rShort = normalizeString(r.shortDesc || '');
-    const rSize = (r.size || '').replace(/["\s]/g, '');
     const rDim = parseHoleDimension(r.size);
 
     let catMatched = false;
@@ -179,7 +201,7 @@ export function getContractRateOptionsForTool(
 
     // Check synonyms
     if (!catMatched) {
-      for (const [key, synList] of Object.entries(CATEGORY_SYNONYMS)) {
+      for (const [, synList] of Object.entries(CATEGORY_SYNONYMS)) {
         const matchesSyn = synList.some((syn) => toolDesc.includes(normalizeString(syn)));
         if (matchesSyn) {
           if (synList.some((syn) => rCat.includes(normalizeString(syn)) || rShort.includes(normalizeString(syn)))) {
@@ -196,9 +218,8 @@ export function getContractRateOptionsForTool(
       if (toolDim !== null && rDim !== null) {
         // If tool is 8" and rate is 8", direct match; or rate is a range like 7-7/8" TO 12"
         if (Math.abs(toolDim - rDim) > 0.3) {
-          // Check if range
           const rSizeUpper = (r.size || '').toUpperCase();
-          if (!rSizeUpper.includes('TO') && !rSizeUpper.includes('-')) {
+          if (!rSizeUpper.includes('TO') && !rSizeUpper.includes('-') && !rSizeUpper.includes('LESS')) {
             sizeCompatible = false;
           }
         }
@@ -214,27 +235,23 @@ export function getContractRateOptionsForTool(
   const finalPool = matchedRates.length > 0 ? matchedRates : (genericRates.length > 0 ? genericRates : ratesList.slice(0, 10));
 
   const options: ToolHoleSectionOption[] = finalPool.map((r, idx) => {
-    const cur = r.currency || contract?.currency || (contract?.contractNo === '4700024096' ? 'AED' : 'USD');
-    const refStr = r.contractRef ? `[${r.contractRef}] ` : '';
-    const sectionStr = r.holeSection ? `${r.holeSection}` : (r.size ? `Size: ${r.size}` : 'Standard Rate');
-    const opsStr = r.opsRate ? `Ops: ${cur} ${r.opsRate.toLocaleString()}` : '';
-    const stdStr = r.standbyRate ? `Std: ${cur} ${r.standbyRate.toLocaleString()}` : '';
-    const rateDetails = [opsStr, stdStr].filter(Boolean).join(' | ');
+    const cur = r.currency || contract?.currency || (isAdnocDrilling ? 'AED' : 'USD');
+    const sectionStr = r.holeSection && r.holeSection !== 'Hole Section' ? `${r.holeSection}` : (r.size ? `${r.size}` : 'Standard');
 
     return {
       key: `${r.contractRef || 'RATE'}_${r.no || idx}_${r.holeSection || r.size || idx}`,
-      contractRef: r.contractRef || 'SCHEDULE',
+      contractRef: r.contractRef && r.contractRef !== 'Ref' ? r.contractRef : '—',
       category: r.category || tool.shortDesc || '',
       shortDesc: r.shortDesc || tool.shortDesc || '',
       size: r.size || tool.size || '',
-      holeSection: r.holeSection || r.size || 'Standard',
+      holeSection: sectionStr,
       opsRate: r.opsRate || 0,
       standbyRate: r.standbyRate || 0,
       runCharges: r.runCharges,
       monthlyCharges: r.monthlyCharges,
       redress: r.redress,
       currency: cur,
-      label: `${refStr}${sectionStr} — (${rateDetails})`,
+      label: sectionStr,
     };
   });
 

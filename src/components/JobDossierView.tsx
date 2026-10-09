@@ -15,6 +15,7 @@ import { saveJobToolHoleSectionApi } from '../services/api';
 import {
   getContractRateOptionsForTool,
   findBestMatchingOption,
+  isAdnocDrillingRentalContract,
   ToolHoleSectionOption,
 } from '../services/contractRateResolver';
 
@@ -3633,8 +3634,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <th className="p-1.5 whitespace-nowrap min-w-[220px]">DESCRIPTION</th>
                       <th className="p-1.5 text-center w-12 min-w-[48px]">QTY</th>
                       <th className="p-1.5 text-center whitespace-nowrap min-w-[80px]">STATUS</th>
-                      <th className="p-1.5 whitespace-nowrap min-w-[220px] bg-amber-100 text-amber-950 font-bold border-x border-slate-300">
-                        HOLE SECTION (CONTRACT RATE)
+                      <th className="p-1.5 text-center whitespace-nowrap min-w-[85px] bg-amber-100 text-amber-950 font-bold border-x border-slate-300">
+                        CONTRACT REF
+                      </th>
+                      <th className="p-1.5 whitespace-nowrap min-w-[170px] max-w-[220px] bg-amber-100 text-amber-950 font-bold border-x border-slate-300">
+                        HOLE SECTION
                       </th>
                       {utilDaysList.map((d) => (
                         <th key={d} className="p-0.5 text-center w-7 min-w-[28px] font-mono text-[11px] bg-slate-200/70 border-x border-slate-300">
@@ -3655,92 +3659,96 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <tbody className="divide-y divide-slate-200">
                     {toolUtilizationRows.length === 0 ? (
                       <tr>
-                        <td colSpan={utilDaysList.length + 17} className="p-8 text-center text-slate-500 font-medium">
+                        <td colSpan={utilDaysList.length + 18} className="p-8 text-center text-slate-500 font-medium">
                           No mobilized tools found for Job {jobData.id} in {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}.
                         </td>
                       </tr>
                     ) : (
-                      toolUtilizationRows.map((row) => (
-                        <tr key={row.rowSeq} className="hover:bg-blue-50/50 h-7 leading-none">
-                          <td className="p-1 text-center font-mono text-slate-500">{row.rowSeq}</td>
-                          <td className="p-1 font-mono text-blue-700 font-bold whitespace-nowrap">{row.dtNumber}</td>
-                          <td className="p-1 font-mono whitespace-nowrap text-[10px]">{formatDateDD_MM_YYYY(row.dispatchDate)}</td>
-                          <td className="p-1 font-mono font-bold whitespace-nowrap">{row.serial || row.assetNo}</td>
-                          <td className="p-1 truncate max-w-[220px]" title={row.desc || row.shortDesc}>{row.desc || row.shortDesc}</td>
-                          <td className="p-1 text-center font-bold">{row.qty || 1}</td>
-                          <td className="p-1 text-center whitespace-nowrap">
-                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
-                              {row.status || 'On Rig'}
-                            </span>
-                          </td>
-                          {/* Hole Section & Contract Rate Selector Dropdown */}
-                          <td className="p-1 min-w-[220px] max-w-[270px] bg-amber-50/40 border-x border-slate-200">
-                            {row.rateOptions && row.rateOptions.length > 0 ? (
-                              <div className="flex flex-col gap-0.5">
+                      toolUtilizationRows.map((row) => {
+                        const isDrilling = isAdnocDrillingRentalContract(activeContract, jobData.client);
+
+                        return (
+                          <tr key={row.rowSeq} className="hover:bg-blue-50/50 h-7 leading-none">
+                            <td className="p-1 text-center font-mono text-slate-500">{row.rowSeq}</td>
+                            <td className="p-1 font-mono text-blue-700 font-bold whitespace-nowrap">{row.dtNumber}</td>
+                            <td className="p-1 font-mono whitespace-nowrap text-[10px]">{formatDateDD_MM_YYYY(row.dispatchDate)}</td>
+                            <td className="p-1 font-mono font-bold whitespace-nowrap">{row.serial || row.assetNo}</td>
+                            <td className="p-1 truncate max-w-[220px]" title={row.desc || row.shortDesc}>{row.desc || row.shortDesc}</td>
+                            <td className="p-1 text-center font-bold">{row.qty || 1}</td>
+                            <td className="p-1 text-center whitespace-nowrap">
+                              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
+                                {row.status || 'On Rig'}
+                              </span>
+                            </td>
+                            {/* 8. Contract Reference Number Column */}
+                            <td className="p-1 text-center font-mono font-bold text-blue-900 border-x border-slate-200 bg-white text-[11px] whitespace-nowrap">
+                              {row.chosenOption?.contractRef && row.chosenOption.contractRef !== '—'
+                                ? row.chosenOption.contractRef
+                                : row.contractRef || '—'}
+                            </td>
+                            {/* 9. Hole Section Column (Dropdown for ADNOC Drilling 4700024096, text for others) */}
+                            <td className="p-1 min-w-[170px] max-w-[220px] bg-amber-50/40 border-x border-slate-200">
+                              {isDrilling && row.rateOptions && row.rateOptions.length > 0 ? (
                                 <select
                                   value={row.chosenOption?.key || row.rateOptions[0]?.key || ''}
                                   disabled={isLocked}
                                   onChange={(e) => handleSelectToolHoleSection(row.toolKey, row, e.target.value)}
-                                  className="w-full text-[10px] font-medium bg-white border border-amber-300 rounded px-1 py-0.5 text-[#1a3055] focus:ring-1 focus:ring-amber-500 outline-none cursor-pointer disabled:bg-slate-100"
-                                  title="Select exact hole section / contract rate schedule for this tool"
+                                  className="w-full text-[10px] font-medium bg-white border border-amber-300 rounded px-1.5 py-0.5 text-[#1a3055] focus:ring-1 focus:ring-amber-500 outline-none cursor-pointer disabled:bg-slate-100"
+                                  title="Select exact hole section for this tool"
                                 >
                                   {row.rateOptions.map((opt: ToolHoleSectionOption) => (
                                     <option key={opt.key} value={opt.key}>
-                                      {opt.contractRef ? `[${opt.contractRef}] ` : ''}{opt.holeSection} ({opt.currency} {opt.opsRate.toLocaleString()})
+                                      {opt.holeSection}
                                     </option>
                                   ))}
                                 </select>
-                                {row.chosenOption && (
-                                  <div className="flex justify-between text-[9px] text-slate-500 font-mono px-0.5">
-                                    <span>Ref: <strong className="text-blue-700">{row.chosenOption.contractRef || '—'}</strong></span>
-                                    <span>Ops: <strong>{row.chosenOption.currency} {row.chosenOption.opsRate.toLocaleString()}</strong></span>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="font-mono text-[10px] text-slate-400 italic">No Contract Rate</span>
-                            )}
-                          </td>
-                          {utilDaysList.map((day) => {
-                            const val = row.dayStatuses[day];
-                            return (
-                              <td
-                                key={day}
-                                onClick={() => handleToggleDayStatus(row.toolKey, day)}
-                                title={`Day ${day}: ${val === '1' ? '1 (Active Operations / Drilling)' : val === 'S' ? 'S (Standby on Rig)' : 'Off Rig'}. Click to toggle.`}
-                                className={`p-0.5 text-center font-mono font-bold text-[10px] border-x border-slate-100 transition select-none ${
-                                  !isLocked ? 'cursor-pointer hover:ring-1 hover:ring-blue-400' : ''
-                                } ${
-                                  val === '1'
-                                    ? 'bg-emerald-100 text-emerald-900'
-                                    : val === 'S'
-                                    ? 'bg-blue-100 text-blue-900'
-                                    : ''
-                                }`}
-                              >
-                                {val}
-                              </td>
-                            );
-                          })}
-                          <td className="p-1 text-center font-bold text-blue-800 bg-blue-50/40">{row.sbCount}</td>
-                          <td className="p-1 text-center font-bold text-emerald-800 bg-emerald-50/40">{row.opsCount}</td>
-                          <td className="p-1 text-right font-mono text-slate-700">{row.standbyRate.toLocaleString()}</td>
-                          <td className="p-1 text-right font-mono text-slate-700">{row.opsRate.toLocaleString()}</td>
-                          <td className="p-1 text-right font-mono font-bold text-blue-900 bg-blue-50/30">{row.totalStandbyRate.toLocaleString()}</td>
-                          <td className="p-1 text-right font-mono font-bold text-emerald-900 bg-emerald-50/30">{row.totalOpsRate.toLocaleString()}</td>
-                          <td className="p-1 text-right font-mono text-slate-600">{row.runCharge.toLocaleString()}</td>
-                          <td className="p-1 text-right font-mono text-slate-600">{row.redressCharge.toLocaleString()}</td>
-                          <td className="p-1 text-right font-mono font-bold pr-2 text-slate-900 bg-amber-50/50">
-                            {row.totalMonthValue.toLocaleString()} {row.currency || 'AED'}
-                          </td>
-                        </tr>
-                      ))
+                              ) : (
+                                <span className="font-medium text-slate-800 text-[11px] truncate block px-1" title={row.chosenOption?.holeSection || row.size || 'Standard'}>
+                                  {row.chosenOption?.holeSection || row.size || 'Standard'}
+                                </span>
+                              )}
+                            </td>
+                            {utilDaysList.map((day) => {
+                              const val = row.dayStatuses[day];
+                              return (
+                                <td
+                                  key={day}
+                                  onClick={() => handleToggleDayStatus(row.toolKey, day)}
+                                  title={`Day ${day}: ${val === '1' ? '1 (Active Operations / Drilling)' : val === 'S' ? 'S (Standby on Rig)' : 'Off Rig'}. Click to toggle.`}
+                                  className={`p-0.5 text-center font-mono font-bold text-[10px] border-x border-slate-100 transition select-none ${
+                                    !isLocked ? 'cursor-pointer hover:ring-1 hover:ring-blue-400' : ''
+                                  } ${
+                                    val === '1'
+                                      ? 'bg-emerald-100 text-emerald-900'
+                                      : val === 'S'
+                                      ? 'bg-blue-100 text-blue-900'
+                                      : ''
+                                  }`}
+                                >
+                                  {val}
+                                </td>
+                              );
+                            })}
+                            <td className="p-1 text-center font-bold text-blue-800 bg-blue-50/40">{row.sbCount}</td>
+                            <td className="p-1 text-center font-bold text-emerald-800 bg-emerald-50/40">{row.opsCount}</td>
+                            <td className="p-1 text-right font-mono text-slate-700">{row.standbyRate.toLocaleString()}</td>
+                            <td className="p-1 text-right font-mono text-slate-700">{row.opsRate.toLocaleString()}</td>
+                            <td className="p-1 text-right font-mono font-bold text-blue-900 bg-blue-50/30">{row.totalStandbyRate.toLocaleString()}</td>
+                            <td className="p-1 text-right font-mono font-bold text-emerald-900 bg-emerald-50/30">{row.totalOpsRate.toLocaleString()}</td>
+                            <td className="p-1 text-right font-mono text-slate-600">{row.runCharge.toLocaleString()}</td>
+                            <td className="p-1 text-right font-mono text-slate-600">{row.redressCharge.toLocaleString()}</td>
+                            <td className="p-1 text-right font-mono font-bold pr-2 text-slate-900 bg-amber-50/50">
+                              {row.totalMonthValue.toLocaleString()} {row.currency || 'AED'}
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                   {toolUtilizationRows.length > 0 && (
                     <tfoot className="bg-[#e9f0f8] font-bold text-[#1a3055] border-t-2 border-slate-300">
                       <tr>
-                        <td colSpan={8} className="p-1.5 text-right uppercase">Fleet Totals:</td>
+                        <td colSpan={9} className="p-1.5 text-right uppercase">Fleet Totals:</td>
                         {utilDaysList.map((day) => {
                           const dayActiveCount = toolUtilizationRows.filter((r) => r.dayStatuses[day] !== '').length;
                           return (

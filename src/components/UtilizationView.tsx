@@ -3,8 +3,12 @@ import { DrillingJob, DTBatch, RTBatch, ToolItem, User, ContractRecord } from '.
 import { formatDateDDMMYY, formatQty } from '../utils';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
 import { normalizeJobKey, saveDailyFieldLogsApi, saveJobToolHoleSectionApi } from '../services/api';
-import { getJobUtilizationRecords, generateDailyCellsForJob } from '../services/jobUtilizationData';
-import { getContractRateOptionsForTool, findBestMatchingOption, ToolHoleSectionOption } from '../services/contractRateResolver';
+import {
+  getContractRateOptionsForTool,
+  findBestMatchingOption,
+  isAdnocDrillingRentalContract,
+  ToolHoleSectionOption,
+} from '../services/contractRateResolver';
 import * as XLSX from 'xlsx';
 
 interface UtilizationViewProps {
@@ -1924,9 +1928,13 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                     <th className="px-1.5 py-1.5 text-center w-14">
                       Status
                     </th>
-                    {/* 8. Hole Section / Pricing Dropdown */}
-                    <th className="px-2 py-1.5 min-w-[190px] max-w-[240px] text-left text-amber-300 font-bold border-r border-[#2a436e]">
-                      Hole Section (Contract Rate)
+                    {/* 8. Contract Reference Number */}
+                    <th className="px-1.5 py-1.5 min-w-[85px] text-center text-amber-300 font-bold border-r border-[#2a436e]">
+                      Contract Ref
+                    </th>
+                    {/* 9. Hole Section */}
+                    <th className="px-2 py-1.5 min-w-[170px] max-w-[220px] text-left text-amber-300 font-bold border-r border-[#2a436e]">
+                      Hole Section
                     </th>
 
                     {/* Day Columns 1..daysInActiveMonth (Compact single day numbers 1, 2, 3...) */}
@@ -1964,7 +1972,7 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                   {displayedItems.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={7 + daysInActiveMonth + 4}
+                        colSpan={8 + daysInActiveMonth + 4}
                         className="p-10 text-center text-slate-500 font-medium"
                       >
                         No line items found for this tab or search query.
@@ -2034,10 +2042,20 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                             </span>
                           </td>
 
-                          {/* Hole Section & Contract Rate Selector Dropdown */}
-                          <td className="px-1.5 py-1 min-w-[190px] max-w-[240px] border-r border-slate-200 bg-white">
+                          {/* 8. Contract Reference Number */}
+                          <td className="px-1.5 py-1 text-center font-mono font-bold text-blue-900 border-r border-slate-200 bg-white text-[11px] whitespace-nowrap">
+                            {stats.selectedRate?.contractRef && stats.selectedRate.contractRef !== '—'
+                              ? stats.selectedRate.contractRef
+                              : item.category === 'Tools'
+                              ? '—'
+                              : 'N/A'}
+                          </td>
+
+                          {/* 9. Hole Section (Dropdown only for ADNOC Drilling 4700024096, text for others) */}
+                          <td className="px-1.5 py-1 min-w-[170px] max-w-[220px] border-r border-slate-200 bg-white">
                             {item.category === 'Tools' ? (
                               (() => {
+                                const isDrilling = isAdnocDrillingRentalContract(activeContract, currentJob?.client);
                                 const rateOpts = getContractRateOptionsForTool(
                                   { desc: item.description, assetNo: item.assetNumber, category: item.category },
                                   activeContract
@@ -2045,8 +2063,8 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                                 const currentSelected = stats.selectedRate;
                                 const currentKey = currentSelected ? currentSelected.key : (rateOpts[0]?.key || '');
 
-                                return (
-                                  <div className="flex flex-col gap-0.5">
+                                if (isDrilling && rateOpts.length > 0) {
+                                  return (
                                     <select
                                       value={currentKey}
                                       onClick={(e) => e.stopPropagation()}
@@ -2055,21 +2073,21 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                                         handleSelectHoleSection(item.id, item, e.target.value);
                                       }}
                                       className="w-full text-[10px] font-medium bg-amber-50/50 border border-amber-300 rounded px-1.5 py-0.5 text-[#1a3055] focus:ring-1 focus:ring-amber-500 outline-none cursor-pointer"
-                                      title="Select exact hole section / contract rate for this tool"
+                                      title="Select exact hole section for this tool"
                                     >
                                       {rateOpts.map((opt) => (
                                         <option key={opt.key} value={opt.key}>
-                                          {opt.contractRef ? `[${opt.contractRef}] ` : ''}{opt.holeSection} ({opt.currency} {opt.opsRate.toLocaleString()})
+                                          {opt.holeSection}
                                         </option>
                                       ))}
                                     </select>
-                                    {currentSelected && (
-                                      <div className="flex justify-between text-[9px] text-slate-500 font-mono px-0.5">
-                                        <span>Ref: <strong className="text-blue-700">{currentSelected.contractRef}</strong></span>
-                                        <span>Ops: <strong>{currentSelected.currency} {currentSelected.opsRate.toLocaleString()}</strong></span>
-                                      </div>
-                                    )}
-                                  </div>
+                                  );
+                                }
+
+                                return (
+                                  <span className="font-medium text-slate-800 text-[11px] truncate block" title={currentSelected?.holeSection || 'Standard'}>
+                                    {currentSelected?.holeSection || 'Standard'}
+                                  </span>
                                 );
                               })()
                             ) : (
