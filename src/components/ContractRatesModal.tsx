@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ContractRecord, ContractRateItem, User } from '../types';
+import { useModulePermission } from '../services/permissionService';
 import { 
   X, 
   Plus, 
@@ -267,7 +268,8 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
     onClose();
   };
 
-  const isReadOnly = user?.role === 'Viewer';
+  const { canEdit } = useModulePermission(user, 'contracts');
+  const isReadOnly = !canEdit;
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto no-print">

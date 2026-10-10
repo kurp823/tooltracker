@@ -34,6 +34,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { ToolItem, MaintenanceRecord, InspectionRecord, NavModule, User } from '../types';
+import { useModulePermission } from '../services/permissionService';
 
 interface InventoryDashboardViewProps {
   user?: User | null;
@@ -56,6 +57,7 @@ export const InventoryDashboardView: React.FC<InventoryDashboardViewProps> = ({
   onOpenAddAsset,
   onRefresh,
 }) => {
+  const { canEdit: canEditInventory } = useModulePermission(user, 'inventory');
   const [activeTab, setActiveTab] = useState<DashboardViewTab>('analytics');
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedSizeFilter, setSelectedSizeFilter] = useState('ALL');
@@ -305,7 +307,7 @@ export const InventoryDashboardView: React.FC<InventoryDashboardViewProps> = ({
                 <span>Refresh</span>
               </button>
             )}
-            {onOpenAddAsset && user?.role !== 'Viewer' && (
+            {onOpenAddAsset && canEditInventory && (
               <button
                 onClick={onOpenAddAsset}
                 className="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs transition shadow-2xs cursor-pointer flex items-center gap-1"

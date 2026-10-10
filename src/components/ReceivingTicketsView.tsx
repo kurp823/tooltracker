@@ -4,6 +4,7 @@ import { extractSizeFromDescription, extractToolType, normalizeJobKey } from '..
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
 import { formatDateDD_MM_YYYY } from './JobDossierView';
 import { EMDAD_LOGO_BASE64 } from '../constants/branding';
+import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 
 interface ReceivingTicketsViewProps {
   user?: User | null;
@@ -33,6 +34,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
   onUpdateRTBatch,
   onRefresh,
 }) => {
+  const { canEdit, isReadOnly } = useModulePermission(user, 'rt');
   // Tabs: 'all' (default ledger of all RTs, exactly like Delivery Tickets) or 'onrig' (tools currently on rig awaiting backload)
   const [tab, setTab] = useState<'all' | 'onrig'>('all');
   const [search, setSearch] = useState('');
@@ -513,6 +515,8 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
 
   return (
     <div className="space-y-3">
+      {isReadOnly && <ReadOnlyBanner role={user?.role} moduleName="Receiving Tickets (RT) Manifests" />}
+
       {/* Ribbon: Exactly matching Delivery Tickets ribbon */}
       <div className="bg-white border border-[#b8c9db] rounded-lg px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
         <div className="flex items-center gap-3">
@@ -544,7 +548,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
               <span>Refresh</span>
             </button>
           )}
-          {user?.role !== 'Viewer' && (
+          {canEdit && (
             <button
               onClick={handleOpenNewRT}
               className="h-7 px-3 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-2xs transition cursor-pointer flex items-center gap-1.5"
@@ -824,7 +828,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                             {latestDT}
                           </td>
                           <td className="px-2.5 py-2 text-center space-x-2 whitespace-nowrap">
-                            {user?.role !== 'Viewer' && (
+                            {canEdit && (
                               <button
                                 type="button"
                                 onClick={() => handleOpenCreateForRig(grp.key)}

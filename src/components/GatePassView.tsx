@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { GatePass, GatePassLine, ToolItem, User } from '../types';
 import { formatDateDDMMYY } from '../utils';
 import { EMDAD_LOGO_BASE64 } from '../constants/branding';
+import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 
 interface GatePassViewProps {
   user?: User | null;
@@ -18,6 +19,7 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
   onSaveGatePass,
   onRefresh,
 }) => {
+  const { canEdit, isReadOnly } = useModulePermission(user, 'gatepass');
   const [search, setSearch] = useState('');
   const [selectedGPDetail, setSelectedGPDetail] = useState<GatePass | null>(null);
   const [isNewGPOpen, setIsNewGPOpen] = useState(false);
@@ -290,6 +292,8 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {isReadOnly && <ReadOnlyBanner role={user?.role} moduleName="Security Gate Pass" />}
+
       {/* Ribbon */}
       <div className="bg-white border border-[#b8c9db] rounded p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
         <div>
@@ -307,7 +311,7 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
               <span>Refresh</span>
             </button>
           )}
-          {user?.role !== 'Viewer' && (
+          {canEdit && (
             <button
               onClick={() => {
                 setNewGpNumber(nextGpNumber);

@@ -19,6 +19,7 @@ import {
   ToolHoleSectionOption,
 } from '../services/contractRateResolver';
 import { EMDAD_LOGO_BASE64, EmdadLogo } from '../constants/branding';
+import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 
 interface JobDossierViewProps {
   job: DrillingJob;
@@ -311,6 +312,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return hasLegal || hasDraft || isFinishedStage;
   }, [jobData]);
 
+  const { canEdit: canEditJobs, isReadOnly } = useModulePermission(user, 'jobs');
   const isAdmin = user?.role === 'Admin';
   const isClosedOrInvoiced = Boolean(
     isJobInvoicedOrSubmitted ||
@@ -322,9 +324,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const [isReopenModalOpen, setIsReopenModalOpen] = useState(false);
   const [reopenJustification, setReopenJustification] = useState('');
 
-  // When closed or legally invoiced, entire job is locked in VIEW ONLY mode unless Admin unlocks with justification
+  // When user has no edit clearance, or when closed or legally invoiced, entire job is locked in VIEW ONLY mode unless Admin unlocks with justification
   const isJobLocked = isClosedOrInvoiced && !adminUnlocked;
-  const isLocked = isJobLocked;
+  const isLocked = !canEditJobs || isJobLocked;
 
   // Daily Field Log state (Daily Drilling Report / Operational Remarks)
   const [dailyLogs, setDailyLogs] = useState<DailyFieldLog[]>(() => {
@@ -1920,6 +1922,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Explicit Save Job File handler
   const handleExplicitSaveJob = async () => {
+    if (!canEditJobs) {
+      showToast('Cannot save: your role has view-only permissions for Drilling Jobs.', 'error');
+      return;
+    }
     if (isClosedOrInvoiced && !adminUnlocked) {
       showToast('Cannot save: this job is invoiced / completed and locked in read-only mode.', 'error');
       return;
@@ -1997,7 +2003,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           <button
             type="button"
             onClick={handleExplicitSaveJob}
-            disabled={isSaving || (isClosedOrInvoiced && !adminUnlocked)}
+            disabled={isSaving || !canEditJobs || (isClosedOrInvoiced && !adminUnlocked)}
             className="text-xs bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-500 text-white px-3 py-1 rounded font-bold cursor-pointer transition shadow-xs flex items-center gap-1.5"
             title="Save all changes in this Job File"
           >
@@ -2061,6 +2067,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
       {/* Main Form Body */}
       <div className="bg-white border-x border-b border-[#9fb6cf] p-4 rounded-b-md shadow-md min-h-[620px] relative">
+        {isReadOnly && <ReadOnlyBanner role={user?.role} moduleName="Drilling Job File" />}
         {/* SIMPLIFIED LOCK BANNER */}
         {isClosedOrInvoiced && (
           <div className="p-1.5 px-3 mb-3 rounded border bg-amber-50 border-amber-300 text-amber-900 text-xs flex flex-wrap items-center justify-between font-bold shadow-2xs gap-2">
@@ -4519,7 +4526,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           <button
             type="button"
             onClick={handleExplicitSaveJob}
-            disabled={isSaving || (isClosedOrInvoiced && !adminUnlocked)}
+            disabled={isSaving || !canEditJobs || (isClosedOrInvoiced && !adminUnlocked)}
             className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-600 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
           >
             <span>{isSaving ? '⏳' : '💾'}</span>

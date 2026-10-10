@@ -3,6 +3,7 @@ import { Callout, CalloutItem, ToolItem, User, DrillingJob } from '../types';
 import { TOOL_SIZES } from '../data/initialData';
 import { ToolPickerModal } from './ToolPickerModal';
 import { formatDateDDMMYY } from '../utils';
+import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 
 interface CalloutsViewProps {
   user?: User | null;
@@ -35,6 +36,7 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
   onOpenNewCallout,
   onRefresh,
 }) => {
+  const { canEdit, isReadOnly } = useModulePermission(user, 'callouts');
   const handleCreateJob = onCreateJobFromCallout || onCreateJob || (() => {});
   const handleDispatch = onDispatchJob || (() => {});
 
@@ -379,6 +381,8 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {isReadOnly && <ReadOnlyBanner role={user?.role} moduleName="Rig Callouts & Mobilization" />}
+
       {/* Ribbon */}
       <div className="bg-white border border-[#b8c9db] rounded p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
         <div>
@@ -396,7 +400,7 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
               <span>Refresh</span>
             </button>
           )}
-          {user?.role !== 'Viewer' && (
+          {canEdit && (
             <button
               onClick={() => {
                 setQueueItems([]);
@@ -569,7 +573,7 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
                         >
                           View Details
                         </button>
-                        {user?.role !== 'Viewer' && (
+                        {canEdit && (
                           <>
                             <button
                               type="button"
@@ -1136,7 +1140,7 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
             {/* Footer */}
             <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-between items-center flex-shrink-0 text-xs">
               <div className="flex items-center gap-2">
-                {user?.role !== 'Viewer' && (
+                {canEdit && (
                   <button
                     type="button"
                     onClick={() => {
@@ -1156,7 +1160,7 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
                         (j.id === selectedCalloutDetail.jobId || (j as any).JobID === selectedCalloutDetail.jobId)) ||
                       (j.calloutId && j.calloutId === selectedCalloutDetail.id)
                   );
-                  if (user?.role !== 'Viewer') {
+                  if (canEdit) {
                     if (linkedJob) {
                       return (
                         <div className="flex items-center gap-2">

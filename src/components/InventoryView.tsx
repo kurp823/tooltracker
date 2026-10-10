@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { ToolItem, User } from '../types';
 import { TOOL_SIZES } from '../data/initialData';
+import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 
 interface InventoryViewProps {
   user?: User | null;
@@ -29,6 +30,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   onOpenToolHistory,
   onRefresh,
 }) => {
+  const { canEdit, isReadOnly } = useModulePermission(user, 'inventory');
+
   const showToast = useCallback(
     (msg: string, type: 'success' | 'error' | 'info' = 'info') => {
       if (propShowToast) {
@@ -341,6 +344,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   };
 
   const startEditTool = (t: ToolItem) => {
+    if (!canEdit) return;
     setEditingToolId(t.id);
     setEditStatus(t.status);
     setEditLocation(t.location);
@@ -348,7 +352,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingToolId) return;
+    if (!canEdit || !editingToolId) return;
     if (onUpdateTool) {
       onUpdateTool(editingToolId, { status: editStatus, location: editLocation });
     } else if (onSaveInventory) {
@@ -363,6 +367,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {isReadOnly && <ReadOnlyBanner role={user?.role} moduleName="Tool Fleet & Inventory Catalog" />}
+
       {/* Ribbon */}
       <div className="bg-white border border-[#b8c9db] rounded p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
         <div>
@@ -388,7 +394,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           >
             📤 Export CSV
           </button>
-          {user?.role !== 'Viewer' && (
+          {canEdit && (
             <button
               type="button"
               onClick={handleOpenAddModal}
@@ -631,13 +637,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                             <span>History</span>
                           </button>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => startEditTool(t)}
-                          className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold border border-slate-300 cursor-pointer transition"
-                        >
-                          Edit
-                        </button>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            onClick={() => startEditTool(t)}
+                            className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold border border-slate-300 cursor-pointer transition"
+                          >
+                            Edit
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -698,13 +706,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                               <span>History</span>
                             </button>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => startEditTool(t)}
-                            className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold border border-slate-300 cursor-pointer transition"
-                          >
-                            Edit
-                          </button>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => startEditTool(t)}
+                              className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold border border-slate-300 cursor-pointer transition"
+                            >
+                              Edit
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

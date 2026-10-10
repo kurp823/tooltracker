@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavModule, User } from '../types';
 import { MODULE_PERMISSIONS } from '../data/initialData';
-import { EmdadLogo } from '../constants/branding';
+import { getRolePermissions } from '../services/permissionService';
 
 interface SidebarProps {
   activeView?: NavModule;
@@ -37,21 +37,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const handleNav = onNavigate || onSelectModule || (() => {});
 
   // Dynamic Role Permissions Matrix loaded from localStorage with default fallback
-  const [rolePermissions, setRolePermissions] = useState<Record<string, NavModule[]>>(() => {
-    try {
-      const saved = localStorage.getItem('emdad_role_permissions');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return MODULE_PERMISSIONS;
-  });
+  const [rolePermissions, setRolePermissions] = useState<Record<string, NavModule[]>>(() => getRolePermissions());
 
   useEffect(() => {
     const handlePermissionsChange = () => {
-      try {
-        const saved = localStorage.getItem('emdad_role_permissions');
-        if (saved) setRolePermissions(JSON.parse(saved));
-        else setRolePermissions(MODULE_PERMISSIONS);
-      } catch (e) {}
+      setRolePermissions(getRolePermissions());
     };
     window.addEventListener('permissions_updated', handlePermissionsChange);
     window.addEventListener('storage', handlePermissionsChange);
@@ -205,21 +195,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Top Header / Branding area in sidebar */}
       <div className="p-3 border-b border-[#182944] flex items-center justify-between">
         {!isCollapsed ? (
-          <div className="flex items-center gap-2">
-            <div className="bg-white px-1.5 py-0.5 rounded shadow-xs flex items-center justify-center shrink-0">
-              <EmdadLogo className="h-5 w-auto object-contain" />
+          <div>
+            <div className="font-bold text-[11px] text-white tracking-wider flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+              <span>OPERATIONS PLATFORM</span>
             </div>
-            <div>
-              <div className="font-bold text-[11px] text-white tracking-wider flex items-center gap-1">
-                <span>OPERATIONS</span>
-              </div>
-              <div className="text-[9px] text-slate-400 font-medium">Tool Fleet &amp; Dispatch</div>
-            </div>
+            <div className="text-[9px] text-slate-400 font-medium">Tool Fleet &amp; Dispatch</div>
           </div>
         ) : (
-          <div className="mx-auto bg-white px-1 py-0.5 rounded shadow-xs flex items-center justify-center">
-            <EmdadLogo className="h-3.5 w-auto object-contain" />
-          </div>
+          <div className="mx-auto font-black text-xs text-amber-400">EMDAD</div>
         )}
 
         {onToggleCollapse && (

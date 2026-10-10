@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ContractRecord, DrillingJob, User, NavModule } from '../types';
 import { ContractRatesModal } from './ContractRatesModal';
+import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 import { 
   FileSpreadsheet, 
   Plus, 
@@ -37,6 +38,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
   onRefresh,
   onNavigate,
 }) => {
+  const { canEdit, isReadOnly } = useModulePermission(user, 'contracts');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'Active' | 'Closed'>('ALL');
   const [clientFilter, setClientFilter] = useState<string>('ALL');
@@ -233,6 +235,8 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {isReadOnly && <ReadOnlyBanner role={user?.role} moduleName="Commercial Contracts & Price Books" />}
+
       {/* Top Banner Ribbon */}
       <div className="bg-white border border-[#b8c9db] rounded-lg p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -286,7 +290,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
               <span>Export CSV</span>
             </button>
 
-            {user?.role !== 'Viewer' && (
+            {canEdit && (
               <button
                 onClick={() => setIsNewContractOpen(true)}
                 className="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-xs transition flex items-center gap-1.5 cursor-pointer"

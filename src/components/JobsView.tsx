@@ -16,6 +16,7 @@ import { JobToolsListView } from './JobToolsListView';
 import { ToolItem, ContractRecord } from '../types';
 import { isInvalidOrPlaceholderDate } from '../utils';
 import { resolveJobClient } from '../services/api';
+import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 import {
   Search,
   Download,
@@ -228,6 +229,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   selectedCalloutForNewJob,
   onOpenJobToolsList,
 }) => {
+  const { canEdit, isReadOnly } = useModulePermission(user, 'jobs');
   const [tab, setTab] = useState<'all' | JobStageKey>('all');
   const [search, setSearch] = useState('');
   const [selectedRigFilter, setSelectedRigFilter] = useState<string>('all');
@@ -921,7 +923,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
             <span>Export CSV</span>
           </button>
 
-          {user?.role !== 'Viewer' && (
+          {canEdit && (
             <button
               onClick={onOpenNewJobModal}
               className="h-7.5 px-3.5 rounded bg-[#1a3055] text-white font-semibold text-xs hover:bg-[#24426d] transition cursor-pointer flex items-center gap-1.5 shadow-xs"
@@ -932,6 +934,8 @@ export const JobsView: React.FC<JobsViewProps> = ({
           )}
         </div>
       </div>
+
+      {isReadOnly && <ReadOnlyBanner role={user?.role} moduleName="Drilling Jobs Management" />}
 
       {/* EXECUTIVE LIFECYCLE KPI RIBBON */}
       <div className="bg-white border border-slate-200/90 rounded-lg p-2 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
@@ -1936,7 +1940,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
           job={selectedJobDetail}
           dtBatches={getJobStats(selectedJobDetail.id).dtBatches}
           rtBatches={getJobStats(selectedJobDetail.id).rtBatches}
-          canEdit={user?.role !== 'Viewer'}
+          canEdit={canEdit}
           formatJobDate={formatJobDate}
           renderStatusBadge={renderStatusBadge}
           onOpenStatusModal={() => setEditingJobStatus(selectedJobDetail)}

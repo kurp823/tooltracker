@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { MaintenanceRecord, ToolItem, User } from '../types';
+import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 
 interface MaintenanceViewProps {
   user?: User | null;
@@ -46,6 +47,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   onCompleteMaintenance,
   onRefresh,
 }) => {
+  const { canEdit, isReadOnly } = useModulePermission(user, 'maintenance');
   const [tab, setTab] = useState<'active' | 'vendor' | 'ready_qc' | 'completed'>('active');
   const [search, setSearch] = useState('');
   const [isNewMntOpen, setIsNewMntOpen] = useState(false);
@@ -284,6 +286,8 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {isReadOnly && <ReadOnlyBanner role={user?.role} moduleName="Maintenance & Workshop Services" />}
+
       {/* Ribbon */}
       <div className="bg-white border border-[#b8c9db] rounded p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
         <div>
@@ -301,7 +305,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
               <span>Refresh</span>
             </button>
           )}
-          {user?.role !== 'Viewer' && (
+          {canEdit && (
             <button
               onClick={() => setIsNewMntOpen(true)}
               className="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-xs transition cursor-pointer"
@@ -393,7 +397,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                 >
                   Cost (AED) {sortField === 'cost' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
                 </th>
-                {user?.role !== 'Viewer' && <th className="px-3 py-2 text-center">Actions &amp; Workflow</th>}
+                {canEdit && <th className="px-3 py-2 text-center">Actions &amp; Workflow</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e2e8f0]">
@@ -498,7 +502,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                           '—'
                         )}
                       </td>
-                      {user?.role !== 'Viewer' && (
+                      {canEdit && (
                         <td className="px-3 py-2 text-center whitespace-nowrap">
                           {!isCompleted ? (
                             <div className="flex items-center justify-center gap-1.5 flex-wrap">

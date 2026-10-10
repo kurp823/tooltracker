@@ -3,6 +3,7 @@ import { DTBatch, DTLine, DrillingJob, Callout, ToolItem, User } from '../types'
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
 import { extractSizeFromDescription, extractToolType, normalizeJobKey } from '../services/api';
 import { EMDAD_LOGO_BASE64, EmdadLogo } from '../constants/branding';
+import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 
 interface DeliveryTicketsViewProps {
   user?: User | null;
@@ -35,6 +36,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   preSelectedJobId,
   onRefresh,
 }) => {
+  const { canEdit, isReadOnly } = useModulePermission(user, 'dt');
   const [tab, setTab] = useState<'onrig' | 'all'>('onrig');
   const [search, setSearch] = useState('');
   const [selectedDTId, setSelectedDTId] = useState<string | null>(null);
@@ -558,6 +560,8 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
 
   return (
     <div className="space-y-3">
+      {isReadOnly && <ReadOnlyBanner role={user?.role} moduleName="Delivery Tickets (DT) Manifests" />}
+
       {/* Ribbon */}
       <div className="bg-white border border-[#b8c9db] rounded-lg px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
         <div className="flex items-center gap-3">
@@ -586,7 +590,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
               <span>Refresh</span>
             </button>
           )}
-          {user?.role !== 'Viewer' && (
+          {canEdit && (
             <button
               onClick={() => {
                 setNewDtNumber(nextDtNumber);

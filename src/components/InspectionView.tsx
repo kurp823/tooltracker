@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { InspectionRecord, MaintenanceRecord, ToolItem, User } from '../types';
+import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 
 interface InspectionViewProps {
   user?: User | null;
@@ -22,6 +23,7 @@ export const InspectionView: React.FC<InspectionViewProps> = ({
   onUpdateInspection,
   onRefresh,
 }) => {
+  const { canEdit, isReadOnly } = useModulePermission(user, 'inspection');
   const [tab, setTab] = useState<'pending' | 'complete'>('pending');
   const [search, setSearch] = useState('');
   const [editingInspection, setEditingInspection] = useState<InspectionRecord | null>(null);
@@ -49,6 +51,7 @@ export const InspectionView: React.FC<InspectionViewProps> = ({
   }, [inspections, tab, search]);
 
   const openUpdateModal = (ins: InspectionRecord) => {
+    if (!canEdit) return;
     setEditingInspection(ins);
     setInspectorName(user?.name || 'QC Inspector');
     setInspectionDate(new Date().toISOString().split('T')[0]);
@@ -115,6 +118,8 @@ export const InspectionView: React.FC<InspectionViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {isReadOnly && <ReadOnlyBanner role={user?.role} moduleName="QC Inspection Bay" />}
+
       {/* Ribbon */}
       <div className="bg-white border border-[#b8c9db] rounded p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
         <div>
@@ -183,7 +188,7 @@ export const InspectionView: React.FC<InspectionViewProps> = ({
                 <th className="px-3 py-2">Inspector</th>
                 <th className="px-3 py-2">QC Result</th>
                 <th className="px-3 py-2">Disposition</th>
-                {user?.role !== 'Viewer' && <th className="px-3 py-2 text-center">Action</th>}
+                {canEdit && <th className="px-3 py-2 text-center">Action</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e2e8f0]">
@@ -217,7 +222,7 @@ export const InspectionView: React.FC<InspectionViewProps> = ({
                       </span>
                     </td>
                     <td className="px-3 py-2 text-slate-600">{i.disposition || '—'}</td>
-                    {user?.role !== 'Viewer' && (
+                    {canEdit && (
                       <td className="px-3 py-2 text-center">
                         <button
                           onClick={() => openUpdateModal(i)}

@@ -41,6 +41,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { normalizeJobKey } from '../services/api';
+import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 
 interface InvoicingViewProps {
   user: User;
@@ -67,6 +68,8 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
   onNavigate,
   onRefresh,
 }) => {
+  const { canEdit, isReadOnly } = useModulePermission(user, 'invoicing');
+
   // Filter stage
   const [stageFilter, setStageFilter] = useState<
     'all_ready' | 'submitted' | 'draft_invoiced' | 'ses_approval' | 'final_invoiced' | 'all'
@@ -269,6 +272,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
 
   // Handle line day/rate adjustments
   const handleUpdateLine = (index: number, field: keyof CalculationTicketLine, value: number) => {
+    if (!canEdit) return;
     setEditableLines((prev) => {
       const next = [...prev];
       const target = { ...next[index], [field]: value };
@@ -376,6 +380,10 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
 
   // Action: Generate Draft Invoice
   const handleGenerateDraftInvoice = () => {
+    if (!canEdit) {
+      if (onShowToast) onShowToast('Your role has view-only permissions for Invoicing.', 'error');
+      return;
+    }
     if (!currentJob || !onUpdateJob) return;
     const today = new Date().toISOString().split('T')[0];
     const draftNo = draftNumber.trim() || defaultDraftNumber;
@@ -401,6 +409,10 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
 
   // Action: Open Epicor Final Legal Invoice Modal
   const handleOpenFinalInvoiceModal = () => {
+    if (!canEdit) {
+      if (onShowToast) onShowToast('Your role has view-only permissions for Invoicing.', 'error');
+      return;
+    }
     setEpicorLegalInvoiceNo(currentJob?.legalInvoiceNumber || '');
     setLegalInvoiceDate(new Date().toISOString().split('T')[0]);
     setIsEpicorModalOpen(true);
@@ -409,7 +421,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
   // Action: Submit Final Legal Invoice (Typed from Epicor)
   const handleConfirmFinalInvoice = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentJob || !onUpdateJob) return;
+    if (!canEdit || !currentJob || !onUpdateJob) return;
 
     const legalNo = epicorLegalInvoiceNo.trim();
     if (!legalNo) {
@@ -449,6 +461,8 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
 
   return (
     <div className="space-y-6 pb-24 text-slate-800">
+      {isReadOnly && <ReadOnlyBanner role={user?.role} moduleName="Invoicing & Commercial Verification" />}
+
       {/* 1. Header & Stage Filters */}
       <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-5">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -478,21 +492,26 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                 <span>Refresh</span>
               </button>
             )}
-            <button
-              onClick={handleGenerateDraftInvoice}
-              className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-            >
-              <Save className="w-3.5 h-3.5" />
-              <span>Generate Draft Invoice</span>
-            </button>
 
-            <button
-              onClick={handleOpenFinalInvoiceModal}
-              className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-            >
-              <FileCheck className="w-3.5 h-3.5" />
-              <span>Issue Final Tax Invoice (Epicor)</span>
-            </button>
+            {canEdit && (
+              <button
+                onClick={handleGenerateDraftInvoice}
+                className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Generate Draft Invoice</span>
+              </button>
+            )}
+
+            {canEdit && (
+              <button
+                onClick={handleOpenFinalInvoiceModal}
+                className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                <FileCheck className="w-3.5 h-3.5" />
+                <span>Issue Final Tax Invoice (Epicor)</span>
+              </button>
+            )}
 
             <button
               onClick={handlePrint}

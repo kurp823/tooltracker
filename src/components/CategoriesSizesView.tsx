@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ToolItem, User, NavModule } from '../types';
-import { WRITE_PERMISSIONS } from '../data/initialData';
+import { useModulePermission } from '../services/permissionService';
 import { Plus, Trash2, Edit2, Check, X, Tag, FolderPlus, Search, Layers, Box } from 'lucide-react';
 
 interface CategoriesSizesViewProps {
@@ -24,20 +24,7 @@ export const CategoriesSizesView: React.FC<CategoriesSizesViewProps> = ({
   showToast,
   onRefresh,
 }) => {
-  // Check if current user has permission to write / edit master categories & sizes
-  const canEdit = useMemo(() => {
-    if (user?.role === 'Admin') return true;
-    try {
-      const saved = localStorage.getItem('emdad_write_permissions');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const roleWrites: NavModule[] = parsed[user?.role || 'Viewer'] || [];
-        return roleWrites.includes('categories-sizes');
-      }
-    } catch (e) {}
-    const defaultWrites = WRITE_PERMISSIONS[user?.role || 'Viewer'] || [];
-    return defaultWrites.includes('categories-sizes');
-  }, [user]);
+  const { canEdit } = useModulePermission(user, 'categories-sizes');
   // Category state
   const [catSearch, setCatSearch] = useState('');
   const [newCatName, setNewCatName] = useState('');
