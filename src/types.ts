@@ -235,7 +235,10 @@ export interface DrillingJob {
     casingCleanout2?: string;
   };
   crewMembers?: JobCrewMember[];
+  assignedCrew?: JobCrewMember[];
   dailyLogs?: DailyFieldLog[];
+  lastRtNumber?: string;
+  docsSignedDate?: string | null;
 }
 
 export interface DailyFieldLog {

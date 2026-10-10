@@ -9,7 +9,7 @@ import {
   isAdnocDrillingRentalContract,
   ToolHoleSectionOption,
 } from '../services/contractRateResolver';
-import { getJobUtilizationRecords } from '../services/jobUtilizationData';
+import { getJobUtilizationRecords, generateDailyCellsForJob } from '../services/jobUtilizationData';
 import * as XLSX from 'xlsx';
 
 interface UtilizationViewProps {

@@ -265,6 +265,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   inventory,
   contracts = [],
   onSaveJob,
+  onRefresh,
   onSaveDTBatch,
   onUpdateDTBatch,
   onSaveRTBatch,

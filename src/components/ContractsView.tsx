@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ContractRecord, DrillingJob, User } from '../types';
+import { ContractRecord, DrillingJob, User, NavModule } from '../types';
 import { ContractRatesModal } from './ContractRatesModal';
 import { 
   FileSpreadsheet, 

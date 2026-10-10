@@ -124,18 +124,154 @@ export const App: React.FC = () => {
     }
   });
 
-  // Current Active Module View
-  const [activeView, setActiveView] = useState<ViewKey>('dashboard');
+  // Valid View Set for hash and persistence matching
+  const VALID_VIEWS = useMemo(() => new Set<ViewKey>([
+    'dashboard',
+    'jobs',
+    'dt',
+    'rt',
+    'job-tools-list',
+    'tool-history',
+    'callouts',
+    'gatepass',
+    'utilization',
+    'inventory-dash',
+    'inventory',
+    'categories-sizes',
+    'maintenance-dash',
+    'inspection',
+    'maintenance',
+    'billing-dash',
+    'invoicing',
+    'billing-package',
+    'tool-revenue-report',
+    'contract-dash',
+    'contracts',
+    'data-management',
+    'settings',
+  ]), []);
+
+  // Current Active Module View - Restores from URL Hash or localStorage on browser refresh
+  const [activeView, setActiveViewState] = useState<ViewKey>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const hash = window.location.hash.replace(/^#\/?/, '').trim() as ViewKey;
+        const validList = [
+          'dashboard', 'jobs', 'dt', 'rt', 'job-tools-list', 'tool-history', 'callouts',
+          'gatepass', 'utilization', 'inventory-dash', 'inventory', 'categories-sizes',
+          'maintenance-dash', 'inspection', 'maintenance', 'billing-dash', 'invoicing',
+          'billing-package', 'tool-revenue-report', 'contract-dash', 'contracts',
+          'data-management', 'settings',
+        ];
+        if (hash && validList.includes(hash)) {
+          return hash;
+        }
+        const saved = localStorage.getItem('emdad_active_view') as ViewKey;
+        if (saved && validList.includes(saved)) {
+          return saved;
+        }
+      }
+    } catch {}
+    return 'dashboard';
+  });
+
+  const setActiveView = useCallback((view: ViewKey) => {
+    setActiveViewState(view);
+    try {
+      localStorage.setItem('emdad_active_view', view);
+      if (typeof window !== 'undefined' && window.location.hash !== `#${view}`) {
+        window.history.replaceState(null, '', `#${view}`);
+      }
+    } catch {}
+  }, []);
+
+  // Listen for hash changes (browser back/forward button)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace(/^#\/?/, '').trim() as ViewKey;
+      if (hash && VALID_VIEWS.has(hash)) {
+        setActiveViewState(hash);
+        localStorage.setItem('emdad_active_view', hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [VALID_VIEWS]);
 
   // Navigation and Modal Triggers
   const [isNewCalloutOpen, setIsNewCalloutOpen] = useState(false);
   const [isNewJobOpen, setIsNewJobOpen] = useState(false);
   const [isNewDTOpen, setIsNewDTOpen] = useState(false);
   const [selectedCalloutForJob, setSelectedCalloutForJob] = useState<Callout | null>(null);
-  const [preSelectedJobIdForDT, setPreSelectedJobIdForDT] = useState<string | null>(null);
-  const [selectedJobIdForBillingPackage, setSelectedJobIdForBillingPackage] = useState<string | null>(null);
-  const [preSelectedJobIdForToolsList, setPreSelectedJobIdForToolsList] = useState<string | null>(null);
-  const [preSelectedSerialForToolHistory, setPreSelectedSerialForToolHistory] = useState<string | null>(null);
+  const [preSelectedJobIdForDT, setPreSelectedJobIdForDT] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem('emdad_selected_job_dt') || null;
+    } catch {
+      return null;
+    }
+  });
+  const [selectedJobIdForBillingPackage, setSelectedJobIdForBillingPackage] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem('emdad_selected_job_billing') || null;
+    } catch {
+      return null;
+    }
+  });
+  const [preSelectedJobIdForToolsList, setPreSelectedJobIdForToolsList] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem('emdad_selected_job_tools') || null;
+    } catch {
+      return null;
+    }
+  });
+  const [preSelectedSerialForToolHistory, setPreSelectedSerialForToolHistory] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem('emdad_selected_serial_history') || null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Persist contextual selections
+  useEffect(() => {
+    try {
+      if (selectedJobIdForBillingPackage) {
+        sessionStorage.setItem('emdad_selected_job_billing', selectedJobIdForBillingPackage);
+      } else {
+        sessionStorage.removeItem('emdad_selected_job_billing');
+      }
+    } catch {}
+  }, [selectedJobIdForBillingPackage]);
+
+  useEffect(() => {
+    try {
+      if (preSelectedJobIdForToolsList) {
+        sessionStorage.setItem('emdad_selected_job_tools', preSelectedJobIdForToolsList);
+      } else {
+        sessionStorage.removeItem('emdad_selected_job_tools');
+      }
+    } catch {}
+  }, [preSelectedJobIdForToolsList]);
+
+  useEffect(() => {
+    try {
+      if (preSelectedSerialForToolHistory) {
+        sessionStorage.setItem('emdad_selected_serial_history', preSelectedSerialForToolHistory);
+      } else {
+        sessionStorage.removeItem('emdad_selected_serial_history');
+      }
+    } catch {}
+  }, [preSelectedSerialForToolHistory]);
+
+  useEffect(() => {
+    try {
+      if (preSelectedJobIdForDT) {
+        sessionStorage.setItem('emdad_selected_job_dt', preSelectedJobIdForDT);
+      } else {
+        sessionStorage.removeItem('emdad_selected_job_dt');
+      }
+    } catch {}
+  }, [preSelectedJobIdForDT]);
 
   // Sync state
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('saved');
@@ -1500,7 +1636,7 @@ export const App: React.FC = () => {
 
         {/* Dynamic View Canvas */}
         <main className="flex-1 p-3 md:p-5 overflow-y-auto w-full">
-          <ErrorBoundary onReset={() => setActiveView('dashboard')}>
+          <ErrorBoundary key={activeView} onReset={() => {}}>
           {activeView === 'dashboard' && (
             <DashboardView
               user={currentUser}
