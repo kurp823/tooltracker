@@ -47,8 +47,27 @@ export async function saveDatasetToCache(data: {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
+
+    const cleanDtBatches = Array.isArray(data.dtBatches)
+      ? data.dtBatches.filter((b: any) => {
+          const id = String(b?.id || '').toUpperCase();
+          const num = String(b?.dtNumber || '').toUpperCase();
+          return !id.startsWith('DT-AUTO') && !id.startsWith('DT-CLS') && !num.startsWith('DT-CLS') && !num.startsWith('DT-AUTO');
+        })
+      : data.dtBatches;
+
+    const cleanRtBatches = Array.isArray(data.rtBatches)
+      ? data.rtBatches.filter((b: any) => {
+          const id = String(b?.id || '').toUpperCase();
+          const num = String(b?.rtNumber || '').toUpperCase();
+          return !id.startsWith('RT-AUTO') && !id.startsWith('RT-CLS') && !num.startsWith('RT-CLS') && !num.startsWith('RT-AUTO');
+        })
+      : data.rtBatches;
+
     const payload: CachedDataset = {
       ...data,
+      dtBatches: cleanDtBatches,
+      rtBatches: cleanRtBatches,
       timestamp: Date.now(),
     };
     store.put(payload, 'latest_full_dataset');
@@ -68,7 +87,27 @@ export async function loadDatasetFromCache(): Promise<CachedDataset | null> {
     const store = tx.objectStore(STORE_NAME);
     const request = store.get('latest_full_dataset');
     return new Promise((resolve) => {
-      request.onsuccess = () => resolve(request.result || null);
+      request.onsuccess = () => {
+        const result: CachedDataset | null = request.result || null;
+        if (result) {
+          // Purge any legacy synthetic tickets from previous sessions
+          if (Array.isArray(result.dtBatches)) {
+            result.dtBatches = result.dtBatches.filter((b: any) => {
+              const id = String(b?.id || '').toUpperCase();
+              const num = String(b?.dtNumber || '').toUpperCase();
+              return !id.startsWith('DT-AUTO') && !id.startsWith('DT-CLS') && !num.startsWith('DT-CLS') && !num.startsWith('DT-AUTO');
+            });
+          }
+          if (Array.isArray(result.rtBatches)) {
+            result.rtBatches = result.rtBatches.filter((b: any) => {
+              const id = String(b?.id || '').toUpperCase();
+              const num = String(b?.rtNumber || '').toUpperCase();
+              return !id.startsWith('RT-AUTO') && !id.startsWith('RT-CLS') && !num.startsWith('RT-CLS') && !num.startsWith('RT-AUTO');
+            });
+          }
+        }
+        resolve(result);
+      };
       request.onerror = () => resolve(null);
     });
   } catch (err) {

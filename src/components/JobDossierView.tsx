@@ -484,6 +484,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     if (!rawId && !normId) return [];
 
     return dtBatches.filter((b) => {
+      const id = String(b.id || '').toUpperCase();
+      const num = String(b.dtNumber || '').toUpperCase();
+      if (id.startsWith('DT-AUTO') || id.startsWith('DT-CLS') || num.startsWith('DT-CLS') || num.startsWith('DT-AUTO')) {
+        return false;
+      }
       const bJob = (b.jobId || (b as any).jobNumber || '').trim().toUpperCase();
       const bNorm = normalizeJobKey(b.jobId || (b as any).jobNumber);
       if (bJob && rawId && bJob === rawId) return true;
@@ -504,13 +509,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       (dt.toolLines || []).forEach((tl: any) => {
         const ref = (tl.rtBatchId || tl.returnedRtNumber || (tl as any).rgtNo || '').trim().toUpperCase();
         const retDate = tl.returnDate || tl.dateIn || (tl as any).Date_In;
-        if (ref && ref !== '—' && ref !== '-' && (!retDate || !dtDate || retDate >= dtDate)) {
+        if (ref && ref !== '—' && ref !== '-' && !ref.startsWith('RT-AUTO') && !ref.startsWith('RT-CLS') && (!retDate || !dtDate || retDate >= dtDate)) {
           jobReferencedRTs.add(ref);
         }
       });
     });
 
     const matched = rtBatches.filter((b) => {
+      const id = String(b.id || '').toUpperCase();
+      const num = String(b.rtNumber || '').toUpperCase();
+      if (id.startsWith('RT-AUTO') || id.startsWith('RT-CLS') || num.startsWith('RT-CLS') || num.startsWith('RT-AUTO')) {
+        return false;
+      }
       const bJob = (b.jobId || (b as any).jobNumber || '').trim().toUpperCase();
       const bNorm = normalizeJobKey(b.jobId || (b as any).jobNumber);
       const bNum = (b.rtNumber || b.id || '').trim().toUpperCase();
@@ -970,9 +980,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       (rt.toolLines || []).find((l: any) => l.dateIn || l.Date_In || l.returnDate || l.DateIn)?.dateIn ||
       (rt.toolLines || []).find((l: any) => l.Date_In)?.Date_In;
     if (val && val !== '—') return formatDateDD_MM_YYYY(val);
-    if (rt.rtNumber?.startsWith('RT-CLS-') || rt.id?.startsWith('RT-AUTO-')) {
-      return formatDateDD_MM_YYYY(jobData.demobDate || jobData.lastRtDate);
-    }
     return '—';
   };
 
@@ -3170,9 +3177,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         } else if (directRtRef && directRtRef !== '—' && directRtRef !== '-' && isReturnedValid) {
                           rgtNo = directRtRef;
                           rgtDate = candidateReturnDate;
-                        } else if (isJobInvoicedOrSubmitted && (jobData.demobDate || jobData.lastRtDate)) {
-                          rgtNo = jobData.lastRtNumber || 'RT-CLS';
-                          rgtDate = jobData.demobDate || jobData.lastRtDate;
                         }
 
                         const categoryName = extractToolType(t.desc, t.shortDesc);
@@ -3451,8 +3455,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         activeRT.loadingNoteDate ||
                         activeRT.lNoteDate ||
                         (activeRT as any).Date_In ||
-                        (activeRT as any).dateIn ||
-                        (activeRT.rtNumber?.startsWith('RT-CLS-') ? jobData.demobDate : null)
+                        (activeRT as any).dateIn
                       );
 
                       return (

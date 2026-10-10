@@ -336,13 +336,35 @@ export const App: React.FC = () => {
 
   const [dtBatches, setDtBatches] = useState<DTBatch[]>(() => {
     const s = localStorage.getItem('emdad_dt_batches');
-    if (s) return JSON.parse(s);
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((b: any) => {
+            const id = String(b?.id || '').toUpperCase();
+            const num = String(b?.dtNumber || '').toUpperCase();
+            return !id.startsWith('DT-AUTO') && !id.startsWith('DT-CLS') && !num.startsWith('DT-CLS') && !num.startsWith('DT-AUTO');
+          });
+        }
+      } catch {}
+    }
     return isPureSqlMode ? [] : INITIAL_DT_BATCHES;
   });
 
   const [rtBatches, setRtBatches] = useState<RTBatch[]>(() => {
     const s = localStorage.getItem('emdad_rt_batches');
-    if (s) return JSON.parse(s);
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((b: any) => {
+            const id = String(b?.id || '').toUpperCase();
+            const num = String(b?.rtNumber || '').toUpperCase();
+            return !id.startsWith('RT-AUTO') && !id.startsWith('RT-CLS') && !num.startsWith('RT-CLS') && !num.startsWith('RT-AUTO');
+          });
+        }
+      } catch {}
+    }
     return isPureSqlMode ? [] : INITIAL_RT_BATCHES;
   });
 

@@ -37,8 +37,8 @@ export function getWritePermissions(): Record<UserRole, NavModule[]> {
  */
 export function canViewModule(user: User | null | undefined, module: NavModule): boolean {
   if (!user) return false;
-  if (user.role === 'Admin') return true;
-  if (module === 'settings' && user.role !== 'Admin') return false;
+  if ((user.role as string) === 'Admin') return true;
+  if (module === 'settings') return false;
   const rolePerms = getRolePermissions();
   const allowed = rolePerms[user.role] || MODULE_PERMISSIONS[user.role] || [];
   return allowed.includes(module);
@@ -49,8 +49,8 @@ export function canViewModule(user: User | null | undefined, module: NavModule):
  */
 export function canEditModule(user: User | null | undefined, module: NavModule): boolean {
   if (!user) return false;
-  if (user.role === 'Admin') return true;
-  if (module === 'settings' && user.role !== 'Admin') return false;
+  if ((user.role as string) === 'Admin') return true;
+  if (module === 'settings') return false;
   const writePerms = getWritePermissions();
   const allowed = writePerms[user.role] || WRITE_PERMISSIONS[user.role] || [];
   return allowed.includes(module);

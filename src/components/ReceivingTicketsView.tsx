@@ -153,11 +153,6 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
     if (lineWithDate) {
       return formatDateDD_MM_YYYY(lineWithDate.dateIn || (lineWithDate as any).Date_In || (lineWithDate as any).returnDate || (lineWithDate as any).DateIn);
     }
-    if (r.rtNumber && r.rtNumber.startsWith('RT-CLS-') && r.jobId) {
-      const job = jobMap.get(r.jobId.trim().toUpperCase()) || jobMap.get(normalizeJobKey(r.jobId));
-      if (job?.demobDate) return formatDateDD_MM_YYYY(job.demobDate);
-      if (job?.lastRtDate) return formatDateDD_MM_YYYY(job.lastRtDate);
-    }
     return '—';
   };
 
@@ -173,11 +168,6 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
     const lineWithDate = (r.toolLines || []).find((l: any) => l.dateIn || l.Date_In || l.returnDate || l.DateIn);
     if (lineWithDate) {
       return formatDateDD_MM_YYYY(lineWithDate.dateIn || (lineWithDate as any).Date_In || (lineWithDate as any).returnDate || (lineWithDate as any).DateIn);
-    }
-    if (r.rtNumber && r.rtNumber.startsWith('RT-CLS-') && r.jobId) {
-      const job = jobMap.get(r.jobId.trim().toUpperCase()) || jobMap.get(normalizeJobKey(r.jobId));
-      if (job?.demobDate) return formatDateDD_MM_YYYY(job.demobDate);
-      if (job?.lastRtDate) return formatDateDD_MM_YYYY(job.lastRtDate);
     }
     return '—';
   };

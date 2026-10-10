@@ -1,6 +1,6 @@
 import { DrillingJob } from "../types";
 
-export const MASTER_JOBS: DrillingJob[] = [
+export const MASTER_JOBS: DrillingJob[] = ([
   {
     "id": "Job-023-00001",
     "rig": "AL YASAT",
@@ -46426,4 +46426,4 @@ export const MASTER_JOBS: DrillingJob[] = [
     "rtToolsCount": 0,
     "toolsOnRig": 0
   }
-];
+]) as unknown as DrillingJob[];

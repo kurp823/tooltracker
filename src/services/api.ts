@@ -768,6 +768,17 @@ export function normalizeDTBatch(row: any): any {
       return line;
     });
 
+  // Deduplicate lines by serial & itemNo to prevent historical multi-well Cartesian product duplication
+  const seenLineKeys = new Set<string>();
+  const deduplicatedLines = lines.filter((l: any) => {
+    const s = String(l?.serial || l?.assetNo || '').trim().toUpperCase();
+    const item = l?.itemNo ? String(l.itemNo) : '';
+    const key = `${s}:::${item}`;
+    if (s && seenLineKeys.has(key)) return false;
+    if (s) seenLineKeys.add(key);
+    return true;
+  });
+
   return {
     id: String(row.DTBatchID || row.dtBatchId || row.id || row.ID || row.dtNumber || row.DTNumber || ''),
     dtNumber: String(row.DTNumber || row.dtNumber || row.TicketNumber || row.ticketNumber || row.id || ''),
@@ -812,8 +823,8 @@ export function normalizeDTBatch(row: any): any {
     signedDocUrl: row.signedDocUrl || row.SignedDocUrl || '',
     signedDocName: row.signedDocName || row.SignedDocName || '',
     signedDate: cleanDateStr(row.signedDate || row.SignedDate || ''),
-    toolLines: lines,
-    tools: lines,
+    toolLines: deduplicatedLines,
+    tools: deduplicatedLines,
   };
 }
 
@@ -1081,6 +1092,17 @@ export function normalizeRTBatch(row: any): any {
     return norm;
   }).filter(Boolean);
 
+  // Deduplicate lines by serial & itemNo to prevent historical multi-well Cartesian product duplication
+  const seenRtLineKeys = new Set<string>();
+  const deduplicatedRtLines = lines.filter((l: any) => {
+    const s = String(l?.serial || l?.assetNo || '').trim().toUpperCase();
+    const item = l?.itemNo ? String(l.itemNo) : '';
+    const key = `${s}:::${item}`;
+    if (s && seenRtLineKeys.has(key)) return false;
+    if (s) seenRtLineKeys.add(key);
+    return true;
+  });
+
   const carrier = String(
     row.Carrier ||
     row.carrier ||
@@ -1132,8 +1154,8 @@ export function normalizeRTBatch(row: any): any {
     signedDocUrl: row.signedDocUrl || row.SignedDocUrl || '',
     signedDocName: row.signedDocName || row.SignedDocName || '',
     signedDate: cleanDateStr(row.signedDate || row.SignedDate || ''),
-    toolLines: lines,
-    tools: lines,
+    toolLines: deduplicatedRtLines,
+    tools: deduplicatedRtLines,
   };
 }
 
@@ -1329,7 +1351,20 @@ export function reconcileJobsDTRTAndInventory(
     if (j.jobNumber) jobsById.set(String(j.jobNumber).trim().toUpperCase(), j);
   });
 
-  // Attach contract references to DTs if missing
+  // 1. Purge any synthetic dummy tickets (DT-CLS, DT-AUTO, RT-CLS, RT-AUTO)
+  dtBatches = (dtBatches || []).filter((b: any) => {
+    const id = String(b?.id || '').toUpperCase();
+    const num = String(b?.dtNumber || '').toUpperCase();
+    return !id.startsWith('DT-AUTO') && !id.startsWith('DT-CLS') && !num.startsWith('DT-CLS') && !num.startsWith('DT-AUTO');
+  });
+
+  rtBatches = (rtBatches || []).filter((b: any) => {
+    const id = String(b?.id || '').toUpperCase();
+    const num = String(b?.rtNumber || '').toUpperCase();
+    return !id.startsWith('RT-AUTO') && !id.startsWith('RT-CLS') && !num.startsWith('RT-CLS') && !num.startsWith('RT-AUTO');
+  });
+
+  // 2. Attach contract references to DTs if missing and clean dummy references
   dtBatches.forEach((b: any) => {
     if (!b.contract || b.contract === '—') {
       const j = b.jobId ? jobsById.get(String(b.jobId).trim().toUpperCase()) : null;
@@ -1337,133 +1372,18 @@ export function reconcileJobsDTRTAndInventory(
         b.contract = j.contract || j.client || (j.poNumber ? `PO-${j.poNumber}` : '');
       }
     }
-  });
-
-  // 0. Cross-index and synthesize RT Batches from DT lines that have returnedRtNumber or rtBatchId
-  const rtsByRtNumber = new Map<string, any>();
-  rtBatches.forEach((rt) => {
-    const num = String(rt.rtNumber || rt.id || '').trim().toUpperCase();
-    if (num) rtsByRtNumber.set(num, rt);
-  });
-
-  dtBatches.forEach((dt) => {
-    (dt.toolLines || []).forEach((tl: any) => {
-      const rtNum = String(tl.returnedRtNumber || tl.rtBatchId || '').trim();
-      if (rtNum && rtNum !== '—' && rtNum !== '-' && !rtNum.toUpperCase().startsWith('RT-AUTO') && !rtNum.toUpperCase().startsWith('RT-CLS')) {
-        const rtKey = rtNum.toUpperCase();
-        let targetRT = rtsByRtNumber.get(rtKey);
-        const lineDate = cleanDateStr(
-          tl.returnDate ||
-          tl.dateIn ||
-          tl.Date_In ||
-          (tl as any).DateIn ||
-          targetRT?.rtDate ||
-          targetRT?.backloadRmDate ||
-          targetRT?.loadingNoteDate ||
-          targetRT?.lNoteDate ||
-          dt.dispatchDate ||
-          ''
-        );
-        
-        if (!targetRT) {
-          targetRT = {
-            id: `RTB-${rtNum.replace(/[^a-zA-Z0-9]/g, '')}`,
-            rtNumber: rtNum,
-            jobId: dt.jobId || '',
-            rig: dt.rig || '',
-            well: dt.well || '',
-            contract: dt.contract || '',
-            rtDate: lineDate,
-            backloadRmDate: lineDate,
-            loadingNoteNo: `LN-${rtNum.replace(/^RT-?/i, '')}`,
-            loadingNoteDate: lineDate,
-            lNoteNo: `LN-${rtNum.replace(/^RT-?/i, '')}`,
-            lNoteDate: lineDate,
-            carrier: 'EMDAD Logistics',
-            shippedVia: 'EMDAD Logistics',
-            receivedBy: 'QC Inspector',
-            condition: 'Good condition',
-            toolLines: [],
-            isSigned: true,
-            isLocked: true,
-          };
-          rtBatches.push(targetRT);
-          rtsByRtNumber.set(rtKey, targetRT);
-        } else {
-          // If the existing targetRT from SQL has an empty date, fill it
-          if ((!targetRT.rtDate || targetRT.rtDate === '—') && lineDate) {
-            targetRT.rtDate = lineDate;
-            targetRT.backloadRmDate = lineDate;
-          }
-          if ((!targetRT.loadingNoteDate || targetRT.loadingNoteDate === '—') && lineDate) {
-            targetRT.loadingNoteDate = lineDate;
-            targetRT.lNoteDate = lineDate;
-          }
-          if (!targetRT.jobId && dt.jobId) {
-            targetRT.jobId = dt.jobId;
-          }
-          if (!targetRT.rig && dt.rig) {
-            targetRT.rig = dt.rig;
-          }
-          if (!targetRT.well && dt.well) {
-            targetRT.well = dt.well;
-          }
-        }
-
-        const existingTool = (targetRT.toolLines || []).find(
-          (rtl: any) => rtl.serial && tl.serial && String(rtl.serial).trim().toUpperCase() === String(tl.serial).trim().toUpperCase()
-        );
-        if (existingTool) {
-          const effDate = cleanDateStr(
-            existingTool.dateIn ||
-            existingTool.Date_In ||
-            existingTool.DateIn ||
-            existingTool.returnDate ||
-            existingTool.rtDate ||
-            lineDate ||
-            targetRT.rtDate ||
-            targetRT.loadingNoteDate
-          );
-          if (effDate) {
-            existingTool.dateIn = effDate;
-            existingTool.Date_In = effDate;
-            existingTool.DateIn = effDate;
-            existingTool.rtDate = effDate;
-            existingTool.returnDate = effDate;
-          }
-          if (!existingTool.rtNumber) existingTool.rtNumber = rtNum;
-        } else {
-          if (!targetRT.toolLines) targetRT.toolLines = [];
-          const effDate = lineDate || targetRT.rtDate || targetRT.loadingNoteDate;
-          targetRT.toolLines.push({
-            id: tl.id || `RTL-${Date.now()}-${targetRT.toolLines.length}`,
-            itemNo: targetRT.toolLines.length + 1,
-            serial: tl.serial,
-            assetNo: tl.assetNo || tl.serial,
-            shortDesc: tl.shortDesc,
-            desc: tl.desc,
-            toolDescription: tl.toolDescription || tl.desc || tl.shortDesc,
-            size: tl.size,
-            dateIn: effDate,
-            Date_In: effDate,
-            DateIn: effDate,
-            rtDate: effDate,
-            returnDate: effDate,
-            rtNumber: rtNum,
-            used: tl.used != null ? tl.used : (tl.usedStatus === 'used'),
-            routedTo: tl.used ? 'Inspection Bay' : 'Available Inventory',
-            condition: tl.condition || (tl.used ? 'USED' : 'NOT USED'),
-            ownership: tl.ownership || 'EMDAD',
-            remarks: tl.remarks || '',
-            qty: tl.qty || 1,
-            dtBatchId: dt.id || dt.dtNumber,
-          });
-        }
+    (b.toolLines || []).forEach((tl: any) => {
+      const ref = String(tl.returnedRtNumber || tl.rtBatchId || '').trim();
+      if (ref.toUpperCase().startsWith('RT-AUTO') || ref.toUpperCase().startsWith('RT-CLS')) {
+        tl.returnedRtNumber = '';
+        tl.rtBatchId = null;
+      } else if (ref && ref !== '—' && ref !== '-') {
+        tl.status = 'Returned';
       }
     });
   });
 
-  // Index DTs and RTs by Job ID
+  // 3. Index genuine DTs and RTs by Job ID and normalized job key
   const dtsByJobId = new Map<string, any[]>();
   dtBatches.forEach((dt) => {
     const k = String(dt.jobId || '').trim().toUpperCase();
@@ -1492,9 +1412,8 @@ export function reconcileJobsDTRTAndInventory(
     }
   });
 
-  // 1. Auto-create dummy tickets and reconcile completed jobs with legal invoices (FSH, FR, WHP)
+  // 4. Reconcile completed jobs with legal invoices (FSH, FR, WHP) - DO NOT fabricate fake tickets!
   jobs.forEach((job) => {
-    // Legal invoice numbers strictly start with FSH, FR, or WHP
     const hasLegalInvoice = Boolean(
       (job.legalInvoiceNumber && (
         job.legalInvoiceNumber.toUpperCase().startsWith('FSH') ||
@@ -1515,7 +1434,7 @@ export function reconcileJobsDTRTAndInventory(
       const jobDTs = dtsByJobId.get(jobKey) || [];
       const jobRTs = rtsByJobId.get(jobKey) || [];
 
-      // Ensure all existing DTs for this completed job are locked, signed, and tool lines returned
+      // Lock authentic DTs and mark tool lines as returned
       jobDTs.forEach((dt) => {
         dt.isSigned = true;
         dt.isLocked = true;
@@ -1524,7 +1443,7 @@ export function reconcileJobsDTRTAndInventory(
         });
       });
 
-      // Ensure all existing RTs for this completed job are locked and signed
+      // Lock authentic RTs
       jobRTs.forEach((rt) => {
         rt.isSigned = true;
         rt.isLocked = true;
@@ -1533,128 +1452,8 @@ export function reconcileJobsDTRTAndInventory(
         });
       });
 
-      // Collect all tool serials dispatched in DTs
-      const dispatchedLines: any[] = [];
-      jobDTs.forEach((dt) => {
-        (dt.toolLines || []).forEach((tl: any) => {
-          dispatchedLines.push(tl);
-        });
-      });
-
-      // Collect all tool serials returned in RTs
-      const returnedLines: any[] = [];
-      const returnedSerials = new Set<string>();
-      jobRTs.forEach((rt) => {
-        (rt.toolLines || []).forEach((tl: any) => {
-          returnedLines.push(tl);
-          if (tl.serial) returnedSerials.add(String(tl.serial).trim().toUpperCase());
-        });
-      });
-
-      // Case A: Tools were dispatched on DT, but unreturned on RT -> create dummy RT
-      const unreturned = dispatchedLines.filter(
-        (tl) => tl.serial && !returnedSerials.has(String(tl.serial).trim().toUpperCase())
-      );
-
-      if (dispatchedLines.length > 0 && unreturned.length > 0) {
-        const dummyRTId = `RT-AUTO-${String(job.id).replace(/[^a-zA-Z0-9]/g, '')}`;
-        const dummyRTNum = `RT-CLS-${String(job.id).replace(/^Job[-_]?/i, '')}`;
-        const existingAuto = rtBatches.find(
-          (r) => r.id === dummyRTId || r.rtNumber === dummyRTNum
-        );
-
-        if (!existingAuto) {
-          const autoDate = job.demobDate || job.lastRtDate || job.finalInvoicedDate || job.mobDate || '2023-12-31';
-          const lnNo = `LN-${String(job.id).replace(/^Job[-_]?/i, '')}`;
-          const autoRT = {
-            id: dummyRTId,
-            rtNumber: dummyRTNum,
-            jobId: job.id,
-            rig: job.rig || 'Rig Unassigned',
-            well: job.well || '—',
-            contract: job.contract || '',
-            rtDate: autoDate,
-            backloadRmDate: autoDate,
-            loadingNoteNo: lnNo,
-            loadingNoteDate: autoDate,
-            lNoteNo: lnNo,
-            lNoteDate: autoDate,
-            carrier: 'EMDAD Logistics',
-            shippedVia: 'EMDAD Logistics',
-            receivedBy: 'Operations Base (Closed)',
-            recipient: 'Emdad Base QC',
-            notes: `Auto-closure receiving clearance for completed job ${job.id} (Legal Inv #${job.legalInvoiceNumber || job.invoiceNumber})`,
-            toolLines: unreturned.map((tl: any) => ({
-              ...tl,
-              dateIn: autoDate,
-              Date_In: autoDate,
-              rtDate: autoDate,
-              rtNumber: dummyRTNum,
-              status: 'Returned',
-              used: Boolean(tl.used),
-              rtBatchId: dummyRTId,
-              routedTo: tl.routedTo || 'Emdad Base',
-            })),
-            isSigned: true,
-            isLocked: true,
-          };
-          rtBatches.push(autoRT);
-          if (!rtsByJobId.has(jobKey)) rtsByJobId.set(jobKey, []);
-          rtsByJobId.get(jobKey)!.push(autoRT);
-
-          // Update DT tool lines to link to this auto RT
-          jobDTs.forEach((dt) => {
-            (dt.toolLines || []).forEach((tl: any) => {
-              if (unreturned.some((u) => u.serial && String(u.serial).trim().toUpperCase() === String(tl.serial).trim().toUpperCase())) {
-                tl.status = 'Returned';
-                tl.rtBatchId = dummyRTId;
-              }
-            });
-          });
-
-          if (!job.lastRtDate) {
-            job.lastRtDate = autoRT.rtDate;
-          }
-        }
-      }
-
-      // Case B: RT tools exist (e.g. RT tools = 1) but DT tools = 0 -> create dummy DT to balance
-      if (returnedLines.length > 0 && dispatchedLines.length === 0) {
-        const dummyDTId = `DT-AUTO-${String(job.id).replace(/[^a-zA-Z0-9]/g, '')}`;
-        const dummyDTNum = `DT-CLS-${String(job.id).replace(/^Job[-_]?/i, '')}`;
-        const existingAutoDT = dtBatches.find(
-          (d) => d.id === dummyDTId || d.dtNumber === dummyDTNum
-        );
-
-        if (!existingAutoDT) {
-          const autoDT = {
-            id: dummyDTId,
-            dtNumber: dummyDTNum,
-            jobId: job.id,
-            rig: job.rig || 'Rig Unassigned',
-            well: job.well || '—',
-            contract: job.contract || '',
-            rmDate: job.mobDate || '2023-01-01',
-            dispatchDate: job.mobDate || '2023-01-01',
-            dispatchedBy: 'Operations Base (Closed)',
-            recipient: job.client || 'Client Representative',
-            notes: `Auto-closure dispatch record for completed job ${job.id} (Legal Inv #${job.legalInvoiceNumber || job.invoiceNumber})`,
-            toolLines: returnedLines.map((tl: any) => ({
-              ...tl,
-              status: 'Returned',
-              rtBatchId: tl.rtBatchId || (jobRTs[0] ? jobRTs[0].id : undefined),
-            })),
-            isSigned: true,
-            isLocked: true,
-          };
-          dtBatches.push(autoDT);
-          if (!dtsByJobId.has(jobKey)) dtsByJobId.set(jobKey, []);
-          dtsByJobId.get(jobKey)!.push(autoDT);
-        }
-      }
-
-      job.signedDtAttached = true;
-      job.signedRtAttached = true;
+      job.signedDtAttached = jobDTs.length > 0;
+      job.signedRtAttached = jobRTs.length > 0;
       job.signedUtilizationAttached = true;
       if (!job.status || job.status.toLowerCase() !== 'completed') {
         job.status = 'Completed';
@@ -1814,60 +1613,42 @@ export async function fetchLiveDatabaseData(): Promise<{
     lines.forEach((line) => {
       const keys = new Set<string>();
 
+      // Only extract genuine ticket foreign keys — NEVER the line's own primary key (ID, id, LineID, itemNo)
       const rawRefs = type === 'DT'
         ? [
             line.dtNumber, line.DTNumber, line.DT_Number, line.dt_number,
             line.TicketNumber, line.ticketNumber, line.Ticket_Number, line.ticket_number,
             line.DTNo, line.dtNo, line.DT_No, line.dt_no,
-            line.DTBatchID, line.dtBatchId, line.DT_Batch_ID, line.dt_batch_id,
-            line.BatchID, line.batchId,
             line.DeliveryTicketNo, line.deliveryTicketNo, line.DeliveryTicketNumber, line.deliveryTicketNumber,
+            line.DTBatchID, line.dtBatchId, line.DT_Batch_ID, line.dt_batch_id,
             line.DeliveryTicketID, line.deliveryTicketId, line.DT_ID, line.dt_id,
-            line.HeaderID, line.headerId, line.DTHeaderID, line.dtHeaderId,
-            line.TicketID, line.ticketId, line.ID, line.id,
+            line.DTHeaderID, line.dtHeaderId,
           ]
         : [
             line.rtNumber, line.RTNumber, line.RT_Number, line.rt_number,
             line.TicketNumber, line.ticketNumber, line.Ticket_Number, line.ticket_number,
             line.RTNo, line.rtNo, line.RT_No, line.rt_no,
             line.RGT_No, line.rgtNo, line.RGTNo, line.rgt_no,
-            line.RTBatchID, line.rtBatchId, line.RT_Batch_ID, line.rt_batch_id,
-            line.BatchID, line.batchId,
             line.ReceivingTicketNo, line.receivingTicketNo, line.ReceivingTicketNumber, line.receivingTicketNumber,
+            line.RTBatchID, line.rtBatchId, line.RT_Batch_ID, line.rt_batch_id,
             line.ReceivingTicketID, line.receivingTicketId, line.RT_ID, line.rt_id,
-            line.HeaderID, line.headerId, line.RTHeaderID, line.rtHeaderId,
-            line.TicketID, line.ticketId, line.ID, line.id,
+            line.RTHeaderID, line.rtHeaderId,
           ];
 
       rawRefs.forEach((r) => {
         if (r != null && r !== '') {
           const s = String(r).trim();
-          if (s) {
+          if (s && s !== '—' && s !== '-') {
             keys.add(s);
             keys.add(s.toUpperCase());
             const norm = s.toUpperCase().replace(/^(DT|RT|RGT)[-_]?/i, '');
             if (norm) {
               keys.add(norm);
               keys.add(`${type}-${norm}`);
-              keys.add(`${type}${norm}`);
-              const withoutZeros = norm.replace(/^0+/, '');
-              if (withoutZeros) {
-                keys.add(withoutZeros);
-                keys.add(`${type}-${withoutZeros}`);
-              }
             }
           }
         }
       });
-
-      const jId = String(line.jobId || line.JobID || line.jobNumber || line.JobNumber || line.JobNo || line.jobNo || line.Job || line.job || '').trim();
-      if (jId) {
-        const normJ = normalizeJobKey(jId);
-        if (normJ) {
-          keys.add(`JOB_${normJ}`);
-        }
-        keys.add(`JOB_${jId.toUpperCase()}`);
-      }
 
       keys.forEach((k) => {
         if (!map.has(k)) map.set(k, []);
@@ -1900,24 +1681,22 @@ export async function fetchLiveDatabaseData(): Promise<{
             ticket.dtNumber, ticket.DTNumber, ticket.DT_Number, ticket.dt_number,
             ticket.TicketNumber, ticket.ticketNumber, ticket.Ticket_Number, ticket.ticket_number,
             ticket.DTNo, ticket.dtNo, ticket.DT_No, ticket.dt_no,
-            ticket.DTBatchID, ticket.dtBatchId, ticket.DT_Batch_ID, ticket.dt_batch_id,
-            ticket.BatchID, ticket.batchId,
-            ticket.id, ticket.ID,
             ticket.DeliveryTicketNo, ticket.deliveryTicketNo, ticket.DeliveryTicketNumber, ticket.deliveryTicketNumber,
+            ticket.DTBatchID, ticket.dtBatchId, ticket.DT_Batch_ID, ticket.dt_batch_id,
             ticket.DeliveryTicketID, ticket.deliveryTicketId, ticket.DT_ID, ticket.dt_id,
-            ticket.HeaderID, ticket.headerId, ticket.DTHeaderID, ticket.dtHeaderId,
+            ticket.DTHeaderID, ticket.dtHeaderId,
+            ticket.id, ticket.ID,
           ]
         : [
             ticket.rtNumber, ticket.RTNumber, ticket.RT_Number, ticket.rt_number,
             ticket.TicketNumber, ticket.ticketNumber, ticket.Ticket_Number, ticket.ticket_number,
             ticket.RTNo, ticket.rtNo, ticket.RT_No, ticket.rt_no,
             ticket.RGT_No, ticket.rgtNo, ticket.RGTNo, ticket.rgt_no,
-            ticket.RTBatchID, ticket.rtBatchId, ticket.RT_Batch_ID, ticket.rt_batch_id,
-            ticket.BatchID, ticket.batchId,
-            ticket.id, ticket.ID,
             ticket.ReceivingTicketNo, ticket.receivingTicketNo, ticket.ReceivingTicketNumber, ticket.receivingTicketNumber,
+            ticket.RTBatchID, ticket.rtBatchId, ticket.RT_Batch_ID, ticket.rt_batch_id,
             ticket.ReceivingTicketID, ticket.receivingTicketId, ticket.RT_ID, ticket.rt_id,
-            ticket.HeaderID, ticket.headerId, ticket.RTHeaderID, ticket.rtHeaderId,
+            ticket.RTHeaderID, ticket.rtHeaderId,
+            ticket.id, ticket.ID,
           ];
 
       let foundLines: any[] | null = null;
@@ -1929,26 +1708,10 @@ export async function fetchLiveDatabaseData(): Promise<{
           const norm = s.toUpperCase().replace(/^(DT|RT|RGT)[-_]?/i, '');
           if (norm && lineIndex.has(norm)) { foundLines = lineIndex.get(norm)!; break; }
           if (norm && lineIndex.has(`${type}-${norm}`)) { foundLines = lineIndex.get(`${type}-${norm}`)!; break; }
-          const withoutZeros = norm.replace(/^0+/, '');
-          if (withoutZeros && lineIndex.has(withoutZeros)) { foundLines = lineIndex.get(withoutZeros)!; break; }
-          if (withoutZeros && lineIndex.has(`${type}-${withoutZeros}`)) { foundLines = lineIndex.get(`${type}-${withoutZeros}`)!; break; }
         }
       }
 
-      if (!foundLines) {
-        const jId = String(ticket.jobId || ticket.JobID || ticket.jobNumber || ticket.JobNumber || ticket.JobNo || ticket.jobNo || '').trim();
-        if (jId) {
-          const normJ = normalizeJobKey(jId);
-          if (normJ && lineIndex.has(`JOB_${normJ}`)) {
-            foundLines = lineIndex.get(`JOB_${normJ}`)!;
-          }
-        }
-      }
-
-      if (foundLines && foundLines.length > 0) {
-        ticket.toolLines = foundLines;
-      }
-
+      ticket.toolLines = foundLines && foundLines.length > 0 ? foundLines : [];
       return ticket;
     });
   }
