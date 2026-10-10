@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { DrillingJob, JobLifecycleStatus, DTBatch, RTBatch, NavModule, User } from '../types';
 import { formatDateDDMMYYYY } from '../utils';
 import { isLegalInvoiceNumber } from '../jobLifecycle';
+import { resolveJobClient } from '../services/api';
 import {
   ShieldCheck,
   FileCheck,
@@ -187,10 +188,21 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
     setOption1Modal({ isOpen: false, job: null, actionType: 'draft' });
   };
 
+  // 0. Clean & Normalize Jobs with resolved client names
+  const normalizedJobs = useMemo(() => {
+    return jobs.map((j) => {
+      const client = resolveJobClient(j.client, j.contract, undefined, j.rig);
+      return {
+        ...j,
+        client: client || j.client || 'ADNOC DRILLING',
+      };
+    });
+  }, [jobs]);
+
   // 1. Pipeline Counts
   const completedJobs = useMemo(
     () =>
-      jobs.filter((j) => {
+      normalizedJobs.filter((j) => {
         const s = (j.status || '').toLowerCase().trim();
         return (
           isLegalInvoiceNumber(j.legalInvoiceNumber) ||
@@ -207,12 +219,12 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
           s === 'ses submitted'
         );
       }),
-    [jobs]
+    [normalizedJobs]
   );
 
   const waitingSignedDocs = useMemo(
     () =>
-      jobs.filter((j) => {
+      normalizedJobs.filter((j) => {
         const s = (j.status || '').toLowerCase().trim();
         return (
           !isLegalInvoiceNumber(j.legalInvoiceNumber) &&
@@ -222,12 +234,12 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
             s === 'waiting docs')
         );
       }),
-    [jobs]
+    [normalizedJobs]
   );
 
   const submittedToBilling = useMemo(
     () =>
-      jobs.filter((j) => {
+      normalizedJobs.filter((j) => {
         const s = (j.status || '').toLowerCase().trim();
         return (
           !isLegalInvoiceNumber(j.legalInvoiceNumber) &&
@@ -237,24 +249,24 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
             s === 'in billing')
         );
       }),
-    [jobs]
+    [normalizedJobs]
   );
 
   const draftInvoiced = useMemo(
     () =>
-      jobs.filter((j) => {
+      normalizedJobs.filter((j) => {
         const s = (j.status || '').toLowerCase().trim();
         return (
           !isLegalInvoiceNumber(j.legalInvoiceNumber) &&
           (s === 'draft invoiced' || s === 'draft invoice')
         );
       }),
-    [jobs]
+    [normalizedJobs]
   );
 
   const underSes = useMemo(
     () =>
-      jobs.filter((j) => {
+      normalizedJobs.filter((j) => {
         const s = (j.status || '').toLowerCase().trim();
         return (
           !isLegalInvoiceNumber(j.legalInvoiceNumber) &&
@@ -264,12 +276,12 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
             s === 'under approval')
         );
       }),
-    [jobs]
+    [normalizedJobs]
   );
 
   const finalInvoiced = useMemo(
     () =>
-      jobs.filter((j) => {
+      normalizedJobs.filter((j) => {
         const s = (j.status || '').toLowerCase().trim();
         return (
           isLegalInvoiceNumber(j.legalInvoiceNumber) ||
@@ -280,7 +292,7 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
           s === 'job completed'
         );
       }),
-    [jobs]
+    [normalizedJobs]
   );
 
   const totalBilledValue = useMemo(() => {
@@ -305,7 +317,7 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
 
   // Filtered and Sorted jobs list
   const displayedJobs = useMemo(() => {
-    let list = [...jobs];
+    let list = [...normalizedJobs];
     if (filterStage === 'waiting_docs') list = [...waitingSignedDocs];
     else if (filterStage === 'submitted_billing') list = [...submittedToBilling];
     else if (filterStage === 'draft_invoiced') list = [...draftInvoiced];
@@ -338,7 +350,7 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
       return sortOrder === 'desc' ? -comparison : comparison;
     });
   }, [
-    jobs,
+    normalizedJobs,
     filterStage,
     search,
     sortField,

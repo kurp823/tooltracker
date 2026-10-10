@@ -121,6 +121,85 @@ function isLegalCandidate(c: string): boolean {
   return /[A-Z]/.test(s);
 }
 
+export function cleanDateValue(val: any): string {
+  if (!val) return '';
+  const str = String(val).trim();
+  if (
+    !str ||
+    str === '—' ||
+    str === '-' ||
+    str === 'null' ||
+    str === 'undefined' ||
+    str === 'NIL' ||
+    str === 'NULL' ||
+    str.startsWith('1900') ||
+    str.startsWith('01-Jan-1900') ||
+    str.startsWith('01-jan-1900') ||
+    str.startsWith('01/01/1900') ||
+    str.startsWith('1970-01-01') ||
+    str.includes('1900-01-01')
+  ) {
+    return '';
+  }
+  return str;
+}
+
+export function resolveJobClient(
+  rawClient?: string | null,
+  contractRef?: string | null,
+  masterClient?: string | null,
+  rig?: string | null
+): string {
+  const c = String(rawClient || '').trim();
+  const cUpper = c.toUpperCase();
+  const isGeneric =
+    !c ||
+    cUpper === 'EMDAD CLIENT' ||
+    cUpper === 'EMDAD' ||
+    cUpper === 'CLIENT' ||
+    cUpper === 'NIL' ||
+    cUpper === 'NULL' ||
+    cUpper === 'UNDEFINED' ||
+    cUpper === '—' ||
+    cUpper === '-';
+
+  // 1. If we have a specific non-placeholder client from input, use it
+  if (!isGeneric) {
+    return c;
+  }
+
+  // 2. If master has a specific client, use it
+  if (
+    masterClient &&
+    !masterClient.toUpperCase().includes('EMDAD CLIENT') &&
+    masterClient.toUpperCase() !== 'CLIENT' &&
+    masterClient.trim() !== ''
+  ) {
+    return masterClient.trim();
+  }
+
+  // 3. Resolve from Contract / Project Reference
+  const proj = String(contractRef || '').toUpperCase().trim();
+  if (proj.includes('444558')) return 'ADNOC OFFSHORE';
+  if (proj.includes('4700012465')) return 'ADNOC ONSHORE';
+  if (proj.includes('4700016147')) return 'ADNOC SOUR GAS';
+  if (proj.includes('4700018368')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
+  if (proj.includes('DVP-2023-K-016') || proj.includes('BUNDUQ')) return 'BUNDUQ COMPANY LIMITED';
+  if (proj.includes('4700023373')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
+  if (proj.includes('4700023861')) return 'ADNOC ONSHORE';
+  if (proj.includes('4700024096')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
+  if (proj.includes('4700024608')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
+  if (proj.includes('TW-') || proj.includes('TURNWELL')) return 'TURNWELL INDUSTRIES LLC';
+  if (proj.includes('16358.13') || proj.includes('16358')) return 'ADNOC ONSHORE';
+
+  // 4. Resolve from Rig if rig gives a clue
+  const rigUpper = String(rig || '').toUpperCase().trim();
+  if (rigUpper.startsWith('AD-') || rigUpper.startsWith('ND-')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
+  if (rigUpper.includes('AL YASAT') || rigUpper.includes('YEMILAH') || rigUpper.includes('GHASHA')) return 'ADNOC OFFSHORE';
+
+  return 'ADNOC DRILLING';
+}
+
 function normalizeJob(row: any): any {
   const jId = row.JobID || row.jobId || row.jobNumber || row.ID || row.id || '';
   const key = String(jId).trim().toUpperCase();
@@ -183,27 +262,55 @@ function normalizeJob(row: any): any {
     status = 'Under SES';
   }
 
+  const resolvedContract = String(
+    row.ContractNo ||
+    row.contractNo ||
+    row.ContractNumber ||
+    row.contractNumber ||
+    row.ContractRef ||
+    row.contractRef ||
+    row.ContractID ||
+    row.contractId ||
+    row.Contract ||
+    row.contract ||
+    master?.contract ||
+    ''
+  ).trim();
+
+  const resolvedRig = row.Rig || row.rig || master?.rig || '';
+
+  const resolvedClient = resolveJobClient(
+    row.Client || row.client,
+    resolvedContract,
+    master?.client,
+    resolvedRig
+  );
+
+  const mobDate = cleanDateValue(
+    row.MobDate || row.mobDate || master?.mobDate || row.FirstDtDate || (row.CreatedDate && !String(row.CreatedDate).startsWith('2026-09') ? String(row.CreatedDate).split('T')[0] : '')
+  );
+
+  const demobDate = cleanDateValue(
+    row.DemobDate || row.demobDate || master?.demobDate || row.LastRtDate
+  );
+
+  const firstDtDate = cleanDateValue(row.FirstDtDate || row.firstDtDate);
+  const lastRtDate = cleanDateValue(row.LastRtDate || row.lastRtDate);
+  const docsSignedDate = cleanDateValue(row.DocsSignedDate || row.docsSignedDate);
+  const submittedToBillingDate = cleanDateValue(row.SubmittedToBillingDate || row.submittedToBillingDate) || null;
+  const draftInvoicedDate = cleanDateValue(row.DraftInvoicedDate || row.draftInvoicedDate) || null;
+  const sesSubmittedDate = cleanDateValue(row.SesSubmittedDate || row.sesSubmittedDate) || null;
+  const finalInvoicedDate = cleanDateValue(row.FinalInvoicedDate || row.finalInvoicedDate) || (hasLegal ? (cleanDateValue(row.InvoiceDate || row.MobDate) || '2024-01-01') : null);
+  const invoiceDate = cleanDateValue(row.InvoiceDate || row.LegalInvoiceDate) || (hasLegal ? (mobDate || '2024-01-01') : '');
+
   return {
     id: jId,
     jobNumber: jId,
     calloutId: row.CalloutID || row.calloutId || master?.calloutId || '',
-    rig: row.Rig || row.rig || master?.rig || '',
+    rig: resolvedRig,
     well: row.Well || row.well || master?.well || '',
-    client: row.Client || row.client || master?.client || '',
-    contract: String(
-      row.ContractNo ||
-      row.contractNo ||
-      row.ContractNumber ||
-      row.contractNumber ||
-      row.ContractRef ||
-      row.contractRef ||
-      row.ContractID ||
-      row.contractId ||
-      row.Contract ||
-      row.contract ||
-      master?.contract ||
-      ''
-    ).trim(),
+    client: resolvedClient,
+    contract: resolvedContract,
     poNumber: row.PONumber || row.poNumber || master?.poNumber || '',
     clientRef: String(row.ClientRef || row.clientRef || master?.clientRef || '').trim(),
     erpRef: row.ERPRef || row.erpRef || '',
@@ -211,8 +318,8 @@ function normalizeJob(row: any): any {
     serviceType: row.ServiceType || row.serviceType || master?.serviceType || 'Downhole Rental',
     invoicingType: row.InvoicingType || row.invoicingType || 'PerJob',
     currency: row.Currency || row.currency || 'USD',
-    mobDate: row.MobDate || row.mobDate || master?.mobDate || row.FirstDtDate || (row.CreatedDate && !String(row.CreatedDate).startsWith('2026-09') ? String(row.CreatedDate).split('T')[0] : '') || '',
-    demobDate: row.DemobDate || row.demobDate || master?.demobDate || row.LastRtDate || '',
+    mobDate,
+    demobDate,
     status: status,
     tools: [],
     operatingDays: 0,
@@ -223,18 +330,18 @@ function normalizeJob(row: any): any {
     draftInvoiceNumber,
     invoiceAmount,
     sesNumber: row.SesNumber || row.sesNumber || '',
-    invoiceDate: row.InvoiceDate || row.LegalInvoiceDate || (hasLegal ? (row.MobDate || '2024-01-01') : ''),
+    invoiceDate,
     invoicedAmountUSD: invoiceAmount,
     cost: row.Cost || row.cost || master?.cost || '',
-    createdDate: row.CreatedDate || row.createdDate || master?.createdDate || '',
+    createdDate: cleanDateValue(row.CreatedDate || row.createdDate || master?.createdDate),
     createdBy: row.CreatedBy || row.createdBy || master?.createdBy || 'Operations',
-    firstDtDate: row.FirstDtDate || row.firstDtDate || '',
-    lastRtDate: row.LastRtDate || row.lastRtDate || '',
-    docsSignedDate: row.DocsSignedDate || row.docsSignedDate || '',
-    submittedToBillingDate: row.SubmittedToBillingDate || row.submittedToBillingDate || null,
-    draftInvoicedDate: row.DraftInvoicedDate || row.draftInvoicedDate || null,
-    sesSubmittedDate: row.SesSubmittedDate || row.sesSubmittedDate || null,
-    finalInvoicedDate: row.FinalInvoicedDate || row.finalInvoicedDate || (hasLegal ? (row.InvoiceDate || row.MobDate || '2024-01-01') : null),
+    firstDtDate,
+    lastRtDate,
+    docsSignedDate,
+    submittedToBillingDate,
+    draftInvoicedDate,
+    sesSubmittedDate,
+    finalInvoicedDate,
   };
 }
 

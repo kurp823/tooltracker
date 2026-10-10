@@ -51,13 +51,44 @@ export function formatDateDDMMYY(value?: string | Date | null): string {
 }
 
 /**
+ * Checks if a date value is invalid, empty, or a SQL placeholder (e.g. 1900-01-01 or 1970-01-01)
+ */
+export function isInvalidOrPlaceholderDate(value?: string | Date | null): boolean {
+  if (!value) return true;
+  if (value instanceof Date) {
+    if (isNaN(value.getTime()) || value.getFullYear() <= 1900) return true;
+    return false;
+  }
+  const str = String(value).trim();
+  if (
+    !str ||
+    str === '—' ||
+    str === '-' ||
+    str === 'null' ||
+    str === 'undefined' ||
+    str === 'NIL' ||
+    str === 'NULL' ||
+    str.startsWith('1900') ||
+    str.startsWith('01-Jan-1900') ||
+    str.startsWith('01-jan-1900') ||
+    str.startsWith('01/01/1900') ||
+    str.startsWith('1970-01-01') ||
+    str.includes('1900-01-01')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Formats any date string or Date object into standard dd/mm/yyyy format (e.g., 01/09/2026)
+ * Returns empty string for invalid, missing, or 1900 placeholder dates.
  */
 export function formatDateDDMMYYYY(value?: string | Date | null): string {
-  if (!value) return '';
+  if (isInvalidOrPlaceholderDate(value)) return '';
   
   if (value instanceof Date) {
-    if (isNaN(value.getTime())) return '';
+    if (isNaN(value.getTime()) || value.getFullYear() <= 1900) return '';
     const d = String(value.getDate()).padStart(2, '0');
     const m = String(value.getMonth() + 1).padStart(2, '0');
     const yyyy = String(value.getFullYear());
@@ -65,11 +96,11 @@ export function formatDateDDMMYYYY(value?: string | Date | null): string {
   }
 
   const str = String(value).trim();
-  if (!str || str === 'null' || str === 'undefined') return '';
 
   // If already formatted like DD/MM/YYYY
   if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
     const parts = str.split('/');
+    if (parseInt(parts[2], 10) <= 1900) return '';
     return `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[2]}`;
   }
 
@@ -77,6 +108,7 @@ export function formatDateDDMMYYYY(value?: string | Date | null): string {
   const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (isoMatch) {
     const y = isoMatch[1];
+    if (parseInt(y, 10) <= 1900) return '';
     const m = isoMatch[2].padStart(2, '0');
     const d = isoMatch[3].padStart(2, '0');
     return `${d}/${m}/${y}`;
@@ -85,13 +117,14 @@ export function formatDateDDMMYYYY(value?: string | Date | null): string {
   // Fallback try standard Date parsing
   const parsed = new Date(str);
   if (!isNaN(parsed.getTime())) {
+    if (parsed.getFullYear() <= 1900) return '';
     const d = String(parsed.getDate()).padStart(2, '0');
     const m = String(parsed.getMonth() + 1).padStart(2, '0');
     const yyyy = String(parsed.getFullYear());
     return `${d}/${m}/${yyyy}`;
   }
 
-  return str;
+  return '';
 }
 
 /**

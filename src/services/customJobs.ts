@@ -1,8 +1,27 @@
 import { DrillingJob } from '../types';
 import { loadDatasetFromCache, saveDatasetToCache } from './dbCache';
-import { normalizeJobKey } from './api';
+import { normalizeJobKey, resolveJobClient, cleanDateValue } from './api';
 
 const CUSTOM_JOBS_KEY = 'emdad_custom_jobs';
+
+export function cleanJobRecord(j: DrillingJob): DrillingJob {
+  const resolvedClient = resolveJobClient(j.client, j.contract, undefined, j.rig);
+  return {
+    ...j,
+    client: resolvedClient || j.client || 'ADNOC DRILLING COMPANY P.J.S.C.',
+    mobDate: cleanDateValue(j.mobDate),
+    demobDate: cleanDateValue(j.demobDate),
+    firstDtDate: cleanDateValue(j.firstDtDate),
+    lastRtDate: cleanDateValue(j.lastRtDate),
+    docsSignedDate: cleanDateValue(j.docsSignedDate),
+    submittedToBillingDate: cleanDateValue(j.submittedToBillingDate) || null,
+    draftInvoicedDate: cleanDateValue(j.draftInvoicedDate) || null,
+    sesSubmittedDate: cleanDateValue(j.sesSubmittedDate) || null,
+    finalInvoicedDate: cleanDateValue(j.finalInvoicedDate) || null,
+    invoiceDate: cleanDateValue(j.invoiceDate),
+    createdDate: cleanDateValue(j.createdDate),
+  };
+}
 
 /**
  * Safely loads custom / user-updated / imported jobs from localStorage.
@@ -14,7 +33,9 @@ export function loadCustomJobs(): DrillingJob[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return parsed.filter((j) => j && (j.id || j.jobNumber));
+      return parsed
+        .filter((j) => j && (j.id || j.jobNumber))
+        .map((j) => cleanJobRecord(j));
     }
     return [];
   } catch (err) {
@@ -138,7 +159,7 @@ export function mergeJobsWithCustomJobs(
     }
   });
 
-  return [...brandNew, ...mergedBase];
+  return [...brandNew, ...mergedBase].map((j) => cleanJobRecord(j));
 }
 
 /**

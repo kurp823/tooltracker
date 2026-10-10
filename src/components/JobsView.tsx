@@ -14,6 +14,8 @@ import { JobDetailModal } from './JobDetailModal';
 import { JobDossierView } from './JobDossierView';
 import { JobToolsListView } from './JobToolsListView';
 import { ToolItem, ContractRecord } from '../types';
+import { isInvalidOrPlaceholderDate } from '../utils';
+import { resolveJobClient } from '../services/api';
 import {
   Search,
   Download,
@@ -68,13 +70,17 @@ interface JobsViewProps {
 }
 
 // Clean oilfield date formatter (strictly formats as DD-MMM-YYYY, e.g. 28-May-2023)
+// Returns '—' for empty, invalid, or 1900/1970 placeholder dates
 export const formatJobDate = (dateStr?: string | null): string => {
-  if (!dateStr || dateStr.trim() === '' || dateStr.trim() === '—' || dateStr.trim() === '-') return '—';
+  if (!dateStr || isInvalidOrPlaceholderDate(dateStr)) return '—';
   const clean = dateStr.trim();
+  if (clean === '' || clean === '—' || clean === '-') return '—';
 
   // If already DD-MMM-YYYY (4 digits year)
   const dmy4Match = clean.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
   if (dmy4Match) {
+    const yr = parseInt(dmy4Match[3], 10);
+    if (yr <= 1900) return '—';
     return `${dmy4Match[1].padStart(2, '0')}-${dmy4Match[2].charAt(0).toUpperCase() + dmy4Match[2].slice(1).toLowerCase()}-${dmy4Match[3]}`;
   }
 
@@ -83,13 +89,15 @@ export const formatJobDate = (dateStr?: string | null): string => {
   if (dmy2Match) {
     const yrNum = parseInt(dmy2Match[3], 10);
     const yr = yrNum > 50 ? `19${dmy2Match[3]}` : `20${dmy2Match[3]}`;
+    if (parseInt(yr, 10) <= 1900) return '—';
     return `${dmy2Match[1].padStart(2, '0')}-${dmy2Match[2].charAt(0).toUpperCase() + dmy2Match[2].slice(1).toLowerCase()}-${yr}`;
   }
 
   const isoMatch = clean.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (isoMatch) {
+    const yr = parseInt(isoMatch[1], 10);
+    if (yr <= 1900) return '—';
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const yr = isoMatch[1];
     const mIndex = parseInt(isoMatch[2], 10) - 1;
     const day = isoMatch[3].padStart(2, '0');
     if (mIndex >= 0 && mIndex < 12) {
@@ -100,19 +108,20 @@ export const formatJobDate = (dateStr?: string | null): string => {
   try {
     const d = new Date(clean);
     if (!isNaN(d.getTime())) {
+      const yr = d.getFullYear();
+      if (yr <= 1900) return '—';
       const day = String(d.getDate()).padStart(2, '0');
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const yr = String(d.getFullYear());
       return `${day}-${months[d.getMonth()]}-${yr}`;
     }
   } catch {}
 
-  return clean.split('T')[0];
+  return '—';
 };
 
 // Parse dates into milliseconds for chronological min/max and sorting
 export const parseDateToMs = (dStr?: string | null): number => {
-  if (!dStr || dStr.trim() === '' || dStr === '—' || dStr === '-') return 0;
+  if (!dStr || isInvalidOrPlaceholderDate(dStr)) return 0;
   const clean = dStr.trim();
   const dmyMatch = clean.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
   if (dmyMatch) {
@@ -121,12 +130,16 @@ export const parseDateToMs = (dStr?: string | null): number => {
     const month = months.indexOf(dmyMatch[2].toLowerCase());
     let year = parseInt(dmyMatch[3], 10);
     if (year < 100) year += 2000;
+    if (year <= 1900) return 0;
     if (month >= 0) {
       return new Date(year, month, day).getTime();
     }
   }
   const t = new Date(clean).getTime();
-  return isNaN(t) ? 0 : t;
+  if (isNaN(t)) return 0;
+  const parsed = new Date(clean);
+  if (parsed.getFullYear() <= 1900) return 0;
+  return t;
 };
 
 // Start Date is always the first (earliest) Delivery Ticket date; fallback to mobDate
@@ -137,13 +150,13 @@ export const getJobStartDate = (job: DrillingJob, dtBatches?: DTBatch[]): string
         const raw = dt.dispatchDate || dt.deliveryDate || dt.rmDate;
         return { raw, ms: parseDateToMs(raw) };
       })
-      .filter((d) => d.ms > 0)
+      .filter((d) => d.ms > 0 && !isInvalidOrPlaceholderDate(d.raw))
       .sort((a, b) => a.ms - b.ms);
-    if (valid.length > 0 && valid[0].raw) {
+    if (valid.length > 0 && valid[0].raw && !isInvalidOrPlaceholderDate(valid[0].raw)) {
       return valid[0].raw;
     }
   }
-  return job.mobDate || '';
+  return !isInvalidOrPlaceholderDate(job.mobDate) ? (job.mobDate || '') : '';
 };
 
 // End Date is always the last (latest) Receiving Ticket date; fallback to demobDate
@@ -154,13 +167,13 @@ export const getJobEndDate = (job: DrillingJob, rtBatches?: RTBatch[]): string =
         const raw = rt.rtDate || rt.backloadRmDate || rt.loadingNoteDate || rt.lNoteDate || (rt as any).Date_In || (rt as any).dateIn;
         return { raw, ms: parseDateToMs(raw) };
       })
-      .filter((d) => d.ms > 0)
+      .filter((d) => d.ms > 0 && !isInvalidOrPlaceholderDate(d.raw))
       .sort((a, b) => a.ms - b.ms);
-    if (valid.length > 0 && valid[valid.length - 1].raw) {
+    if (valid.length > 0 && valid[valid.length - 1].raw && !isInvalidOrPlaceholderDate(valid[valid.length - 1].raw)) {
       return valid[valid.length - 1].raw;
     }
   }
-  return job.demobDate || '';
+  return !isInvalidOrPlaceholderDate(job.demobDate) ? (job.demobDate || '') : '';
 };
 
 // Normalize keys to allow exact cross-matching (e.g. Job-023-00002 <-> 023-00002)
@@ -320,9 +333,17 @@ export const JobsView: React.FC<JobsViewProps> = ({
     }
   };
 
-  // Filter out any dummy test jobs
+  // Filter out any dummy test jobs and resolve accurate client name
   const validJobs = useMemo(() => {
-    return jobs.filter((j) => j && j.id && !j.id.toUpperCase().includes('TEST') && !j.id.toUpperCase().includes('DUMMY'));
+    return jobs
+      .filter((j) => j && j.id && !j.id.toUpperCase().includes('TEST') && !j.id.toUpperCase().includes('DUMMY'))
+      .map((j) => {
+        const resolvedClient = resolveJobClient(j.client, j.contract, undefined, j.rig);
+        return {
+          ...j,
+          client: resolvedClient || j.client || 'ADNOC DRILLING COMPANY P.J.S.C.',
+        };
+      });
   }, [jobs]);
 
   // Distinct rigs for quick filter dropdown
@@ -334,11 +355,15 @@ export const JobsView: React.FC<JobsViewProps> = ({
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [validJobs]);
 
-  // Distinct clients for combo filter
+  // Distinct clients for combo filter (excluding generic placeholders)
   const uniqueClients = useMemo(() => {
     const set = new Set<string>();
     validJobs.forEach((j) => {
-      if (j.client && j.client.trim()) set.add(j.client.trim());
+      const c = (j.client || '').trim();
+      const u = c.toUpperCase();
+      if (c && u !== 'EMDAD CLIENT' && u !== 'CLIENT' && u !== 'EMDAD' && u !== 'NIL' && u !== 'NULL' && u !== '—') {
+        set.add(c);
+      }
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [validJobs]);
@@ -1422,12 +1447,12 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
                       {/* 7. Job Start Date */}
                       <td className={`px-2.5 ${padY} text-center font-mono text-xs text-slate-700 whitespace-nowrap align-middle`}>
-                        {formatJobDate(startDate)}
+                        {formatJobDate(startDate) === '—' ? <span className="text-slate-300">—</span> : formatJobDate(startDate)}
                       </td>
 
                       {/* 8. Job End Date */}
                       <td className={`px-2.5 ${padY} text-center font-mono text-xs text-slate-700 whitespace-nowrap align-middle`}>
-                        {formatJobDate(endDate)}
+                        {formatJobDate(endDate) === '—' ? <span className="text-slate-300">—</span> : formatJobDate(endDate)}
                       </td>
 
                       {/* 9. Job Value */}
