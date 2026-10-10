@@ -403,7 +403,7 @@ export function extractToolType(desc?: string, shortDesc?: string, invShortDesc?
   // If invShortDesc is a clean, concise category (< 35 chars, no long connection specs)
   if (invShortDesc && invShortDesc !== 'Downhole Tool') {
     const s = invShortDesc.trim();
-    if (s.length > 0 && s.length <= 35 && !s.includes(' W/') && !s.includes('PIN X') && !s.includes(' C/W ') && !s.includes(' C/ W ') && !s.includes('REG Box') && !s.includes('REG PIN')) {
+    if (s.length > 0 && s.length <= 35 && !s.includes(' W/') && !s.includes('PIN X') && !s.includes(' C/W ') && !s.includes(' C/ W ') && !s.includes('REG Box') && !s.includes('REG PIN') && !s.includes('(') && !s.includes(')')) {
       return s;
     }
   }
@@ -411,7 +411,7 @@ export function extractToolType(desc?: string, shortDesc?: string, invShortDesc?
   // If shortDesc is clean and concise
   if (shortDesc && shortDesc !== 'Downhole Tool') {
     const s = shortDesc.trim();
-    if (s.length > 0 && s.length <= 35 && !s.includes(' W/') && !s.includes('PIN X') && !s.includes(' C/W ') && !s.includes(' C/ W ') && !s.includes('REG Box') && !s.includes('REG PIN')) {
+    if (s.length > 0 && s.length <= 35 && !s.includes(' W/') && !s.includes('PIN X') && !s.includes(' C/W ') && !s.includes(' C/ W ') && !s.includes('REG Box') && !s.includes('REG PIN') && !s.includes('(') && !s.includes(')')) {
       return s;
     }
   }
@@ -419,27 +419,80 @@ export function extractToolType(desc?: string, shortDesc?: string, invShortDesc?
   const text = `${shortDesc || ''} ${desc || ''}`.toUpperCase();
   if (!text.trim()) return 'Downhole Tool';
 
-  if (text.includes('CARGO BASKET') || text.includes('TOOL BASKET') || (text.includes('BASKET') && !text.includes('JUNK BASKET'))) {
+  // 1. Grapples & Grapple Controls (Prioritized over generic BASKET / OVERSHOT)
+  if (text.includes('BASKET GRAPPLE PLAIN CONTROL') || text.includes('PLAIN CONTROL')) return 'BASKET GRAPPLE CONTROL';
+  if (text.includes('SPIRAL GRAPPLE CONTROL')) return 'SPIRAL GRAPPLE CONTROL';
+  if (text.includes('GRAPPLE CONTROL')) return 'GRAPPLE CONTROL';
+  if (text.includes('MILL CONTROL PACKER') || text.includes('MILL CONTROL PACKOFF') || text.includes('MILL CONTROL')) return 'MILL CONTROL PACKER';
+  if (text.includes('TYPE "A" PACKOFF') || text.includes('TYPE "A" PACKER') || text.includes('TYPE A PACKOFF') || text.includes('TYPE A PACKER') || text.includes('PACKOFF') || text.includes('PACKER')) return 'PACKOFF';
+
+  if (text.includes('BASKET GRAPPLE')) return 'BASKET GRAPPLE';
+  if (text.includes('SPIRAL GRAPPLE')) return 'SPIRAL GRAPPLE';
+  if (text.includes('SPEAR GRAPPLE')) return 'SPEAR GRAPPLE';
+  if (text.includes('GRAPPLE') && !text.includes('OVERSHOT')) return 'GRAPPLE';
+
+  // 2. Overshot Guides & Overshot Extensions
+  if (text.includes('HOLLOW MILL GUIDE') || text.includes('MILL GUIDE')) return 'HOLLOW MILL GUIDE';
+  if (text.includes('WALL HOOK GUIDE') || text.includes('OVERSIZED GUIDE')) return 'OVERSHOT GUIDE';
+  if (text.includes('FS OVERSHOT EXTENSION') || text.includes('SC OVERSHOT EXTENSION') || text.includes('SH OVERSHOT EXTENSION') || text.includes('OVERSHOT EXTENSION') || text.includes('OVERSHOT EXTENSION SUB')) return 'OVERSHOT EXTENSION';
+  if (text.includes('FS OVERSHOT') || text.includes('FULL STRENGTH OVERSHOT') || text.includes('F.S OVERSHOT') || text.includes('F.S. OVERSHOT')) return 'FS OVERSHOT';
+  if (text.includes('SC OVERSHOT') || text.includes('SHORT CATCH OVERSHOT')) return 'SC OVERSHOT';
+  if (text.includes('SH OVERSHOT') || text.includes('SEMI-FLUSH OVERSHOT') || text.includes('SLIM HOLE OVERSHOT')) return 'SH OVERSHOT';
+  if (text.includes('SERIES 150') || text.includes('SERIES 70') || text.includes('OVERSHOT')) return 'OVERSHOT';
+
+  // 3. Wash Pipe & Accessories
+  if (text.includes('WASH PIPE') || text.includes('WASHOVER PIPE') || text.includes('WASHPIPE')) return 'WASH PIPE';
+  if (text.includes('FLAT BOTTOM WASHOVER SHOE') || text.includes('WAVY BOTTOM WASHOVER SHOE') || text.includes('WASHOVER SHOE') || text.includes('ROTARY SHOE')) return 'WASHOVER SHOE';
+  if (text.includes('CROSSOVER BUSHING')) return 'CROSSOVER BUSHING';
+  if (text.includes('TRIPLE BUSHING')) return 'TRIPLE BUSHING';
+  if (text.includes('DRIVE SUB') || text.includes('DRIVE BUSHING')) return 'DRIVE SUB';
+  if (text.includes('SIDE DOOR ELEVATOR') || text.includes('ELEVATOR')) return 'ELEVATOR';
+  if (text.includes('SAFETY CLAMP')) return 'SAFETY CLAMP';
+  if (text.includes('WASH PIPE SLIP') || text.includes('CASING SLIP') || text.includes('DRILL PIPE SLIP') || text.includes('SLIP FOR')) return 'SLIP';
+  if (text.includes('LIFT PLUG') || text.includes('LIFTING PLUG')) return 'LIFT PLUG';
+
+  // 4. Baskets, Containers & Vessels
+  if (text.includes('JUNK BASKET') || text.includes('RCJB') || text.includes('POOR BOY') || text.includes('POOR BUOY')) return 'JUNK BASKET';
+  if (text.includes('CARGO BASKET') || text.includes('TOOL BASKET') || text.includes('HALF HEIGHT BASKET') || text.includes('DRUM BASKET') || text.includes('BASKET W/') || text.includes('FEET CARGO BASKET') || text.includes('FT CARGO BASKET') || text.startsWith('CARGO BASKET')) {
     return 'CARGO BASKET';
   }
-  if (text.includes('CONTAINER')) return 'CONTAINER';
+  if (text.includes('CONTAINER') || text.includes('WORKSHOP')) return 'CONTAINER';
 
-  if (text.includes('FS OVERSHOT EXTENSION') || text.includes('OVERSHOT EXTENSION')) return 'OVERSHOT EXTENSION';
-  if (text.includes('FS OVERSHOT')) return 'FS OVERSHOT';
-  if (text.includes('OVERSHOT')) return 'OVERSHOT';
+  // 5. Releasing Spears & Casing Cutters
+  if (text.includes('SPEAR STOP SUB')) return 'SPEAR STOP SUB';
+  if (text.includes('SPEAR EXTENSION')) return 'SPEAR EXTENSION';
+  if (text.includes('RELEASING SPEAR') || text.includes('ITCO RELEASING SPEAR') || text.includes('ROPE SPEAR') || text.includes('MANDREL RELEASING SPEAR') || text.includes('CASING SPEAR') || text.includes('SPEAR')) return 'CASING SPEAR';
+  if (text.includes('EXTERNAL CUTTER') || text.includes('INTERNAL CUTTER') || text.includes('CASING CUTTER')) return 'EXTERNAL CUTTER';
 
+  // 6. Mills & Taps
+  if (text.includes('TAPER TAP') || text.includes('DIE COLLAR')) return 'TAPER TAP';
+  if (text.includes('BLADED JUNK MILL') || text.includes('JUNK MILL')) return 'JUNK MILL';
+  if (text.includes('TAPER MILL')) return 'TAPER MILL';
+  if (text.includes('PILOT MILL')) return 'PILOT MILL';
+  if (text.includes('STRING MILL') || text.includes('WATERMELON MILL')) return 'STRING MILL';
+  if (text.includes('MILL')) return 'MILL';
+
+  // 7. Stabilizers & Reamers
   if (text.includes('NEAR BIT STABILIZER') || text.includes('NEAR BIT STAB')) return 'NEAR BIT STABILIZER';
   if (text.includes('STRING STABILIZER') || text.includes('STRING STAB')) return 'STRING STABILIZER';
   if (text.includes('STABILIZER') || text.includes('STAB')) return 'STABILIZER';
+  if (text.includes('ROLLER REAMER') || text.includes('UNDERREAMER') || text.includes('REAMER')) return 'ROLLER REAMER';
+  if (text.includes('HOLE OPENER')) return 'HOLE OPENER';
+  if (text.includes('CASING SCRAPER') || text.includes('SCRAPER')) return 'CASING SCRAPER';
 
+  // 8. Jars, Accelerators & Bumper Subs
   if (text.includes('HYD-MECH') || text.includes('HYDRO-MECH')) return 'HYD-MECH DRILLING JAR';
+  if (text.includes('SUPERIOR HYD') || text.includes('SUPER FISHING JAR') || text.includes('FISHING JAR')) return 'FISHING JAR';
   if (text.includes('DRILLING JAR')) return 'DRILLING JAR';
-  if (text.includes('FISHING JAR') || text.includes(' JAR')) return 'DRILLING JAR';
-
+  if (text.includes('JAR ACCELERATOR') || text.includes('FISHING ACCELERATOR') || text.includes('JAR INTENSIFIER') || text.includes('INTENSIFIER')) return 'FISHING ACCELERATOR';
+  if (text.includes('BUMPER SUB') || text.includes('FISHING BUMPER SUB')) return 'BUMPER SUB';
   if (text.includes('SHOCK TOOL') || text.includes('SHOCK SUB')) return 'SHOCK TOOL';
 
+  // 9. Subs, Valves & Joints
+  if (text.includes('SAFETY JOINT') || text.includes('COARSE THREAD SAFETY JOINT')) return 'SAFETY JOINT';
+  if (text.includes('JUNK SUB') || text.includes('BOOT BASKET')) return 'JUNK SUB';
   if (text.includes('SAVER SUB')) return 'SAVER SUB';
-  if (text.includes('CROSS OVER SUB') || text.includes('CROSSOVER SUB') || text.includes('X-OVER') || text.includes('CROSS-OVER')) return 'CROSS OVER SUB';
+  if (text.includes('CROSS OVER SUB') || text.includes('CROSSOVER SUB') || text.includes('X-OVER') || text.includes('CROSS-OVER') || text.startsWith('CROSSOVER')) return 'CROSS OVER SUB';
   if (text.includes('BIT SUB')) return 'BIT SUB';
   if (text.includes('FLOAT SUB')) return 'FLOAT SUB';
   if (text.includes('LIFT SUB') || text.includes('LIFTING SUB') || text.includes('LIFT NIPPLE')) return 'LIFT SUB';
@@ -448,28 +501,21 @@ export function extractToolType(desc?: string, shortDesc?: string, invShortDesc?
   if (text.includes('PUP JOINT')) return 'PUP JOINT';
   if (text.includes('SUB') && !text.includes('SUB-CONTRACTOR')) return 'SUB';
 
+  // 10. Magnets & Impression Blocks
+  if (text.includes('DITCH MAGNET') || text.includes('FISHING MAGNET') || text.includes('MAGNET')) return 'FISHING MAGNET';
+  if (text.includes('IMPRESSION BLOCK') || text.includes('LEAD IMPRESSION BLOCK') || text.includes('LEAD IMP')) return 'IMPRESSION BLOCK';
+
+  // 11. Pressure Control & Tubulars
   if (text.includes('DIVERTER')) return 'DIVERTER';
   if (text.includes('SAFETY VALVE') || text.includes('FOSV') || text.includes('TIW') || text.includes('IBOP')) return 'SAFETY VALVE';
   if (text.includes('BOP') || text.includes('BLOWOUT PREVENTER')) return 'BLOWOUT PREVENTER';
-
   if (text.includes('SPIRAL DRILL COLLAR')) return 'SPIRAL DRILL COLLAR';
   if (text.includes('PONY DRILL COLLAR') || text.includes('PONY COLLAR')) return 'PONY DRILL COLLAR';
   if (text.includes('NON-MAG') || text.includes('NMDC')) return 'NON-MAG DRILL COLLAR';
   if (text.includes('DRILL COLLAR') || text.includes('COLLAR')) return 'DRILL COLLAR';
-
   if (text.includes('HEVI-WATE') || text.includes('HWDP')) return 'HEVI-WATE DRILL PIPE';
   if (text.includes('DRILL PIPE')) return 'DRILL PIPE';
   if (text.includes('TUBING')) return 'TUBING';
-
-  if (text.includes('ROLLER REAMER') || text.includes('UNDERREAMER') || text.includes('REAMER')) return 'ROLLER REAMER';
-  if (text.includes('HOLE OPENER')) return 'HOLE OPENER';
-  if (text.includes('CASING SCRAPER') || text.includes('SCRAPER')) return 'CASING SCRAPER';
-
-  if (text.includes('JUNK MILL') || text.includes('TAPER MILL') || text.includes('PILOT MILL') || text.includes('MILL')) return 'MILL';
-  if (text.includes('FISHING MAGNET') || text.includes('MAGNET')) return 'FISHING MAGNET';
-  if (text.includes('JUNK BASKET')) return 'JUNK BASKET';
-  if (text.includes('IMPRESSION BLOCK')) return 'IMPRESSION BLOCK';
-  if (text.includes('SPEAR')) return 'CASING SPEAR';
   if (text.includes('MOTOR') || text.includes('MUD MOTOR')) return 'MUD MOTOR';
 
   // Fallback: strip leading size / dimensions if present, take first phrase before W/, C/W, etc.
@@ -492,22 +538,25 @@ export function cleanDateStr(d: any): string {
   if (d === null || d === undefined || d === '') return '';
   if (typeof d === 'number' || (typeof d === 'string' && /^\d+$/.test(d.trim()))) {
     const num = typeof d === 'number' ? d : parseInt(d.trim(), 10);
-    // Excel serial date integer e.g. 25000 to 65000
+    // Excel serial date integer e.g. 25000 to 65000 (1968 - 2077)
     if (num >= 25000 && num <= 65000) {
       try {
         const dateObj = new Date(Math.round((num - 25569) * 86400 * 1000));
         if (!isNaN(dateObj.getTime())) {
+          const y = dateObj.getUTCFullYear();
+          if (y <= 1900 || y === 1970) return '';
           return dateObj.toISOString().split('T')[0];
         }
       } catch {}
     }
   }
   const s = String(d).trim();
-  if (!s || s === '—' || s === '-' || s === 'null' || s === 'undefined') return '';
+  if (!s || s === '—' || s === '-' || s === 'null' || s === 'undefined' || s.includes('1900')) return '';
   if (s.includes('T')) return s.split('T')[0];
   if (s.includes(' ')) return s.split(' ')[0];
   const dmy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
   if (dmy) {
+    if (dmy[3] === '1900' || parseInt(dmy[3], 10) <= 1900) return '';
     return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
   }
   return s;
@@ -681,14 +730,6 @@ export function normalizeDTBatch(row: any): any {
     ? row.tbl_DeliveryTicketLines
     : [];
 
-  const lines = rawLines.map(normalizeDTLine).filter(Boolean);
-
-  const cleanDateStr = (d: any) => {
-    if (!d) return '';
-    const s = String(d).trim();
-    return s.includes('T') ? s.split('T')[0] : s;
-  };
-
   const rawDate = cleanDateStr(
     row.DTDate ||
     row.dtDate ||
@@ -707,6 +748,25 @@ export function normalizeDTBatch(row: any): any {
     row.createdAt ||
     row.CreatedAt
   );
+
+  const lines = rawLines
+    .map(normalizeDTLine)
+    .filter(Boolean)
+    .map((line: any) => {
+      // If line has a return date before this DT's dispatch date, it is leftover/corrupt historical data
+      if (line && rawDate && line.returnDate && line.returnDate < rawDate) {
+        return {
+          ...line,
+          returnedRtNumber: '',
+          rtBatchId: null,
+          returnDate: '',
+          dateIn: '',
+          Date_In: '',
+          status: 'OnRig',
+        };
+      }
+      return line;
+    });
 
   return {
     id: String(row.DTBatchID || row.dtBatchId || row.id || row.ID || row.dtNumber || row.DTNumber || ''),

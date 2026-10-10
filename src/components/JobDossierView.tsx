@@ -11,7 +11,7 @@ import {
   JobCrewMember,
   DailyFieldLog,
 } from '../types';
-import { saveJobToolHoleSectionApi } from '../services/api';
+import { saveJobToolHoleSectionApi, extractToolType } from '../services/api';
 import {
   getContractRateOptionsForTool,
   findBestMatchingOption,
@@ -57,23 +57,29 @@ export const formatDateDD_MM_YYYY = (val?: string | Date | number | null): strin
       try {
         const d = new Date(Math.round((num - 25569) * 86400 * 1000));
         if (!isNaN(d.getTime())) {
+          const year = d.getUTCFullYear();
+          if (year <= 1900 || year === 1970) return '—';
           const day = String(d.getUTCDate()).padStart(2, '0');
           const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-          const year = d.getUTCFullYear();
           return `${day}-${month}-${year}`;
         }
       } catch {}
     }
   }
   const str = String(val).trim();
-  if (!str || str === '—' || str === '-' || str === 'null' || str === 'undefined') return '—';
+  if (!str || str === '—' || str === '-' || str === 'null' || str === 'undefined' || str.includes('1900')) return '—';
 
   // If already DD-MM-YYYY (numbers)
-  if (/^\d{2}-\d{2}-\d{4}$/.test(str)) return str;
+  if (/^\d{2}-\d{2}-\d{4}$/.test(str)) {
+    const parts = str.split('-');
+    if (parseInt(parts[2], 10) <= 1900 || parts[2] === '1970') return '—';
+    return str;
+  }
 
   // If DD/MM/YYYY
   if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
     const parts = str.split('/');
+    if (parseInt(parts[2], 10) <= 1900 || parts[2] === '1970') return '—';
     return `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[2]}`;
   }
 
@@ -81,12 +87,14 @@ export const formatDateDD_MM_YYYY = (val?: string | Date | number | null): strin
   if (/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(str)) {
     const parts = str.split('/');
     const yr = parseInt(parts[2], 10) > 50 ? `19${parts[2]}` : `20${parts[2]}`;
+    if (parseInt(yr, 10) <= 1900 || yr === '1970') return '—';
     return `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${yr}`;
   }
 
   // If YYYY-MM-DD
   const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (isoMatch) {
+    if (parseInt(isoMatch[1], 10) <= 1900 || isoMatch[1] === '1970') return '—';
     return `${isoMatch[3].padStart(2, '0')}-${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
   }
 
@@ -102,14 +110,16 @@ export const formatDateDD_MM_YYYY = (val?: string | Date | number | null): strin
     if (yr.length === 2) {
       yr = parseInt(yr, 10) > 50 ? `19${yr}` : `20${yr}`;
     }
+    if (parseInt(yr, 10) <= 1900 || yr === '1970') return '—';
     return `${mmmMatch[1].padStart(2, '0')}-${mNum}-${yr}`;
   }
 
   const d = new Date(str);
   if (!isNaN(d.getTime())) {
+    const year = d.getFullYear();
+    if (year <= 1900 || year === 1970) return '—';
     const day = String(d.getDate()).padStart(2, '0');
     const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
     return `${day}-${month}-${year}`;
   }
   return str;
@@ -485,9 +495,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     // 1. Collect all explicit RT references from this job's DT lines
     const jobReferencedRTs = new Set<string>();
     jobDTs.forEach((dt) => {
+      const dtDate = dt.dispatchDate || dt.rmDate;
       (dt.toolLines || []).forEach((tl: any) => {
         const ref = (tl.rtBatchId || tl.returnedRtNumber || (tl as any).rgtNo || '').trim().toUpperCase();
-        if (ref && ref !== '—' && ref !== '-') {
+        const retDate = tl.returnDate || tl.dateIn || (tl as any).Date_In;
+        if (ref && ref !== '—' && ref !== '-' && (!retDate || !dtDate || retDate >= dtDate)) {
           jobReferencedRTs.add(ref);
         }
       });
@@ -500,7 +512,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
       if (bJob && rawId && bJob === rawId) return true;
       if (bNorm && normId && bNorm === normId) return true;
-      if (bNum && jobReferencedRTs.has(bNum)) return true;
+      if (bNum && jobReferencedRTs.has(bNum) && (!bJob || bJob === rawId || (bNorm && normId && bNorm === normId))) {
+        return true;
+      }
 
       return false;
     });
@@ -581,7 +595,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       (d.toolLines || []).map((t) => {
         const tSerial = (t.serial || '').trim().toUpperCase();
         const tAsset = (t.assetNo || '').trim().toUpperCase();
-        const returnBatch = rtBatches.find((rt) =>
+        const dtDate = d.dispatchDate || d.rmDate;
+        const returnBatch = jobRTs.find((rt) =>
           (rt.toolLines || []).some((rtl) => {
             const rSerial = (rtl.serial || '').trim().toUpperCase();
             const rAsset = (rtl.assetNo || '').trim().toUpperCase();
@@ -590,19 +605,24 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           rt.id === t.rtBatchId ||
           rt.rtNumber === t.rtBatchId
         );
-        const rDate = returnBatch
+        const candidateDate = returnBatch
           ? returnBatch.rtDate || returnBatch.backloadRmDate || (returnBatch as any).Date_In || (returnBatch as any).dateIn
           : (t as any).rtDate || (t as any).returnDate || (t as any).Date_In || (t as any).dateIn || (t.status === 'Returned' ? jobData.demobDate : null);
+        
+        const isValidDate = candidateDate && (!dtDate || candidateDate >= dtDate);
+        const rDate = isValidDate ? candidateDate : (returnBatch ? returnBatch.rtDate : null);
+        const rNum = returnBatch ? returnBatch.rtNumber : (isValidDate && t.rtBatchId && t.rtBatchId !== '—' ? t.rtBatchId : null);
+
         return {
           ...t,
           dtNumber: d.dtNumber,
           dispatchDate: d.dispatchDate,
           returnDate: rDate,
-          rtNumber: returnBatch ? returnBatch.rtNumber : (t.rtBatchId || null),
+          rtNumber: rNum,
         };
       })
     );
-  }, [jobDTs, rtBatches, jobData.demobDate]);
+  }, [jobDTs, jobRTs, jobData.demobDate]);
 
   // Dynamic Month Options based strictly on first DT to last RT
   const utilMonthOptions = useMemo(() => {
@@ -3022,11 +3042,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         const tAsset = (t.assetNo || '').trim().toUpperCase();
                         const directRtRef = String((t as any).returnedRtNumber || t.rtBatchId || (t as any).rgtNo || '').trim();
 
-                        const returnBatch = rtBatches.find((rt) => {
+                        const returnBatch = jobRTs.find((rt) => {
                           const rNum = (rt.rtNumber || rt.id || '').trim().toUpperCase();
                           const rNorm = normalizeJobKey(rNum);
                           const dNorm = normalizeJobKey(directRtRef);
-                          if (directRtRef && directRtRef !== '—' && (rNum === directRtRef.toUpperCase() || (rNorm && rNorm === dNorm))) return true;
+                          if (directRtRef && directRtRef !== '—' && directRtRef !== '-' && (rNum === directRtRef.toUpperCase() || (rNorm && rNorm === dNorm))) return true;
                           return (rt.toolLines || []).some((rtl) => {
                             const rSerial = (rtl.serial || '').trim().toUpperCase();
                             const rAsset = (rtl.assetNo || '').trim().toUpperCase();
@@ -3034,15 +3054,32 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           });
                         });
 
-                        const rgtNo = (directRtRef && directRtRef !== '—') ? directRtRef : (returnBatch ? returnBatch.rtNumber || (returnBatch as any).rgtNo : null);
-                        const rgtDate = (t as any).returnDate ||
+                        const dtDate = activeDT.dispatchDate || activeDT.rmDate;
+                        const candidateReturnDate = (t as any).returnDate ||
                           (t as any).dateIn ||
                           (t as any).Date_In ||
                           returnBatch?.rtDate ||
                           returnBatch?.backloadRmDate ||
                           (returnBatch as any)?.Date_In ||
-                          (returnBatch as any)?.dateIn ||
-                          (rgtNo && (rgtNo.startsWith('RT-CLS-') || isJobInvoicedOrSubmitted) ? (jobData.demobDate || jobData.lastRtDate) : null);
+                          (returnBatch as any)?.dateIn;
+
+                        const isReturnedValid = Boolean(candidateReturnDate && (!dtDate || candidateReturnDate >= dtDate));
+
+                        let rgtNo: string | null = null;
+                        let rgtDate: string | null = null;
+
+                        if (returnBatch) {
+                          rgtNo = returnBatch.rtNumber || (returnBatch as any).rgtNo || (directRtRef && directRtRef !== '—' ? directRtRef : null);
+                          rgtDate = isReturnedValid ? candidateReturnDate : (returnBatch.rtDate || null);
+                        } else if (directRtRef && directRtRef !== '—' && directRtRef !== '-' && isReturnedValid) {
+                          rgtNo = directRtRef;
+                          rgtDate = candidateReturnDate;
+                        } else if (isJobInvoicedOrSubmitted && (jobData.demobDate || jobData.lastRtDate)) {
+                          rgtNo = jobData.lastRtNumber || 'RT-CLS';
+                          rgtDate = jobData.demobDate || jobData.lastRtDate;
+                        }
+
+                        const categoryName = extractToolType(t.desc, t.shortDesc);
 
                         return (
                           <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
@@ -3055,7 +3092,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-emerald-700">{rgtNo || '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{rgtDate ? formatDateDD_MM_YYYY(rgtDate) : '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-slate-700">{t.ownership || 'EMDAD'}</td>
-                            <td className="py-1 px-2 whitespace-nowrap text-slate-600 text-[11px]">{t.shortDesc || 'Downhole Tool'}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-slate-600 text-[11px] font-medium">{categoryName}</td>
                           </tr>
                         );
                       })}
