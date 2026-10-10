@@ -11,6 +11,7 @@ interface InspectionViewProps {
     updates: Partial<InspectionRecord>,
     newMaintenanceWO?: MaintenanceRecord
   ) => void;
+  onRefresh?: () => void;
 }
 
 export const InspectionView: React.FC<InspectionViewProps> = ({
@@ -19,6 +20,7 @@ export const InspectionView: React.FC<InspectionViewProps> = ({
   inventory,
   maintenance,
   onUpdateInspection,
+  onRefresh,
 }) => {
   const [tab, setTab] = useState<'pending' | 'complete'>('pending');
   const [search, setSearch] = useState('');
@@ -119,8 +121,20 @@ export const InspectionView: React.FC<InspectionViewProps> = ({
           <div className="text-[11px] text-slate-500 font-medium">Quality Assurance</div>
           <h1 className="text-base font-bold text-[#1a3055]">QC Inspection Bay</h1>
         </div>
-        <div className="text-slate-500 text-xs font-bold">
-          {inspections.filter((i) => i.status === 'Pending').length} Pending Inspection(s)
+        <div className="flex items-center gap-3">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              title="Refresh QC Inspections from Azure SQL / Database"
+              className="px-3 py-1.5 rounded bg-white border border-[#b8c9db] text-slate-700 font-bold text-xs hover:bg-slate-50 hover:text-slate-900 shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+          )}
+          <div className="text-slate-500 text-xs font-bold">
+            {inspections.filter((i) => i.status === 'Pending').length} Pending Inspection(s)
+          </div>
         </div>
       </div>
 

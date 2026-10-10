@@ -47,6 +47,7 @@ interface ContractsDashboardViewProps {
   jobs: DrillingJob[];
   onNavigate: (mod: NavModule, param?: string) => void;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  onRefresh?: () => void;
 }
 
 const USD_AED_RATE = 3.6725;
@@ -58,6 +59,7 @@ export const ContractsDashboardView: React.FC<ContractsDashboardViewProps> = ({
   jobs,
   onNavigate,
   showToast,
+  onRefresh,
 }) => {
   const [currencyMode, setCurrencyMode] = useState<'AED' | 'USD' | 'NATIVE'>('AED');
   const [search, setSearch] = useState('');
@@ -430,6 +432,18 @@ export const ContractsDashboardView: React.FC<ContractsDashboardViewProps> = ({
                 <span>Native</span>
               </button>
             </div>
+
+            {/* Refresh Button */}
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                title="Refresh Contracts Portfolio from Azure SQL / Database"
+                className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
+              >
+                <span>🔄</span>
+                <span>Refresh</span>
+              </button>
+            )}
 
             {/* Switch to Master Register */}
             <button

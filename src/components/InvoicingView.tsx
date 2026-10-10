@@ -51,6 +51,7 @@ interface InvoicingViewProps {
   onUpdateJob?: (job: DrillingJob) => void;
   onShowToast?: (msg: string, type: 'success' | 'error' | 'info') => void;
   onNavigate?: (view: any, param?: string) => void;
+  onRefresh?: () => void;
 }
 
 export const InvoicingView: React.FC<InvoicingViewProps> = ({
@@ -63,6 +64,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
   onUpdateJob,
   onShowToast,
   onNavigate,
+  onRefresh,
 }) => {
   // Filter stage
   const [stageFilter, setStageFilter] = useState<
@@ -465,6 +467,16 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
 
           {/* Quick Action Buttons */}
           <div className="flex items-center flex-wrap gap-2">
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                title="Refresh Invoicing Records from Azure SQL / Database"
+                className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                <span>🔄</span>
+                <span>Refresh</span>
+              </button>
+            )}
             <button
               onClick={handleGenerateDraftInvoice}
               className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"

@@ -13,6 +13,7 @@ interface InventoryViewProps {
   onOpenAddModal?: () => void;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
   onOpenToolHistory?: (serial: string) => void;
+  onRefresh?: () => void;
 }
 
 export const InventoryView: React.FC<InventoryViewProps> = ({
@@ -26,6 +27,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   onOpenAddModal,
   showToast: propShowToast,
   onOpenToolHistory,
+  onRefresh,
 }) => {
   const showToast = useCallback(
     (msg: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -368,7 +370,19 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           <h1 className="text-base font-bold text-[#1a3055]">Assets and Inventory Catalog</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="px-2.5 py-1.5 rounded bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs border border-slate-300 shadow-sm transition cursor-pointer flex items-center gap-1"
+              title="Refresh live data from server"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+          )}
           <button
+            type="button"
             onClick={handleExportCSV}
             className="px-2.5 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs border border-slate-300 shadow-sm transition cursor-pointer"
           >
@@ -376,6 +390,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </button>
           {user?.role !== 'Viewer' && (
             <button
+              type="button"
               onClick={handleOpenAddModal}
               className="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm transition cursor-pointer"
             >

@@ -26,6 +26,7 @@ interface BillingDashboardViewProps {
   rtBatches: RTBatch[];
   onNavigate: (mod: NavModule, jobId?: string) => void;
   onUpdateJob: (updatedJob: DrillingJob) => void;
+  onRefresh?: () => void;
 }
 
 export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
@@ -35,6 +36,7 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
   rtBatches,
   onNavigate,
   onUpdateJob,
+  onRefresh,
 }) => {
   const [filterStage, setFilterStage] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
@@ -458,6 +460,16 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              title="Refresh Commercial Billing & Invoicing Dashboard from Azure SQL / Database"
+              className="px-3 py-1.5 rounded bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs border border-[#b8c9db] shadow-2xs transition cursor-pointer flex items-center gap-1.5"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+          )}
           <button
             onClick={() => onNavigate('contract-dash')}
             className="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-2xs transition cursor-pointer flex items-center gap-1.5"

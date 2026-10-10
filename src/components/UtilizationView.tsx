@@ -21,6 +21,7 @@ interface UtilizationViewProps {
   contracts?: ContractRecord[];
   onUpdateJob?: (job: DrillingJob) => void;
   onNavigate?: (module: string) => void;
+  onRefresh?: () => void;
 }
 
 interface ClientRateConfig {
@@ -98,6 +99,7 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
   contracts = [],
   onUpdateJob,
   onNavigate,
+  onRefresh,
 }) => {
   // 1. Active Job
   const [selectedJobId, setSelectedJobId] = useState<string>(jobs[0]?.id || 'JOB-26-00001');
@@ -1456,6 +1458,18 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                   : 'Attach Signed Rig Log'}
               </span>
             </button>
+
+            {onRefresh && (
+              <button
+                type="button"
+                onClick={onRefresh}
+                title="Refresh Utilization Data from Azure SQL / Database"
+                className="px-2.5 py-1 rounded bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-xs shadow-2xs cursor-pointer flex items-center gap-1.5 transition"
+              >
+                <span>🔄</span>
+                <span>Refresh</span>
+              </button>
+            )}
 
             <button
               onClick={() => setIsAddModalOpen(true)}

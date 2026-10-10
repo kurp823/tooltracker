@@ -17,6 +17,7 @@ interface CalloutsViewProps {
   isNewCalloutOpen?: boolean;
   onCloseNewCallout?: () => void;
   onOpenNewCallout?: () => void;
+  onRefresh?: () => void;
 }
 
 export const CalloutsView: React.FC<CalloutsViewProps> = ({
@@ -32,6 +33,7 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
   isNewCalloutOpen: propIsNewOpen,
   onCloseNewCallout,
   onOpenNewCallout,
+  onRefresh,
 }) => {
   const handleCreateJob = onCreateJobFromCallout || onCreateJob || (() => {});
   const handleDispatch = onDispatchJob || (() => {});
@@ -384,6 +386,16 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
           <h1 className="text-base font-bold text-[#1a3055]">Rig Callouts &amp; Mobilization Demands</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              title="Refresh Rig Callouts from Azure SQL / Database"
+              className="px-3 py-1.5 rounded bg-white border border-[#b8c9db] text-slate-700 font-bold text-xs hover:bg-slate-50 hover:text-slate-900 shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+          )}
           {user?.role !== 'Viewer' && (
             <button
               onClick={() => {

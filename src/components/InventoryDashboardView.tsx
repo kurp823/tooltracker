@@ -42,6 +42,7 @@ interface InventoryDashboardViewProps {
   maintenance: MaintenanceRecord[];
   onNavigate: (mod: NavModule) => void;
   onOpenAddAsset?: () => void;
+  onRefresh?: () => void;
 }
 
 type DashboardViewTab = 'analytics' | 'rigs' | 'pipeline' | 'categories';
@@ -53,6 +54,7 @@ export const InventoryDashboardView: React.FC<InventoryDashboardViewProps> = ({
   maintenance,
   onNavigate,
   onOpenAddAsset,
+  onRefresh,
 }) => {
   const [activeTab, setActiveTab] = useState<DashboardViewTab>('analytics');
   const [searchFilter, setSearchFilter] = useState('');
@@ -293,6 +295,16 @@ export const InventoryDashboardView: React.FC<InventoryDashboardViewProps> = ({
 
           {/* Action Hub */}
           <div className="flex flex-wrap items-center gap-2">
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                title="Refresh Inventory Dashboard from Azure SQL / Database"
+                className="px-3 py-1.5 rounded bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs border border-slate-300 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              >
+                <span>🔄</span>
+                <span>Refresh</span>
+              </button>
+            )}
             {onOpenAddAsset && user?.role !== 'Viewer' && (
               <button
                 onClick={onOpenAddAsset}

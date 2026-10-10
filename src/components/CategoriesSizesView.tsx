@@ -11,6 +11,7 @@ interface CategoriesSizesViewProps {
   sizes: string[];
   onUpdateSizes: (sizes: string[]) => void;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  onRefresh?: () => void;
 }
 
 export const CategoriesSizesView: React.FC<CategoriesSizesViewProps> = ({
@@ -21,6 +22,7 @@ export const CategoriesSizesView: React.FC<CategoriesSizesViewProps> = ({
   sizes,
   onUpdateSizes,
   showToast,
+  onRefresh,
 }) => {
   // Check if current user has permission to write / edit master categories & sizes
   const canEdit = useMemo(() => {
@@ -180,6 +182,16 @@ export const CategoriesSizesView: React.FC<CategoriesSizesViewProps> = ({
         </div>
 
         <div className="flex items-center gap-3 text-xs">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              title="Refresh Categories & Sizes from Azure SQL / Database"
+              className="px-3 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+          )}
           <div className="bg-blue-50 border border-blue-200 rounded px-3 py-1.5 font-medium text-blue-900">
             Categories: <strong className="font-bold">{categories.length}</strong>
           </div>

@@ -32,6 +32,7 @@ interface MaintenanceViewProps {
     notes: string,
     destination?: 'Base' | 'QC'
   ) => void;
+  onRefresh?: () => void;
 }
 
 export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
@@ -43,6 +44,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   onReceiveFromVendor,
   onRouteToQC,
   onCompleteMaintenance,
+  onRefresh,
 }) => {
   const [tab, setTab] = useState<'active' | 'vendor' | 'ready_qc' | 'completed'>('active');
   const [search, setSearch] = useState('');
@@ -288,14 +290,26 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
           <div className="text-[11px] text-slate-500 font-medium">Workshop &amp; Vendor Services</div>
           <h1 className="text-base font-bold text-[#1a3055]">Maintenance, Redress &amp; 3rd Party Repairs</h1>
         </div>
-        {user?.role !== 'Viewer' && (
-          <button
-            onClick={() => setIsNewMntOpen(true)}
-            className="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-xs transition cursor-pointer"
-          >
-            + New Maintenance Order
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              title="Refresh Maintenance Records from Azure SQL / Database"
+              className="px-3 py-1.5 rounded bg-white border border-[#b8c9db] text-slate-700 font-bold text-xs hover:bg-slate-50 hover:text-slate-900 shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+          )}
+          {user?.role !== 'Viewer' && (
+            <button
+              onClick={() => setIsNewMntOpen(true)}
+              className="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-xs transition cursor-pointer"
+            >
+              + New Maintenance Order
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tabs & Search */}

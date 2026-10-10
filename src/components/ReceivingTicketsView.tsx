@@ -17,6 +17,7 @@ interface ReceivingTicketsViewProps {
   isNewRTOpen?: boolean;
   onCloseNewRT?: () => void;
   onOpenNewRT?: () => void;
+  onRefresh?: () => void;
 }
 
 export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
@@ -29,6 +30,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
   contracts = [],
   onSaveRTBatch,
   onUpdateRTBatch,
+  onRefresh,
 }) => {
   // Tabs: 'all' (default ledger of all RTs, exactly like Delivery Tickets) or 'onrig' (tools currently on rig awaiting backload)
   const [tab, setTab] = useState<'all' | 'onrig'>('all');
@@ -526,16 +528,29 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
             </span>
           </div>
         </div>
-        {user?.role !== 'Viewer' && (
-          <button
-            onClick={handleOpenNewRT}
-            className="h-7 px-3 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-2xs transition cursor-pointer flex items-center gap-1.5"
-            title="Receive backloaded tools from rig site and generate RT"
-          >
-            <span>+</span>
-            <span>New Receiving Ticket</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="h-7 px-3 rounded bg-white text-slate-700 border border-slate-300 font-semibold text-xs hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              title="Refresh live data from server"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+          )}
+          {user?.role !== 'Viewer' && (
+            <button
+              onClick={handleOpenNewRT}
+              className="h-7 px-3 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-2xs transition cursor-pointer flex items-center gap-1.5"
+              title="Receive backloaded tools from rig site and generate RT"
+            >
+              <span>+</span>
+              <span>New Receiving Ticket</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tabs & Search & Filters */}

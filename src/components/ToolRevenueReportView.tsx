@@ -31,6 +31,7 @@ interface ToolRevenueReportViewProps {
   user?: User | null;
   onNavigate?: (module: string, param?: string) => void;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  onRefresh?: () => void;
 }
 
 export type AnalyticsTab = 'tools-ledger' | 'category-summary' | 'size-summary' | 'contract-summary';
@@ -39,6 +40,7 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
   user,
   onNavigate,
   showToast,
+  onRefresh,
 }) => {
   const [activeTab, setActiveTab] = useState<AnalyticsTab>('tools-ledger');
   const [currencyMode, setCurrencyMode] = useState<'AED' | 'USD' | 'NATIVE'>('AED');
@@ -335,6 +337,16 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
               </button>
             </div>
 
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                title="Refresh Revenue Analytics from Azure SQL / Database"
+                className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3.5 py-1.5 rounded-lg border border-slate-200 transition shadow-2xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>🔄</span>
+                <span>Refresh</span>
+              </button>
+            )}
             <button
               onClick={handleExportExcel}
               className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg transition shadow-2xs flex items-center gap-1.5 cursor-pointer"

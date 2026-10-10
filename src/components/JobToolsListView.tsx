@@ -12,6 +12,7 @@ interface JobToolsListViewProps {
   preSelectedJobId?: string | null;
   onNavigate?: (view: any, param?: string) => void;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  onRefresh?: () => void;
 }
 
 export interface JobToolReconRow {
@@ -36,6 +37,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
   rtBatches,
   preSelectedJobId,
   showToast,
+  onRefresh,
 }) => {
   // Map of Job ID / normalized key to job object for fast metadata lookups
   const jobsMap = useMemo(() => {
@@ -360,16 +362,28 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
           </h1>
         </div>
 
-        {/* 3-Vertical-Dots Action Menu */}
-        <div className="relative" ref={actionMenuRef}>
-          <button
-            type="button"
-            onClick={() => setIsActionMenuOpen((prev) => !prev)}
-            className="p-1.5 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition cursor-pointer flex items-center justify-center"
-            title="Options & Export"
-          >
-            <span className="font-bold text-base leading-none px-1">⋮</span>
-          </button>
+        <div className="flex items-center gap-2">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              title="Refresh Job Tools List from Azure SQL / Database"
+              className="px-3 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+          )}
+
+          {/* 3-Vertical-Dots Action Menu */}
+          <div className="relative" ref={actionMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsActionMenuOpen((prev) => !prev)}
+              className="p-1.5 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition cursor-pointer flex items-center justify-center"
+              title="Options & Export"
+            >
+              <span className="font-bold text-base leading-none px-1">⋮</span>
+            </button>
 
           {isActionMenuOpen && (
             <div className="absolute right-0 mt-1.5 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-30 text-xs animate-scale-in">
@@ -404,6 +418,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
               </button>
             </div>
           )}
+          </div>
         </div>
       </div>
 

@@ -7,6 +7,7 @@ interface GatePassViewProps {
   gatePasses: GatePass[];
   inventory: ToolItem[];
   onSaveGatePass: (gp: GatePass, removedTools: ToolItem[]) => void;
+  onRefresh?: () => void;
 }
 
 export const GatePassView: React.FC<GatePassViewProps> = ({
@@ -14,6 +15,7 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
   gatePasses,
   inventory,
   onSaveGatePass,
+  onRefresh,
 }) => {
   const [search, setSearch] = useState('');
   const [selectedGPDetail, setSelectedGPDetail] = useState<GatePass | null>(null);
@@ -291,6 +293,16 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
           <h1 className="text-base font-bold text-[#1a3055]">Security Gate Pass Verification</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              title="Refresh Security Gate Passes from Azure SQL / Database"
+              className="px-3 py-1.5 rounded bg-white border border-[#b8c9db] text-slate-700 font-bold text-xs hover:bg-slate-50 hover:text-slate-900 shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+          )}
           {user?.role !== 'Viewer' && (
             <button
               onClick={() => {

@@ -22,6 +22,7 @@ interface MaintenanceDashboardViewProps {
   onNavigate: (mod: NavModule) => void;
   onUpdateInspection?: (id: string, updates: Partial<InspectionRecord>) => void;
   onUpdateMaintenance?: (id: string, updates: Partial<MaintenanceRecord>) => void;
+  onRefresh?: () => void;
 }
 
 const QC_COLORS = ['#0d9488', '#f59e0b', '#ef4444', '#64748b'];
@@ -32,6 +33,7 @@ export const MaintenanceDashboardView: React.FC<MaintenanceDashboardViewProps> =
   maintenance,
   inventory,
   onNavigate,
+  onRefresh,
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'qc' | 'workshop' | 'vendors'>('all');
   const [search, setSearch] = useState('');
@@ -154,6 +156,16 @@ export const MaintenanceDashboardView: React.FC<MaintenanceDashboardViewProps> =
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              title="Refresh Maintenance & QC Dashboard from Azure SQL / Database"
+              className="px-3 py-1.5 rounded bg-white border border-[#b8c9db] text-slate-700 font-bold text-xs hover:bg-slate-50 hover:text-slate-900 shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+          )}
           <button
             onClick={() => onNavigate('inspection')}
             className="px-3 py-1.5 rounded bg-[#1a3055] text-white hover:bg-[#24426d] font-bold text-xs shadow-sm transition cursor-pointer"

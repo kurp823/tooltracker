@@ -52,6 +52,7 @@ interface JobsViewProps {
   inventory?: ToolItem[];
   contracts?: ContractRecord[];
   onSaveJob: (job: DrillingJob) => void;
+  onRefresh?: () => void;
   onDispatchJob: (jobId: string) => void;
   onReceiveJob?: (jobId: string) => void;
   onBatchUpdateJobs?: (jobs: DrillingJob[]) => void;
@@ -210,6 +211,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   inventory = [],
   contracts = [],
   onSaveJob,
+  onRefresh,
   onDispatchJob,
   onReceiveJob,
   onBatchUpdateJobs,
@@ -897,6 +899,18 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
         {/* Global Action Buttons */}
         <div className="flex items-center gap-2">
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="h-7.5 px-3 rounded bg-white text-slate-700 border border-slate-300 font-semibold text-xs hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              title="Refresh live data from server"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-slate-600" />
+              <span>Refresh</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleExportJobsCsv}
@@ -906,8 +920,6 @@ export const JobsView: React.FC<JobsViewProps> = ({
             <Download className="w-3.5 h-3.5 text-slate-600" />
             <span>Export CSV</span>
           </button>
-
-
 
           {user?.role !== 'Viewer' && (
             <button
@@ -1969,6 +1981,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   onSaveJob(updated);
                   setDossierJob(updated);
                 }}
+                onRefresh={onRefresh}
                 onSaveDTBatch={onSaveDTBatch || (() => {})}
                 onUpdateDTBatch={onUpdateDTBatch}
                 onSaveRTBatch={onSaveRTBatch || (() => {})}

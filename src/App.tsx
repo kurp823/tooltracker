@@ -1531,6 +1531,7 @@ export const App: React.FC = () => {
               maintenance={maintenance}
               onNavigate={(mod) => setActiveView(mod)}
               onOpenAddAsset={() => setActiveView('inventory')}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1547,6 +1548,7 @@ export const App: React.FC = () => {
                 setActiveView('tool-history');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1559,6 +1561,7 @@ export const App: React.FC = () => {
               onUpdateCategories={handleUpdateCustomCategories}
               onUpdateSizes={handleUpdateCustomSizes}
               showToast={showToast}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1576,6 +1579,7 @@ export const App: React.FC = () => {
               isNewCalloutOpen={isNewCalloutOpen}
               onCloseNewCallout={() => setIsNewCalloutOpen(false)}
               onOpenNewCallout={() => setIsNewCalloutOpen(true)}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1622,6 +1626,7 @@ export const App: React.FC = () => {
               }}
               onOpenNewJobModal={() => setIsNewJobOpen(true)}
               selectedCalloutForNewJob={selectedCalloutForJob}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1642,6 +1647,7 @@ export const App: React.FC = () => {
               }}
               onOpenNewDT={() => setIsNewDTOpen(true)}
               preSelectedJobId={preSelectedJobIdForDT}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1656,6 +1662,7 @@ export const App: React.FC = () => {
               contracts={contracts}
               onSaveRTBatch={handleSaveRTBatch}
               onUpdateRTBatch={handleUpdateRTBatch}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1671,6 +1678,7 @@ export const App: React.FC = () => {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
               showToast={showToast}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1686,6 +1694,7 @@ export const App: React.FC = () => {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
               showToast={showToast}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1695,6 +1704,7 @@ export const App: React.FC = () => {
               gatePasses={gatePasses}
               inventory={inventory}
               onSaveGatePass={handleSaveGatePass}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1706,6 +1716,7 @@ export const App: React.FC = () => {
               inventory={inventory}
               onNavigate={(mod) => setActiveView(mod)}
               onUpdateInspection={handleUpdateInspection}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1716,6 +1727,7 @@ export const App: React.FC = () => {
               inventory={inventory}
               maintenance={maintenance}
               onUpdateInspection={handleUpdateInspection}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1729,6 +1741,7 @@ export const App: React.FC = () => {
               onReceiveFromVendor={handleReceiveFromVendor}
               onRouteToQC={handleRouteMaintenanceToQC}
               onCompleteMaintenance={handleCompleteMaintenance}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1745,6 +1758,7 @@ export const App: React.FC = () => {
                 setActiveView(mod);
               }}
               onUpdateJob={handleSaveJob}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1762,6 +1776,7 @@ export const App: React.FC = () => {
                 if (jobId) setSelectedJobIdForBillingPackage(jobId);
                 setActiveView(mod);
               }}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1778,6 +1793,7 @@ export const App: React.FC = () => {
               onUpdateDTBatch={handleUpdateDTBatch}
               onUpdateRTBatch={handleUpdateRTBatch}
               onShowToast={showToast}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 
@@ -1797,6 +1813,7 @@ export const App: React.FC = () => {
                   if (serial) setPreSelectedSerialForToolHistory(serial);
                   setActiveView(mod as ViewKey);
                 }}
+                onRefresh={() => handleFetchLiveSql(false)}
               />
             </React.Suspense>
           )}
@@ -1819,6 +1836,7 @@ export const App: React.FC = () => {
                 contracts={contracts}
                 onUpdateJob={handleSaveJob}
                 onNavigate={(mod) => setActiveView(mod as ViewKey)}
+                onRefresh={() => handleFetchLiveSql(false)}
               />
             </React.Suspense>
           )}
@@ -1830,6 +1848,7 @@ export const App: React.FC = () => {
               jobs={jobs}
               onNavigate={(mod) => setActiveView(mod as ViewKey)}
               showToast={showToast}
+              onRefresh={() => handleFetchLiveSql(false)}
             />
           )}
 

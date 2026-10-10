@@ -16,6 +16,7 @@ interface DeliveryTicketsViewProps {
   onCloseNewDT: () => void;
   onOpenNewDT: () => void;
   preSelectedJobId?: string | null;
+  onRefresh?: () => void;
 }
 
 export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
@@ -31,6 +32,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   onCloseNewDT,
   onOpenNewDT,
   preSelectedJobId,
+  onRefresh,
 }) => {
   const [tab, setTab] = useState<'onrig' | 'all'>('onrig');
   const [search, setSearch] = useState('');
@@ -568,19 +570,32 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
             </span>
           </div>
         </div>
-        {user?.role !== 'Viewer' && (
-          <button
-            onClick={() => {
-              setNewDtNumber(nextDtNumber);
-              setCheckedToolIds([]);
-              onOpenNewDT();
-            }}
-            className="h-7 px-3 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-2xs transition cursor-pointer flex items-center gap-1.5"
-          >
-            <span>+</span>
-            <span>New Delivery Ticket</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="h-7 px-3 rounded bg-white text-slate-700 border border-slate-300 font-semibold text-xs hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              title="Refresh live data from server"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+          )}
+          {user?.role !== 'Viewer' && (
+            <button
+              onClick={() => {
+                setNewDtNumber(nextDtNumber);
+                setCheckedToolIds([]);
+                onOpenNewDT();
+              }}
+              className="h-7 px-3 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-2xs transition cursor-pointer flex items-center gap-1.5"
+            >
+              <span>+</span>
+              <span>New Delivery Ticket</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tabs & Search & Filters */}

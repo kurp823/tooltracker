@@ -54,6 +54,7 @@ interface InvoicePackageViewProps {
   onUpdateDTBatch?: (batch: DTBatch) => void;
   onUpdateRTBatch?: (batch: RTBatch) => void;
   onShowToast?: (msg: string, type: 'success' | 'error' | 'info') => void;
+  onRefresh?: () => void;
 }
 
 export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
@@ -68,6 +69,7 @@ export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
   onUpdateDTBatch,
   onUpdateRTBatch,
   onShowToast,
+  onRefresh,
 }) => {
   // Current job selection
   const [selectedJobId, setSelectedJobId] = useState<string>(() => {
@@ -311,6 +313,16 @@ export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
 
           {/* Action Buttons */}
           <div className="flex items-center flex-wrap gap-2 shrink-0">
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                title="Refresh Invoice Package Data from Azure SQL / Database"
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-md text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+              >
+                <span>🔄</span>
+                <span>Refresh</span>
+              </button>
+            )}
             <button
               onClick={handleOpenDraftConfirm}
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold shadow-2xs transition-colors cursor-pointer"

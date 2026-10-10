@@ -29,6 +29,7 @@ interface JobDossierViewProps {
   inventory: ToolItem[];
   contracts?: ContractRecord[];
   onSaveJob: (job: DrillingJob) => void;
+  onRefresh?: () => void;
   onSaveDTBatch: (batch: DTBatch) => void;
   onUpdateDTBatch?: (batch: DTBatch, addedTools?: ToolItem[], removedTools?: ToolItem[]) => void;
   onSaveRTBatch: (batch: RTBatch) => void;
@@ -1905,6 +1906,55 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return engineerUtilizationRows.reduce((acc, e) => acc + e.totalUSD, 0);
   }, [engineerUtilizationRows]);
 
+  // Saving state indicator and last saved timestamp
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+
+  // Explicit Save Job File handler
+  const handleExplicitSaveJob = async () => {
+    if (isClosedOrInvoiced && !adminUnlocked) {
+      showToast('Cannot save: this job is invoiced / completed and locked in read-only mode.', 'error');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const updatedJob: DrillingJob = {
+        ...jobData,
+        assignedCrew,
+        dailyLogs,
+      };
+
+      // Persist tool hole section selections to localStorage and API if available
+      const jobKey = jobData.id || jobData.jobNumber;
+      if (jobKey && Object.keys(toolHoleSectionSelections).length > 0) {
+        try {
+          localStorage.setItem(`emdad_job_tool_sections_${jobKey}`, JSON.stringify(toolHoleSectionSelections));
+          for (const [toolKey, opt] of Object.entries(toolHoleSectionSelections)) {
+            saveJobToolHoleSectionApi(
+              jobKey,
+              toolKey,
+              opt.holeSection,
+              opt.contractRef,
+              opt.opsRate,
+              opt.standbyRate,
+              opt.currency
+            ).catch(() => {});
+          }
+        } catch {}
+      }
+
+      onSaveJob(updatedJob);
+      setJobData(updatedJob);
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      setLastSavedTime(timeStr);
+      showToast(`Job File ${jobData.id} saved successfully at ${timeStr}!`, 'success');
+    } catch (e: any) {
+      showToast(`Failed to save job file: ${e.message || 'Unknown error'}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div
       className="access-dossier bg-[#dce6f1] min-h-screen text-slate-800 p-2 sm:p-4 select-none"
@@ -1928,12 +1978,43 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               Legal Inv: {jobData.legalInvoiceNumber}
             </span>
           )}
+          {lastSavedTime && (
+            <span className="text-[10px] text-emerald-300 font-normal hidden sm:inline">
+              (Saved at {lastSavedTime})
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Prominent Save Job File Button */}
+          <button
+            type="button"
+            onClick={handleExplicitSaveJob}
+            disabled={isSaving || (isClosedOrInvoiced && !adminUnlocked)}
+            className="text-xs bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-500 text-white px-3 py-1 rounded font-bold cursor-pointer transition shadow-xs flex items-center gap-1.5"
+            title="Save all changes in this Job File"
+          >
+            <span>{isSaving ? '⏳' : '💾'}</span>
+            <span>{isSaving ? 'Saving…' : 'Save Job File'}</span>
+          </button>
+
+          {/* Refresh Button */}
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="text-xs bg-white/10 hover:bg-white/20 text-slate-200 px-2.5 py-1 rounded cursor-pointer transition font-medium flex items-center gap-1"
+              title="Refresh live data from server"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+          )}
+
           {onBackToRegister && (
             <button
+              type="button"
               onClick={onBackToRegister}
-              className="text-xs bg-white/10 hover:bg-white/20 text-white px-2.5 py-0.5 rounded cursor-pointer transition font-medium flex items-center gap-1"
+              className="text-xs bg-white/10 hover:bg-white/20 text-white px-2.5 py-1 rounded cursor-pointer transition font-medium flex items-center gap-1"
             >
               <span>&larr;</span> Back to Register
             </button>
@@ -4396,6 +4477,48 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* MS Access Bottom Action Footer */}
+      <div className="bg-[#1a3055] text-white px-4 py-2 rounded-b-md flex flex-wrap items-center justify-between gap-3 shadow-md mt-1 no-print">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-slate-300">Active Job:</span>
+          <span className="font-mono font-bold text-amber-300">{jobData.id}</span>
+          <span className="text-slate-400">&bull;</span>
+          <span className="text-slate-300">Client:</span>
+          <span className="font-semibold text-white">{jobData.client || '—'}</span>
+          <span className="text-slate-400">&bull;</span>
+          <span className="text-slate-300">Rig:</span>
+          <span className="font-mono text-cyan-300">{jobData.rig || '—'}</span>
+          {lastSavedTime && (
+            <span className="text-[10px] text-emerald-300 font-normal hidden md:inline ml-2">
+              (Last Saved: {lastSavedTime})
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+              title="Refresh live data from server"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleExplicitSaveJob}
+            disabled={isSaving || (isClosedOrInvoiced && !adminUnlocked)}
+            className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-600 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+          >
+            <span>{isSaving ? '⏳' : '💾'}</span>
+            <span>{isSaving ? 'Saving Job…' : 'Save Job File'}</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
