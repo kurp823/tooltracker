@@ -1372,7 +1372,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                 </th>
 
                 {/* 13. Actions */}
-                <th className="px-3 py-2 text-right whitespace-nowrap min-w-[170px] pr-3.5">
+                <th className="px-3 py-2 text-right whitespace-nowrap min-w-[130px] pr-3.5">
                   Actions
                 </th>
               </tr>
@@ -1536,11 +1536,11 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
                       {/* 13. Actions */}
                       <td className={`px-3 ${padY} text-right whitespace-nowrap align-middle pr-3.5`}>
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => setDossierJob(job)}
-                            className="h-6 px-2 rounded bg-blue-50 hover:bg-[#1a3055] hover:text-white text-blue-900 font-medium text-[11px] transition-colors border border-blue-200 cursor-pointer flex items-center gap-1 shadow-2xs"
-                            title="Open Job File"
+                            className="h-6 px-2.5 rounded bg-blue-50 hover:bg-[#1a3055] hover:text-white text-blue-900 font-medium text-[11px] transition-colors border border-blue-200 cursor-pointer flex items-center gap-1 shadow-2xs"
+                            title="Open Job File (Dossier, DTs, RTs, Tools & Commercials)"
                           >
                             <span>🗂️</span>
                             <span>Job File</span>
@@ -1553,26 +1553,6 @@ export const JobsView: React.FC<JobsViewProps> = ({
                             <span>📋</span>
                             <span>Tools</span>
                           </button>
-                          {isActive && user?.role !== 'Viewer' && (
-                            <button
-                              onClick={() => onDispatchJob(job.id)}
-                              className="h-6 px-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-[11px] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
-                              title="Create Delivery Ticket (DT)"
-                            >
-                              <Truck className="w-3 h-3" />
-                              <span>DT</span>
-                            </button>
-                          )}
-                          {toolsOnRig > 0 && onReceiveJob && user?.role !== 'Viewer' && (
-                            <button
-                              onClick={() => onReceiveJob(job.id)}
-                              className="h-6 px-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white font-medium text-[11px] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
-                              title="Create Receiving Ticket (RT)"
-                            >
-                              <RotateCcw className="w-3 h-3" />
-                              <span>RT</span>
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>

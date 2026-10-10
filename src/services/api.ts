@@ -152,52 +152,78 @@ export function resolveJobClient(
 ): string {
   const c = String(rawClient || '').trim();
   const cUpper = c.toUpperCase();
+  
+  // Generic placeholders or contract project codes accidentally saved in client field
   const isGeneric =
     !c ||
-    cUpper === 'EMDAD CLIENT' ||
-    cUpper === 'EMDAD' ||
+    cUpper.includes('EMDAD') ||
     cUpper === 'CLIENT' ||
     cUpper === 'NIL' ||
     cUpper === 'NULL' ||
     cUpper === 'UNDEFINED' ||
     cUpper === '—' ||
-    cUpper === '-';
+    cUpper === '-' ||
+    ['444558', '47000', '16358', '16119', 'DVP-', 'TW-', 'CHURCHIL', 'WIS-', 'BAKER-', 'GOSS-', 'WFD-', 'ALB/', 'CW369672', 'ITS -', 'ITS-'].some((code) => cUpper.includes(code));
 
-  // 1. If we have a specific non-placeholder client from input, use it
-  if (!isGeneric) {
-    return c;
-  }
+  // 1. Resolve from Contract / Project Reference or raw client if it holds a contract code
+  const proj = String(contractRef || rawClient || '').toUpperCase().trim();
+  if (proj.includes('444558')) return 'ADNOC OFFSHORE';
+  if (proj.includes('4700012465')) return 'ADNOC ONSHORE';
+  if (proj.includes('4700016147')) return 'ADNOC SOUR GAS';
+  if (proj.includes('4700018368')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
+  if (proj.includes('4700023373')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
+  if (proj.includes('4700023861')) return 'ADNOC ONSHORE';
+  if (proj.includes('4700024096')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
+  if (proj.includes('4700024608')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
+  if (proj.includes('4700015149')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
+  if (proj.includes('16358.13') || proj.includes('16358')) return 'ADNOC ONSHORE';
+  if (proj.includes('16119.01') || proj.includes('16119')) return 'ADNOC ONSHORE';
+  if (proj.includes('4700012347')) return 'ADNOC ONSHORE';
+  if (proj.includes('DVP-2023-K-016') || proj.includes('BUNDUQ')) return 'BUNDUQ COMPANY LIMITED';
+  if (proj.includes('TW-') || proj.includes('TURNWELL')) return 'TURNWELL INDUSTRIES LLC';
+  if (proj.includes('ALB/') || proj.includes('COSMO')) return 'COSMO E&P ALBAHRIYA LIMITED';
+  if (proj.includes('CW369672') || proj.includes('HALLIBURTON')) return 'HALLIBURTON WORLDWIDE LIMITED';
+  if (proj.includes('ITS') || proj.includes('NABORS')) return 'ITS (NABORS)';
+  if (proj.includes('CHURCHIL') || proj.includes('CORETRAX')) return 'CHURCHILL / CORETRAX';
+  if (proj.includes('WIS') || proj.includes('WELLBORE INTEGRITY')) return 'WELLBORE INTEGRITY SOLUTIONS';
+  if (proj.includes('BAKER')) return 'BAKER HUGHES';
+  if (proj.includes('GOSS')) return 'GOSS';
+  if (proj.includes('CSS') || proj.includes('CONSOLIDATED')) return 'CONSOLIDATED SUPPLIERS';
+  if (proj.includes('WFD') || proj.includes('WEATHERFORD')) return 'WEATHERFORD';
+  if (proj.includes('MOTORMAX')) return 'MOTORMAX';
+  if (proj.includes('PROGROUP')) return 'PROGROUP';
+  if (proj.includes('ARCHER')) return 'ARCHER';
+  if (proj.includes('MA-ES') || proj.includes('CAMERON') || proj.includes('MALEGA')) return 'MALEGA ENERGY SERVICE';
+  if (proj.includes('OVERSEAS') || proj.includes('OWEN')) return 'OWEN SOLUTIONS';
+  if (proj.includes('GORDON')) return 'GORDON TECHNOLOGIES';
+  if (proj.includes('ELITE')) return 'ELITE WELLBORE';
+  if (proj.includes('GIS')) return 'GIS - UAE';
+  if (proj.includes('NUCLIEX')) return 'Nucliex Drilling Technologies Ltd';
+  if (proj.includes('SLB') || proj.includes('SCHLUMBERGER')) return 'SLB (SCHLUMBERGER)';
 
   // 2. If master has a specific client, use it
   if (
     masterClient &&
-    !masterClient.toUpperCase().includes('EMDAD CLIENT') &&
+    !masterClient.toUpperCase().includes('EMDAD') &&
     masterClient.toUpperCase() !== 'CLIENT' &&
     masterClient.trim() !== ''
   ) {
     return masterClient.trim();
   }
 
-  // 3. Resolve from Contract / Project Reference
-  const proj = String(contractRef || '').toUpperCase().trim();
-  if (proj.includes('444558')) return 'ADNOC OFFSHORE';
-  if (proj.includes('4700012465')) return 'ADNOC ONSHORE';
-  if (proj.includes('4700016147')) return 'ADNOC SOUR GAS';
-  if (proj.includes('4700018368')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
-  if (proj.includes('DVP-2023-K-016') || proj.includes('BUNDUQ')) return 'BUNDUQ COMPANY LIMITED';
-  if (proj.includes('4700023373')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
-  if (proj.includes('4700023861')) return 'ADNOC ONSHORE';
-  if (proj.includes('4700024096')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
-  if (proj.includes('4700024608')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
-  if (proj.includes('TW-') || proj.includes('TURNWELL')) return 'TURNWELL INDUSTRIES LLC';
-  if (proj.includes('16358.13') || proj.includes('16358')) return 'ADNOC ONSHORE';
+  // 3. If we have a specific non-placeholder client from input, use it
+  if (!isGeneric) {
+    return c;
+  }
 
   // 4. Resolve from Rig if rig gives a clue
   const rigUpper = String(rig || '').toUpperCase().trim();
   if (rigUpper.startsWith('AD-') || rigUpper.startsWith('ND-')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
-  if (rigUpper.includes('AL YASAT') || rigUpper.includes('YEMILAH') || rigUpper.includes('GHASHA')) return 'ADNOC OFFSHORE';
+  if (rigUpper.includes('AL YASAT') || rigUpper.includes('YEMILAH') || rigUpper.includes('GHASHA') || rigUpper.includes('UMM') || rigUpper.includes('HAIL')) {
+    return 'ADNOC OFFSHORE';
+  }
 
-  return 'ADNOC DRILLING';
+  return 'ADNOC DRILLING COMPANY P.J.S.C.';
 }
 
 function normalizeJob(row: any): any {
