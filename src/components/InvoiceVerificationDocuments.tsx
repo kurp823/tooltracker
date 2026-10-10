@@ -24,6 +24,7 @@ import {
   Eye,
 } from 'lucide-react';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
+import { EMDAD_LOGO_BASE64, EmdadLogo } from '../constants/branding';
 
 interface InvoiceVerificationDocumentsProps {
   packageData: DraftInvoicePackageData;
@@ -259,7 +260,13 @@ export const InvoiceVerificationDocuments: React.FC<InvoiceVerificationDocuments
                         <html>
                           <head><title>${doc.name}</title></head>
                           <body style="font-family: sans-serif; padding: 20px;">
-                            <h2>EMDAD UPSTREAM SERVICES — OFFICIAL BILLING EXHIBIT</h2>
+                            <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 14px; border-bottom: 2px solid #1a3055; padding-bottom: 10px;">
+                              <img src="${EMDAD_LOGO_BASE64}" alt="EMDAD Logo" style="height: 38px; width: auto; object-fit: contain;" />
+                              <div>
+                                <h2 style="margin: 0; color: #1a3055; font-size: 16px;">EMDAD UPSTREAM SERVICES — OFFICIAL BILLING EXHIBIT</h2>
+                                <div style="font-size: 10px; color: #64748b; font-weight: bold;">COMMERCIAL VERIFICATION &amp; AUDIT TRAIL</div>
+                              </div>
+                            </div>
                             <h3>Exhibit ${index + 1}: ${doc.category}</h3>
                             <p><strong>Job ID:</strong> ${packageData.jobId} &bull; <strong>Rig:</strong> ${packageData.rig} &bull; <strong>Well:</strong> ${packageData.well}</p>
                             <p><strong>Source:</strong> ${doc.sourceType} (${doc.sourceRef}) &bull; <strong>File:</strong> ${doc.name}</p>
@@ -436,9 +443,14 @@ export const InvoiceVerificationDocuments: React.FC<InvoiceVerificationDocuments
             <div className="p-6 space-y-4 overflow-y-auto text-xs bg-slate-100 flex-1">
               <div className="bg-white border-2 border-slate-300 shadow-md p-6 rounded max-w-xl mx-auto font-sans space-y-4">
                 <div className="border-b-2 border-slate-800 pb-3 flex justify-between items-start">
-                  <div>
-                    <h2 className="text-base font-black text-[#1a3055]">EMDAD L.L.C.</h2>
-                    <p className="text-[10px] text-slate-600 uppercase font-semibold">Field Operations & Commercial Verification</p>
+                  <div className="flex items-center gap-2.5">
+                    <div className="bg-white p-1 rounded border border-slate-200 shadow-xs flex items-center justify-center">
+                      <EmdadLogo className="h-6 w-auto object-contain" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-[#1a3055]">EMDAD L.L.C.</h2>
+                      <p className="text-[10px] text-slate-600 uppercase font-semibold">Field Operations & Commercial Verification</p>
+                    </div>
                   </div>
                   <div className="text-right">
                     <span className="px-2 py-0.5 bg-slate-900 text-white font-bold rounded text-[10px]">

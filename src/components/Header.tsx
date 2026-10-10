@@ -1,5 +1,6 @@
 import React from 'react';
 import { DbConnectionStatus } from '../services/api';
+import { EmdadLogo } from '../constants/branding';
 
 interface HeaderProps {
   syncStatus?: 'idle' | 'syncing' | 'saved' | 'error';
@@ -39,8 +40,8 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-[#0b192c] text-sm shadow">
-          E
+        <div className="bg-white px-2 py-1 rounded shadow flex items-center justify-center">
+          <EmdadLogo className="h-6 w-auto object-contain" />
         </div>
 
         <div>

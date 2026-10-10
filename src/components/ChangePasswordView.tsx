@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { getApiEndpoint, getApiKey } from '../services/api';
+import { EmdadLogo } from '../constants/branding';
 
 interface ChangePasswordViewProps {
   user: User;
@@ -57,8 +58,8 @@ export const ChangePasswordView: React.FC<ChangePasswordViewProps> = ({ user, on
     <div className="min-h-screen flex items-center justify-center bg-[#0f1f38] px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-[#1a3055] text-2xl shadow-lg mx-auto mb-4">
-            E
+          <div className="bg-white rounded-lg p-3 shadow-lg mx-auto mb-4 inline-flex items-center justify-center border border-slate-200">
+            <EmdadLogo className="h-10 w-auto object-contain" />
           </div>
           <div className="font-extrabold text-xl text-white tracking-wide">EMDAD SERVICES LLC</div>
           <div className="text-slate-400 text-[11px] mt-1">Set a new password to continue, {user.name}</div>

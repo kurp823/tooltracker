@@ -15,6 +15,7 @@ import {
   convertAmountToWords,
   CONTRACT_444558_RATES,
 } from '../services/billingPackageService';
+import { EmdadLogo } from '../constants/branding';
 import {
   FileText,
   Printer,
@@ -923,15 +924,20 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
             <div className="space-y-4">
               {/* Header: Company & Banner */}
               <div className="flex justify-between items-start border-b-2 border-slate-800 pb-3">
-                <div>
-                  <div className="text-xl font-black tracking-wider text-slate-900 flex items-center space-x-1">
-                    <span className="text-emerald-700">EMDAD</span>
-                    <span className="text-xs font-semibold text-slate-500 tracking-normal">L.L.C</span>
+                <div className="flex items-start gap-3">
+                  <div className="bg-white p-1 rounded border border-slate-200 shadow-xs flex items-center justify-center shrink-0">
+                    <EmdadLogo className="h-8 w-auto object-contain" />
                   </div>
-                  <div className="text-[10px] text-slate-600 leading-tight mt-0.5">
-                    P.O. Box. 4118<br />
-                    29th Floor, Etihad Towers, Abu Dhabi, UAE<br />
-                    <strong className="text-slate-800">TRN - 100260782600003</strong>
+                  <div>
+                    <div className="text-xl font-black tracking-wider text-slate-900 flex items-center space-x-1">
+                      <span className="text-emerald-700">EMDAD</span>
+                      <span className="text-xs font-semibold text-slate-500 tracking-normal">L.L.C</span>
+                    </div>
+                    <div className="text-[10px] text-slate-600 leading-tight mt-0.5">
+                      P.O. Box. 4118<br />
+                      29th Floor, Etihad Towers, Abu Dhabi, UAE<br />
+                      <strong className="text-slate-800">TRN - 100260782600003</strong>
+                    </div>
                   </div>
                 </div>
 
@@ -1232,12 +1238,17 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
             <div className="space-y-4">
               {/* Header */}
               <div className="flex justify-between items-start border-b border-slate-300 pb-2">
-                <div>
-                  <div className="text-lg font-black tracking-wider text-slate-900">
-                    <span className="text-emerald-700">EMDAD</span> L.L.C.
+                <div className="flex items-start gap-2.5">
+                  <div className="bg-white p-1 rounded border border-slate-200 shadow-xs flex items-center justify-center shrink-0">
+                    <EmdadLogo className="h-7 w-auto object-contain" />
                   </div>
-                  <div className="text-[10px] text-slate-500">
-                    Drilling Services | Fishing Department
+                  <div>
+                    <div className="text-base font-black tracking-wider text-slate-900">
+                      <span className="text-emerald-700">EMDAD</span> L.L.C.
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      Drilling Services | Fishing Department
+                    </div>
                   </div>
                 </div>
                 <div className="text-center font-bold text-xs uppercase text-slate-800">

@@ -12,6 +12,7 @@ import {
   ContractRecord,
   ViewKey,
 } from './types';
+import { EmdadLogo } from './constants/branding';
 import {
   INITIAL_INVENTORY,
   INITIAL_CALLOUTS,
@@ -1582,8 +1583,8 @@ export const App: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0f1f38] px-4">
         <div className="text-center">
-          <div className="w-16 h-16 rounded bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-[#1a3055] text-3xl shadow-lg mx-auto mb-5 animate-pulse">
-            E
+          <div className="bg-white rounded-lg p-3 shadow-lg mx-auto mb-5 inline-flex items-center justify-center border border-slate-200 animate-pulse">
+            <EmdadLogo className="h-10 w-auto object-contain" />
           </div>
           <div className="font-extrabold text-2xl text-white tracking-wide">EMDAD LLC</div>
           <div className="text-amber-300 text-xs font-semibold mt-1">Well Intervention - Upstream Services</div>

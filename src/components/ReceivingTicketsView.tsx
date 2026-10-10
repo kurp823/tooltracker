@@ -3,6 +3,7 @@ import { RTBatch, RTLine, DTBatch, ToolItem, User, DrillingJob, Callout } from '
 import { extractSizeFromDescription, extractToolType, normalizeJobKey } from '../services/api';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
 import { formatDateDD_MM_YYYY } from './JobDossierView';
+import { EMDAD_LOGO_BASE64 } from '../constants/branding';
 
 interface ReceivingTicketsViewProps {
   user?: User | null;
@@ -436,9 +437,12 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
 </head>
 <body>
   <div class="hdr">
-    <div>
-      <h1 style="font-size: 18px; margin: 0 0 2px; color: #1a3055;">EMDAD OILFIELD SERVICES LLC</h1>
-      <div style="color: #64748b; font-size: 10px;">Backload Equipment Receiving Manifest</div>
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <img src="${EMDAD_LOGO_BASE64}" alt="EMDAD Logo" style="height: 38px; width: auto; object-fit: contain;" />
+      <div>
+        <h1 style="font-size: 18px; margin: 0 0 2px; color: #1a3055;">EMDAD OILFIELD SERVICES LLC</h1>
+        <div style="color: #64748b; font-size: 10px;">Backload Equipment Receiving Manifest</div>
+      </div>
     </div>
     <div style="text-align: right;">
       <div style="font-size: 20px; font-weight: 900; color: #059669; font-family: monospace;">${b.rtNumber}</div>

@@ -14,6 +14,7 @@ import {
   UAE_VAT_PERCENTAGE,
   convertAmountToWords,
 } from '../services/billingPackageService';
+import { EmdadLogo } from '../constants/branding';
 import {
   FileText,
   Printer,
@@ -464,9 +465,9 @@ export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
           <div className="border-b-2 border-slate-800 pb-4 mb-5">
             <div className="flex justify-between items-start">
               <div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-9 h-9 bg-[#0f1f38] text-amber-400 font-black text-xl flex items-center justify-center rounded">
-                    E
+                <div className="flex items-center space-x-3">
+                  <div className="bg-white p-1 rounded border border-slate-200 shadow-xs flex items-center justify-center">
+                    <EmdadLogo className="h-8 w-auto object-contain" />
                   </div>
                   <div>
                     <h2 className="text-lg font-black text-[#0f1f38] tracking-wide">EMDAD L.L.C.</h2>

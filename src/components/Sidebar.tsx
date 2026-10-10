@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavModule, User } from '../types';
 import { MODULE_PERMISSIONS } from '../data/initialData';
+import { EmdadLogo } from '../constants/branding';
 
 interface SidebarProps {
   activeView?: NavModule;
@@ -204,15 +205,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Top Header / Branding area in sidebar */}
       <div className="p-3 border-b border-[#182944] flex items-center justify-between">
         {!isCollapsed ? (
-          <div>
-            <div className="font-black text-xs text-white tracking-wider flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-              <span>EMDAD OPERATIONS</span>
+          <div className="flex items-center gap-2">
+            <div className="bg-white px-1.5 py-0.5 rounded shadow-xs flex items-center justify-center shrink-0">
+              <EmdadLogo className="h-5 w-auto object-contain" />
             </div>
-            <div className="text-[10px] text-slate-400 font-medium">Field Equipment & Dispatch</div>
+            <div>
+              <div className="font-bold text-[11px] text-white tracking-wider flex items-center gap-1">
+                <span>OPERATIONS</span>
+              </div>
+              <div className="text-[9px] text-slate-400 font-medium">Tool Fleet &amp; Dispatch</div>
+            </div>
           </div>
         ) : (
-          <div className="mx-auto font-black text-xs text-amber-400">EMDAD</div>
+          <div className="mx-auto bg-white px-1 py-0.5 rounded shadow-xs flex items-center justify-center">
+            <EmdadLogo className="h-3.5 w-auto object-contain" />
+          </div>
         )}
 
         {onToggleCollapse && (

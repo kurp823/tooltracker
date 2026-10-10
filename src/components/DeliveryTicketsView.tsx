@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { DTBatch, DTLine, DrillingJob, Callout, ToolItem, User } from '../types';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
 import { extractSizeFromDescription, extractToolType, normalizeJobKey } from '../services/api';
+import { EMDAD_LOGO_BASE64, EmdadLogo } from '../constants/branding';
 
 interface DeliveryTicketsViewProps {
   user?: User | null;
@@ -475,9 +476,12 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
 </head>
 <body>
   <div class="hdr">
-    <div>
-      <h1 style="font-size: 18px; margin: 0 0 2px; color: #1a3055;">EMDAD OILFIELD SERVICES LLC</h1>
-      <div style="color: #64748b; font-size: 10px;">Downhole Tool Rental &amp; Logistics Manifest</div>
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <img src="${EMDAD_LOGO_BASE64}" alt="EMDAD Logo" style="height: 38px; width: auto; object-fit: contain;" />
+      <div>
+        <h1 style="font-size: 18px; margin: 0 0 2px; color: #1a3055;">EMDAD OILFIELD SERVICES LLC</h1>
+        <div style="color: #64748b; font-size: 10px;">Downhole Tool Rental &amp; Logistics Manifest</div>
+      </div>
     </div>
     <div style="text-align: right;">
       <div style="font-size: 20px; font-weight: 900; color: #d97706; font-family: monospace;">${b.dtNumber}</div>
