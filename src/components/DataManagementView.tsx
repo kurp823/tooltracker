@@ -65,6 +65,8 @@ export interface FieldDefinition {
   required?: boolean;
   description: string;
   sample: any;
+  defaultSample?: any;
+  allowedValues?: string[];
 }
 
 interface TableDefinition {
@@ -102,7 +104,15 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
       { key: 'invoiceAmount', label: 'Job Value ($)', type: 'number', description: 'Total job billing value / invoice amount', sample: 3765.91 },
       { key: 'legalInvoiceNumber', label: 'Legal / Invoice NO', type: 'string', description: 'Official tax invoice NO (e.g. FSH-02620, FR-..., WHP-...)', sample: 'FSH-02620' },
       { key: 'draftInvoiceNumber', label: 'ERP / Draft Invoice NO', type: 'string', description: 'Under-approval ERP document number', sample: '209149' },
-      { key: 'status', label: 'Current Status', type: 'string', description: 'Open, Ongoing, Waiting on Signed Docs, Submitted to Billing Team, SES Submitted, Completed', sample: 'Completed' },
+      {
+        key: 'status',
+        label: 'Current Status',
+        type: 'string',
+        description: 'Job lifecycle status: Open, Ongoing, Waiting on Signed Docs, Submitted to Billing Team, SES Submitted, Final invoiced, Completed, Closed',
+        sample: 'Ongoing (Options: Open | Ongoing | Waiting on Signed Docs | Submitted to Billing Team | SES Submitted | Final invoiced | Completed | Closed)',
+        defaultSample: 'Ongoing',
+        allowedValues: ['Open', 'Ongoing', 'Waiting on Signed Docs', 'Submitted to Billing Team', 'SES Submitted', 'Final invoiced', 'Completed', 'Closed'],
+      },
       { key: 'mobDate', label: 'Mob Date', type: 'date', description: 'Mobilization date (YYYY-MM-DD)', sample: '2023-05-28' },
       { key: 'demobDate', label: 'Demob Date', type: 'date', description: 'Demobilization date (YYYY-MM-DD)', sample: '2023-06-07' },
       { key: 'notes', label: 'Remarks / Notes', type: 'string', description: 'Operational remarks', sample: 'Fishing operations completed successfully' },
@@ -123,9 +133,33 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
       { key: 'desc', label: 'Full Description', type: 'string', description: 'Detailed engineering description', sample: '6-1/2" HYDRAULIC DRILLING JAR 4-1/2" IF' },
       { key: 'size', label: 'Tool Size / OD', type: 'string', description: 'Tool outer diameter (e.g., 6-1/2", 8", 9-1/2")', sample: '6-1/2"' },
       { key: 'qty', label: 'Quantity', type: 'number', description: 'Quantity (usually 1 per serial)', sample: 1 },
-      { key: 'location', label: 'Current Location', type: 'string', description: 'Emdad Base, On Rig, Inspection Bay, Workshop, Returned to Supplier', sample: 'Emdad Base' },
-      { key: 'status', label: 'Tool Status', type: 'string', description: 'Good, Repair, Inspection, Redress, Removed, On Rig', sample: 'Good' },
-      { key: 'ownership', label: 'Ownership', type: 'string', description: 'EMDAD, MOTORMAX, EPIS, ELITE, SALTIRE, etc.', sample: 'EMDAD' },
+      {
+        key: 'location',
+        label: 'Current Location',
+        type: 'string',
+        description: 'Current physical location: Emdad Base, On Rig, Inspection Bay, Workshop, Returned to Supplier',
+        sample: 'Emdad Base (Options: Emdad Base | On Rig | Inspection Bay | Workshop | Returned to Supplier)',
+        defaultSample: 'Emdad Base',
+        allowedValues: ['Emdad Base', 'On Rig', 'Inspection Bay', 'Workshop', 'Returned to Supplier'],
+      },
+      {
+        key: 'status',
+        label: 'Tool Status',
+        type: 'string',
+        description: 'Tool readiness status: Good, Inspection, Repair, Redress, On Rig, Removed, Lost in Hole, Scrapped',
+        sample: 'Good (Options: Good | Inspection | Repair | Redress | On Rig | Removed | Lost in Hole | Scrapped)',
+        defaultSample: 'Good',
+        allowedValues: ['Good', 'Inspection', 'Repair', 'Redress', 'On Rig', 'Removed', 'Lost in Hole', 'Scrapped'],
+      },
+      {
+        key: 'ownership',
+        label: 'Ownership',
+        type: 'string',
+        description: 'Tool ownership entity: EMDAD, MOTORMAX, EPIS, ELITE, SALTIRE, Customer',
+        sample: 'EMDAD (Options: EMDAD | MOTORMAX | EPIS | ELITE | SALTIRE | Customer)',
+        defaultSample: 'EMDAD',
+        allowedValues: ['EMDAD', 'MOTORMAX', 'EPIS', 'ELITE', 'SALTIRE', 'Customer'],
+      },
       { key: 'supplier', label: 'Supplier / OEM', type: 'string', description: 'OEM or rental supplier', sample: 'COUGAR' },
     ],
   },
@@ -163,8 +197,24 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
       { key: 'desc', label: 'Tool Description', type: 'string', description: 'Detailed tool description', sample: '6-1/2" HYDRAULIC DRILLING JAR 4-1/2" IF' },
       { key: 'size', label: 'Size / OD', type: 'string', description: 'Outer diameter (e.g., 6-1/2", 8")', sample: '6-1/2"' },
       { key: 'qty', label: 'Quantity', type: 'number', description: 'Dispatched quantity', sample: 1 },
-      { key: 'status', label: 'Status', type: 'string', description: 'OnRig or Returned', sample: 'OnRig' },
-      { key: 'ownership', label: 'Ownership', type: 'string', description: 'EMDAD, MOTORMAX, EPIS, etc.', sample: 'EMDAD' },
+      {
+        key: 'status',
+        label: 'Status',
+        type: 'string',
+        description: 'Tool status on ticket: OnRig (active on rig) or Returned (backloaded to base)',
+        sample: 'OnRig (Options: OnRig | Returned)',
+        defaultSample: 'OnRig',
+        allowedValues: ['OnRig', 'Returned'],
+      },
+      {
+        key: 'ownership',
+        label: 'Ownership',
+        type: 'string',
+        description: 'Tool ownership entity: EMDAD, MOTORMAX, EPIS, ELITE, SALTIRE, Customer',
+        sample: 'EMDAD (Options: EMDAD | MOTORMAX | EPIS | ELITE | SALTIRE | Customer)',
+        defaultSample: 'EMDAD',
+        allowedValues: ['EMDAD', 'MOTORMAX', 'EPIS', 'ELITE', 'SALTIRE', 'Customer'],
+      },
       { key: 'remarks', label: 'Remarks / Serial Notes', type: 'string', description: 'Line inspection remarks or condition', sample: 'Good condition' },
     ],
   },
@@ -188,7 +238,15 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
       { key: 'well', label: 'Well', type: 'string', description: 'Origin well', sample: 'ZK-89.5-68' },
       { key: 'contract', label: 'Contract', type: 'string', description: 'Contract reference', sample: '444558' },
       { key: 'receivedBy', label: 'Received By', type: 'string', description: 'Base inspector / receiver name', sample: 'Deen' },
-      { key: 'condition', label: 'Condition', type: 'string', description: 'Good / Used / Damaged / Redress Needed', sample: 'Used' },
+      {
+        key: 'condition',
+        label: 'Condition',
+        type: 'string',
+        description: 'Overall backload condition: Good, Used, Damaged, Redress Needed',
+        sample: 'Used (Options: Good | Used | Damaged | Redress Needed)',
+        defaultSample: 'Used',
+        allowedValues: ['Good', 'Used', 'Damaged', 'Redress Needed'],
+      },
       { key: 'notes', label: 'Notes', type: 'string', description: 'Receiving remarks', sample: 'All tools accounted for' },
     ],
     detailFields: [
@@ -199,9 +257,42 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
       { key: 'shortDesc', label: 'Tool Category / Type', type: 'string', required: true, description: 'Tool classification (e.g., HYD DRILLING JAR)', sample: 'HYD DRILLING JAR' },
       { key: 'desc', label: 'Tool Description', type: 'string', description: 'Detailed tool description', sample: '6-1/2" HYDRAULIC DRILLING JAR 4-1/2" IF' },
       { key: 'size', label: 'Size / OD', type: 'string', description: 'Outer diameter', sample: '6-1/2"' },
-      { key: 'used', label: 'Used on Well?', type: 'boolean', description: 'True if tool was run downhole in well', sample: true },
-      { key: 'routedTo', label: 'Routed To', type: 'string', description: 'Inspection Bay, Base Stock, Workshop Redress', sample: 'Inspection Bay' },
-      { key: 'condition', label: 'Tool Condition', type: 'string', description: 'Good condition, thread damaged, seals worn', sample: 'Good condition' },
+      {
+        key: 'used',
+        label: 'Used on Well?',
+        type: 'boolean',
+        description: 'Downhole run flag: true (run downhole) or false (standby/unused)',
+        sample: 'true (Options: true | false)',
+        defaultSample: true,
+        allowedValues: ['true', 'false'],
+      },
+      {
+        key: 'routedTo',
+        label: 'Routed To',
+        type: 'string',
+        description: 'Base routing location: Inspection Bay, Emdad Base, Workshop, Available Inventory',
+        sample: 'Inspection Bay (Options: Inspection Bay | Emdad Base | Workshop | Available Inventory)',
+        defaultSample: 'Inspection Bay',
+        allowedValues: ['Inspection Bay', 'Emdad Base', 'Workshop', 'Available Inventory'],
+      },
+      {
+        key: 'condition',
+        label: 'Tool Condition',
+        type: 'string',
+        description: 'Specific physical condition: Good condition, Used, Damaged, Seals worn, Thread damaged',
+        sample: 'Good condition (Options: Good condition | Used | Damaged | Seals worn | Thread damaged)',
+        defaultSample: 'Good condition',
+        allowedValues: ['Good condition', 'Used', 'Damaged', 'Seals worn', 'Thread damaged'],
+      },
+      {
+        key: 'ownership',
+        label: 'Ownership',
+        type: 'string',
+        description: 'Tool ownership entity: EMDAD, MOTORMAX, EPIS, ELITE, SALTIRE, Customer',
+        sample: 'EMDAD (Options: EMDAD | MOTORMAX | EPIS | ELITE | SALTIRE | Customer)',
+        defaultSample: 'EMDAD',
+        allowedValues: ['EMDAD', 'MOTORMAX', 'EPIS', 'ELITE', 'SALTIRE', 'Customer'],
+      },
       { key: 'remarks', label: 'Remarks / Notes', type: 'string', description: 'Receiving line observations', sample: 'Threads cleaned and inspected' },
     ],
   },
@@ -218,7 +309,15 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
       { key: 'client', label: 'Client', type: 'string', required: true, description: 'Customer operator name', sample: 'ADNOC OFFSHORE' },
       { key: 'rig', label: 'Rig', type: 'string', required: true, description: 'Rig name', sample: 'AL YASAT' },
       { key: 'well', label: 'Well', type: 'string', required: true, description: 'Well identifier', sample: 'ZK-89.5-68' },
-      { key: 'status', label: 'Status', type: 'string', description: 'Active, Forecast, Closed, Pending, In Progress', sample: 'Active' },
+      {
+        key: 'status',
+        label: 'Status',
+        type: 'string',
+        description: 'Callout status: Active, Forecast, Pending, In Progress, Closed',
+        sample: 'Active (Options: Active | Forecast | Pending | In Progress | Closed)',
+        defaultSample: 'Active',
+        allowedValues: ['Active', 'Forecast', 'Pending', 'In Progress', 'Closed'],
+      },
       { key: 'createdDate', label: 'Callout Date', type: 'date', description: 'Request received date (YYYY-MM-DD)', sample: '2026-03-01' },
       { key: 'poRef', label: 'PO Reference', type: 'string', description: 'Customer PO or Callout Ref', sample: '4200222381' },
       { key: 'contract', label: 'Contract Reference', type: 'string', description: 'Governing master contract', sample: '444558' },
@@ -255,9 +354,25 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
       { key: 'shortDesc', label: 'Tool Category', type: 'string', description: 'Tool classification', sample: 'HYD DRILLING JAR' },
       { key: 'receivedDate', label: 'Received Date', type: 'date', description: 'Date received in inspection bay', sample: '2026-03-08' },
       { key: 'inspector', label: 'Inspector Name', type: 'string', description: 'Certified NDT inspector', sample: 'Nihas' },
-      { key: 'status', label: 'Inspection Status', type: 'string', description: 'Pending, Complete, Pass, Fail', sample: 'Pass' },
+      {
+        key: 'status',
+        label: 'Inspection Status',
+        type: 'string',
+        description: 'QC inspection status: Pending, In Progress, Pass, Fail, Complete',
+        sample: 'Pass (Options: Pending | In Progress | Pass | Fail | Complete)',
+        defaultSample: 'Pass',
+        allowedValues: ['Pending', 'In Progress', 'Pass', 'Fail', 'Complete'],
+      },
       { key: 'reportNumber', label: 'NDT Report Number', type: 'string', description: 'Official inspection cert/report number', sample: 'NDT-2026-0412' },
-      { key: 'disposition', label: 'Disposition', type: 'string', description: 'Accept to Fleet / Send to Redress / Scrap', sample: 'Accept to Fleet' },
+      {
+        key: 'disposition',
+        label: 'Disposition',
+        type: 'string',
+        description: 'Post-inspection disposition: Accept to Fleet, Send to Redress, Scrap, Quarantine',
+        sample: 'Accept to Fleet (Options: Accept to Fleet | Send to Redress | Scrap | Quarantine)',
+        defaultSample: 'Accept to Fleet',
+        allowedValues: ['Accept to Fleet', 'Send to Redress', 'Scrap', 'Quarantine'],
+      },
       { key: 'notes', label: 'Findings / Remarks', type: 'string', description: 'Technical findings', sample: 'Threads and seals passed full visual & dimensional' },
     ],
   },
@@ -273,10 +388,26 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
       { key: 'woNumber', label: 'Work Order Number', type: 'string', required: true, description: 'Maintenance WO (e.g. WO-MNT-26-0001)', sample: 'WO-MNT-26-0001' },
       { key: 'serial', label: 'Tool Serial Number', type: 'string', required: true, description: 'Tool serial being repaired', sample: 'EMD-1025' },
       { key: 'issue', label: 'Issue / Reason', type: 'string', required: true, description: 'Fault description or scheduled redress', sample: 'Post-job disassembly, seal replacement, hydraulic fluid flush' },
-      { key: 'type', label: 'Maintenance Type', type: 'string', description: 'InHouse, Vendor, ThirdParty', sample: 'InHouse' },
+      {
+        key: 'type',
+        label: 'Maintenance Type',
+        type: 'string',
+        description: 'Maintenance classification: InHouse, Vendor, ThirdParty',
+        sample: 'InHouse (Options: InHouse | Vendor | ThirdParty)',
+        defaultSample: 'InHouse',
+        allowedValues: ['InHouse', 'Vendor', 'ThirdParty'],
+      },
       { key: 'vendor', label: 'Vendor Name', type: 'string', description: 'External workshop or OEM (if vendor repair)', sample: 'COUGAR DRILLING SERVICES' },
       { key: 'startDate', label: 'Start Date', type: 'date', description: 'Repair start date (YYYY-MM-DD)', sample: '2026-03-10' },
-      { key: 'status', label: 'Status', type: 'string', description: 'In Progress, Sent to Vendor, Received from Vendor, Ready for QC, Complete - Ready', sample: 'Complete - Ready' },
+      {
+        key: 'status',
+        label: 'Status',
+        type: 'string',
+        description: 'Maintenance order status: In Progress, Sent to Vendor, Received from Vendor, Ready for QC, Complete - Ready, Closed',
+        sample: 'Complete - Ready (Options: In Progress | Sent to Vendor | Received from Vendor | Ready for QC | Complete - Ready | Closed)',
+        defaultSample: 'Complete - Ready',
+        allowedValues: ['In Progress', 'Sent to Vendor', 'Received from Vendor', 'Ready for QC', 'Complete - Ready', 'Closed'],
+      },
       { key: 'actualCost', label: 'Actual Cost ($)', type: 'number', description: 'Total cost incurred', sample: 850.00 },
       { key: 'notes', label: 'Repair Notes', type: 'string', description: 'Work completed details', sample: 'O-rings, backup rings, and mandrels inspected and certified' },
     ],
@@ -293,11 +424,27 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
       { key: 'id', label: 'Contract ID', type: 'string', required: true, description: 'Unique Contract reference (e.g. CON-ADNOC-01)', sample: 'CON-ADNOC-01' },
       { key: 'contractNo', label: 'Contract / Tender No', type: 'string', description: 'Official agreement reference', sample: '444558' },
       { key: 'client', label: 'Client', type: 'string', required: true, description: 'Client operator name', sample: 'ADNOC OFFSHORE' },
-      { key: 'currency', label: 'Currency', type: 'string', description: 'USD or AED', sample: 'USD' },
+      {
+        key: 'currency',
+        label: 'Currency',
+        type: 'string',
+        description: 'Contract billing currency: USD or AED',
+        sample: 'USD (Options: USD | AED)',
+        defaultSample: 'USD',
+        allowedValues: ['USD', 'AED'],
+      },
       { key: 'contractValue', label: 'Contract Ceiling Value', type: 'number', description: 'Total contract amount', sample: 5000000 },
       { key: 'startDate', label: 'Effective Start Date', type: 'date', description: 'Start date (YYYY-MM-DD)', sample: '2023-01-01' },
       { key: 'endDate', label: 'Expiry Date', type: 'date', description: 'Expiry date (YYYY-MM-DD)', sample: '2026-12-31' },
-      { key: 'status', label: 'Contract Status', type: 'string', description: 'Active, Completed, Expired, Closed', sample: 'Active' },
+      {
+        key: 'status',
+        label: 'Contract Status',
+        type: 'string',
+        description: 'Contract agreement status: Active, Completed, Expired, Closed',
+        sample: 'Active (Options: Active | Completed | Expired | Closed)',
+        defaultSample: 'Active',
+        allowedValues: ['Active', 'Completed', 'Expired', 'Closed'],
+      },
       { key: 'poNumber', label: 'Governing PO Number', type: 'string', description: 'Framework purchase order', sample: '4200222381' },
       { key: 'pbgNumber', label: 'PBG Number', type: 'string', description: 'Performance bank guarantee reference', sample: 'PBG-99214' },
       { key: 'notes', label: 'Notes', type: 'string', description: 'Contract remarks', sample: 'Includes fishing jars, shock tools, and hole openers' },
@@ -422,7 +569,13 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
     const headers = activeFields.map((f) => f.key);
     const sampleRow: Record<string, any> = {};
     activeFields.forEach((f) => {
-      sampleRow[f.key] = f.sample;
+      if (f.defaultSample !== undefined) {
+        sampleRow[f.key] = f.defaultSample;
+      } else if (typeof f.sample === 'string' && f.sample.includes(' (Options:')) {
+        sampleRow[f.key] = f.sample.split(' (Options:')[0].trim();
+      } else {
+        sampleRow[f.key] = f.sample;
+      }
     });
 
     const worksheet = XLSX.utils.json_to_sheet([sampleRow], { header: headers });
@@ -621,6 +774,26 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
           }
         }
       });
+
+      // Check allowed values if defined
+      fieldsToValidate.forEach((f) => {
+        if (f.allowedValues && f.allowedValues.length > 0) {
+          const val = row[f.key] ?? row[f.label] ?? row[f.key.toUpperCase()] ?? row[f.key.toLowerCase()];
+          if (val !== undefined && val !== null && String(val).trim() !== '') {
+            const strVal = String(val).trim();
+            const matched = f.allowedValues.some(
+              (opt) => opt.toLowerCase() === strVal.toLowerCase()
+            );
+            if (!matched) {
+              errors.push({
+                row: rowNum,
+                column: f.key,
+                message: `Invalid value "${strVal}". Allowed options: ${f.allowedValues.join(', ')}`,
+              });
+            }
+          }
+        }
+      });
     });
 
     setValidationErrors(errors);
@@ -711,7 +884,16 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
         } else if (f.type === 'boolean') {
           cleaned[f.key] = val === true || String(val).toLowerCase() === 'true' || val === 1 || val === '1';
         } else {
-          cleaned[f.key] = val !== undefined && val !== null ? String(val).trim() : '';
+          let str = val !== undefined && val !== null ? String(val).trim() : '';
+          if (f.allowedValues && f.allowedValues.length > 0 && str) {
+            const exactMatch = f.allowedValues.find(
+              (opt) => opt.toLowerCase() === str.toLowerCase()
+            );
+            if (exactMatch) {
+              str = exactMatch;
+            }
+          }
+          cleaned[f.key] = str;
         }
       });
       return cleaned;
@@ -1357,17 +1539,17 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
                     <tr>
-                      <th className="p-2">Field Key</th>
-                      <th className="p-2">Label</th>
-                      <th className="p-2">Type</th>
-                      <th className="p-2">Constraint</th>
+                      <th className="p-2 w-32">Field Key</th>
+                      <th className="p-2 w-36">Label</th>
+                      <th className="p-2 w-20">Type</th>
+                      <th className="p-2 w-24">Constraint</th>
                       <th className="p-2">Description</th>
-                      <th className="p-2 font-mono">Sample Value</th>
+                      <th className="p-2 font-mono min-w-[280px]">Sample Value &amp; Options</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-sans">
                     {activeFields.map((f) => (
-                      <tr key={f.key} className="hover:bg-slate-50">
+                      <tr key={f.key} className="hover:bg-slate-50 transition-colors">
                         <td className="p-2 font-mono font-bold text-slate-800">{f.key}</td>
                         <td className="p-2 font-medium text-slate-700">{f.label}</td>
                         <td className="p-2">
@@ -1384,8 +1566,27 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
                             <span className="text-slate-400 text-[10px]">Optional</span>
                           )}
                         </td>
-                        <td className="p-2 text-slate-600">{f.description}</td>
-                        <td className="p-2 font-mono text-slate-700 bg-slate-50/60 text-[11px]">{String(f.sample)}</td>
+                        <td className="p-2 text-slate-600 leading-relaxed">{f.description}</td>
+                        <td className="p-2 bg-slate-50/60 text-[11px]">
+                          <div className="font-mono text-slate-800 font-semibold break-words">
+                            {String(f.sample)}
+                          </div>
+                          {f.allowedValues && f.allowedValues.length > 0 && (
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                              <span className="text-[10px] font-sans font-semibold text-slate-500 uppercase tracking-wider">
+                                Accepted:
+                              </span>
+                              {f.allowedValues.map((val) => (
+                                <span
+                                  key={val}
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-blue-50 text-blue-700 border border-blue-200/80"
+                                >
+                                  {val}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
