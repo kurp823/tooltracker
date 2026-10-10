@@ -5,6 +5,7 @@
 
 import { MASTER_JOBS } from '../data/masterJobs';
 import { saveCustomTool } from './customTools';
+import { saveCustomJob } from './customJobs';
 
 export const normalizeJobKey = (str?: string): string => {
   if (!str) return '';
@@ -112,69 +113,74 @@ function normalizeInventoryItem(row: any): any {
   };
 }
 
+function isLegalCandidate(c: string): boolean {
+  if (!c) return false;
+  const s = String(c).trim().toUpperCase();
+  if (!s || s === '—' || s === '-' || s === 'PENDING' || s === 'NULL' || s === 'UNDEFINED' || s === 'NIL' || s.startsWith('ERP') || s.startsWith('DFT') || s.startsWith('DRAFT')) return false;
+  if (/^\d+$/.test(s)) return false;
+  return /[A-Z]/.test(s);
+}
+
 function normalizeJob(row: any): any {
-  const jId = row.JobID || row.jobId || row.jobNumber || '';
+  const jId = row.JobID || row.jobId || row.jobNumber || row.ID || row.id || '';
   const key = String(jId).trim().toUpperCase();
   const master = MASTER_JOBS_MAP.get(key) || MASTER_JOBS_MAP.get(normalizeJobKey(jId));
 
-  // 1. Resolve Legal Invoice Number:
-  // Legal numbers MUST start with 'FSH', 'FR', or 'WHP' (e.g. FSH-02620, FR-23-881, WHP-00513)
+  // 1. Resolve Legal Invoice Number / Credit Note:
   const legalCandidates = [
+    String(row.LegalInvoiceNumber || row.legalInvoiceNumber || '').trim(),
     String(row.LegalNumber || row.legalNumber || '').trim(),
     String(row.LegalInvoiceNo || row.legalInvoiceNo || '').trim(),
+    String(row.LegalInvoice || row.legalInvoice || '').trim(),
     String(row.ClientRef || row.clientRef || '').trim(),
     String(master?.legalInvoiceNumber || '').trim(),
-    String(row.LegalInvoiceNumber || row.legalInvoiceNumber || '').trim(),
-    String(row.LegalInvoice || row.legalInvoice || '').trim(),
   ];
 
-  const foundLegal = legalCandidates.find((c) => {
-    if (!c || c === '—' || c === '-' || c.toUpperCase() === 'PENDING') return false;
-    const u = c.toUpperCase();
-    return u.startsWith('FSH') || u.startsWith('FR') || u.startsWith('WHP');
-  }) || '';
-
-  const legalInvoiceNumber = foundLegal;
+  const legalInvoiceNumber = legalCandidates.find(isLegalCandidate) || '';
 
   // 2. Resolve ERP / Draft / Emdad Invoice Number:
-  // Numbers without FSH, FR, or WHP initials (e.g. 218662, 218661, 208801) are ERP / Draft invoices under approval
   const erpCandidates = [
     String(row.DraftInvoiceNumber || row.draftInvoiceNumber || '').trim(),
     String(row.DraftInvoiceNo || row.draftInvoiceNo || '').trim(),
     String(row.EmdadInvoiceNo || row.emdadInvoiceNo || '').trim(),
-    String(master?.draftInvoiceNumber || '').trim(),
-    String(row.LegalInvoiceNumber || row.legalInvoiceNumber || '').trim(),
-    String(row.LegalInvoiceNo || row.legalInvoiceNo || '').trim(),
-    String(row.ClientRef || row.clientRef || '').trim(),
     String(row.ERPInvoiceNo || row.erpInvoiceNo || row.ERPRef || row.erpRef || '').trim(),
+    String(master?.draftInvoiceNumber || '').trim(),
   ];
 
-  const foundErp = erpCandidates.find((c) => {
+  const draftInvoiceNumber = erpCandidates.find((c) => {
     if (!c || c === '—' || c === '-' || c.toUpperCase() === 'PENDING' || c === legalInvoiceNumber) return false;
-    const u = c.toUpperCase();
-    return !u.startsWith('FSH') && !u.startsWith('FR') && !u.startsWith('WHP');
+    return true;
   }) || '';
 
-  const draftInvoiceNumber = foundErp;
+  // 3. Resolve Invoiced Amount (preserves negative credit amounts and exact decimal figures)
+  let invoiceAmount: number = 0;
+  if (row.InvoiceAmount !== undefined && row.InvoiceAmount !== null && row.InvoiceAmount !== '') {
+    invoiceAmount = Number(row.InvoiceAmount);
+  } else if (row.invoiceAmount !== undefined && row.invoiceAmount !== null && row.invoiceAmount !== '') {
+    invoiceAmount = Number(row.invoiceAmount);
+  } else if (master?.invoiceAmount !== undefined && master.invoiceAmount !== null) {
+    invoiceAmount = Number(master.invoiceAmount);
+  } else if (row.InvoicedAmountUSD !== undefined && row.InvoicedAmountUSD !== null && row.InvoicedAmountUSD !== '') {
+    invoiceAmount = Number(row.InvoicedAmountUSD);
+  }
 
-  // 3. Resolve Invoiced Amount
-  const invoiceAmount =
-    row.InvoiceAmount !== undefined && row.InvoiceAmount !== null && row.InvoiceAmount !== '' ? Number(row.InvoiceAmount) :
-    row.invoiceAmount !== undefined && row.invoiceAmount !== null && row.invoiceAmount !== '' ? Number(row.invoiceAmount) :
-    master?.invoiceAmount !== undefined && master.invoiceAmount !== null ? Number(master.invoiceAmount) :
-    Number(row.InvoicedAmountUSD || 0);
+  if (!invoiceAmount && (row.Cost || row.cost || master?.cost)) {
+    const rawCost = String(row.Cost || row.cost || master?.cost).replace(/[^0-9.-]/g, '');
+    const num = parseFloat(rawCost);
+    if (!isNaN(num) && num !== 0) {
+      invoiceAmount = num;
+    }
+  }
 
   const hasLegal = Boolean(legalInvoiceNumber);
   const hasErp = Boolean(draftInvoiceNumber);
-  const rawStatus = row.Status || row.status || master?.status || 'Open';
+  const rawStatus = String(row.Status || row.status || master?.status || 'Open').trim();
   
-  // Rule: Only jobs with verified FSH/FR/WHP legal invoice are Final Invoiced / Completed.
-  // Jobs with ERP invoices (e.g. 218662) without these initials are Under Approval / SES Submitted.
   let status = rawStatus;
-  if (hasLegal) {
-    status = 'Final invoiced';
-  } else if (hasErp || String(rawStatus).toLowerCase().includes('ses') || String(rawStatus).toLowerCase().includes('approval')) {
-    status = 'SES submitted';
+  if (hasLegal || rawStatus.toLowerCase() === 'completed' || rawStatus.toLowerCase() === 'final invoiced' || rawStatus.toLowerCase() === 'closed') {
+    status = 'Completed';
+  } else if (hasErp || rawStatus.toLowerCase().includes('ses') || rawStatus.toLowerCase().includes('approval')) {
+    status = 'Under SES';
   }
 
   return {
@@ -2704,6 +2710,13 @@ export async function saveInventoryApi(tool: any): Promise<{ success: boolean; m
 }
 
 export async function saveJobApi(job: any): Promise<{ success: boolean; message: string }> {
+  if (!job) return { success: true, message: 'No job provided' };
+  try {
+    saveCustomJob(job);
+  } catch (err) {
+    console.warn('[saveJobApi] Could not save to custom jobs store:', err);
+  }
+
   try {
     const res = await fetchFromApi('savejob', { job });
     return { success: res !== null, message: res ? 'Job saved to Azure SQL' : 'Saved locally' };

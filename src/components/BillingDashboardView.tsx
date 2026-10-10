@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { DrillingJob, JobLifecycleStatus, DTBatch, RTBatch, NavModule, User } from '../types';
 import { formatDateDDMMYYYY } from '../utils';
+import { isLegalInvoiceNumber } from '../jobLifecycle';
 import {
   ShieldCheck,
   FileCheck,
@@ -38,40 +39,61 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [search, setSearch] = useState<string>('');
 
-  const renderBillingStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Final invoiced':
-      case 'Closed':
+  const renderBillingStatusBadge = (status: string, legalInvoiceNumber?: string) => {
+    if (isLegalInvoiceNumber(legalInvoiceNumber)) {
+      return (
+        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-300">
+          Completed / Invoiced
+        </span>
+      );
+    }
+    const sLower = (status || '').toLowerCase().trim();
+    switch (sLower) {
+      case 'final invoiced':
+      case 'closed':
+      case 'completed':
+      case 'job completed':
         return (
           <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-800 border border-slate-300">
-            Final Invoiced
+            Completed / Invoiced
           </span>
         );
-      case 'Under SES approval':
+      case 'under ses approval':
+      case 'under ses':
+      case 'ses submitted':
+      case 'under approval':
         return (
           <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-800 border border-purple-200">
             Under SES Approval
           </span>
         );
-      case 'Draft invoiced':
+      case 'draft invoiced':
+      case 'draft invoice':
         return (
           <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-800 border border-blue-200">
             Draft Invoiced
           </span>
         );
-      case 'Tickets submitted to billing team':
+      case 'tickets submitted to billing team':
+      case 'submitted to billing team':
+      case 'submitted to billing':
+      case 'in billing':
         return (
           <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-900 border border-amber-200">
             Submitted to Billing
           </span>
         );
-      case 'Job completed and waiting signed docs':
+      case 'job completed and waiting signed docs':
+      case 'waiting on signed docs':
+      case 'waiting signed docs':
+      case 'waiting docs':
         return (
-          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-rose-50 text-rose-800 border border-rose-200">
             Waiting Signed Docs
           </span>
         );
-      case 'Ongoing':
+      case 'ongoing':
+      case 'active':
         return (
           <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
             Ongoing Operations
@@ -168,57 +190,109 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
   // 1. Pipeline Counts
   const completedJobs = useMemo(
     () =>
-      jobs.filter((j) =>
-        [
-          'Job completed and waiting signed docs',
-          'Job completed',
-          'Tickets submitted to billing team',
-          'Draft invoiced',
-          'Under SES approval',
-          'Final invoiced',
-          'Closed',
-        ].includes(j.status)
-      ),
+      jobs.filter((j) => {
+        const s = (j.status || '').toLowerCase().trim();
+        return (
+          isLegalInvoiceNumber(j.legalInvoiceNumber) ||
+          isLegalInvoiceNumber(j.invoiceNumber) ||
+          s === 'final invoiced' ||
+          s === 'closed' ||
+          s === 'completed' ||
+          s === 'job completed' ||
+          s === 'job completed and waiting signed docs' ||
+          s === 'tickets submitted to billing team' ||
+          s === 'draft invoiced' ||
+          s === 'under ses approval' ||
+          s === 'under ses' ||
+          s === 'ses submitted'
+        );
+      }),
     [jobs]
   );
 
   const waitingSignedDocs = useMemo(
-    () => jobs.filter((j) => j.status === 'Job completed and waiting signed docs'),
+    () =>
+      jobs.filter((j) => {
+        const s = (j.status || '').toLowerCase().trim();
+        return (
+          !isLegalInvoiceNumber(j.legalInvoiceNumber) &&
+          (s === 'job completed and waiting signed docs' ||
+            s === 'waiting on signed docs' ||
+            s === 'waiting signed docs' ||
+            s === 'waiting docs')
+        );
+      }),
     [jobs]
   );
 
   const submittedToBilling = useMemo(
-    () => jobs.filter((j) => j.status === 'Tickets submitted to billing team'),
+    () =>
+      jobs.filter((j) => {
+        const s = (j.status || '').toLowerCase().trim();
+        return (
+          !isLegalInvoiceNumber(j.legalInvoiceNumber) &&
+          (s === 'tickets submitted to billing team' ||
+            s === 'submitted to billing team' ||
+            s === 'submitted to billing' ||
+            s === 'in billing')
+        );
+      }),
     [jobs]
   );
 
   const draftInvoiced = useMemo(
-    () => jobs.filter((j) => j.status === 'Draft invoiced'),
+    () =>
+      jobs.filter((j) => {
+        const s = (j.status || '').toLowerCase().trim();
+        return (
+          !isLegalInvoiceNumber(j.legalInvoiceNumber) &&
+          (s === 'draft invoiced' || s === 'draft invoice')
+        );
+      }),
     [jobs]
   );
 
   const underSes = useMemo(
-    () => jobs.filter((j) => j.status === 'Under SES approval'),
+    () =>
+      jobs.filter((j) => {
+        const s = (j.status || '').toLowerCase().trim();
+        return (
+          !isLegalInvoiceNumber(j.legalInvoiceNumber) &&
+          (s === 'under ses approval' ||
+            s === 'under ses' ||
+            s === 'ses submitted' ||
+            s === 'under approval')
+        );
+      }),
     [jobs]
   );
 
   const finalInvoiced = useMemo(
-    () => jobs.filter((j) => j.status === 'Final invoiced' || j.status === 'Closed'),
+    () =>
+      jobs.filter((j) => {
+        const s = (j.status || '').toLowerCase().trim();
+        return (
+          isLegalInvoiceNumber(j.legalInvoiceNumber) ||
+          isLegalInvoiceNumber(j.invoiceNumber) ||
+          s === 'final invoiced' ||
+          s === 'closed' ||
+          s === 'completed' ||
+          s === 'job completed'
+        );
+      }),
     [jobs]
   );
 
   const totalBilledValue = useMemo(() => {
-    return finalInvoiced.reduce((acc, j) => acc + (j.invoiceAmount || 0), 0);
+    return finalInvoiced.reduce((acc, j) => {
+      const val = j.invoiceAmount || (typeof j.cost === 'number' ? j.cost : parseFloat(String(j.cost || '').replace(/[^0-9.-]/g, '')) || 0);
+      return acc + (typeof val === 'number' && !isNaN(val) ? val : 0);
+    }, 0);
   }, [finalInvoiced]);
 
   // Sorting state for predictable alignment (default Ascending JOB-00001, JOB-00002, JOB-00003)
   const [sortField, setSortField] = useState<'id' | 'client' | 'rig' | 'status' | 'po'>('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-
-  const extractSeq = (idStr: string) => {
-    const m = idStr.match(/\d+$/);
-    return m ? parseInt(m[0], 10) : 0;
-  };
 
   const handleSortToggle = (field: 'id' | 'client' | 'rig' | 'status' | 'po') => {
     if (sortField === field) {
@@ -251,13 +325,13 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
     return list.sort((a, b) => {
       let comparison = 0;
       if (sortField === 'id') {
-        comparison = extractSeq(a.id) - extractSeq(b.id);
+        comparison = (a.id || '').localeCompare(b.id || '', undefined, { numeric: true, sensitivity: 'base' });
       } else if (sortField === 'client') {
-        comparison = a.client.localeCompare(b.client);
+        comparison = (a.client || '').localeCompare(b.client || '');
       } else if (sortField === 'rig') {
-        comparison = a.rig.localeCompare(b.rig);
+        comparison = (a.rig || '').localeCompare(b.rig || '');
       } else if (sortField === 'status') {
-        comparison = a.status.localeCompare(b.status);
+        comparison = (a.status || '').localeCompare(b.status || '');
       } else if (sortField === 'po') {
         comparison = (a.poNumber || '').localeCompare(b.poNumber || '');
       }
@@ -604,7 +678,7 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
                             </div>
                             <div className="text-xs font-bold text-[#1a3055] mt-0.5">{j.client}</div>
                           </div>
-                          <div>{renderBillingStatusBadge(j.status)}</div>
+                          <div>{renderBillingStatusBadge(j.status, j.legalInvoiceNumber)}</div>
                         </div>
 
                         {/* Rig & Well */}
@@ -642,11 +716,20 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
                                     {inv}
                                   </span>
                                 ))}
-                              {j.invoiceAmount ? (
-                                <span className="font-mono font-bold text-slate-900 text-xs ml-auto">
-                                  ${j.invoiceAmount.toLocaleString()}
-                                </span>
-                              ) : null}
+                              {(() => {
+                                const invVal = j.invoiceAmount || (typeof j.cost === 'number' ? j.cost : parseFloat(String(j.cost || '').replace(/[^0-9.-]/g, '')) || 0);
+                                if (typeof invVal === 'number' && !isNaN(invVal) && invVal !== 0) {
+                                  const isNeg = invVal < 0;
+                                  return (
+                                    <span className={`font-mono font-bold text-xs ml-auto ${isNeg ? 'text-rose-600' : 'text-slate-900'}`}>
+                                      {isNeg
+                                        ? `-$${Math.abs(invVal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                        : `$${invVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </div>
                           ) : (
                             <div className="text-slate-400 text-xs italic">
@@ -807,7 +890,7 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
                         </td>
                         <td className="px-3 py-2 font-mono text-slate-600 whitespace-nowrap">{j.poNumber || '—'}</td>
                         <td className="px-3 py-2 whitespace-nowrap">
-                          {renderBillingStatusBadge(j.status)}
+                          {renderBillingStatusBadge(j.status, j.legalInvoiceNumber)}
                         </td>
                         <td className="px-3 py-2 font-mono text-slate-700 whitespace-nowrap text-xs">
                           {formattedDate || '—'}
@@ -833,8 +916,20 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
                             )}
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-right font-mono font-bold text-xs text-slate-900 whitespace-nowrap">
-                          {invValue > 0 ? `$${invValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                        <td className="px-3 py-2 text-right font-mono font-bold text-xs whitespace-nowrap">
+                          {(() => {
+                            if (typeof invValue === 'number' && !isNaN(invValue) && invValue !== 0) {
+                              const isNeg = invValue < 0;
+                              return (
+                                <span className={isNeg ? 'text-rose-600 font-bold' : 'text-slate-900 font-medium'}>
+                                  {isNeg
+                                    ? `-$${Math.abs(invValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                    : `$${invValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                </span>
+                              );
+                            }
+                            return <span className="text-slate-300 font-normal">—</span>;
+                          })()}
                         </td>
                         <td className="px-3 py-2 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1">

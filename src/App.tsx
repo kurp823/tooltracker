@@ -46,6 +46,13 @@ import {
   mergeInventoryWithCustomTools,
   syncCustomToolsToIndexedDB,
 } from './services/customTools';
+import {
+  loadCustomJobs,
+  saveCustomJob,
+  saveCustomJobs,
+  mergeJobsWithCustomJobs,
+  syncCustomJobsToIndexedDB,
+} from './services/customJobs';
 import { MASTER_JOBS } from './data/masterJobs';
 import { Toast, ToastNotification } from './components/Toast';
 import { Header } from './components/Header';
@@ -178,14 +185,16 @@ export const App: React.FC = () => {
   });
 
   const [jobs, setJobs] = useState<DrillingJob[]>(() => {
+    const custom = loadCustomJobs();
     const s = localStorage.getItem('emdad_jobs');
+    let base = MASTER_JOBS;
     if (s) {
       try {
         const parsed = JSON.parse(s);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) base = parsed;
       } catch {}
     }
-    return MASTER_JOBS;
+    return mergeJobsWithCustomJobs(base, custom);
   });
 
   const [dtBatches, setDtBatches] = useState<DTBatch[]>(() => {
@@ -308,6 +317,7 @@ export const App: React.FC = () => {
         const res = await fetchLiveDatabaseData();
         if (res.success && res.data) {
           const custom = loadCustomTools();
+          const customJobs = loadCustomJobs();
           let mergedInv = inventory;
           if (res.data.inventory !== undefined) {
             mergedInv = mergeInventoryWithCustomTools(res.data.inventory, custom);
@@ -316,10 +326,13 @@ export const App: React.FC = () => {
             mergedInv = mergeInventoryWithCustomTools(inventory, custom);
             setInventory(mergedInv);
           }
+          let mergedJobs: DrillingJob[];
           if (res.data.jobs !== undefined && res.data.jobs.length > 0) {
-            setJobs(res.data.jobs);
+            mergedJobs = mergeJobsWithCustomJobs(res.data.jobs, customJobs);
+            setJobs(mergedJobs);
           } else {
-            setJobs((prev) => (prev && prev.length > 0 ? prev : MASTER_JOBS));
+            mergedJobs = mergeJobsWithCustomJobs(jobs.length > 0 ? jobs : MASTER_JOBS, customJobs);
+            setJobs(mergedJobs);
           }
           if (res.data.dtBatches !== undefined) {
             setDtBatches(res.data.dtBatches);
@@ -331,6 +344,7 @@ export const App: React.FC = () => {
           saveDatasetToCache({
             ...res.data,
             inventory: mergedInv,
+            jobs: mergedJobs,
           });
 
           setDbStatus({
@@ -340,7 +354,7 @@ export const App: React.FC = () => {
             message: res.message,
             counts: {
               inventory: mergedInv.length,
-              jobs: res.data.jobs?.length ?? 0,
+              jobs: mergedJobs.length,
               dtBatches: res.data.dtBatches?.length ?? 0,
               rtBatches: res.data.rtBatches?.length ?? 0,
             },
@@ -351,7 +365,9 @@ export const App: React.FC = () => {
           }
         } else {
           const custom = loadCustomTools();
+          const customJobs = loadCustomJobs();
           setInventory((prev) => mergeInventoryWithCustomTools(prev, custom));
+          setJobs((prev) => mergeJobsWithCustomJobs(prev, customJobs));
           setDbStatus((prev) => ({
             ...prev,
             isConnected: false,
@@ -377,20 +393,25 @@ export const App: React.FC = () => {
         }
       }
     },
-    [showToast, inventory, jobs.length, dtBatches.length, rtBatches.length]
+    [showToast, inventory, jobs, dtBatches.length, rtBatches.length]
   );
 
   // Fast Instant Startup: Load cached dataset from IndexedDB in < 50ms
   useEffect(() => {
     loadDatasetFromCache().then((cached) => {
       const custom = loadCustomTools();
+      const customJobs = loadCustomJobs();
       if (cached) {
         if (cached.inventory && cached.inventory.length > 0) {
           setInventory(mergeInventoryWithCustomTools(cached.inventory, custom));
         } else if (custom.length > 0) {
           setInventory((prev) => mergeInventoryWithCustomTools(prev, custom));
         }
-        if (cached.jobs && cached.jobs.length > 0) setJobs(cached.jobs);
+        if (cached.jobs && cached.jobs.length > 0) {
+          setJobs(mergeJobsWithCustomJobs(cached.jobs, customJobs));
+        } else if (customJobs.length > 0) {
+          setJobs((prev) => mergeJobsWithCustomJobs(prev, customJobs));
+        }
         if (cached.dtBatches && cached.dtBatches.length > 0) setDtBatches(cached.dtBatches);
         if (cached.rtBatches && cached.rtBatches.length > 0) setRtBatches(cached.rtBatches);
         setDbStatus((prev) => ({
@@ -405,8 +426,13 @@ export const App: React.FC = () => {
             rtBatches: cached.rtBatches?.length || 0,
           },
         }));
-      } else if (custom.length > 0) {
-        setInventory((prev) => mergeInventoryWithCustomTools(prev, custom));
+      } else {
+        if (custom.length > 0) {
+          setInventory((prev) => mergeInventoryWithCustomTools(prev, custom));
+        }
+        if (customJobs.length > 0) {
+          setJobs((prev) => mergeJobsWithCustomJobs(prev, customJobs));
+        }
       }
     });
   }, []);
@@ -633,15 +659,19 @@ export const App: React.FC = () => {
 
   // Jobs Actions
   const handleSaveJob = (job: DrillingJob) => {
+    saveCustomJob(job);
     setJobs((prev) => {
       const targetId = (job.id || '').trim().toUpperCase();
       const idx = prev.findIndex((j) => (j.id || '').trim().toUpperCase() === targetId);
+      let updated: DrillingJob[];
       if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = job;
-        return copy;
+        updated = [...prev];
+        updated[idx] = job;
+      } else {
+        updated = [job, ...prev];
       }
-      return [job, ...prev];
+      syncCustomJobsToIndexedDB(updated);
+      return updated;
     });
     saveJobApi(job).then((r) => {
       if (!r.success) showToast(r.message, 'error');
@@ -1574,6 +1604,8 @@ export const App: React.FC = () => {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
               onBatchUpdateJobs={(updatedJobs) => {
+                saveCustomJobs(updatedJobs);
+                syncCustomJobsToIndexedDB(updatedJobs);
                 setJobs(updatedJobs);
                 showToast(`Aligned and saved ${updatedJobs.length} jobs in system.`, 'success');
               }}
@@ -1847,7 +1879,12 @@ export const App: React.FC = () => {
               onUpdateState={(tableKey: TableEntityKey, updater: (prev: any[]) => any[]) => {
                 switch (tableKey) {
                   case 'jobs':
-                    setJobs((prev) => updater(prev));
+                    setJobs((prev) => {
+                      const updated = updater(prev);
+                      saveCustomJobs(updated);
+                      syncCustomJobsToIndexedDB(updated);
+                      return updated;
+                    });
                     break;
                   case 'inventory':
                     setInventory((prev) => updater(prev));

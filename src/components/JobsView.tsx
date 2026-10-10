@@ -404,7 +404,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
     return list.sort((a, b) => {
       let comparison = 0;
       if (sortField === 'id') {
-        comparison = extractJobSeq(a.id) - extractJobSeq(b.id);
+        comparison = (a.id || '').localeCompare(b.id || '', undefined, { numeric: true, sensitivity: 'base' });
       } else if (sortField === 'client') {
         comparison = (a.client || '').localeCompare(b.client || '');
       } else if (sortField === 'rig') {
@@ -561,13 +561,13 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
     if (newStage === '6_completed') {
       const enteredLegal = window.prompt(
-        `To mark Job ${job.id} as Completed, please enter a valid Legal Invoice Number (must start with FSH, FR, or WHP):`,
+        `To mark Job ${job.id} as Completed, please enter a valid Legal Invoice or Credit Note Number (e.g. FSH-02620, CN-21023, FR-..., WHP-...):`,
         job.legalInvoiceNumber || ''
       );
 
       if (!enteredLegal || !isLegalInvoiceNumber(enteredLegal)) {
         alert(
-          `A legal invoice number starting with FSH, FR, or WHP is strictly required to complete a job.\n\nWithout an FSH, FR, or WHP prefix, this invoice remains under approval (Stage 5).`
+          `A valid legal invoice number or credit note (e.g. FSH, CN, FR, WHP, INV, DN, EMD) is required to complete a job.\n\nWithout a verified reference, this invoice remains under approval (Stage 5).`
         );
         return;
       }
@@ -1434,13 +1434,17 @@ export const JobsView: React.FC<JobsViewProps> = ({
                       <td className={`px-2.5 ${padY} text-right font-mono text-xs whitespace-nowrap align-middle`}>
                         {(() => {
                           const val = job.invoiceAmount || (typeof job.cost === 'number' ? job.cost : parseFloat(String(job.cost || '').replace(/[^0-9.-]/g, '')) || 0);
-                          return val > 0 ? (
-                            <span className="font-medium text-slate-900 text-xs">
-                              ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          );
+                          if (typeof val === 'number' && !isNaN(val) && val !== 0) {
+                            const isNeg = val < 0;
+                            return (
+                              <span className={isNeg ? 'font-bold text-rose-600 text-xs' : 'font-medium text-slate-900 text-xs'}>
+                                {isNeg
+                                  ? `-$${Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                  : `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                              </span>
+                            );
+                          }
+                          return <span className="text-slate-300">—</span>;
                         })()}
                       </td>
 

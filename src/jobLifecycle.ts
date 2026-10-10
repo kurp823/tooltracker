@@ -99,15 +99,33 @@ export const ALL_STAGE_KEYS: JobStageKey[] = [
 ];
 
 /**
- * Checks if an invoice string qualifies as a true legal invoice.
- * Legal invoices MUST start with 'FSH', 'FR', or 'WHP' (case-insensitive).
- * Purely numeric or other formats (e.g. 218662, 218661) are ERP / Draft invoices under approval.
+ * Checks if an invoice string qualifies as a true legal invoice or credit note.
+ * Legal documents include tax invoices (FSH, FR, WHP, INV, EMD, etc.) and Credit/Debit Notes (CN, DN).
+ * Purely numeric strings (e.g. 218662, 218661, 209149) or ERP-prefixed references are draft / internal ERP documents.
  */
 export function isLegalInvoiceNumber(inv?: string | null): boolean {
   if (!inv) return false;
   const s = String(inv).trim().toUpperCase();
-  if (!s || s === '—' || s === '-' || s === 'PENDING' || s === 'NULL' || s === 'UNDEFINED') return false;
-  return s.startsWith('FSH') || s.startsWith('FR') || s.startsWith('WHP');
+  if (
+    !s ||
+    s === '—' ||
+    s === '-' ||
+    s === 'PENDING' ||
+    s === 'NULL' ||
+    s === 'UNDEFINED' ||
+    s === 'NIL' ||
+    s.startsWith('ERP') ||
+    s.startsWith('DFT') ||
+    s.startsWith('DRAFT')
+  ) {
+    return false;
+  }
+  // Purely numeric strings are internal ERP / Draft invoices
+  if (/^\d+$/.test(s)) {
+    return false;
+  }
+  // Any formatted legal reference containing letters (e.g. FSH-..., FR-..., WHP-..., CN-..., DN-..., INV-...)
+  return /[A-Z]/.test(s);
 }
 
 /**
@@ -116,14 +134,14 @@ export function isLegalInvoiceNumber(inv?: string | null): boolean {
  * 2) Ongoing: Tools dispatched to site / rig (DTs generated)
  * 3) Waiting Docs: Tools returned, awaiting signed tickets
  * 4) In Billing: Signed tickets verified & submitted to billing
- * 5) Under Approval: Draft / ERP invoice (or non-FSH/FR/WHP invoice) under client/management approval
- * 6) Completed: Verified legal invoice issued (starts with FSH, FR, or WHP)
+ * 5) Under Approval: Draft / ERP invoice (or internal numeric ERP ID) under client/management approval
+ * 6) Completed: Verified legal invoice / credit note issued (starts with FSH, FR, WHP, CN, DN, etc.)
  */
 export function resolveJobStage(job: DrillingJob, dtCount: number, rtCount: number): JobStageKey {
   const toolsOnRig = Math.max(0, dtCount - rtCount);
   const sLower = (job.status || '').toLowerCase().trim();
 
-  // Rule 6: Legal invoice strictly requires prefix FSH, FR, or WHP
+  // Rule 6: Legal invoice strictly requires verified tax invoice or credit note
   const hasVerifiedLegalInvoice =
     isLegalInvoiceNumber(job.legalInvoiceNumber) ||
     (isLegalInvoiceNumber(job.invoiceNumber) && !job.legalInvoiceNumber);
@@ -132,14 +150,14 @@ export function resolveJobStage(job: DrillingJob, dtCount: number, rtCount: numb
     return '6_completed';
   }
 
-  // Any job marked completed or final invoiced without an FSH/FR/WHP prefix is Under Approval (Stage 5)
+  // Any job explicitly marked completed or closed with completed status
   if (
     sLower === 'completed' ||
     sLower === 'job completed' ||
     sLower === 'closed' ||
     sLower === 'final invoiced'
   ) {
-    return '5_ses_submitted';
+    return '6_completed';
   }
 
   // Rule 5: If an ERP / Draft invoice exists (including numeric invoice numbers like 218662 that lack FSH/FR/WHP)
