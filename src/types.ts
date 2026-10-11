@@ -237,6 +237,7 @@ export interface DrillingJob {
   crewMembers?: JobCrewMember[];
   assignedCrew?: JobCrewMember[];
   dailyLogs?: DailyFieldLog[];
+  utilizationStatuses?: Record<string, string>;
   lastRtNumber?: string;
   docsSignedDate?: string | null;
 }

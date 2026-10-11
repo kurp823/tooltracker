@@ -11,7 +11,7 @@ import {
   JobCrewMember,
   DailyFieldLog,
 } from '../types';
-import { saveJobToolHoleSectionApi, extractToolType } from '../services/api';
+import { saveJobToolHoleSectionApi, extractToolType, saveDailyFieldLogsApi, fetchDailyFieldLogsApi } from '../services/api';
 import {
   getContractRateOptionsForTool,
   findBestMatchingOption,
@@ -1741,8 +1741,92 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return Array.from({ length: daysInUtilMonth }, (_, i) => i + 1);
   }, [daysInUtilMonth]);
 
-  // Interactive cell overrides for daily tool utilization
-  const [customUtilStatuses, setCustomUtilStatuses] = useState<Record<string, string>>({});
+  // Interactive cell overrides for daily tool utilization (persisted per job & synced with Azure SQL)
+  const [customUtilStatuses, setCustomUtilStatuses] = useState<Record<string, string>>(() => {
+    if (jobData.utilizationStatuses && Object.keys(jobData.utilizationStatuses).length > 0) {
+      return jobData.utilizationStatuses;
+    }
+    const jId = (jobData.id || jobData.jobNumber || '').trim();
+    if (jId) {
+      try {
+        const saved = localStorage.getItem(`emdad_job_util_statuses_${jId}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === 'object') return parsed;
+        }
+      } catch {}
+    }
+    return {};
+  });
+
+  const [isLoadingUtilDb, setIsLoadingUtilDb] = useState(false);
+  const [isSavingUtilDb, setIsSavingUtilDb] = useState(false);
+  const [lastSavedUtilTime, setLastSavedUtilTime] = useState<string | null>(null);
+
+  // Load live daily utilization records from Azure SQL on mount or when job changes
+  useEffect(() => {
+    let isCancelled = false;
+    const jId = (jobData.id || jobData.jobNumber || '').trim();
+    if (!jId) return;
+
+    const cacheKey = `emdad_job_util_statuses_${jId}`;
+    let initialMap: Record<string, string> = {};
+    if (jobData.utilizationStatuses && Object.keys(jobData.utilizationStatuses).length > 0) {
+      initialMap = { ...jobData.utilizationStatuses };
+    } else {
+      try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) initialMap = JSON.parse(cached);
+      } catch {}
+    }
+
+    if (Object.keys(initialMap).length > 0) {
+      setCustomUtilStatuses(initialMap);
+    }
+
+    setIsLoadingUtilDb(true);
+    fetchDailyFieldLogsApi(jId)
+      .then((rows) => {
+        if (isCancelled || !Array.isArray(rows) || rows.length === 0) return;
+        const dbMap: Record<string, string> = {};
+        rows.forEach((r: any) => {
+          const serial = String(r.ToolSerial || r.toolSerial || r.assetNumber || '').trim();
+          const rawDate = String(r.Date || r.date || '').trim();
+          const status = String(r.Status || r.status || '').trim();
+          if (!serial || !rawDate || (status !== '1' && status !== 'S' && status !== '')) return;
+
+          const dMatch = rawDate.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+          if (dMatch) {
+            const y = parseInt(dMatch[1], 10);
+            const m = parseInt(dMatch[2], 10);
+            const d = parseInt(dMatch[3], 10);
+            dbMap[`${serial}_${y}_${m}_${d}`] = status;
+            dbMap[`${serial.toUpperCase()}_${y}_${m}_${d}`] = status;
+          }
+        });
+
+        if (Object.keys(dbMap).length > 0) {
+          setCustomUtilStatuses((prev) => {
+            const merged = { ...prev, ...dbMap };
+            try {
+              localStorage.setItem(cacheKey, JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not fetch daily field logs for job:', err);
+      })
+      .finally(() => {
+        if (!isCancelled) setIsLoadingUtilDb(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [jobData.id, jobData.jobNumber]);
+
   const handleToggleDayStatus = (toolKey: string, dayNum: number) => {
     if (isLocked) return;
     const key = `${toolKey}_${selectedUtilYear}_${selectedUtilMonth}_${dayNum}`;
@@ -1752,7 +1836,29 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     else if (cur === 'S') next = '';
     else if (cur === '') next = '1';
     else next = 'S';
-    setCustomUtilStatuses((prev) => ({ ...prev, [key]: next }));
+
+    const nextStatuses = {
+      ...customUtilStatuses,
+      [key]: next,
+      [`${toolKey.toUpperCase()}_${selectedUtilYear}_${selectedUtilMonth}_${dayNum}`]: next,
+    };
+    setCustomUtilStatuses(nextStatuses);
+
+    // Save to local storage cache immediately
+    const jId = (jobData.id || jobData.jobNumber || '').trim();
+    if (jId) {
+      try {
+        localStorage.setItem(`emdad_job_util_statuses_${jId}`, JSON.stringify(nextStatuses));
+      } catch {}
+    }
+
+    // Save to jobData and trigger onSaveJob so parent job state is in sync
+    const updatedJob: DrillingJob = {
+      ...jobData,
+      utilizationStatuses: nextStatuses,
+    };
+    setJobData(updatedJob);
+    onSaveJob(updatedJob);
   };
 
   // Active Contract matching for rate resolution
@@ -1969,6 +2075,88 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const monthTotalRunCharge = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.runCharge, 0), [toolUtilizationRows]);
   const monthTotalRedress = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.redressCharge, 0), [toolUtilizationRows]);
   const totalToolRevenueAED = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.totalMonthValue, 0), [toolUtilizationRows]);
+
+  // Save full monthly utilization ledger to Azure SQL live database (tbl_DailyFieldLogs & tbl_Jobs)
+  const handleSaveUtilizationToDatabase = async () => {
+    if (isLocked) {
+      showToast('Cannot save utilization: job is invoiced and locked in read-only mode.', 'error');
+      return;
+    }
+    const jId = (jobData.id || jobData.jobNumber || '').trim();
+    if (!jId) {
+      showToast('Cannot save utilization: missing Job Number.', 'error');
+      return;
+    }
+
+    setIsSavingUtilDb(true);
+
+    // 1. Cache full override state to localStorage
+    const cacheKey = `emdad_job_util_statuses_${jId}`;
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify(customUtilStatuses));
+    } catch {}
+
+    // 2. Persist to Job Record in local state and database
+    const updatedJob: DrillingJob = {
+      ...jobData,
+      utilizationStatuses: customUtilStatuses,
+    };
+    setJobData(updatedJob);
+    onSaveJob(updatedJob);
+
+    // 3. Assemble structured daily rows for Azure SQL tbl_DailyFieldLogs
+    const logEntries: Array<{
+      jobId: string;
+      dtNumber?: string;
+      toolSerial: string;
+      date: string;
+      status: '1' | 'S';
+      rate?: number;
+    }> = [];
+
+    toolUtilizationRows.forEach((row) => {
+      const serial = row.toolKey;
+      if (!serial) return;
+      const opsRate = row.opsRate || 0;
+      const sbRate = row.standbyRate || 0;
+
+      utilDaysList.forEach((dayNum) => {
+        const status = row.dayStatuses[dayNum];
+        if (status === '1' || status === 'S') {
+          const dateStr = `${selectedUtilYear}-${String(selectedUtilMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+          logEntries.push({
+            jobId: jId,
+            dtNumber: row.dtNumber,
+            toolSerial: serial,
+            date: dateStr,
+            status,
+            rate: status === '1' ? opsRate : sbRate,
+          });
+        }
+      });
+    });
+
+    try {
+      if (logEntries.length > 0) {
+        const res = await saveDailyFieldLogsApi(logEntries);
+        setLastSavedUtilTime(new Date().toLocaleTimeString());
+        showToast(
+          res.success
+            ? `Utilization (${logEntries.length} daily logs) saved to Azure SQL live database for ${MONTH_NAMES[selectedUtilMonth - 1]} ${selectedUtilYear}.`
+            : `Utilization saved locally for Job ${jId}.`,
+          'success'
+        );
+      } else {
+        setLastSavedUtilTime(new Date().toLocaleTimeString());
+        showToast(`Job ${jId} utilization preferences saved.`, 'success');
+      }
+    } catch (err) {
+      console.warn('Error saving utilization logs to database:', err);
+      showToast(`Utilization saved to Job record and cached locally.`, 'info');
+    } finally {
+      setIsSavingUtilDb(false);
+    }
+  };
 
   // Engineer Utilization calculation
   const engineerUtilizationRows = useMemo(() => {
@@ -3834,10 +4022,36 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <span className="text-slate-600 text-xs">
                   Mobilized Tools in Month: <strong className="font-mono text-blue-900">{toolUtilizationRows.length}</strong>
                 </span>
+
+                {isLoadingUtilDb && (
+                  <span className="text-blue-600 text-[11px] font-medium flex items-center gap-1 animate-pulse">
+                    <span>🔄</span> Loading live DB logs...
+                  </span>
+                )}
+
+                {lastSavedUtilTime && !isLoadingUtilDb && (
+                  <span className="text-emerald-700 text-[11px] font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded flex items-center gap-1">
+                    <span>✓</span> Synced ({lastSavedUtilTime})
+                  </span>
+                )}
+
+                {!isLocked && (
+                  <button
+                    type="button"
+                    onClick={handleSaveUtilizationToDatabase}
+                    disabled={isSavingUtilDb}
+                    className="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs px-3 py-1 rounded cursor-pointer transition shadow-2xs flex items-center gap-1.5"
+                    title="Save all tool utilization rows to Azure SQL database and sync across users"
+                  >
+                    <span>{isSavingUtilDb ? '⏳' : '💾'}</span>
+                    <span>{isSavingUtilDb ? 'Saving to Azure SQL...' : 'Save Utilization to Database'}</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => window.print()}
