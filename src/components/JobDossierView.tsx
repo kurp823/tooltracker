@@ -128,6 +128,48 @@ export const formatDateDD_MM_YYYY = (val?: string | Date | number | null): strin
   return str;
 };
 
+// Helper to extract the first non-empty, non-placeholder date from a list of candidates
+export const getValidDateString = (...candidates: any[]): string => {
+  for (const c of candidates) {
+    if (!c) continue;
+    const s = String(c).trim();
+    if (!s || s === '—' || s === '-' || s === 'null' || s === 'undefined' || s.includes('1900') || s === '1970-01-01') continue;
+    return s;
+  }
+  return '';
+};
+
+// Converts any date representation to YYYY-MM-DD for HTML5 date input fields
+export const toInputDateFormat = (val?: string | Date | null): string => {
+  if (!val || val === '—' || val === '-') return '';
+  const s = String(val).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmyMatch) {
+    return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+  }
+  const mmmMatch = s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+  if (mmmMatch) {
+    const months: Record<string, string> = {
+      jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+      jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+    };
+    const mNum = months[mmmMatch[2].toLowerCase()] || '01';
+    let yr = mmmMatch[3];
+    if (yr.length === 2) {
+      yr = parseInt(yr, 10) > 50 ? `19${yr}` : `20${yr}`;
+    }
+    return `${yr}-${mNum}-${mmmMatch[1].padStart(2, '0')}`;
+  }
+  try {
+    const d = new Date(s);
+    if (!isNaN(d.getTime()) && d.getFullYear() > 1900) {
+      return d.toISOString().split('T')[0];
+    }
+  } catch {}
+  return '';
+};
+
 // Parse flexible dates into milliseconds timestamp for range comparisons
 const parseDateToMs = (val?: string | Date | null): number => {
   if (!val) return 0;
@@ -963,23 +1005,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Robust field resolvers for Return Tickets
   const resolveRtDate = (rt?: RTBatch | null): string => {
     if (!rt) return '—';
-    const val =
-      rt.rtDate ||
-      rt.backloadRmDate ||
-      (rt as any).Date_In ||
-      (rt as any).dateIn ||
-      (rt as any).DateIn ||
-      (rt as any).rmDate ||
-      (rt as any).date ||
-      (rt as any).ticketDate ||
-      rt.loadingNoteDate ||
-      rt.lNoteDate ||
-      (rt as any).LNoteDate ||
-      (rt as any).l_note_date ||
-      (rt as any).loadingDate ||
-      (rt.toolLines || []).find((l: any) => l.dateIn || l.Date_In || l.returnDate || l.DateIn)?.dateIn ||
-      (rt.toolLines || []).find((l: any) => l.Date_In)?.Date_In;
-    if (val && val !== '—') return formatDateDD_MM_YYYY(val);
+    const val = getValidDateString(
+      rt.rtDate,
+      rt.backloadRmDate,
+      (rt as any).Date_In,
+      (rt as any).dateIn,
+      (rt as any).DateIn,
+      (rt as any).rmDate,
+      (rt as any).date,
+      (rt as any).ticketDate,
+      (rt.toolLines || []).find((l: any) => getValidDateString(l.dateIn, l.Date_In, l.returnDate))?.dateIn,
+      (rt.toolLines || []).find((l: any) => getValidDateString(l.Date_In))?.Date_In,
+      jobData.demobDate,
+      jobData.lastRtDate
+    );
+    if (val) return formatDateDD_MM_YYYY(val);
     return '—';
   };
 
@@ -992,29 +1032,31 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       (rt as any).l_note_no ||
       (rt as any).loadingNote ||
       (rt as any).lnNo ||
-      (rt as any).LNNo ||
-      (rt.rtNumber ? `LN-${rt.rtNumber.replace(/^RT-?/, '')}` : '—');
-    return val || '—';
+      (rt as any).LNNo;
+    const clean = String(val || '').trim();
+    if (!clean || clean === '—' || clean === '-' || clean === 'null' || clean === 'undefined') return '—';
+    return clean;
   };
 
   const resolveRtLoadingNoteDate = (rt?: RTBatch | null): string => {
-    if (!rt) return resolveRtDate(rt);
-    const val =
-      rt.loadingNoteDate ||
-      rt.lNoteDate ||
-      (rt as any).LNoteDate ||
-      (rt as any).l_note_date ||
-      (rt as any).loadingDate ||
-      rt.rtDate ||
-      rt.backloadRmDate ||
-      jobData.demobDate ||
-      jobData.lastRtDate;
-    return formatDateDD_MM_YYYY(val);
+    if (!rt) return '—';
+    const val = getValidDateString(
+      rt.loadingNoteDate,
+      rt.lNoteDate,
+      (rt as any).LNoteDate,
+      (rt as any).l_note_date,
+      (rt as any).loadingDate
+    );
+    if (val) return formatDateDD_MM_YYYY(val);
+    return '—';
   };
 
   const resolveRtCarrier = (rt?: RTBatch | null): string => {
-    if (!rt) return 'EMDAD Logistics';
-    return rt.carrier || rt.shippedVia || (rt as any).transporter || 'EMDAD Logistics';
+    if (!rt) return '—';
+    const val = rt.carrier || rt.shippedVia || (rt as any).transporter;
+    const clean = String(val || '').trim();
+    if (!clean || clean === '—' || clean === '-' || clean === 'null' || clean === 'undefined') return '—';
+    return clean;
   };
 
   const handleCreateNewRTInJob = () => {
@@ -1039,19 +1081,66 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       jobId: jobData.id || jobData.jobNumber || '',
       rtDate: defaultDate,
       backloadRmDate: defaultDate,
-      loadingNoteNo: `LN-${String(jobData.id || newRtNumber).replace(/^Job[-_]?/i, '')}`,
-      loadingNoteDate: defaultDate,
+      loadingNoteNo: '',
+      loadingNoteDate: '',
       contract: jobData.contractNo || jobData.contract || '',
       rig: jobData.rig || '',
       well: jobData.well || '',
-      receivedBy: user?.name || 'QC Inspector',
-      carrier: 'EMDAD Logistics',
+      receivedBy: '',
+      carrier: '',
       toolLines: [],
     };
 
     onSaveRTBatch(newRT);
     setSelectedRTNumber(newRT.rtNumber);
-    showToast(`New Return Ticket ${newRT.rtNumber} generated for Job ${jobData.id}.`, 'success');
+    showToast(`New Return Ticket ${newRtNumber} created for Job ${jobData.id}. Please enter Loading Note and receiving details.`, 'success');
+  };
+
+  const handleUpdateRTHeaderField = (field: keyof RTBatch | string, value: any) => {
+    if (!activeRT || isClosedOrInvoiced || isLocked) return;
+    const updatedRT: RTBatch = {
+      ...activeRT,
+      [field]: value,
+    };
+    if (field === 'loadingNoteNo') {
+      (updatedRT as any).lNoteNo = value;
+    }
+    if (field === 'loadingNoteDate') {
+      (updatedRT as any).lNoteDate = value;
+    }
+    if (field === 'carrier') {
+      (updatedRT as any).shippedVia = value;
+    }
+    if (field === 'rtDate') {
+      (updatedRT as any).backloadRmDate = value;
+    }
+    if (onUpdateRTBatch) {
+      onUpdateRTBatch(updatedRT);
+    } else {
+      onSaveRTBatch(updatedRT);
+    }
+  };
+
+  const handleUpdateRTToolLine = (lineIdx: number, updates: Partial<ToolItem> | any) => {
+    if (!activeRT || isClosedOrInvoiced || isLocked) return;
+    const updatedToolLines = (activeRT.toolLines || []).map((line, idx) => {
+      if (idx === lineIdx) {
+        return {
+          ...line,
+          ...updates,
+        };
+      }
+      return line;
+    });
+    const updatedRT: RTBatch = {
+      ...activeRT,
+      toolLines: updatedToolLines,
+    };
+    if (onUpdateRTBatch) {
+      onUpdateRTBatch(updatedRT);
+    } else {
+      onSaveRTBatch(updatedRT);
+    }
   };
 
   // Return Goods: Filter DTs that actually have unreturned tools
@@ -1079,6 +1168,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [unreturnedDTs, rgtSearchDTNo]);
 
   const [rgtCheckedSerials, setRgtCheckedSerials] = useState<string[]>([]);
+  const [rgtMoveDateIn, setRgtMoveDateIn] = useState<string>(() => {
+    return new Date().toISOString().split('T')[0];
+  });
 
   const rgtDTToolsToReturn = useMemo(() => {
     if (!rgtSearchDTNo) return [];
@@ -1347,7 +1439,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         .filter((n) => !isNaN(n));
       const nextSeq = rtNums.length > 0 ? Math.max(...rtNums) + 1 : 1;
       const newRtNumber = `RT-${curYr}-${String(nextSeq).padStart(5, '0')}`;
-      const defaultDate = jobData.demobDate || new Date().toISOString().split('T')[0];
+      const defaultDate = rgtMoveDateIn || jobData.demobDate || new Date().toISOString().split('T')[0];
 
       targetRT = {
         id: `RTB-${Date.now()}`,
@@ -1355,19 +1447,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         jobId: jobData.id || jobData.jobNumber || '',
         rtDate: defaultDate,
         backloadRmDate: defaultDate,
-        loadingNoteNo: `LN-${String(jobData.id || newRtNumber).replace(/^Job[-_]?/i, '')}`,
-        loadingNoteDate: defaultDate,
+        loadingNoteNo: '',
+        loadingNoteDate: '',
         contract: jobData.contractNo || jobData.contract || '',
         rig: jobData.rig || '',
         well: jobData.well || '',
-        receivedBy: user?.name || 'QC Inspector',
-        carrier: 'EMDAD Logistics',
+        receivedBy: '',
+        carrier: '',
         toolLines: [],
       };
     }
 
     const selectedLines = rgtDTToolsToReturn.filter((t) => rgtCheckedSerials.includes(t.serial));
-    const defaultDate = resolveRtDate(targetRT);
+    const effectiveReturnDate = rgtMoveDateIn || toInputDateFormat(resolveRtDate(targetRT)) || new Date().toISOString().split('T')[0];
+    const formattedReturnDate = formatDateDD_MM_YYYY(effectiveReturnDate);
+
     const newRTLines = selectedLines.map((t, idx) => ({
       itemNo: (targetRT!.toolLines?.length || 0) + idx + 1,
       serial: t.serial,
@@ -1379,9 +1473,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       condition: 'USED',
       routedTo: 'Inspection Bay',
       remarks: 'USED',
-      dateIn: defaultDate,
-      Date_In: defaultDate,
-      rtDate: defaultDate,
+      dateIn: formattedReturnDate,
+      Date_In: formattedReturnDate,
+      rtDate: formattedReturnDate,
       rtNumber: targetRT!.rtNumber,
     }));
 
@@ -1397,7 +1491,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     }
     setSelectedRTNumber(updatedRT.rtNumber);
     setRgtCheckedSerials([]);
-    showToast(`Moved ${newRTLines.length} tool(s) to Return Ticket ${updatedRT.rtNumber}.`, 'success');
+    showToast(`Moved ${newRTLines.length} tool(s) to Return Ticket ${updatedRT.rtNumber} with Date In ${formattedReturnDate}.`, 'success');
   };
 
   // Print Handlers
@@ -1457,7 +1551,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     <div class="box"><div class="lbl">Shipped Via / Carrier</div><div class="val">${carrierStr}</div></div>
     <div class="box"><div class="lbl">Loading Note No</div><div class="val">${lNoteNoStr}</div></div>
     <div class="box"><div class="lbl">Loading Note Date</div><div class="val">${lNoteDateStr}</div></div>
-    <div class="box"><div class="lbl">Received By (Base)</div><div class="val">${activeRT.receivedBy || 'QC Inspector'}</div></div>
+    <div class="box"><div class="lbl">Received By (Base)</div><div class="val">${activeRT.receivedBy || '—'}</div></div>
   </div>
 
   <table>
@@ -1477,22 +1571,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         const matchedDTLine = jobDTs.flatMap((dt) => dt.toolLines || []).find(
           (dtl: any) => dtl.serial && t.serial && String(dtl.serial).trim().toUpperCase() === String(t.serial).trim().toUpperCase()
         );
-        const lineDateStr = formatDateDD_MM_YYYY(
-          (t as any).dateIn ||
-          (t as any).Date_In ||
-          (t as any).DateIn ||
-          (t as any).returnDate ||
-          (t as any).ReturnDate ||
-          (t as any).rtDate ||
-          (matchedDTLine as any)?.returnDate ||
-          (matchedDTLine as any)?.dateIn ||
-          (matchedDTLine as any)?.Date_In ||
-          activeRT.rtDate ||
-          activeRT.backloadRmDate ||
-          activeRT.loadingNoteDate ||
-          activeRT.lNoteDate ||
+        const rawLineDate = getValidDateString(
+          (t as any).dateIn,
+          (t as any).Date_In,
+          (t as any).DateIn,
+          (t as any).returnDate,
+          (t as any).ReturnDate,
+          (t as any).rtDate,
+          (matchedDTLine as any)?.returnDate,
+          (matchedDTLine as any)?.dateIn,
+          (matchedDTLine as any)?.Date_In,
+          activeRT.rtDate,
+          activeRT.backloadRmDate,
           jobData.demobDate
         );
+        const lineDateStr = rawLineDate ? formatDateDD_MM_YYYY(rawLineDate) : '—';
         return `<tr>
           <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
           <td style="font-family: monospace; font-weight: bold;">${t.serial || t.assetNo}</td>
@@ -1509,7 +1602,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   <div class="sig">
     <div class="sig-box">Field Engineer / Dispatcher<br/><br/>_______________________</div>
     <div class="sig-box">QC Inspection Bay Officer<br/><br/>_______________________</div>
-    <div class="sig-box">Base Receiving Lead<br/><br/><strong>${activeRT.receivedBy || 'QC Inspector'}</strong></div>
+    <div class="sig-box">Base Receiving Lead<br/><br/><strong>${activeRT.receivedBy || '—'}</strong></div>
   </div>
 </body>
 </html>`;
@@ -3369,38 +3462,86 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-[11px]">
                   <div>
-                    <span className="font-bold text-slate-600">Customer:</span>{' '}
+                    <span className="font-bold text-slate-600 block mb-0.5">Customer:</span>
                     <span className="font-bold text-slate-900">{jobData.client}</span>
                   </div>
                   <div>
-                    <span className="font-bold text-slate-600">Contract / Project:</span>{' '}
-                    <span className="font-mono">{jobData.contractNo || cleanContractName(jobData.contract) || '—'}</span>
+                    <span className="font-bold text-slate-600 block mb-0.5">Contract / Project:</span>
+                    <span className="font-mono text-slate-800">{jobData.contractNo || cleanContractName(jobData.contract) || '—'}</span>
                   </div>
                   <div>
-                    <span className="font-bold text-slate-600">Rig / Well:</span>{' '}
+                    <span className="font-bold text-slate-600 block mb-0.5">Rig / Well:</span>
                     <span className="font-mono font-bold text-blue-900">{jobData.rig} / {jobData.well}</span>
                   </div>
                   <div>
-                    <span className="font-bold text-slate-600">Date:</span>{' '}
-                    <span className="font-mono font-bold">{resolveRtDate(activeRT)}</span>
+                    <span className="font-bold text-slate-600 block mb-0.5">Date:</span>
+                    {isClosedOrInvoiced || isLocked ? (
+                      <span className="font-mono font-bold text-slate-900">{resolveRtDate(activeRT)}</span>
+                    ) : (
+                      <input
+                        type="date"
+                        value={toInputDateFormat(activeRT.rtDate || activeRT.backloadRmDate || jobData.demobDate)}
+                        onChange={(e) => handleUpdateRTHeaderField('rtDate', e.target.value)}
+                        className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-full cursor-pointer focus:border-blue-500 focus:outline-none"
+                      />
+                    )}
                   </div>
                   <div>
-                    <span className="font-bold text-slate-600">Shipped Via:</span>{' '}
-                    <span>{resolveRtCarrier(activeRT)}</span>
+                    <span className="font-bold text-slate-600 block mb-0.5">Shipped Via:</span>
+                    {isClosedOrInvoiced || isLocked ? (
+                      <span className="text-slate-800">{resolveRtCarrier(activeRT)}</span>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder="Shipped Via (Carrier)"
+                        value={activeRT.carrier || activeRT.shippedVia || ''}
+                        onChange={(e) => handleUpdateRTHeaderField('carrier', e.target.value)}
+                        className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs text-slate-800 w-full focus:border-blue-500 focus:outline-none"
+                      />
+                    )}
                   </div>
                   <div>
-                    <span className="font-bold text-slate-600">L/Note Date:</span>{' '}
-                    <span className="font-mono">{resolveRtLoadingNoteDate(activeRT)}</span>
+                    <span className="font-bold text-slate-600 block mb-0.5">L/Note Date:</span>
+                    {isClosedOrInvoiced || isLocked ? (
+                      <span className="font-mono text-slate-800">{resolveRtLoadingNoteDate(activeRT)}</span>
+                    ) : (
+                      <input
+                        type="date"
+                        value={toInputDateFormat(activeRT.loadingNoteDate || activeRT.lNoteDate)}
+                        onChange={(e) => handleUpdateRTHeaderField('loadingNoteDate', e.target.value)}
+                        className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-mono text-slate-800 w-full cursor-pointer focus:border-blue-500 focus:outline-none"
+                      />
+                    )}
                   </div>
                   <div>
-                    <span className="font-bold text-slate-600">L/Note No:</span>{' '}
-                    <span className="font-mono font-bold">{resolveRtLoadingNoteNo(activeRT)}</span>
+                    <span className="font-bold text-slate-600 block mb-0.5">L/Note No:</span>
+                    {isClosedOrInvoiced || isLocked ? (
+                      <span className="font-mono font-bold text-slate-900">{resolveRtLoadingNoteNo(activeRT)}</span>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder="Loading Note No"
+                        value={activeRT.loadingNoteNo || activeRT.lNoteNo || ''}
+                        onChange={(e) => handleUpdateRTHeaderField('loadingNoteNo', e.target.value)}
+                        className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-full focus:border-blue-500 focus:outline-none"
+                      />
+                    )}
                   </div>
                   <div>
-                    <span className="font-bold text-slate-600">Received By:</span>{' '}
-                    <span className="font-medium text-slate-800">{activeRT.receivedBy || 'QC Inspector'}</span>
+                    <span className="font-bold text-slate-600 block mb-0.5">Received By:</span>
+                    {isClosedOrInvoiced || isLocked ? (
+                      <span className="font-medium text-slate-800">{activeRT.receivedBy || '—'}</span>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder="Received By (Name / Lead)"
+                        value={activeRT.receivedBy || ''}
+                        onChange={(e) => handleUpdateRTHeaderField('receivedBy', e.target.value)}
+                        className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs text-slate-800 w-full focus:border-blue-500 focus:outline-none"
+                      />
+                    )}
                   </div>
                 </div>
               </div>
@@ -3440,23 +3581,27 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         (dtl: any) => dtl.serial && t.serial && String(dtl.serial).trim().toUpperCase() === String(t.serial).trim().toUpperCase()
                       );
 
-                      const lineDateIn = formatDateDD_MM_YYYY(
-                        (t as any).dateIn ||
-                        (t as any).Date_In ||
-                        (t as any).DateIn ||
-                        (t as any).returnDate ||
-                        (t as any).ReturnDate ||
-                        (t as any).rtDate ||
-                        (matchedDTLine as any)?.returnDate ||
-                        (matchedDTLine as any)?.dateIn ||
-                        (matchedDTLine as any)?.Date_In ||
-                        activeRT.rtDate ||
-                        activeRT.backloadRmDate ||
-                        activeRT.loadingNoteDate ||
-                        activeRT.lNoteDate ||
-                        (activeRT as any).Date_In ||
-                        (activeRT as any).dateIn
+                      const rawLineDate = getValidDateString(
+                        (t as any).dateIn,
+                        (t as any).Date_In,
+                        (t as any).DateIn,
+                        (t as any).date_in,
+                        (t as any).returnDate,
+                        (t as any).ReturnDate,
+                        (t as any).rtDate,
+                        (matchedDTLine as any)?.returnDate,
+                        (matchedDTLine as any)?.dateIn,
+                        (matchedDTLine as any)?.Date_In,
+                        activeRT.rtDate,
+                        activeRT.backloadRmDate,
+                        (activeRT as any).Date_In,
+                        (activeRT as any).dateIn,
+                        jobData.demobDate,
+                        jobData.lastRtDate
                       );
+
+                      const displayDateIn = rawLineDate ? formatDateDD_MM_YYYY(rawLineDate) : '—';
+                      const inputDateIn = toInputDateFormat(rawLineDate);
 
                       return (
                         <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
@@ -3464,7 +3609,26 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
                           <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-mono font-bold text-blue-800">{activeRT.rtNumber}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{lineDateIn}</td>
+                          <td className="py-1 px-2 whitespace-nowrap">
+                            {isClosedOrInvoiced || isLocked ? (
+                              <span className="font-mono text-[11px] text-slate-700 font-medium">{displayDateIn}</span>
+                            ) : (
+                              <input
+                                type="date"
+                                value={inputDateIn}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  handleUpdateRTToolLine(idx, {
+                                    dateIn: val ? formatDateDD_MM_YYYY(val) : '',
+                                    Date_In: val ? formatDateDD_MM_YYYY(val) : '',
+                                    returnDate: val ? formatDateDD_MM_YYYY(val) : '',
+                                    rtDate: val ? formatDateDD_MM_YYYY(val) : '',
+                                  });
+                                }}
+                                className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono text-slate-800 cursor-pointer focus:border-blue-500 focus:outline-none"
+                              />
+                            )}
+                          </td>
                           <td className="py-1 px-2 whitespace-nowrap">
                             <select
                               value={t.condition || (t.used ? 'USED' : 'NOT USED')}
@@ -3536,17 +3700,29 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     </span>
                   </div>
 
-                  {!isClosedOrInvoiced && !isLocked && (
-                    <button
-                      type="button"
-                      onClick={handleMoveToolsToRT}
-                      disabled={rgtCheckedSerials.length === 0}
-                      className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
-                    >
-                      <span>⬇️</span>
-                      <span>Enter / Move to RT Details ({rgtCheckedSerials.length})</span>
-                    </button>
-                  )}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-amber-900 text-xs">Return Date (Date In):</span>
+                      <input
+                        type="date"
+                        value={rgtMoveDateIn}
+                        onChange={(e) => setRgtMoveDateIn(e.target.value)}
+                        className="bg-white border border-amber-300 rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 cursor-pointer shadow-2xs focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+
+                    {!isClosedOrInvoiced && !isLocked && (
+                      <button
+                        type="button"
+                        onClick={handleMoveToolsToRT}
+                        disabled={rgtCheckedSerials.length === 0}
+                        className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span>⬇️</span>
+                        <span>Enter / Move to RT Details ({rgtCheckedSerials.length})</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Lower DT Table: Tools from the selected DT */}

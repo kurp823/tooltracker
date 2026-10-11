@@ -1072,9 +1072,7 @@ export function normalizeRTBatch(row: any): any {
     row.DeliveryNoteDate ||
     row.deliveryNoteDate ||
     row.WaybillDate ||
-    row.waybillDate ||
-    rawDate ||
-    backloadDate
+    row.waybillDate
   );
 
   const effectiveRtDate = rawDate || loadingNoteDate || backloadDate;
@@ -1112,7 +1110,7 @@ export function normalizeRTBatch(row: any): any {
     row.transportCompany ||
     row.Transporter ||
     row.transporter ||
-    'EMDAD Logistics'
+    ''
   ).trim();
 
   const driverName = String(row.DriverName || row.driverName || row.Driver || row.driver || '').trim();
@@ -1136,10 +1134,10 @@ export function normalizeRTBatch(row: any): any {
     jobId: String(row.JobID || row.jobId || row.JobNumber || row.jobNumber || row.JobNo || row.jobNo || ''),
     rtDate: effectiveRtDate,
     backloadRmDate: effectiveBackloadDate,
-    loadingNoteNo: loadingNoteNo || (rtNum ? `LN-${rtNum.replace(/^RT-?/i, '')}` : ''),
-    lNoteNo: loadingNoteNo || (rtNum ? `LN-${rtNum.replace(/^RT-?/i, '')}` : ''),
-    loadingNoteDate: loadingNoteDate || effectiveRtDate,
-    lNoteDate: loadingNoteDate || effectiveRtDate,
+    loadingNoteNo: loadingNoteNo || '',
+    lNoteNo: loadingNoteNo || '',
+    loadingNoteDate: loadingNoteDate || '',
+    lNoteDate: loadingNoteDate || '',
     carrier,
     shippedVia: carrier,
     driverName,
@@ -1147,7 +1145,7 @@ export function normalizeRTBatch(row: any): any {
     contract: String(row.Contract || row.contract || row.ContractRef || row.contractRef || row.ContractNo || row.contractNo || ''),
     rig: String(row.Rig || row.rig || row.RigName || row.rigName || ''),
     well: String(row.Well || row.well || row.WellName || row.wellName || ''),
-    receivedBy: String(row.ReceivedBy || row.receivedBy || row.Inspector || row.inspector || row.QCInspector || row.qcInspector || row.DispatchedBy || 'QC Inspector'),
+    receivedBy: String(row.ReceivedBy || row.receivedBy || row.Inspector || row.inspector || row.QCInspector || row.qcInspector || '').trim(),
     condition: String(row.Condition || row.condition || row.Notes || row.notes || ''),
     notes: String(row.Notes || row.notes || ''),
     isSigned: Boolean(row.isSigned || row.IsSigned || row.signedDocUrl || row.SignedDocUrl),
