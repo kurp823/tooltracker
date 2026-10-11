@@ -368,6 +368,12 @@ function normalizeJob(row: any): any {
     draftInvoicedDate,
     sesSubmittedDate,
     finalInvoicedDate,
+    notes: row.Notes || row.notes || master?.notes || undefined,
+    technicalDetails: row.TechnicalDetails || row.technicalDetails || master?.technicalDetails || undefined,
+    assignedCrew: row.AssignedCrew || row.assignedCrew || master?.assignedCrew || undefined,
+    crewMembers: row.CrewMembers || row.crewMembers || master?.crewMembers || undefined,
+    dailyLogs: row.DailyLogs || row.dailyLogs || master?.dailyLogs || undefined,
+    utilizationStatuses: row.UtilizationStatuses || row.utilizationStatuses || undefined,
   };
 }
 
@@ -2707,6 +2713,31 @@ export async function saveDailyFieldLogsApi(logs: Array<{
   status: '1' | 'S' | string;
   rate?: number;
 }>): Promise<{ success: boolean; message: string }> {
+  const endpoint = getApiEndpoint();
+  if (endpoint.includes('/data-api/rest') || endpoint.endsWith('/rest')) {
+    try {
+      const restBase = endpoint.replace(/\/+$/, '');
+      const promises = logs.map((l) =>
+        fetch(`${restBase}/tbl_DailyFieldLogs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            JobID: l.jobId,
+            DTNumber: l.dtNumber || null,
+            ToolSerial: l.toolSerial,
+            LogDate: l.date,
+            StatusType: l.status,
+            RateCharged: l.rate != null ? Number(l.rate) : null,
+          }),
+        }).catch(() => null)
+      );
+      await Promise.allSettled(promises);
+      return { success: true, message: 'Daily logs saved to Azure SQL' };
+    } catch {
+      // fallback
+    }
+  }
+
   try {
     const res = await fetchFromApi('savedailyfieldlogs', { logs });
     return { success: res !== null, message: res ? 'Daily logs saved to Azure SQL' : 'Saved locally' };
