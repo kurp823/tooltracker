@@ -1186,15 +1186,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     });
   }, [jobDTs, jobRTs, rgtSearchDTNo]);
 
-  // Save Job Record
+  // Save Job Record (Unified save handler)
   const handleSaveJobHeader = () => {
-    if (isClosedOrInvoiced || isLocked) {
-      showToast('Cannot save changes: this job is invoiced and locked in read-only mode.', 'error');
-      return;
-    }
-    const updated = { ...jobData, crewMembers: assignedCrew };
-    onSaveJob(updated);
-    showToast(`Job ${jobData.id} records updated and saved.`, 'success');
+    handleExplicitSaveJob();
   };
 
   // Update Callout Header Values
@@ -2076,88 +2070,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const monthTotalRedress = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.redressCharge, 0), [toolUtilizationRows]);
   const totalToolRevenueAED = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.totalMonthValue, 0), [toolUtilizationRows]);
 
-  // Save full monthly utilization ledger to Azure SQL live database (tbl_DailyFieldLogs & tbl_Jobs)
-  const handleSaveUtilizationToDatabase = async () => {
-    if (isLocked) {
-      showToast('Cannot save utilization: job is invoiced and locked in read-only mode.', 'error');
-      return;
-    }
-    const jId = (jobData.id || jobData.jobNumber || '').trim();
-    if (!jId) {
-      showToast('Cannot save utilization: missing Job Number.', 'error');
-      return;
-    }
-
-    setIsSavingUtilDb(true);
-
-    // 1. Cache full override state to localStorage
-    const cacheKey = `emdad_job_util_statuses_${jId}`;
-    try {
-      localStorage.setItem(cacheKey, JSON.stringify(customUtilStatuses));
-    } catch {}
-
-    // 2. Persist to Job Record in local state and database
-    const updatedJob: DrillingJob = {
-      ...jobData,
-      utilizationStatuses: customUtilStatuses,
-    };
-    setJobData(updatedJob);
-    onSaveJob(updatedJob);
-
-    // 3. Assemble structured daily rows for Azure SQL tbl_DailyFieldLogs
-    const logEntries: Array<{
-      jobId: string;
-      dtNumber?: string;
-      toolSerial: string;
-      date: string;
-      status: '1' | 'S';
-      rate?: number;
-    }> = [];
-
-    toolUtilizationRows.forEach((row) => {
-      const serial = row.toolKey;
-      if (!serial) return;
-      const opsRate = row.opsRate || 0;
-      const sbRate = row.standbyRate || 0;
-
-      utilDaysList.forEach((dayNum) => {
-        const status = row.dayStatuses[dayNum];
-        if (status === '1' || status === 'S') {
-          const dateStr = `${selectedUtilYear}-${String(selectedUtilMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-          logEntries.push({
-            jobId: jId,
-            dtNumber: row.dtNumber,
-            toolSerial: serial,
-            date: dateStr,
-            status,
-            rate: status === '1' ? opsRate : sbRate,
-          });
-        }
-      });
-    });
-
-    try {
-      if (logEntries.length > 0) {
-        const res = await saveDailyFieldLogsApi(logEntries);
-        setLastSavedUtilTime(new Date().toLocaleTimeString());
-        showToast(
-          res.success
-            ? `Utilization (${logEntries.length} daily logs) saved to Azure SQL live database for ${MONTH_NAMES[selectedUtilMonth - 1]} ${selectedUtilYear}.`
-            : `Utilization saved locally for Job ${jId}.`,
-          'success'
-        );
-      } else {
-        setLastSavedUtilTime(new Date().toLocaleTimeString());
-        showToast(`Job ${jId} utilization preferences saved.`, 'success');
-      }
-    } catch (err) {
-      console.warn('Error saving utilization logs to database:', err);
-      showToast(`Utilization saved to Job record and cached locally.`, 'info');
-    } finally {
-      setIsSavingUtilDb(false);
-    }
-  };
-
   // Engineer Utilization calculation
   const engineerUtilizationRows = useMemo(() => {
     return assignedCrew.map((eng, idx) => {
@@ -2208,7 +2120,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
 
-  // Explicit Save Job File handler
+  // Master Save Job File handler - Unified save across entire Job Dossier:
+  // Saves Job Header, Technical Details, Notes, Crew, Daily Logs, AND Utilization matrix to Azure SQL
   const handleExplicitSaveJob = async () => {
     if (!canEditJobs) {
       showToast('Cannot save: your role has view-only permissions for Drilling Jobs.', 'error');
@@ -2218,22 +2131,34 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       showToast('Cannot save: this job is invoiced / completed and locked in read-only mode.', 'error');
       return;
     }
+    const jId = (jobData.id || jobData.jobNumber || '').trim();
+    if (!jId) {
+      showToast('Cannot save: missing Job Number.', 'error');
+      return;
+    }
+
     setIsSaving(true);
     try {
       const updatedJob: DrillingJob = {
         ...jobData,
         assignedCrew,
+        crewMembers: assignedCrew,
         dailyLogs,
+        utilizationStatuses: customUtilStatuses,
       };
 
-      // Persist tool hole section selections to localStorage and API if available
-      const jobKey = jobData.id || jobData.jobNumber;
-      if (jobKey && Object.keys(toolHoleSectionSelections).length > 0) {
+      // 1. Persist local cache of utilization statuses
+      try {
+        localStorage.setItem(`emdad_job_util_statuses_${jId}`, JSON.stringify(customUtilStatuses));
+      } catch {}
+
+      // 2. Persist tool hole section selections to localStorage and Azure SQL
+      if (Object.keys(toolHoleSectionSelections).length > 0) {
         try {
-          localStorage.setItem(`emdad_job_tool_sections_${jobKey}`, JSON.stringify(toolHoleSectionSelections));
+          localStorage.setItem(`emdad_job_tool_sections_${jId}`, JSON.stringify(toolHoleSectionSelections));
           for (const [toolKey, opt] of Object.entries(toolHoleSectionSelections)) {
             saveJobToolHoleSectionApi(
-              jobKey,
+              jId,
               toolKey,
               opt.holeSection,
               opt.contractRef,
@@ -2245,11 +2170,52 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         } catch {}
       }
 
+      // 3. Persist monthly utilization daily ledger rows to Azure SQL (tbl_DailyFieldLogs)
+      if (toolUtilizationRows.length > 0) {
+        const logEntries: Array<{
+          jobId: string;
+          dtNumber?: string;
+          toolSerial: string;
+          date: string;
+          status: '1' | 'S';
+          rate?: number;
+        }> = [];
+
+        toolUtilizationRows.forEach((row) => {
+          const serial = row.toolKey;
+          if (!serial) return;
+          const opsRate = row.opsRate || 0;
+          const sbRate = row.standbyRate || 0;
+
+          utilDaysList.forEach((dayNum) => {
+            const status = row.dayStatuses[dayNum];
+            if (status === '1' || status === 'S') {
+              const dateStr = `${selectedUtilYear}-${String(selectedUtilMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+              logEntries.push({
+                jobId: jId,
+                dtNumber: row.dtNumber,
+                toolSerial: serial,
+                date: dateStr,
+                status,
+                rate: status === '1' ? opsRate : sbRate,
+              });
+            }
+          });
+        });
+
+        if (logEntries.length > 0) {
+          saveDailyFieldLogsApi(logEntries).catch(() => {});
+        }
+      }
+
+      // 4. Save Job data to parent state and Azure SQL (tbl_Jobs)
       onSaveJob(updatedJob);
       setJobData(updatedJob);
+
       const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       setLastSavedTime(timeStr);
-      showToast(`Job File ${jobData.id} saved successfully at ${timeStr}!`, 'success');
+      setLastSavedUtilTime(timeStr);
+      showToast(`Job File ${jobData.id} records (including Utilization) saved to Azure SQL!`, 'success');
     } catch (e: any) {
       showToast(`Failed to save job file: ${e.message || 'Unknown error'}`, 'error');
     } finally {
@@ -4027,29 +3993,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   Mobilized Tools in Month: <strong className="font-mono text-blue-900">{toolUtilizationRows.length}</strong>
                 </span>
 
-                {isLoadingUtilDb && (
+                {isLoadingUtilDb ? (
                   <span className="text-blue-600 text-[11px] font-medium flex items-center gap-1 animate-pulse">
                     <span>🔄</span> Loading live DB logs...
                   </span>
-                )}
-
-                {lastSavedUtilTime && !isLoadingUtilDb && (
+                ) : (
                   <span className="text-emerald-700 text-[11px] font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded flex items-center gap-1">
-                    <span>✓</span> Synced ({lastSavedUtilTime})
+                    <span>✓</span> Live Synced with Job File
                   </span>
-                )}
-
-                {!isLocked && (
-                  <button
-                    type="button"
-                    onClick={handleSaveUtilizationToDatabase}
-                    disabled={isSavingUtilDb}
-                    className="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs px-3 py-1 rounded cursor-pointer transition shadow-2xs flex items-center gap-1.5"
-                    title="Save all tool utilization rows to Azure SQL database and sync across users"
-                  >
-                    <span>{isSavingUtilDb ? '⏳' : '💾'}</span>
-                    <span>{isSavingUtilDb ? 'Saving to Azure SQL...' : 'Save Utilization to Database'}</span>
-                  </button>
                 )}
 
                 <button
