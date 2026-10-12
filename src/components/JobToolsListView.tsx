@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { DrillingJob, DTBatch, RTBatch, ToolItem } from '../types';
 import { normalizeJobKey } from '../services/api';
 import { formatDateDDMMYYYY } from '../utils';
+import { SearchableSelect } from './SearchableSelect';
 
 interface JobToolsListViewProps {
   jobs: DrillingJob[];
@@ -68,18 +69,34 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
     return counts;
   }, [dtBatches]);
 
-  // Sort jobs: jobs with tools first (highest count descending), then alphabetical (exclude test jobs)
+  // Sort jobs: Natural order (most recent first, e.g. Job-026-..., Job-025-...)
   const sortedJobs = useMemo(() => {
-    const valid = jobs.filter((j) => j && j.id && !j.id.toUpperCase().includes('TEST') && !j.id.toUpperCase().includes('DUMMY'));
+    const valid = jobs.filter(
+      (j) => j && j.id && !j.id.toUpperCase().includes('TEST') && !j.id.toUpperCase().includes('DUMMY')
+    );
     return [...valid].sort((a, b) => {
-      const aRaw = a.id.trim().toUpperCase();
-      const bRaw = b.id.trim().toUpperCase();
-      const countA = jobToolCounts.get(aRaw) || jobToolCounts.get(normalizeJobKey(a.id)) || 0;
-      const countB = jobToolCounts.get(bRaw) || jobToolCounts.get(normalizeJobKey(b.id)) || 0;
-      if (countB !== countA) return countB - countA;
-      return (b.id || '').localeCompare(a.id || '');
+      return (b.id || '').localeCompare(a.id || '', undefined, { numeric: true, sensitivity: 'base' });
     });
-  }, [jobs, jobToolCounts]);
+  }, [jobs]);
+
+  const jobSelectOptions = useMemo(() => {
+    return sortedJobs.map((j) => {
+      const jId = (j.id || '').trim();
+      const count =
+        jobToolCounts.get(jId.toUpperCase()) ||
+        jobToolCounts.get(normalizeJobKey(jId)) ||
+        0;
+      const rigStr = j.rig ? `Rig: ${j.rig}` : '';
+      const clientStr = j.client ? ` • ${j.client}` : '';
+      const wellStr = j.well ? ` • Well: ${j.well}` : '';
+      return {
+        value: jId,
+        label: jId,
+        subLabel: `${rigStr}${clientStr}${wellStr}`.trim(),
+        count: `${count} Tools`,
+      };
+    });
+  }, [sortedJobs, jobToolCounts]);
 
   // Selected job: defaults to preSelectedJobId or empty ("-- All Jobs --")
   const [selectedJobId, setSelectedJobId] = useState<string>(preSelectedJobId || '');
@@ -431,38 +448,17 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
               Select Job:
             </label>
 
-            <div className="flex items-center gap-1.5 flex-1 max-w-xl">
-              <select
+            <div className="flex-1 max-w-xl">
+              <SearchableSelect
+                options={jobSelectOptions}
                 value={selectedJobId}
-                onChange={(e) => setSelectedJobId(e.target.value)}
-                className="w-full text-xs font-mono font-bold bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-900 cursor-pointer"
-              >
-                <option value="">-- All Jobs (Show All Dispatched Tools) --</option>
-                {sortedJobs.map((j) => {
-                  const count =
-                    jobToolCounts.get(j.id.trim().toUpperCase()) ||
-                    jobToolCounts.get(normalizeJobKey(j.id)) ||
-                    0;
-                  return (
-                    <option key={j.id} value={j.id}>
-                      {j.id} — Rig: {j.rig || '—'} [{count} Tools]
-                    </option>
-                  );
-                })}
-              </select>
-
-              {/* Clear button to reset back to All Jobs */}
-              {selectedJobId && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedJobId('')}
-                  title="Clear selected job (Show all jobs)"
-                  className="px-2 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-300 text-xs font-bold transition cursor-pointer shrink-0 flex items-center gap-1"
-                >
-                  <span>✕</span>
-                  <span className="hidden sm:inline">All Jobs</span>
-                </button>
-              )}
+                onChange={(val) => setSelectedJobId(val)}
+                allOptionLabel="-- All Jobs (Show All Dispatched Tools) --"
+                allOptionValue=""
+                searchPlaceholder="Type job #, rig, well, or client (e.g. 1707, AD-78, RAMHAN)..."
+                buttonClassName="w-full h-8 font-mono font-bold bg-slate-50 border-slate-300"
+                dropdownClassName="min-w-[360px] max-w-[560px]"
+              />
             </div>
           </div>
 

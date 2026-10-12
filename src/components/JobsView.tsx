@@ -13,6 +13,7 @@ import { JobLifecycleStepper } from './JobLifecycleStepper';
 import { JobDetailModal } from './JobDetailModal';
 import { JobDossierView } from './JobDossierView';
 import { JobToolsListView } from './JobToolsListView';
+import { SearchableSelect } from './SearchableSelect';
 import { ToolItem, ContractRecord } from '../types';
 import { isInvalidOrPlaceholderDate } from '../utils';
 import { resolveJobClient } from '../services/api';
@@ -350,27 +351,53 @@ export const JobsView: React.FC<JobsViewProps> = ({
       });
   }, [jobs]);
 
-  // Distinct rigs for quick filter dropdown
+  // Distinct rigs for quick filter dropdown with natural numeric collation
   const uniqueRigs = useMemo(() => {
-    const set = new Set<string>();
+    const map = new Map<string, string>();
     validJobs.forEach((j) => {
-      if (j.rig && j.rig.trim()) set.add(j.rig.trim());
+      const r = (j.rig || '').trim();
+      if (r && r !== '—' && r !== '-' && r.toUpperCase() !== 'NULL') {
+        const key = r.toUpperCase();
+        if (!map.has(key)) {
+          map.set(key, r);
+        }
+      }
     });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    return Array.from(map.values()).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+    );
   }, [validJobs]);
 
-  // Distinct clients for combo filter (excluding generic placeholders)
+  const rigSelectOptions = useMemo(() => {
+    return uniqueRigs.map((rig) => ({
+      value: rig,
+      label: rig,
+    }));
+  }, [uniqueRigs]);
+
+  // Distinct clients for combo filter (excluding generic placeholders) with clean collation
   const uniqueClients = useMemo(() => {
-    const set = new Set<string>();
+    const map = new Map<string, string>();
     validJobs.forEach((j) => {
       const c = (j.client || '').trim();
       const u = c.toUpperCase();
       if (c && u !== 'EMDAD CLIENT' && u !== 'CLIENT' && u !== 'EMDAD' && u !== 'NIL' && u !== 'NULL' && u !== '—') {
-        set.add(c);
+        if (!map.has(u)) {
+          map.set(u, c);
+        }
       }
     });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    return Array.from(map.values()).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
   }, [validJobs]);
+
+  const clientSelectOptions = useMemo(() => {
+    return uniqueClients.map((client) => ({
+      value: client,
+      label: client,
+    }));
+  }, [uniqueClients]);
 
   // Overall metric totals for ribbon across the 6 discrete lifecycle stages
   const metrics = useMemo(() => {
@@ -1147,44 +1174,38 @@ export const JobsView: React.FC<JobsViewProps> = ({
             )}
           </div>
 
-          {/* Rig Combo Selector */}
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded px-2 h-7.5 text-xs">
+          {/* Rig Searchable Selector */}
+          <div className="flex items-center gap-1.5 text-xs">
             <span className="text-[11px] font-semibold text-slate-500 whitespace-nowrap">Rig:</span>
-            <select
+            <SearchableSelect
+              options={rigSelectOptions}
               value={selectedRigFilter}
-              onChange={(e) => {
-                setSelectedRigFilter(e.target.value);
+              onChange={(val) => {
+                setSelectedRigFilter(val);
                 setCurrentPage(1);
               }}
-              className="bg-transparent text-slate-800 font-medium outline-none cursor-pointer pr-1"
-            >
-              <option value="all">All Rigs ({uniqueRigs.length})</option>
-              {uniqueRigs.map((rig) => (
-                <option key={rig} value={rig}>
-                  {rig}
-                </option>
-              ))}
-            </select>
+              allOptionLabel={`All Rigs (${uniqueRigs.length})`}
+              allOptionValue="all"
+              searchPlaceholder="Search rig (e.g. 137, HAIL)..."
+              buttonClassName="h-7.5 bg-slate-50 border-slate-300 min-w-[130px] max-w-[180px]"
+            />
           </div>
 
-          {/* Client / Operator Combo Selector */}
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded px-2 h-7.5 text-xs">
+          {/* Client / Operator Searchable Selector */}
+          <div className="flex items-center gap-1.5 text-xs">
             <span className="text-[11px] font-semibold text-slate-500 whitespace-nowrap">Client:</span>
-            <select
+            <SearchableSelect
+              options={clientSelectOptions}
               value={selectedClientFilter}
-              onChange={(e) => {
-                setSelectedClientFilter(e.target.value);
+              onChange={(val) => {
+                setSelectedClientFilter(val);
                 setCurrentPage(1);
               }}
-              className="bg-transparent text-slate-800 font-medium outline-none cursor-pointer pr-1 max-w-[140px] truncate"
-            >
-              <option value="all">All Clients ({uniqueClients.length})</option>
-              {uniqueClients.map((client) => (
-                <option key={client} value={client}>
-                  {client}
-                </option>
-              ))}
-            </select>
+              allOptionLabel={`All Clients (${uniqueClients.length})`}
+              allOptionValue="all"
+              searchPlaceholder="Search client..."
+              buttonClassName="h-7.5 bg-slate-50 border-slate-300 min-w-[140px] max-w-[210px]"
+            />
           </div>
 
           {/* Active Filter Clear Tag */}

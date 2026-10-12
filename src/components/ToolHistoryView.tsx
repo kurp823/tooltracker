@@ -4,6 +4,7 @@ import { ToolItem, DrillingJob, DTBatch, RTBatch } from '../types';
 import { JobToolReconRow } from './JobToolsListView';
 import { normalizeJobKey } from '../services/api';
 import { formatDateDDMMYYYY } from '../utils';
+import { SearchableSelect } from './SearchableSelect';
 
 interface ToolHistoryViewProps {
   inventory: ToolItem[];
@@ -37,17 +38,29 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
     return counts;
   }, [dtBatches]);
 
-  // Sort inventory: Tools with deployment history first (highest count descending), then alphabetical
+  // Sort inventory: Natural alphanumeric order by Serial Number / Asset No
   const sortedInventory = useMemo(() => {
     return [...inventory].sort((a, b) => {
-      const aRaw = (a.serial || a.assetNo || '').trim().toUpperCase();
-      const bRaw = (b.serial || b.assetNo || '').trim().toUpperCase();
-      const countA = toolDeploymentCounts.get(aRaw) || 0;
-      const countB = toolDeploymentCounts.get(bRaw) || 0;
-      if (countB !== countA) return countB - countA;
-      return (a.serial || '').localeCompare(b.serial || '');
+      const aSerial = (a.serial || a.assetNo || '').trim();
+      const bSerial = (b.serial || b.assetNo || '').trim();
+      return aSerial.localeCompare(bSerial, undefined, { numeric: true, sensitivity: 'base' });
     });
-  }, [inventory, toolDeploymentCounts]);
+  }, [inventory]);
+
+  const toolSelectOptions = useMemo(() => {
+    return sortedInventory.map((t) => {
+      const s = (t.serial || t.assetNo || '').trim();
+      const count = toolDeploymentCounts.get(s.toUpperCase()) || 0;
+      const desc = t.shortDesc || t.description || '';
+      const sizeStr = t.size ? ` (${t.size})` : '';
+      return {
+        value: t.serial || s,
+        label: s,
+        subLabel: `${desc}${sizeStr}`.trim(),
+        count: `${count} Runs`,
+      };
+    });
+  }, [sortedInventory, toolDeploymentCounts]);
 
   // Default selected tool: preSelectedSerial or empty ("-- All Tools --")
   const [selectedSerial, setSelectedSerial] = useState<string>(preSelectedSerial || '');
@@ -341,36 +354,17 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
               Select Tool (PartNum / Serial):
             </label>
 
-            <div className="flex items-center gap-1.5 flex-1 max-w-xl">
-              <select
+            <div className="flex-1 max-w-xl">
+              <SearchableSelect
+                options={toolSelectOptions}
                 value={selectedSerial}
-                onChange={(e) => setSelectedSerial(e.target.value)}
-                className="w-full text-xs font-mono font-bold bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-900 cursor-pointer"
-              >
-                <option value="">-- All Tools (Show All Fleet Movements) --</option>
-                {sortedInventory.map((t) => {
-                  const s = (t.serial || t.assetNo || '').trim().toUpperCase();
-                  const count = toolDeploymentCounts.get(s) || 0;
-                  return (
-                    <option key={t.id || t.serial} value={t.serial}>
-                      {t.serial} — {t.shortDesc} ({t.size || '—'}) [{count} Runs]
-                    </option>
-                  );
-                })}
-              </select>
-
-              {/* Clear button to reset back to All Tools */}
-              {selectedSerial && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedSerial('')}
-                  title="Clear selected tool (Show all tools)"
-                  className="px-2 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-300 text-xs font-bold transition cursor-pointer shrink-0 flex items-center gap-1"
-                >
-                  <span>✕</span>
-                  <span className="hidden sm:inline">All Tools</span>
-                </button>
-              )}
+                onChange={(val) => setSelectedSerial(val)}
+                allOptionLabel="-- All Tools (Show All Fleet Movements) --"
+                allOptionValue=""
+                searchPlaceholder="Type serial, tool description, or size (e.g. 11648, JAR, 8)..."
+                buttonClassName="w-full h-8 font-mono font-bold bg-slate-50 border-slate-300"
+                dropdownClassName="min-w-[360px] max-w-[560px]"
+              />
             </div>
           </div>
 
