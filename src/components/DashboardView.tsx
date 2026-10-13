@@ -1303,7 +1303,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span>Drilling Jars represent <strong class="text-slate-800">31.7%</strong> of total revenue</span>
+              <span>Drilling Jars represent <strong className="text-slate-800">31.7%</strong> of total revenue</span>
               <button
                 onClick={() => onNavigate('tool-revenue-report')}
                 className="text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1 cursor-pointer"

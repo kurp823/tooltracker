@@ -10,6 +10,7 @@ import {
   ContractRecord,
   JobCrewMember,
   DailyFieldLog,
+  InspectionRecord,
 } from '../types';
 import { saveJobToolHoleSectionApi, extractToolType, saveDailyFieldLogsApi, fetchDailyFieldLogsApi } from '../services/api';
 import {
@@ -4920,13 +4921,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             (tool.assetNo && ins.serial && ins.serial.trim().toLowerCase() === tool.assetNo.trim().toLowerCase())
                         );
                         const latestIns = toolInspections.length > 0
-                          ? [...toolInspections].sort((a, b) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime())[0]
+                          ? [...toolInspections].sort(
+                              (a, b) =>
+                                new Date(b.inspectionDate || b.reportDate || b.receivedDate || '').getTime() -
+                                new Date(a.inspectionDate || a.reportDate || a.receivedDate || '').getTime()
+                            )[0]
                           : null;
 
-                        const insDate = latestIns?.date
-                          ? formatDateDD_MM_YYYY(latestIns.date)
+                        const rawInsDate = latestIns?.inspectionDate || latestIns?.reportDate || latestIns?.receivedDate;
+                        const insDate = rawInsDate
+                          ? formatDateDD_MM_YYYY(rawInsDate)
                           : (tool.addedDate ? formatDateDD_MM_YYYY(tool.addedDate) : '—');
-                        const insNum = latestIns?.inspectionNumber || latestIns?.reportNumber || latestIns?.id || '—';
+                        const insNum = latestIns?.reportNumber || latestIns?.woNumber || latestIns?.id || '—';
                         const condition = latestIns?.status
                           ? latestIns.status.toUpperCase()
                           : (tool.status?.toUpperCase() === 'GOOD' ? 'ACCEPTED' : (tool.status?.toUpperCase() || 'ACCEPTED'));

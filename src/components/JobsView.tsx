@@ -14,7 +14,7 @@ import { JobDetailModal } from './JobDetailModal';
 import { JobDossierView } from './JobDossierView';
 import { JobToolsListView } from './JobToolsListView';
 import { SearchableSelect } from './SearchableSelect';
-import { ToolItem, ContractRecord } from '../types';
+import { ToolItem, ContractRecord, InspectionRecord } from '../types';
 import { isInvalidOrPlaceholderDate } from '../utils';
 import { resolveJobClient } from '../services/api';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';

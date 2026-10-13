@@ -51,7 +51,7 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
     return sortedInventory.map((t) => {
       const s = (t.serial || t.assetNo || '').trim();
       const count = toolDeploymentCounts.get(s.toUpperCase()) || 0;
-      const desc = t.shortDesc || t.description || '';
+      const desc = t.shortDesc || t.desc || (t as any).description || '';
       const sizeStr = t.size ? ` (${t.size})` : '';
       return {
         value: t.serial || s,
