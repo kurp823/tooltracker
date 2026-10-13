@@ -347,6 +347,8 @@ export interface RTBatch {
   jobId: string;
   jobNumber?: string;
   rtDate: string;
+  receivingDate?: string;
+  emdadSignDate?: string;
   backloadRmDate?: string;
   loadingNoteNo?: string;
   loadingNoteDate?: string;

@@ -918,6 +918,10 @@ export function normalizeRTLine(row: any): any {
     row.Date_In ||
     row.DateIn ||
     row.date_in ||
+    row.receivingDate ||
+    row.ReceivingDate ||
+    row.receiving_date ||
+    row.Receiving_Date ||
     row.returnDate ||
     row.ReturnDate ||
     row.rtDate ||
@@ -926,6 +930,8 @@ export function normalizeRTLine(row: any): any {
     row.date ||
     row.ReceivedDate ||
     row.receivedDate ||
+    row.emdadSignDate ||
+    row.EmdadSignDate ||
     row.BackloadDate ||
     row.backloadDate ||
     row.LoadingNoteDate ||
@@ -993,6 +999,10 @@ export function normalizeRTBatch(row: any): any {
     : [];
 
   const rawDate = cleanDateStr(
+    row.receivingDate ||
+    row.ReceivingDate ||
+    row.receiving_date ||
+    row.Receiving_Date ||
     row.RTDate ||
     row.rtDate ||
     row.Date ||
@@ -1001,6 +1011,8 @@ export function normalizeRTBatch(row: any): any {
     row.ticketDate ||
     row.ReceivedDate ||
     row.receivedDate ||
+    row.emdadSignDate ||
+    row.EmdadSignDate ||
     row.CreatedDate ||
     row.createdDate ||
     row.Date_In ||
@@ -1139,6 +1151,8 @@ export function normalizeRTBatch(row: any): any {
     rtNumber: rtNum,
     jobId: String(row.JobID || row.jobId || row.JobNumber || row.jobNumber || row.JobNo || row.jobNo || ''),
     rtDate: effectiveRtDate,
+    receivingDate: effectiveRtDate,
+    emdadSignDate: cleanDateStr(row.emdadSignDate || row.EmdadSignDate || ''),
     backloadRmDate: effectiveBackloadDate,
     loadingNoteNo: loadingNoteNo || '',
     lNoteNo: loadingNoteNo || '',

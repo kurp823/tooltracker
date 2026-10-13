@@ -4,6 +4,11 @@ import { DrillingJob, DTBatch, RTBatch, ToolItem } from '../types';
 import { normalizeJobKey } from '../services/api';
 import { formatDateDDMMYYYY } from '../utils';
 import { SearchableSelect } from './SearchableSelect';
+import historicalRtDatesData from '../data/historicalRtDates.json';
+import jobUtilizationIndexData from '../data/jobUtilizationIndex.json';
+
+const historicalRtMap = historicalRtDatesData as Record<string, string>;
+const jobUtilizationMap = jobUtilizationIndexData as Record<string, Array<{ serial?: string; dt?: string; retDate?: string; delDate?: string }>>;
 
 interface JobToolsListViewProps {
   jobs: DrillingJob[];
@@ -179,12 +184,36 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
     targetRTs.forEach((rt) => {
       const rtJob = (rt.jobId || rt.jobNumber || '').trim().toUpperCase();
       const rtNormJob = normalizeJobKey(rt.jobId || rt.jobNumber || '');
+      const rtBatchDate =
+        rt.rtDate ||
+        rt.receivingDate ||
+        (rt as any).ReceivingDate ||
+        (rt as any).receiving_date ||
+        rt.emdadSignDate ||
+        rt.backloadRmDate ||
+        rt.loadingNoteDate ||
+        rt.lNoteDate ||
+        '';
+
       (rt.toolLines || []).forEach((rtl) => {
+        const lineDate =
+          rtl.rtDate ||
+          (rtl as any).receivingDate ||
+          (rtl as any).dateIn ||
+          (rtl as any).Date_In ||
+          (rtl as any).DateIn ||
+          (rtl as any).returnDate ||
+          (rtl as any).ReturnDate ||
+          rtBatchDate;
+
+        const ticketNum = rt.rtNumber || (rt as any).rgtNo || 'RT-GEN';
+        const finalDate = lineDate || (historicalRtMap[ticketNum.toUpperCase()] || '');
+
         rtLineLookups.push({
           serial: (rtl.serial || '').trim().toUpperCase(),
           assetNo: (rtl.assetNo || '').trim().toUpperCase(),
-          rtNumber: rt.rtNumber || (rt as any).rgtNo || 'RT-GEN',
-          rtDate: rt.rtDate || rt.backloadRmDate || rt.loadingNoteDate || rt.lNoteDate || (rtl as any).rtDate || (rtl as any).dateIn || (rtl as any).Date_In || (rtl as any).returnDate || '',
+          rtNumber: ticketNum,
+          rtDate: finalDate,
           used: Boolean(rtl.used || rtl.condition === 'USED'),
           condition: rtl.condition,
           jobKey: rtJob,
@@ -200,18 +229,37 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
       const normJob = normalizeJobKey(dtJobKey);
       const linkedJob = jobsMap.get(dtJobKey) || jobsMap.get(normJob);
 
+      // Check job-level utilization index for this job (contains serial -> retDate mappings)
+      const jobHistLines = jobUtilizationMap[dtJobKey] || (normJob ? jobUtilizationMap[normJob] : undefined) || [];
+      const jobHistSerialMap = new Map<string, string>();
+      jobHistLines.forEach((item) => {
+        const s = (item.serial || '').trim().toUpperCase();
+        if (s && item.retDate) {
+          jobHistSerialMap.set(s, item.retDate);
+        }
+      });
+
       const lines = dt.toolLines || [];
       lines.forEach((line, idx) => {
         const lineSerial = (line.serial || '').trim().toUpperCase();
         const lineAsset = (line.assetNo || '').trim().toUpperCase();
 
-        // Match return ticket by serial or assetNo
-        const matchedRT = rtLineLookups.find((r) => {
+        // 1. Try finding matched RT within the same Job first
+        let matchedRT = rtLineLookups.find((r) => {
           const serialMatch = lineSerial && (r.serial === lineSerial || r.assetNo === lineSerial);
           const assetMatch = lineAsset && (r.serial === lineAsset || r.assetNo === lineAsset);
-          const jobMatches = !selectedJobId || r.jobKey === dtJobKey || (r.normJobKey && r.normJobKey === normJob);
+          const jobMatches = r.jobKey === dtJobKey || (r.normJobKey && r.normJobKey === normJob);
           return (serialMatch || assetMatch) && jobMatches;
         });
+
+        // 2. Fallback: if not found within job and looking at all jobs, match across other jobs
+        if (!matchedRT && !selectedJobId) {
+          matchedRT = rtLineLookups.find((r) => {
+            const serialMatch = lineSerial && (r.serial === lineSerial || r.assetNo === lineSerial);
+            const assetMatch = lineAsset && (r.serial === lineAsset || r.assetNo === lineAsset);
+            return serialMatch || assetMatch;
+          });
+        }
 
         let remark: 'Used' | 'Not Used' | 'On Rig' = 'On Rig';
         let retNum = '';
@@ -228,8 +276,40 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
               ((b.toolLines || []).some((rtl) => (rtl.serial && rtl.serial.trim().toUpperCase() === lineSerial) || (rtl.assetNo && rtl.assetNo.trim().toUpperCase() === lineSerial)))
           );
           retNum = directRt?.rtNumber || (directRt as any)?.rgtNo || line.rtBatchId || 'Returned';
-          retDate = directRt?.rtDate || directRt?.backloadRmDate || directRt?.loadingNoteDate || directRt?.lNoteDate || (line as any).rtDate || (line as any).returnDate || (line as any).dateIn || (line as any).Date_In || '';
+          retDate =
+            directRt?.rtDate ||
+            directRt?.receivingDate ||
+            (directRt as any)?.ReceivingDate ||
+            directRt?.emdadSignDate ||
+            directRt?.backloadRmDate ||
+            directRt?.loadingNoteDate ||
+            directRt?.lNoteDate ||
+            (line as any).rtDate ||
+            (line as any).receivingDate ||
+            (line as any).returnDate ||
+            (line as any).dateIn ||
+            (line as any).Date_In ||
+            '';
           remark = line.used ? 'Used' : 'Not Used';
+        }
+
+        // If ticket number exists but return date is still missing, check historical lookup
+        if (retNum && (!retDate || retDate === '—' || retDate === '-')) {
+          const cleanNum = retNum.trim().toUpperCase();
+          if (historicalRtMap[cleanNum]) {
+            retDate = historicalRtMap[cleanNum];
+          }
+        }
+
+        // If still missing return date, check job utilization index for this tool serial
+        if (!retDate || retDate === '—' || retDate === '-') {
+          const histRet = jobHistSerialMap.get(lineSerial) || (lineAsset ? jobHistSerialMap.get(lineAsset) : undefined);
+          if (histRet) {
+            retDate = histRet;
+            if (!retNum || retNum === '—') {
+              retNum = 'Returned';
+            }
+          }
         }
 
         rows.push({
