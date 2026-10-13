@@ -507,14 +507,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const currencySymbol = isAED ? 'AED ' : '$';
   const currencyUnit = isAED ? 'M (AED)' : 'M ($)';
 
+  const formatCategoryTitle = (cat: string) => {
+    const s = cat.trim().toUpperCase();
+    if (s.includes('JAR')) return 'Drilling Jars';
+    if (s.includes('WHIPSTOCK')) return 'Whipstock Systems';
+    if (s.includes('ROLLER') || s.includes('REAMER')) return 'Roller Reamers';
+    if (s.includes('STABILIZER')) return 'Stabilizers';
+    if (s.includes('PBL')) return 'PBL Bypass Subs';
+    if (s.includes('MILL')) return 'Milling Tools';
+    if (s.includes('SCRAPER')) return 'Casing Scrapers';
+    if (s.includes('OTHER')) return 'Specialty Tools';
+    return cat.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  };
+
   const topCategoriesChartData = useMemo(() => {
-    return TOP_CATEGORIES_REVENUE.slice(0, 8).map((cat) => {
+    return TOP_CATEGORIES_REVENUE.slice(0, 4).map((cat) => {
       const total = isAED ? cat.totalRevenueAED : cat.totalRevenueUSD;
       const oper = isAED ? cat.operRevenueAED : cat.operRevenueUSD;
       const standby = isAED ? cat.standbyRevenueAED : cat.standbyRevenueUSD;
 
       return {
-        name: cat.category.length > 15 ? `${cat.category.substring(0, 13)}...` : cat.category,
+        name: formatCategoryTitle(cat.category),
         fullName: cat.category,
         totalRevenue: total,
         operRevenue: oper,
@@ -742,141 +755,122 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* 4 Financial Commercial KPI Cards (Clean Light Theme) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {/* 4 Financial Commercial KPI Cards (Exact Executive Mockup Styling) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           
           {/* KPI 1: Total Fleet Lifetime Revenue */}
-          <div className="bg-gradient-to-br from-emerald-50/50 via-white to-white rounded-xl p-4 border border-emerald-100/80 hover:border-emerald-300 transition-all shadow-2xs">
-            <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold uppercase tracking-wider">
-              <span>Total Fleet Revenue</span>
-              <div className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                <Sparkles className="w-3.5 h-3.5" />
-              </div>
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:shadow-md transition-all">
+            <div className="text-xs sm:text-sm font-semibold text-slate-500 tracking-tight">
+              Total Fleet Revenue
             </div>
-            <div className="mt-2 text-2xl sm:text-[25px] font-black font-mono text-emerald-700 tracking-tight">
+            <div className="mt-2 text-2xl sm:text-[26px] font-black font-sans text-slate-900 tracking-tight">
               {formatMoney(REVENUE_SUMMARY.totalRevenueAED, REVENUE_SUMMARY.totalRevenueUSD)}
-            </div>
-            <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between font-medium">
-              <span>All Contracts &amp; Invoices</span>
-              <span className="font-mono text-emerald-700 font-bold bg-emerald-100 px-1.5 py-0.5 rounded">100% Invoiced</span>
             </div>
           </div>
 
           {/* KPI 2: Operating Revenue */}
-          <div className="bg-gradient-to-br from-blue-50/50 via-white to-white rounded-xl p-4 border border-blue-100/80 hover:border-blue-300 transition-all shadow-2xs">
-            <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold uppercase tracking-wider">
-              <span>Operating Revenue</span>
-              <div className="w-6 h-6 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
-                <TrendingUp className="w-3.5 h-3.5" />
-              </div>
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:shadow-md transition-all">
+            <div className="text-xs sm:text-sm font-semibold text-slate-500 tracking-tight">
+              Operating Revenue
             </div>
-            <div className="mt-2 text-2xl sm:text-[25px] font-black font-mono text-blue-700 tracking-tight">
+            <div className="mt-2 text-2xl sm:text-[26px] font-black font-sans text-slate-900 tracking-tight">
               {formatMoney(REVENUE_SUMMARY.totalOperRevenueAED, REVENUE_SUMMARY.totalOperRevenueUSD)}
-            </div>
-            <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between font-medium">
-              <span>{REVENUE_SUMMARY.totalOperDays.toLocaleString()} Ops Days ('1')</span>
-              <span className="font-mono text-blue-700 font-bold">
-                {((activeOperRevenue / activeTotalFleetRevenue) * 100).toFixed(1)}% Share
-              </span>
             </div>
           </div>
 
           {/* KPI 3: Standby Revenue */}
-          <div className="bg-gradient-to-br from-amber-50/50 via-white to-white rounded-xl p-4 border border-amber-100/80 hover:border-amber-300 transition-all shadow-2xs">
-            <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold uppercase tracking-wider">
-              <span>Standby Revenue</span>
-              <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
-                <Clock className="w-3.5 h-3.5" />
-              </div>
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:shadow-md transition-all">
+            <div className="text-xs sm:text-sm font-semibold text-slate-500 tracking-tight">
+              Standby Revenue
             </div>
-            <div className="mt-2 text-2xl sm:text-[25px] font-black font-mono text-amber-700 tracking-tight">
+            <div className="mt-2 text-2xl sm:text-[26px] font-black font-sans text-slate-900 tracking-tight">
               {formatMoney(REVENUE_SUMMARY.totalStandbyRevenueAED, REVENUE_SUMMARY.totalStandbyRevenueUSD)}
-            </div>
-            <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between font-medium">
-              <span>{REVENUE_SUMMARY.totalStandbyDays.toLocaleString()} SB Days ('S')</span>
-              <span className="font-mono text-amber-700 font-bold">
-                {((activeStandbyRevenue / activeTotalFleetRevenue) * 100).toFixed(1)}% Share
-              </span>
             </div>
           </div>
 
-          {/* KPI 4: Fleet Taxonomy Scope */}
-          <div className="bg-gradient-to-br from-indigo-50/50 via-white to-white rounded-xl p-4 border border-indigo-100/80 hover:border-indigo-300 transition-all shadow-2xs">
-            <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold uppercase tracking-wider">
-              <span>Fleet Scope</span>
-              <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
-                <Layers className="w-3.5 h-3.5" />
-              </div>
+          {/* KPI 4: Fleet Scope */}
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:shadow-md transition-all">
+            <div className="text-xs sm:text-sm font-semibold text-slate-500 tracking-tight">
+              Fleet Scope
             </div>
-            <div className="mt-2 text-2xl sm:text-[25px] font-black font-mono text-indigo-900 tracking-tight">
+            <div className="mt-2 text-2xl sm:text-[26px] font-black font-sans text-slate-900 tracking-tight">
               {REVENUE_SUMMARY.totalTools.toLocaleString()} Serials
-            </div>
-            <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between font-medium">
-              <span>{REVENUE_SUMMARY.totalCategories} Categories</span>
-              <span className="font-mono text-indigo-700 font-bold">{REVENUE_SUMMARY.totalSizes} Sizes</span>
             </div>
           </div>
 
         </div>
 
         {/* Commercial Charts Row (Top Earning Categories & Revenue by Master Contract) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           
-          {/* Chart A: Top Tool Categories Revenue Breakdown */}
-          <div className="lg:col-span-7 bg-slate-50/50 border border-slate-200/90 rounded-xl p-4 flex flex-col justify-between shadow-2xs">
+          {/* Chart A: Top Tool Categories Revenue Breakdown (Matching Mockup) */}
+          <div className="lg:col-span-6 bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <BarChart3 className="w-3.5 h-3.5 text-blue-600" />
-                    Top Revenue-Generating Tool Categories
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    Cumulative commercial yield across top downhole tool families ({currencySymbol}).
-                  </p>
-                </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                  Top Revenue-Generating Tool Categories
+                </h3>
                 
                 {/* Metric Toggle */}
-                <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 text-[10px] shadow-2xs">
+                <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-0.5 text-[11px]">
                   <button
                     onClick={() => setCategoryChartMetric('split')}
-                    className={`px-2.5 py-1 rounded-md font-bold transition cursor-pointer ${
-                      categoryChartMetric === 'split' ? 'bg-blue-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    className={`px-2.5 py-0.5 rounded-md font-semibold transition cursor-pointer ${
+                      categoryChartMetric === 'split' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
                     Ops vs Standby
                   </button>
                   <button
                     onClick={() => setCategoryChartMetric('total')}
-                    className={`px-2.5 py-1 rounded-md font-bold transition cursor-pointer ${
-                      categoryChartMetric === 'total' ? 'bg-blue-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    className={`px-2.5 py-0.5 rounded-md font-semibold transition cursor-pointer ${
+                      categoryChartMetric === 'total' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    Total Yield ({currencyUnit})
+                    Total
                   </button>
                 </div>
               </div>
 
-              {/* Bar Chart Container */}
+              {/* Bar Chart Container with Mockup Style SVG Gradients */}
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={topCategoriesChartData}
                     layout="vertical"
-                    margin={{ top: 5, right: 25, left: 10, bottom: 5 }}
+                    margin={{ top: 10, right: 20, left: 25, bottom: 5 }}
+                    barSize={20}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                    <defs>
+                      <linearGradient id="mockupOperGradient" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#0f2b5c" />
+                        <stop offset="100%" stopColor="#1e4da1" />
+                      </linearGradient>
+                      <linearGradient id="mockupStandbyGradient" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#d9822b" />
+                        <stop offset="100%" stopColor="#f3b34c" />
+                      </linearGradient>
+                      <linearGradient id="mockupTotalGradient" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#0f2b5c" />
+                        <stop offset="100%" stopColor="#2563eb" />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
                     <XAxis
                       type="number"
-                      tick={{ fontSize: 10, fill: '#64748b' }}
+                      tick={{ fontSize: 11, fill: '#64748b' }}
                       unit="M"
                       tickFormatter={(v) => `${currencySymbol}${v}`}
+                      axisLine={{ stroke: '#e2e8f0' }}
+                      tickLine={false}
                     />
                     <YAxis
                       dataKey="name"
                       type="category"
-                      width={105}
-                      tick={{ fontSize: 10, fill: '#1e293b', fontWeight: 600 }}
+                      width={125}
+                      tick={{ fontSize: 12, fill: '#1e293b', fontWeight: 600 }}
+                      axisLine={false}
+                      tickLine={false}
                     />
                     <Tooltip
                       content={({ active, payload }) => {
@@ -884,10 +878,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           const data = payload[0].payload;
                           return (
                             <div className="bg-white text-slate-900 p-3 rounded-xl shadow-xl border border-slate-200 text-xs font-sans space-y-1">
-                              <div className="font-bold text-blue-900 text-sm border-b border-slate-100 pb-1">{data.fullName}</div>
+                              <div className="font-bold text-slate-900 text-sm border-b border-slate-100 pb-1">{data.name}</div>
                               <div className="mt-1 text-slate-700">
-                                Total Revenue:{' '}
-                                <strong className="font-mono text-emerald-700 font-bold">
+                                Total:{' '}
+                                <strong className="font-mono text-slate-900 font-bold">
                                   {formatMoney(data.valAED, data.valUSD)}
                                 </strong>
                               </div>
@@ -903,10 +897,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                   {formatMoney(data.sbAED, data.sbUSD)} ({data.standbyDays.toLocaleString()} days)
                                 </span>
                               </div>
-                              <div className="mt-1.5 pt-1.5 border-t border-slate-100 text-[10px] text-slate-500 flex justify-between gap-4 font-medium">
-                                <span>{data.toolsCount} Serialized Units</span>
-                                <span>{data.jobsCount} Historical Jobs</span>
-                              </div>
                             </div>
                           );
                         }
@@ -915,28 +905,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     />
                     {categoryChartMetric === 'split' ? (
                       <>
-                        <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '6px' }} />
-                        <Bar
-                          dataKey="standbyRevenueM"
-                          name={`Standby (${currencyUnit})`}
-                          stackId="a"
-                          fill="#f59e0b"
-                          radius={[0, 0, 0, 0]}
-                        />
                         <Bar
                           dataKey="operRevenueM"
                           name={`Operating (${currencyUnit})`}
                           stackId="a"
-                          fill="#2563eb"
-                          radius={[0, 4, 4, 0]}
+                          fill="url(#mockupOperGradient)"
+                          radius={[10, 0, 0, 10]}
+                        />
+                        <Bar
+                          dataKey="standbyRevenueM"
+                          name={`Standby (${currencyUnit})`}
+                          stackId="a"
+                          fill="url(#mockupStandbyGradient)"
+                          radius={[0, 10, 10, 0]}
                         />
                       </>
                     ) : (
                       <Bar
                         dataKey="totalRevenueM"
                         name={`Total Revenue (${currencyUnit})`}
-                        fill="#059669"
-                        radius={[0, 4, 4, 0]}
+                        fill="url(#mockupTotalGradient)"
+                        radius={[10, 10, 10, 10]}
                       />
                     )}
                   </BarChart>
@@ -944,79 +933,77 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </div>
 
-            {/* Quick Category Summary Footer */}
-            <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-600">
-              <span>
-                Drilling Jars represent <strong>31.7%</strong> ({formatCompactMoney(10634447.96, 2895695.06)}) of total commercial revenue.
-              </span>
+            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <span>Drilling Jars represent <strong class="text-slate-800">31.7%</strong> of total revenue</span>
               <button
                 onClick={() => onNavigate('tool-revenue-report')}
                 className="text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1 cursor-pointer"
               >
-                <span>Full Taxonomy Breakdown</span>
+                <span>Full Taxonomy</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
 
-          {/* Chart B: Revenue by Master Operator Contract */}
-          <div className="lg:col-span-5 bg-slate-50/50 border border-slate-200/90 rounded-xl p-4 flex flex-col justify-between shadow-2xs">
+          {/* Chart B: Top Revenue Operator Contracts (Matching Mockup) */}
+          <div className="lg:col-span-6 bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-blue-600" />
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-slate-900 tracking-tight">
                   Top Revenue Operator Contracts
                 </h3>
-                <span className="text-[10px] text-slate-600 font-mono bg-white px-2 py-0.5 rounded-md border border-slate-200">
-                  28 Contracts
+                <span className="text-[11px] text-slate-500 font-medium">
+                  Ranked by Value
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 mb-2">
-                Contract revenue concentration with native currency attribution.
-              </p>
 
-              {/* Ranked Contracts List with Progress Meters */}
-              <div className="space-y-2.5 my-2">
+              {/* Exact Mockup Contract Rows with Number Badges and Meters */}
+              <div className="space-y-4 my-2">
                 {TOP_CONTRACTS_REVENUE.slice(0, 4).map((c, idx) => {
                   const pct = ((c.totalRevenueAED / REVENUE_SUMMARY.totalRevenueAED) * 100).toFixed(1);
-                  const isContractAED = c.currency === 'AED';
+                  const rankBadgeClass =
+                    idx === 0
+                      ? 'bg-blue-100 text-blue-800'
+                      : idx === 1
+                      ? 'bg-slate-100 text-slate-700'
+                      : idx === 2
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-teal-100 text-teal-800';
+
+                  const barColorClass =
+                    idx === 0
+                      ? 'bg-[#0f2b5c]'
+                      : idx === 1
+                      ? 'bg-[#1e4da1]'
+                      : idx === 2
+                      ? 'bg-[#0d9488]'
+                      : 'bg-[#0f766e]';
 
                   return (
-                    <div key={c.contractKey || c.contract || idx} className="bg-white rounded-xl p-3 border border-slate-200 shadow-2xs hover:border-slate-300 transition text-xs">
-                      <div className="flex items-start justify-between gap-1.5">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-slate-900 truncate max-w-[180px]">
-                              {c.client}
-                            </span>
-                            <span
-                              className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase ${
-                                isContractAED
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                  : 'bg-blue-100 text-blue-800 border border-blue-200'
-                              }`}
-                            >
-                              {c.currency} Rate
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
-                            Ref: {c.contract} • {c.toolsCount || c.toolCount} Tools • {c.jobsCount} Jobs
-                          </span>
-                        </div>
-                        <div className="text-right whitespace-nowrap">
-                          <span className="font-mono font-black text-emerald-700 block text-xs">
-                            {formatCompactMoney(c.totalRevenueAED, c.totalRevenueUSD, c.currency)}
-                          </span>
-                          <span className="text-[10px] text-slate-500 font-semibold">{pct}% fleet share</span>
-                        </div>
+                    <div key={c.contractKey || c.contract || idx} className="flex items-center justify-between gap-3 text-xs">
+                      {/* Left: Rank Badge + Operator Name */}
+                      <div className="flex items-center gap-2.5 min-w-[130px] sm:min-w-[150px]">
+                        <span className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-[11px] ${rankBadgeClass}`}>
+                          {idx + 1}
+                        </span>
+                        <span className="font-semibold text-slate-800 truncate">
+                          {c.client || 'Oilfield Operator'}
+                        </span>
                       </div>
-                      
-                      {/* Share progress bar */}
-                      <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden border border-slate-200">
+
+                      {/* Middle: Progress Meter */}
+                      <div className="flex-1 max-w-[220px] bg-slate-100 h-2 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-blue-600 via-teal-500 to-emerald-600 rounded-full"
-                          style={{ width: `${Math.min(100, Math.max(5, Number(pct)))}%` }}
+                          className={`h-full rounded-full ${barColorClass}`}
+                          style={{ width: `${Math.min(100, Math.max(15, Number(pct) * 3))}%` }}
                         />
+                      </div>
+
+                      {/* Right: Revenue Amount */}
+                      <div className="text-right min-w-[120px] whitespace-nowrap">
+                        <span className="font-mono font-bold text-slate-900 text-xs">
+                          {formatCompactMoney(c.totalRevenueAED, c.totalRevenueUSD, c.currency)}
+                        </span>
                       </div>
                     </div>
                   );
@@ -1024,11 +1011,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </div>
 
-            {/* Quick Contract Footer Link */}
-            <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-600">
-              <span>
-                Contract 4700024096 is primary (<strong>AED 19.71M</strong>).
-              </span>
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <span>Primary: <strong className="text-slate-800">4700024096 (ADNOC Drilling)</strong></span>
               <button
                 onClick={() => onNavigate('contracts')}
                 className="text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1 cursor-pointer"
@@ -1043,96 +1027,169 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       </div>
 
-      {/* 3. OPERATIONAL RIG & DOWNHOLE TOOL DEPLOYMENT CHARTS ROW */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Chart 1: Rig & Tools by Operator Client */}
-        <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-2xs lg:col-span-2">
-          <div className="flex justify-between items-center mb-3">
-            <div>
-              <h3 className="text-xs font-bold text-[#1a3055] uppercase tracking-wide">
-                Rig &amp; Downhole Tool Fleet Distribution by Operator
+      {/* 3. OPERATIONAL RIG & DOWNHOLE TOOL DEPLOYMENT CHARTS ROW (MATCHING MOCKUP) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        
+        {/* Chart 1: Rig & Downhole Tool Fleet Distribution (Exact Mockup Styling) */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                Rig &amp; Downhole Tool Fleet Distribution
               </h3>
-              <p className="text-[11px] text-slate-500">
-                Active deployed rigs and downhole tool units across key operating contracts.
-              </p>
+              <div className="flex items-center gap-4 text-xs">
+                <span className="flex items-center gap-1.5 font-semibold text-teal-700">
+                  <span className="w-2.5 h-2.5 rounded-full bg-teal-600 inline-block"></span>
+                  Active Rigs
+                </span>
+                <span className="flex items-center gap-1.5 font-semibold text-blue-700">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block"></span>
+                  Tools on Rig
+                </span>
+              </div>
             </div>
-            <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-              Live Feed
-            </span>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={clientDeploymentData.slice(0, 5)}
+                  margin={{ top: 15, right: 15, left: -20, bottom: 0 }}
+                  barGap={6}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }}
+                    axisLine={{ stroke: '#e2e8f0' }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: '#64748b' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#ffffff',
+                      color: '#0f172a',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      border: '1px solid #e2e8f0',
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
+                    }}
+                  />
+                  <Bar
+                    dataKey="rigs"
+                    name="Active Rigs"
+                    fill="#0d9488"
+                    radius={[6, 6, 0, 0]}
+                    maxBarSize={32}
+                  />
+                  <Bar
+                    dataKey="tools"
+                    name="Tools on Rig"
+                    fill="#2563eb"
+                    radius={[6, 6, 0, 0]}
+                    maxBarSize={32}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={clientDeploymentData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#475569' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#475569' }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#ffffff',
-                    color: '#0f172a',
-                    borderRadius: '8px',
-                    fontSize: '11px',
-                    border: '1px solid #e2e8f0',
-                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
-                  }}
-                  itemStyle={{ color: '#0f172a' }}
-                />
-                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-                <Bar dataKey="tools" name="Tools on Rig" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="rigs" name="Active Rigs" fill="#0d9488" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>Live fleet tracking across active operator concessions</span>
+            <span className="font-semibold text-emerald-700">{activeRigsCount} Active Rigs</span>
           </div>
         </div>
 
-        {/* Chart 2: Tool Category Deployment (Donut Chart) */}
-        <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-2xs">
-          <div className="flex justify-between items-center mb-3">
-            <div>
-              <h3 className="text-xs font-bold text-[#1a3055] uppercase tracking-wide">
+        {/* Chart 2: Tool Fleet Asset Breakdown (Donut Chart Matching Mockup) */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold text-slate-900 tracking-tight">
                 Tool Fleet Asset Breakdown
               </h3>
-              <p className="text-[11px] text-slate-500">
-                Inventory proportion by equipment category.
-              </p>
+              <span className="text-xs text-slate-500 font-medium">Inventory Proportion</span>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 my-2">
+              {/* Donut Chart with Centered Number '6,882' */}
+              <div className="relative w-48 h-48 flex items-center justify-center shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={categoryDeploymentData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={58}
+                      outerRadius={86}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {categoryDeploymentData.map((_, index) => {
+                        const colors = ['#0f2b5c', '#1e4da1', '#0d9488', '#d9822b', '#94a3b8', '#6366f1'];
+                        return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} stroke="#ffffff" strokeWidth={2} />;
+                      })}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#ffffff',
+                        color: '#0f172a',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        border: '1px solid #e2e8f0',
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* Center Stat Counter */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+                  <span className="text-2xl font-black font-sans text-slate-900 tracking-tight">
+                    {REVENUE_SUMMARY.totalTools.toLocaleString()}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Total Tools
+                  </span>
+                </div>
+              </div>
+
+              {/* Exact Mockup Style 2-Column Key with Percentage Pills */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 text-xs w-full max-w-[280px]">
+                {categoryDeploymentData.slice(0, 5).map((item, idx) => {
+                  const colors = ['bg-[#0f2b5c]', 'bg-[#1e4da1]', 'bg-[#0d9488]', 'bg-[#d9822b]', 'bg-[#94a3b8]'];
+                  const totalCount = categoryDeploymentData.reduce((acc, curr) => acc + curr.value, 0);
+                  const pct = totalCount > 0 ? Math.round((item.value / totalCount) * 100) : 0;
+
+                  return (
+                    <div key={item.name} className="flex items-center justify-between gap-1.5 p-1 rounded-md">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${colors[idx % colors.length]}`} />
+                        <span className="font-semibold text-slate-800 truncate text-[11px] sm:text-xs">
+                          {item.name}
+                        </span>
+                      </div>
+                      <span className="px-1.5 py-0.2 rounded font-mono font-bold text-[10px] bg-slate-100 text-slate-700">
+                        {pct}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
-          <div className="h-64 w-full flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={categoryDeploymentData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={85}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {categoryDeploymentData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#ffffff',
-                    color: '#0f172a',
-                    borderRadius: '8px',
-                    fontSize: '11px',
-                    border: '1px solid #e2e8f0',
-                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
-                  }}
-                />
-                <Legend
-                  layout="horizontal"
-                  verticalAlign="bottom"
-                  align="center"
-                  wrapperStyle={{ fontSize: '10px', paddingTop: '4px' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+
+          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>Primary Category: <strong className="text-slate-800">{categoryDeploymentData[0]?.name || 'Drilling Tools'}</strong></span>
+            <button
+              onClick={() => onNavigate('inventory')}
+              className="text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1 cursor-pointer"
+            >
+              <span>View Inventory</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
+
       </div>
 
       {/* 4. FLEET VELOCITY & LIVE RIG OPERATIONAL CARDS */}
