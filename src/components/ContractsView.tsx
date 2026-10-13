@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ContractRecord, DrillingJob, User, NavModule } from '../types';
 import { ContractRatesModal } from './ContractRatesModal';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
+import { useResizableColumns, ResizerHandle, useCustomColumns } from '../services/customColumnService';
 import { 
   FileSpreadsheet, 
   Plus, 
@@ -48,6 +49,24 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
   const [selectedContract, setSelectedContract] = useState<ContractRecord | null>(null);
   const [contractForRates, setContractForRates] = useState<ContractRecord | null>(null);
   const [isNewContractOpen, setIsNewContractOpen] = useState(false);
+
+  // Dynamic Custom Columns & Excel-like Resizable Grid Columns
+  const contractsCustomCols = useCustomColumns('contracts');
+  const contractsResizer = useResizableColumns('contracts_grid', {
+    id: 60,
+    client: 160,
+    contractRef: 150,
+    shortDesc: 200,
+    currency: 65,
+    validity: 140,
+    status: 80,
+    contractValue: 130,
+    pbgNumber: 110,
+    pbgValue: 110,
+    pbgExpiry: 100,
+    rates: 120,
+    actions: 90,
+  });
 
   // Form states for New Contract
   const [contractNo, setContractNo] = useState('');
@@ -440,26 +459,76 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-[#1a3055] text-white border-b border-[#2d4b7a] font-semibold text-[11px] whitespace-nowrap">
-                  <th className="py-2.5 px-3 w-12 text-center">ID</th>
-                  <th className="py-2.5 px-3">Client Entity</th>
-                  <th className="py-2.5 px-3">Contract Ref / SAP</th>
-                  <th className="py-2.5 px-3 min-w-[160px]">Short Description</th>
-                  <th className="py-2.5 px-2 text-center">Curr</th>
-                  <th className="py-2.5 px-3">Validity Period</th>
-                  <th className="py-2.5 px-2 text-center">Status</th>
-                  <th className="py-2.5 px-3 text-right">Contract Value</th>
-                  <th className="py-2.5 px-3">PBG Number</th>
-                  <th className="py-2.5 px-3 text-right">PBG Value</th>
-                  <th className="py-2.5 px-3 text-center">PBG Expiry</th>
-                  <th className="py-2.5 px-3 text-center">Price Book / Rates</th>
-                  <th className="py-2.5 px-3 text-center">Actions</th>
+                <tr className="bg-[#1a3055] text-white border-b border-[#2d4b7a] font-semibold text-[11px] whitespace-nowrap select-none">
+                  <th style={{ width: contractsResizer.widths.id || 60 }} className="py-2.5 px-3 text-center relative">
+                    <span>ID</span>
+                    <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('id', e)} />
+                  </th>
+                  <th style={{ width: contractsResizer.widths.client || 160 }} className="py-2.5 px-3 relative">
+                    <span>Client Entity</span>
+                    <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('client', e)} />
+                  </th>
+                  <th style={{ width: contractsResizer.widths.contractRef || 150 }} className="py-2.5 px-3 relative">
+                    <span>Contract Ref / SAP</span>
+                    <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('contractRef', e)} />
+                  </th>
+                  <th style={{ width: contractsResizer.widths.shortDesc || 200 }} className="py-2.5 px-3 relative">
+                    <span>Short Description</span>
+                    <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('shortDesc', e)} />
+                  </th>
+                  <th style={{ width: contractsResizer.widths.currency || 65 }} className="py-2.5 px-2 text-center relative">
+                    <span>Curr</span>
+                    <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('currency', e)} />
+                  </th>
+                  <th style={{ width: contractsResizer.widths.validity || 140 }} className="py-2.5 px-3 relative">
+                    <span>Validity Period</span>
+                    <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('validity', e)} />
+                  </th>
+                  <th style={{ width: contractsResizer.widths.status || 80 }} className="py-2.5 px-2 text-center relative">
+                    <span>Status</span>
+                    <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('status', e)} />
+                  </th>
+                  <th style={{ width: contractsResizer.widths.contractValue || 130 }} className="py-2.5 px-3 text-right relative">
+                    <span>Contract Value</span>
+                    <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('contractValue', e)} />
+                  </th>
+                  <th style={{ width: contractsResizer.widths.pbgNumber || 110 }} className="py-2.5 px-3 relative">
+                    <span>PBG Number</span>
+                    <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('pbgNumber', e)} />
+                  </th>
+                  <th style={{ width: contractsResizer.widths.pbgValue || 110 }} className="py-2.5 px-3 text-right relative">
+                    <span>PBG Value</span>
+                    <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('pbgValue', e)} />
+                  </th>
+                  <th style={{ width: contractsResizer.widths.pbgExpiry || 100 }} className="py-2.5 px-3 text-center relative">
+                    <span>PBG Expiry</span>
+                    <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('pbgExpiry', e)} />
+                  </th>
+                  {contractsCustomCols.map((c) => (
+                    <th
+                      key={c.key}
+                      style={{ width: contractsResizer.widths[c.key] || c.width || 120 }}
+                      className="py-2.5 px-3 relative bg-[#244275] text-amber-200 font-bold border-l border-[#3a5d99]"
+                      title={`Custom Column: ${c.label}`}
+                    >
+                      <span>{c.label}</span>
+                      <ResizerHandle onMouseDown={(e) => contractsResizer.startResize(c.key, e)} />
+                    </th>
+                  ))}
+                  <th style={{ width: contractsResizer.widths.rates || 120 }} className="py-2.5 px-3 text-center relative">
+                    <span>Price Book / Rates</span>
+                    <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('rates', e)} />
+                  </th>
+                  <th style={{ width: contractsResizer.widths.actions || 90 }} className="py-2.5 px-3 text-center relative">
+                    <span>Actions</span>
+                    <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('actions', e)} />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {filteredContracts.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="py-8 text-center text-slate-500">
+                    <td colSpan={13 + contractsCustomCols.length} className="py-8 text-center text-slate-500">
                       No contracts matching current filter criteria.
                     </td>
                   </tr>
@@ -551,6 +620,16 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                             <span className="text-slate-400">-</span>
                           )}
                         </td>
+                        {contractsCustomCols.map((col) => {
+                          const val = (c as any)[col.key] ?? (c as any).customFields?.[col.key];
+                          return (
+                            <td key={col.key} className="py-2.5 px-3 text-xs text-slate-700 font-mono border-l border-slate-100 whitespace-nowrap">
+                              {val !== undefined && val !== null && String(val).trim() !== ''
+                                ? String(val)
+                                : <span className="text-slate-300 font-sans">—</span>}
+                            </td>
+                          );
+                        })}
                         <td className="py-2.5 px-3 text-center whitespace-nowrap">
                           <button
                             onClick={() => setContractForRates(c)}

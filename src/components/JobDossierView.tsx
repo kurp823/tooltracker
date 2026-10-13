@@ -20,6 +20,11 @@ import {
 } from '../services/contractRateResolver';
 import { EMDAD_LOGO_BASE64, EmdadLogo } from '../constants/branding';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
+import {
+  useResizableColumns,
+  ResizerHandle,
+  useCustomColumns,
+} from '../services/customColumnService';
 
 interface JobDossierViewProps {
   job: DrillingJob;
@@ -368,9 +373,61 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const [isReopenModalOpen, setIsReopenModalOpen] = useState(false);
   const [reopenJustification, setReopenJustification] = useState('');
 
-  // When user has no edit clearance, or when closed or legally invoiced, entire job is locked in VIEW ONLY mode unless Admin unlocks with justification
-  const isJobLocked = isClosedOrInvoiced && !adminUnlocked;
-  const isLocked = !canEditJobs || isJobLocked;
+  // Resizable columns & custom columns for Checklist table
+  const checklistCustomCols = useCustomColumns('dossier_checklist');
+  const checklistResizer = useResizableColumns('dossier_checklist_grid', {
+    itemNo: 50,
+    partNo: 140,
+    description: 300,
+    qty: 60,
+    supplier: 110,
+    qtyIn: 60,
+    insNum: 140,
+    insDate: 105,
+    comments: 110,
+    cat: 130,
+    actions: 60,
+  });
+
+  // Resizable columns & custom columns for itemsselect tool picker
+  const toolPickerCustomCols = useCustomColumns('dossier_itemsselect');
+  const toolPickerResizer = useResizableColumns('dossier_itemsselect_grid', {
+    select: 48,
+    serial: 140,
+    description: 320,
+    size: 80,
+    qty: 60,
+    supplier: 110,
+    insDate: 105,
+    insNum: 140,
+    condition: 100,
+  });
+
+  // Resizable columns & custom columns for Manpower / Crew table
+  const crewCustomCols = useCustomColumns('dossier_crew');
+  const crewResizer = useResizableColumns('dossier_crew_grid', {
+    seq: 48,
+    badgeNo: 95,
+    name: 180,
+    designation: 180,
+    mobDate: 100,
+    demobDate: 100,
+    rigPass: 110,
+    h2s: 100,
+    status: 90,
+    action: 60,
+  });
+
+  // Resizable columns & custom columns for Daily Field Log (DDR)
+  const ddrCustomCols = useCustomColumns('dossier_ddr');
+  const ddrResizer = useResizableColumns('dossier_ddr_grid', {
+    date: 110,
+    status: 100,
+    depth: 130,
+    activity: 350,
+    loggedBy: 140,
+    action: 55,
+  });
 
   // Daily Field Log state (Daily Drilling Report / Operational Remarks)
   const [dailyLogs, setDailyLogs] = useState<DailyFieldLog[]>(() => {
@@ -2635,14 +2692,45 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               ) : (
                 <div className="overflow-x-auto max-h-96 overflow-y-auto">
                   <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-[#e9eff6] text-[#1a3055] font-bold border-b border-[#b8cce0] sticky top-0 text-[11px]">
+                    <thead className="bg-[#e9eff6] text-[#1a3055] font-bold border-b border-[#b8cce0] sticky top-0 text-[11px] select-none">
                       <tr>
-                        <th className="py-1.5 px-3 whitespace-nowrap w-28">Date</th>
-                        <th className="py-1.5 px-3 whitespace-nowrap w-28">Status</th>
-                        <th className="py-1.5 px-3 whitespace-nowrap w-32">Hole Depth / Section</th>
-                        <th className="py-1.5 px-3">24-Hr Operations Summary &amp; Remarks</th>
-                        <th className="py-1.5 px-3 whitespace-nowrap w-36">Logged By</th>
-                        {!isLocked && <th className="py-1.5 px-2 text-center w-12">Action</th>}
+                        <th style={{ width: ddrResizer.widths.date || 110 }} className="py-1.5 px-3 whitespace-nowrap relative">
+                          <span>Date</span>
+                          <ResizerHandle onMouseDown={(e) => ddrResizer.startResize('date', e)} />
+                        </th>
+                        <th style={{ width: ddrResizer.widths.status || 100 }} className="py-1.5 px-3 whitespace-nowrap relative">
+                          <span>Status</span>
+                          <ResizerHandle onMouseDown={(e) => ddrResizer.startResize('status', e)} />
+                        </th>
+                        <th style={{ width: ddrResizer.widths.depth || 130 }} className="py-1.5 px-3 whitespace-nowrap relative">
+                          <span>Hole Depth / Section</span>
+                          <ResizerHandle onMouseDown={(e) => ddrResizer.startResize('depth', e)} />
+                        </th>
+                        <th style={{ width: ddrResizer.widths.activity || 350 }} className="py-1.5 px-3 relative">
+                          <span>24-Hr Operations Summary &amp; Remarks</span>
+                          <ResizerHandle onMouseDown={(e) => ddrResizer.startResize('activity', e)} />
+                        </th>
+                        <th style={{ width: ddrResizer.widths.loggedBy || 140 }} className="py-1.5 px-3 whitespace-nowrap relative">
+                          <span>Logged By</span>
+                          <ResizerHandle onMouseDown={(e) => ddrResizer.startResize('loggedBy', e)} />
+                        </th>
+                        {ddrCustomCols.map((c) => (
+                          <th
+                            key={c.key}
+                            style={{ width: ddrResizer.widths[c.key] || c.width || 120 }}
+                            className="py-1.5 px-3 whitespace-nowrap relative bg-indigo-50/50 text-indigo-950 font-bold border-l border-indigo-200"
+                            title={`Custom Column: ${c.label}`}
+                          >
+                            <span>{c.label}</span>
+                            <ResizerHandle onMouseDown={(e) => ddrResizer.startResize(c.key, e)} />
+                          </th>
+                        ))}
+                        {!isLocked && (
+                          <th style={{ width: ddrResizer.widths.action || 55 }} className="py-1.5 px-2 text-center relative">
+                            <span>Action</span>
+                            <ResizerHandle onMouseDown={(e) => ddrResizer.startResize('action', e)} />
+                          </th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -2671,6 +2759,16 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           <td className="py-2 px-3 whitespace-nowrap text-slate-600 font-medium text-[11px]">
                             {log.loggedBy}
                           </td>
+                          {ddrCustomCols.map((c) => {
+                            const val = (log as any)[c.key] ?? (log as any).customFields?.[c.key];
+                            return (
+                              <td key={c.key} className="py-2 px-3 text-xs text-slate-700 font-mono border-l border-slate-100 whitespace-nowrap">
+                                {val !== undefined && val !== null && String(val).trim() !== ''
+                                  ? String(val)
+                                  : <span className="text-slate-300 font-sans">—</span>}
+                              </td>
+                            );
+                          })}
                           {!isLocked && (
                             <td className="py-2 px-2 text-center">
                               <button
@@ -2999,24 +3097,67 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             {/* Crew Members Table */}
             <div className="border border-[#b8cce0] rounded overflow-hidden">
               <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
+                <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px] select-none">
                   <tr>
-                    <th className="py-1 px-2 whitespace-nowrap text-center w-12">Seq</th>
-                    <th className="py-1 px-2 whitespace-nowrap">Badge #</th>
-                    <th className="py-1 px-2 whitespace-nowrap">Engineer / Supervisor Name</th>
-                    <th className="py-1 px-2 whitespace-nowrap">Role / Designation</th>
-                    <th className="py-1 px-2 whitespace-nowrap font-mono">Mob Date</th>
-                    <th className="py-1 px-2 whitespace-nowrap font-mono">Demob Date</th>
-                    <th className="py-1 px-2 whitespace-nowrap">Rig Pass / Cert</th>
-                    <th className="py-1 px-2 whitespace-nowrap font-mono">H2S Expiry</th>
-                    <th className="py-1 px-2 whitespace-nowrap text-center">Status</th>
-                    {!isClosedOrInvoiced && !isLocked && <th className="py-1 px-2 whitespace-nowrap text-center w-16">Action</th>}
+                    <th style={{ width: crewResizer.widths.seq || 48 }} className="py-1 px-2 whitespace-nowrap text-center relative">
+                      <span>Seq</span>
+                      <ResizerHandle onMouseDown={(e) => crewResizer.startResize('seq', e)} />
+                    </th>
+                    <th style={{ width: crewResizer.widths.badgeNo || 95 }} className="py-1 px-2 whitespace-nowrap relative">
+                      <span>Badge #</span>
+                      <ResizerHandle onMouseDown={(e) => crewResizer.startResize('badgeNo', e)} />
+                    </th>
+                    <th style={{ width: crewResizer.widths.name || 180 }} className="py-1 px-2 whitespace-nowrap relative">
+                      <span>Engineer / Supervisor Name</span>
+                      <ResizerHandle onMouseDown={(e) => crewResizer.startResize('name', e)} />
+                    </th>
+                    <th style={{ width: crewResizer.widths.designation || 180 }} className="py-1 px-2 whitespace-nowrap relative">
+                      <span>Role / Designation</span>
+                      <ResizerHandle onMouseDown={(e) => crewResizer.startResize('designation', e)} />
+                    </th>
+                    <th style={{ width: crewResizer.widths.mobDate || 100 }} className="py-1 px-2 whitespace-nowrap font-mono relative">
+                      <span>Mob Date</span>
+                      <ResizerHandle onMouseDown={(e) => crewResizer.startResize('mobDate', e)} />
+                    </th>
+                    <th style={{ width: crewResizer.widths.demobDate || 100 }} className="py-1 px-2 whitespace-nowrap font-mono relative">
+                      <span>Demob Date</span>
+                      <ResizerHandle onMouseDown={(e) => crewResizer.startResize('demobDate', e)} />
+                    </th>
+                    <th style={{ width: crewResizer.widths.rigPass || 110 }} className="py-1 px-2 whitespace-nowrap relative">
+                      <span>Rig Pass / Cert</span>
+                      <ResizerHandle onMouseDown={(e) => crewResizer.startResize('rigPass', e)} />
+                    </th>
+                    <th style={{ width: crewResizer.widths.h2s || 100 }} className="py-1 px-2 whitespace-nowrap font-mono relative">
+                      <span>H2S Expiry</span>
+                      <ResizerHandle onMouseDown={(e) => crewResizer.startResize('h2s', e)} />
+                    </th>
+                    <th style={{ width: crewResizer.widths.status || 90 }} className="py-1 px-2 whitespace-nowrap text-center relative">
+                      <span>Status</span>
+                      <ResizerHandle onMouseDown={(e) => crewResizer.startResize('status', e)} />
+                    </th>
+                    {crewCustomCols.map((c) => (
+                      <th
+                        key={c.key}
+                        style={{ width: crewResizer.widths[c.key] || c.width || 120 }}
+                        className="py-1 px-2 whitespace-nowrap relative bg-indigo-50/50 text-indigo-950 font-bold border-l border-indigo-200"
+                        title={`Custom Column: ${c.label}`}
+                      >
+                        <span>{c.label}</span>
+                        <ResizerHandle onMouseDown={(e) => crewResizer.startResize(c.key, e)} />
+                      </th>
+                    ))}
+                    {!isClosedOrInvoiced && !isLocked && (
+                      <th style={{ width: crewResizer.widths.action || 60 }} className="py-1 px-2 whitespace-nowrap text-center relative">
+                        <span>Action</span>
+                        <ResizerHandle onMouseDown={(e) => crewResizer.startResize('action', e)} />
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {assignedCrew.length === 0 ? (
                     <tr>
-                      <td colSpan={isClosedOrInvoiced || isLocked ? 9 : 10} className="p-6 text-center text-slate-500 font-medium">
+                      <td colSpan={(isClosedOrInvoiced || isLocked ? 9 : 10) + crewCustomCols.length} className="p-6 text-center text-slate-500 font-medium">
                         No field personnel assigned to this job yet.
                         {!isClosedOrInvoiced && !isLocked && (
                           <span> Click <strong>&quot;Select Personnel / Crew&quot;</strong> above to assign certified crew members.</span>
@@ -3043,6 +3184,16 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             {c.status}
                           </span>
                         </td>
+                        {crewCustomCols.map((col) => {
+                          const val = (c as any)[col.key] ?? (c as any).customFields?.[col.key];
+                          return (
+                            <td key={col.key} className="py-1 px-2 text-xs text-slate-700 font-mono border-l border-slate-100 whitespace-nowrap">
+                              {val !== undefined && val !== null && String(val).trim() !== ''
+                                ? String(val)
+                                : <span className="text-slate-300 font-sans">—</span>}
+                            </td>
+                          );
+                        })}
                         {!isClosedOrInvoiced && !isLocked && (
                           <td className="py-1 px-2 whitespace-nowrap text-center">
                             <button
@@ -3207,17 +3358,68 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
                   <tr>
-                    <th className="p-1.5 text-center w-12">ItemNo</th>
-                    <th className="p-1.5">PartNo / Serial</th>
-                    <th className="p-1.5">Description</th>
-                    <th className="p-1.5 text-center w-14">DTQTY</th>
-                    <th className="p-1.5">Supplier</th>
-                    <th className="p-1.5 text-center w-14">QTYIN</th>
-                    <th className="p-1.5">INS_NUM</th>
-                    <th className="p-1.5">INS_DATE</th>
-                    <th className="p-1.5">Comments</th>
-                    <th className="p-1.5">Category</th>
-                    {!isClosedOrInvoiced && !isLocked && <th className="p-1.5 text-center w-16">Action</th>}
+                    <th style={{ width: checklistResizer.widths.itemNo || 50 }} className="p-1.5 text-center relative">
+                      <span>ItemNo</span>
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('itemNo', e)} />
+                    </th>
+                    <th style={{ width: checklistResizer.widths.partNo || 140 }} className="p-1.5 relative">
+                      <span>PartNo / Serial</span>
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('partNo', e)} />
+                    </th>
+                    <th style={{ width: checklistResizer.widths.description || 300 }} className="p-1.5 relative">
+                      <span>Description</span>
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('description', e)} />
+                    </th>
+                    <th style={{ width: checklistResizer.widths.qty || 60 }} className="p-1.5 text-center relative">
+                      <span>DTQTY</span>
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('qty', e)} />
+                    </th>
+                    <th style={{ width: checklistResizer.widths.supplier || 110 }} className="p-1.5 relative">
+                      <span>Supplier</span>
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('supplier', e)} />
+                    </th>
+                    <th style={{ width: checklistResizer.widths.qtyIn || 60 }} className="p-1.5 text-center relative">
+                      <span>QTYIN</span>
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('qtyIn', e)} />
+                    </th>
+                    <th style={{ width: checklistResizer.widths.insNum || 140 }} className="p-1.5 relative">
+                      <span>INS_NUM</span>
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('insNum', e)} />
+                    </th>
+                    <th style={{ width: checklistResizer.widths.insDate || 105 }} className="p-1.5 relative">
+                      <span>INS_DATE</span>
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('insDate', e)} />
+                    </th>
+                    <th style={{ width: checklistResizer.widths.comments || 110 }} className="p-1.5 relative">
+                      <span>Comments</span>
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('comments', e)} />
+                    </th>
+                    <th style={{ width: checklistResizer.widths.cat || 130 }} className="p-1.5 relative">
+                      <span>Category</span>
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('cat', e)} />
+                    </th>
+
+                    {/* Custom columns registered in Database Inspector */}
+                    {checklistCustomCols.map((c) => (
+                      <th
+                        key={c.key}
+                        style={{ width: checklistResizer.widths[c.key] || c.width || 130 }}
+                        className="p-1.5 relative bg-emerald-50 text-emerald-950 font-bold"
+                      >
+                        <div className="flex items-center gap-1">
+                          <span className="text-emerald-600 text-[10px]">★</span>
+                          <span>{c.label}</span>
+                        </div>
+                        <ResizerHandle onMouseDown={(e) => checklistResizer.startResize(c.key, e)} />
+                      </th>
+                    ))}
+
+                    {!isClosedOrInvoiced && !isLocked && (
+                      <th style={{ width: checklistResizer.widths.actions || 60 }} className="p-1.5 text-center relative">
+                        <span>Action</span>
+                        <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('actions', e)} />
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -3240,9 +3442,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700">{item.supplier || 'EMDAD'}</td>
                         <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{item.qtyIn || 1}</td>
                         <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">{item.insNum || 'GIS-Z-01480-2023'}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{formatDateDD_MM_YYYY(item.insDate)}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-bold text-emerald-700">{item.comments || 'ACCEPTED'}</td>
                         <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600">{item.cat || item.shortDesc}</td>
+
+                        {/* Custom Column cells for checklist */}
+                        {checklistCustomCols.map((c) => {
+                          const val = (item as any)[c.key] ?? (item as any).customFields?.[c.key] ?? '—';
+                          return (
+                            <td key={c.key} className="py-1 px-2 whitespace-nowrap font-mono text-slate-800">
+                              {String(val)}
+                            </td>
+                          );
+                        })}
+
                         {!isClosedOrInvoiced && !isLocked && (
                           <td className="py-1 px-2 whitespace-nowrap text-center">
                             <button
@@ -4595,7 +4806,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <table className="w-full text-left border-collapse text-[11.5px] min-w-[950px]">
                   <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#9fb6cf] font-bold text-[11px] sticky top-0 z-10 shadow-2xs">
                     <tr>
-                      <th className="py-1.5 px-3 whitespace-nowrap text-center w-14 sticky left-0 bg-[#e9f0f8] z-20 shadow-2xs border-r border-[#9fb6cf]">
+                      <th
+                        style={{ width: toolPickerResizer.widths.select || 48 }}
+                        className="py-1.5 px-3 whitespace-nowrap text-center sticky left-0 bg-[#e9f0f8] z-20 shadow-2xs border-r border-[#9fb6cf] relative"
+                      >
                         <input
                           type="checkbox"
                           checked={modalAvailableTools.length > 0 && modalAvailableTools.every((t) => checkedToolSerials.includes(t.serial))}
@@ -4609,15 +4823,79 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           className="cursor-pointer w-4 h-4 text-blue-600 rounded"
                           title="Select All Visible"
                         />
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('select', e)} />
                       </th>
-                      <th className="py-1 px-3 whitespace-nowrap min-w-[140px]">PartNo / Serial</th>
-                      <th className="py-1 px-3 whitespace-nowrap min-w-[320px]">Description</th>
-                      <th className="py-1 px-2 whitespace-nowrap text-center min-w-[80px]">Size</th>
-                      <th className="py-1 px-2 whitespace-nowrap text-center w-16">DTQTY</th>
-                      <th className="py-1 px-3 whitespace-nowrap min-w-[110px]">Supplier</th>
-                      <th className="py-1 px-2 whitespace-nowrap min-w-[105px]">Ins_Date</th>
-                      <th className="py-1 px-2 whitespace-nowrap min-w-[140px]">Ins_Num</th>
-                      <th className="py-1 px-2 whitespace-nowrap min-w-[100px]">Condition</th>
+                      <th
+                        style={{ width: toolPickerResizer.widths.serial || 140 }}
+                        className="py-1 px-3 whitespace-nowrap relative"
+                      >
+                        <span>PartNo / Serial</span>
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('serial', e)} />
+                      </th>
+                      <th
+                        style={{ width: toolPickerResizer.widths.description || 320 }}
+                        className="py-1 px-3 whitespace-nowrap relative"
+                      >
+                        <span>Description</span>
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('description', e)} />
+                      </th>
+                      <th
+                        style={{ width: toolPickerResizer.widths.size || 80 }}
+                        className="py-1 px-2 whitespace-nowrap text-center relative"
+                      >
+                        <span>Size</span>
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('size', e)} />
+                      </th>
+                      <th
+                        style={{ width: toolPickerResizer.widths.qty || 60 }}
+                        className="py-1 px-2 whitespace-nowrap text-center relative"
+                      >
+                        <span>DTQTY</span>
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('qty', e)} />
+                      </th>
+                      <th
+                        style={{ width: toolPickerResizer.widths.supplier || 110 }}
+                        className="py-1 px-3 whitespace-nowrap relative"
+                      >
+                        <span>Supplier</span>
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('supplier', e)} />
+                      </th>
+                      <th
+                        style={{ width: toolPickerResizer.widths.insDate || 105 }}
+                        className="py-1 px-2 whitespace-nowrap relative"
+                      >
+                        <span>Ins_Date</span>
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('insDate', e)} />
+                      </th>
+                      <th
+                        style={{ width: toolPickerResizer.widths.insNum || 140 }}
+                        className="py-1 px-2 whitespace-nowrap relative"
+                      >
+                        <span>Ins_Num</span>
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('insNum', e)} />
+                      </th>
+                      <th
+                        style={{ width: toolPickerResizer.widths.condition || 100 }}
+                        className="py-1 px-2 whitespace-nowrap relative"
+                      >
+                        <span>Condition</span>
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('condition', e)} />
+                      </th>
+
+                      {/* Custom Columns registered in Database Inspector */}
+                      {toolPickerCustomCols.map((c) => (
+                        <th
+                          key={c.key}
+                          style={{ width: toolPickerResizer.widths[c.key] || c.width || 130 }}
+                          className="py-1 px-2 whitespace-nowrap relative bg-emerald-50/70 text-emerald-950 font-bold"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span className="text-emerald-600 text-[10px]">★</span>
+                            <span>{c.label}</span>
+                          </div>
+                          <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize(c.key, e)} />
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -4683,10 +4961,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             </td>
                             <td className="py-1 px-2 whitespace-nowrap text-center font-mono text-slate-700">{tool.size || '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{tool.qty || 1}</td>
-                            <td className="py-1 px-3 whitespace-nowrap text-slate-700">{tool.supplier || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-700">{insDate}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700 font-semibold">{insNum}</td>
                             <td className={`py-1 px-2 whitespace-nowrap font-bold ${condition === 'ACCEPTED' ? 'text-emerald-700' : 'text-amber-700'}`}>{condition}</td>
+
+                            {/* Custom Column Values */}
+                            {toolPickerCustomCols.map((c) => {
+                              const val = (tool as any)[c.key] ?? (tool as any).customFields?.[c.key] ?? '—';
+                              return (
+                                <td key={c.key} className="py-1 px-2 whitespace-nowrap font-mono text-slate-800">
+                                  {String(val)}
+                                </td>
+                              );
+                            })}
                           </tr>
                         );
                       })

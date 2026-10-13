@@ -22,9 +22,15 @@ import {
   saveContractApi,
   saveInspectionApi,
   saveMaintenanceApi,
+  saveCustomColumnsApi,
   fetchLiveDatabaseData,
   fetchSecondaryModules,
 } from '../services/api';
+import {
+  CustomColumnDef,
+  getCustomColumns,
+  saveCustomColumns,
+} from '../services/customColumnService';
 import {
   Database,
   FileSpreadsheet,
@@ -43,6 +49,9 @@ import {
   Search,
   CheckSquare,
   Square,
+  Plus,
+  Trash2,
+  Sliders,
   ShieldAlert,
   Info,
 } from 'lucide-react';
@@ -56,7 +65,13 @@ export type TableEntityKey =
   | 'gatePasses'
   | 'inspections'
   | 'maintenance'
-  | 'contracts';
+  | 'contracts'
+  // Job Dossier Sub-Screens
+  | 'dossier_checklist'
+  | 'dossier_itemsselect'
+  | 'dossier_crew'
+  | 'dossier_ddr'
+  | 'dossier_utilization';
 
 export interface FieldDefinition {
   key: string;
@@ -67,6 +82,7 @@ export interface FieldDefinition {
   sample: any;
   defaultSample?: any;
   allowedValues?: string[];
+  isCustom?: boolean;
 }
 
 interface TableDefinition {
@@ -75,7 +91,7 @@ interface TableDefinition {
   epicorCode: string;
   name: string;
   primaryKey: string;
-  category: 'Operations' | 'Inventory' | 'Quality' | 'Commercial';
+  category: 'Operations' | 'Inventory' | 'Quality' | 'Commercial' | 'Job Dossier';
   description: string;
   fields: FieldDefinition[];
   detailKey?: string;
@@ -86,6 +102,102 @@ interface TableDefinition {
 }
 
 const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
+  // Job Dossier Sub-Screens Models
+  dossier_checklist: {
+    key: 'dossier_checklist',
+    sqlTable: 'tbl_JobChecklistLines',
+    epicorCode: 'JD001 - Dossier Checklist',
+    name: 'Job Dossier: Planned Tools (Checklist)',
+    primaryKey: 'partNo',
+    category: 'Job Dossier',
+    description: 'Job planned equipment, reserved items, inspection certs and delivery readiness checklist inside Job Dossier.',
+    fields: [
+      { key: 'itemNo', label: 'Item No (Seq)', type: 'number', required: true, description: 'Line sequence number', sample: 1 },
+      { key: 'partNo', label: 'PartNo / Serial', type: 'string', required: true, description: 'Assigned tool serial or asset ID', sample: 'EMD-1025' },
+      { key: 'description', label: 'Description', type: 'string', required: true, description: 'Tool technical description', sample: '6-1/2" HYDRAULIC DRILLING JAR' },
+      { key: 'size', label: 'Size', type: 'string', description: 'Tool OD / Size', sample: '6-1/2"' },
+      { key: 'qty', label: 'DTQTY', type: 'number', required: true, description: 'Dispatched quantity', sample: 1 },
+      { key: 'supplier', label: 'Supplier', type: 'string', description: 'Tool owner / vendor', sample: 'EMDAD' },
+      { key: 'qtyIn', label: 'QTYIN', type: 'number', description: 'Quantity received back', sample: 1 },
+      { key: 'insNum', label: 'INS_NUM', type: 'string', description: 'QC Inspection certificate number', sample: 'GIS-Z-01480-2023' },
+      { key: 'insDate', label: 'INS_DATE', type: 'date', description: 'Inspection certification date', sample: '2023-05-15' },
+      { key: 'comments', label: 'Comments / Acceptance', type: 'string', description: 'Inspection acceptance comments', sample: 'ACCEPTED' },
+      { key: 'cat', label: 'Category', type: 'string', description: 'Tool category classification', sample: 'HYD DRILLING JAR' },
+    ],
+  },
+  dossier_itemsselect: {
+    key: 'dossier_itemsselect',
+    sqlTable: 'tbl_ToolPicker_View',
+    epicorCode: 'JD002 - Tool Assignment Picker',
+    name: 'Job Dossier: Tool Assignment Picker (itemsselect)',
+    primaryKey: 'serial',
+    category: 'Job Dossier',
+    description: 'Modal grid used by operations supervisors to search, filter, and assign downhole tools to jobs.',
+    fields: [
+      { key: 'serial', label: 'PartNo / Serial', type: 'string', required: true, description: 'Tool serial number', sample: 'EMD-1025' },
+      { key: 'description', label: 'Description', type: 'string', required: true, description: 'Tool full description', sample: '7" OD CUTLIP GUIDE' },
+      { key: 'size', label: 'Size', type: 'string', description: 'Tool OD', sample: '7"' },
+      { key: 'qty', label: 'DTQTY', type: 'number', description: 'Quantity available', sample: 1 },
+      { key: 'supplier', label: 'Supplier', type: 'string', description: 'Tool ownership entity', sample: 'EMDAD' },
+      { key: 'insDate', label: 'Ins_Date', type: 'date', description: 'Latest inspection date', sample: '2023-03-31' },
+      { key: 'insNum', label: 'Ins_Num', type: 'string', description: 'Latest inspection certificate', sample: 'GIS-Z-01073-2023' },
+      { key: 'condition', label: 'Condition', type: 'string', description: 'Condition state', sample: 'ACCEPTED' },
+    ],
+  },
+  dossier_crew: {
+    key: 'dossier_crew',
+    sqlTable: 'tbl_JobCrewMembers',
+    epicorCode: 'JD003 - Field Crew & Engineers',
+    name: 'Job Dossier: Field Engineers & Rig Crew',
+    primaryKey: 'badgeNo',
+    category: 'Job Dossier',
+    description: 'Certified field fishing engineers, whipstock specialists, and rig tool supervisors allocated to the job.',
+    fields: [
+      { key: 'badgeNo', label: 'Badge #', type: 'string', required: true, description: 'Company badge number', sample: 'EMD-4102' },
+      { key: 'name', label: 'Engineer Name', type: 'string', required: true, description: 'Full certified name', sample: 'Ahmed Al-Mansoor' },
+      { key: 'designation', label: 'Designation / Role', type: 'string', required: true, description: 'Operational role', sample: 'Lead Fishing Engineer' },
+      { key: 'mobDate', label: 'Mob Date', type: 'date', description: 'Mobilization date to rig', sample: '2023-05-15' },
+      { key: 'demobDate', label: 'Demob Date', type: 'date', description: 'Demobilization date from rig', sample: '2023-05-28' },
+      { key: 'rigPassNo', label: 'Rig Pass / Cert', type: 'string', description: 'Rig Pass safety number', sample: 'RP-88421' },
+      { key: 'h2sExpiry', label: 'H2S Expiry', type: 'date', description: 'H2S certification expiry date', sample: '2025-12-12' },
+      { key: 'status', label: 'Crew Status', type: 'string', description: 'Status on rig', sample: 'Mobilized (On Rig)' },
+    ],
+  },
+  dossier_ddr: {
+    key: 'dossier_ddr',
+    sqlTable: 'tbl_JobDailyLogs',
+    epicorCode: 'JD004 - 24-Hr Daily Operations Logs',
+    name: 'Job Dossier: 24-Hr Operations Log (DDR)',
+    primaryKey: 'id',
+    category: 'Job Dossier',
+    description: 'Daily operational progress, standby vs operational hours, hole depth, and field engineer remarks.',
+    fields: [
+      { key: 'id', label: 'Log ID', type: 'string', required: true, description: 'Unique log entry ID', sample: 'DDR-01' },
+      { key: 'date', label: 'Log Date', type: 'date', required: true, description: 'Date of operation', sample: '2023-05-16' },
+      { key: 'status', label: 'Status', type: 'string', required: true, description: 'Operational or Standby', sample: 'Operational' },
+      { key: 'depth', label: 'Hole Depth / Section', type: 'string', description: 'Current hole depth or section', sample: '8-1/2" Section (3,420 m)' },
+      { key: 'activity', label: '24-Hr Operations Summary', type: 'string', required: true, description: 'Detailed shift remarks', sample: 'Run in hole with fishing assembly. Latched fish at 3,410m.' },
+      { key: 'loggedBy', label: 'Logged By', type: 'string', description: 'Field supervisor name', sample: 'Ahmed Al-Mansoor' },
+    ],
+  },
+  dossier_utilization: {
+    key: 'dossier_utilization',
+    sqlTable: 'tbl_JobToolUtilization',
+    epicorCode: 'JD005 - Utilization Matrix',
+    name: 'Job Dossier: Tool Utilization Ledger',
+    primaryKey: 'serial',
+    category: 'Job Dossier',
+    description: 'Day-by-day tool operating days, standby days, and rental rate calculation ledger inside Job Dossier.',
+    fields: [
+      { key: 'serial', label: 'Tool Serial', type: 'string', required: true, description: 'Serialized tool number', sample: 'EMD-1025' },
+      { key: 'assetNo', label: 'Asset Number', type: 'string', description: 'Asset or Part number', sample: 'DJ650-003' },
+      { key: 'operDays', label: 'Operating Days', type: 'number', description: 'Total operating days', sample: 12 },
+      { key: 'standbyDays', label: 'Standby Days', type: 'number', description: 'Total standby days', sample: 3 },
+      { key: 'dayRate', label: 'Operating Day Rate', type: 'number', description: 'Contract rate per day', sample: 450 },
+      { key: 'standbyRate', label: 'Standby Day Rate', type: 'number', description: 'Standby rate per day', sample: 225 },
+      { key: 'totalAmount', label: 'Total Charge', type: 'number', description: 'Calculated charge amount', sample: 6075 },
+    ],
+  },
   jobs: {
     key: 'jobs',
     sqlTable: 'tbl_Jobs',
@@ -486,7 +598,18 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
   const [selectedEntityKey, setSelectedEntityKey] = useState<TableEntityKey>('jobs');
   const [isDetailMode, setIsDetailMode] = useState<boolean>(false);
   const [searchFilter, setSearchFilter] = useState('');
-  const [activeTab, setActiveTab] = useState<'import' | 'preview'>('import');
+  const [activeTab, setActiveTab] = useState<'import' | 'preview'>('preview');
+
+  // Custom Columns State
+  const [allCustomColumns, setAllCustomColumns] = useState<CustomColumnDef[]>(() => getCustomColumns());
+  const [isAddColumnModalOpen, setIsAddColumnModalOpen] = useState(false);
+  const [newColLabel, setNewColLabel] = useState('');
+  const [newColKey, setNewColKey] = useState('');
+  const [newColType, setNewColType] = useState<'string' | 'number' | 'date' | 'select' | 'boolean'>('string');
+  const [newColWidth, setNewColWidth] = useState<number>(140);
+  const [newColOptions, setNewColOptions] = useState<string>('');
+  const [newColDescription, setNewColDescription] = useState('');
+  const [isSyncingSql, setIsSyncingSql] = useState(false);
 
   // Import options modeled after Epicor DMT
   const [allowAdd, setAllowAdd] = useState(true);
@@ -507,6 +630,71 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedDef = TABLE_DEFINITIONS[selectedEntityKey];
+
+  // Handler to create custom column and save live to Azure SQL
+  const handleSaveNewColumn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newColLabel.trim()) {
+      showToast('Column label is required', 'error');
+      return;
+    }
+
+    const colKey = (newColKey.trim() || newColLabel.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_')).replace(/^_+|_+$/g, '');
+    const optionsArray = newColType === 'select'
+      ? newColOptions.split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
+
+    const newColumn: CustomColumnDef = {
+      id: `${selectedEntityKey}_${colKey}_${Date.now()}`,
+      key: colKey,
+      label: newColLabel.trim(),
+      modelKey: selectedEntityKey,
+      type: newColType,
+      width: newColWidth || 140,
+      visible: true,
+      options: optionsArray,
+      createdDate: new Date().toISOString(),
+      createdBy: user?.name || 'Admin',
+    };
+
+    const updated = [...allCustomColumns.filter((c) => !(c.modelKey === selectedEntityKey && c.key === colKey)), newColumn];
+    setAllCustomColumns(updated);
+    saveCustomColumns(updated);
+
+    // Sync live to Azure SQL
+    setIsSyncingSql(true);
+    try {
+      const sqlRes = await saveCustomColumnsApi(updated);
+      showToast(sqlRes.message || 'Custom column registered & saved to Azure SQL live.', 'success');
+    } catch {
+      showToast('Custom column created locally.', 'info');
+    } finally {
+      setIsSyncingSql(false);
+    }
+
+    // Reset modal form
+    setNewColLabel('');
+    setNewColKey('');
+    setNewColType('string');
+    setNewColWidth(140);
+    setNewColOptions('');
+    setNewColDescription('');
+    setIsAddColumnModalOpen(false);
+  };
+
+  const handleDeleteCustomColumn = async (colId: string) => {
+    if (!window.confirm('Are you sure you want to remove this custom column?')) return;
+    const updated = allCustomColumns.filter((c) => c.id !== colId);
+    setAllCustomColumns(updated);
+    saveCustomColumns(updated);
+
+    try {
+      await saveCustomColumnsApi(updated);
+      showToast('Column removed from schema and Azure SQL database.', 'success');
+    } catch {
+      showToast('Column removed locally.', 'info');
+    }
+  };
 
   // Map state to selected entity
   const currentTableData = useMemo(() => {
@@ -552,9 +740,28 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
     );
   }
 
-  const activeFields: FieldDefinition[] = isDetailMode && selectedDef.detailFields
+  const modelCustomColumns = useMemo(() => {
+    return allCustomColumns.filter((c) => c.modelKey === selectedEntityKey);
+  }, [allCustomColumns, selectedEntityKey]);
+
+  const baseFields: FieldDefinition[] = isDetailMode && selectedDef.detailFields
     ? selectedDef.detailFields
     : selectedDef.fields;
+
+  // Merge base schema fields with live admin custom columns
+  const activeFields: FieldDefinition[] = useMemo(() => {
+    const customConverted: FieldDefinition[] = modelCustomColumns.map((c) => ({
+      key: c.key,
+      label: c.label,
+      type: c.type === 'select' ? 'string' : c.type,
+      required: false,
+      description: `Custom User-Defined Field (Created by ${c.createdBy || 'Admin'})`,
+      sample: c.options ? c.options.join(', ') : 'Custom Value',
+      allowedValues: c.options,
+      isCustom: true,
+    }));
+    return [...baseFields, ...customConverted];
+  }, [baseFields, modelCustomColumns]);
 
   const activeTableName = isDetailMode && selectedDef.detailName
     ? selectedDef.detailName
@@ -1536,6 +1743,31 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
             ) : (
               // Database Schema & Column Dictionary Tab
               <div className="bg-white border border-slate-300 rounded shadow-xs overflow-hidden">
+                {/* Custom Column Top Action Header */}
+                <div className="bg-[#f1f5f9] px-4 py-2.5 border-b border-slate-300 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <span>🏷️</span>
+                      <span>Database Schema &amp; Custom Fields Dictionary</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200 font-bold">
+                        {activeFields.length} Total Columns ({modelCustomColumns.length} Custom)
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Columns configured here automatically appear live across all users in <strong>{activeTableName}</strong>.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAddColumnModalOpen(true)}
+                    className="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Add Custom Column</span>
+                  </button>
+                </div>
+
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
                     <tr>
@@ -1544,14 +1776,27 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
                       <th className="p-2 w-20">Type</th>
                       <th className="p-2 w-24">Constraint</th>
                       <th className="p-2">Description</th>
-                      <th className="p-2 font-mono min-w-[280px]">Sample Value &amp; Options</th>
+                      <th className="p-2 font-mono min-w-[240px]">Sample Value &amp; Options</th>
+                      <th className="p-2 text-center w-16">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-sans">
-                    {activeFields.map((f) => (
-                      <tr key={f.key} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-2 font-mono font-bold text-slate-800">{f.key}</td>
-                        <td className="p-2 font-medium text-slate-700">{f.label}</td>
+                    {activeFields.map((f) => {
+                      const matchedCustom = modelCustomColumns.find((c) => c.key === f.key);
+                      return (
+                      <tr key={f.key} className={`transition-colors ${f.isCustom ? 'bg-emerald-50/40 hover:bg-emerald-50/70' : 'hover:bg-slate-50'}`}>
+                        <td className="p-2 font-mono font-bold text-slate-800 flex items-center gap-1">
+                          {f.isCustom && <span className="text-emerald-600 font-bold text-xs" title="Custom Column">★</span>}
+                          <span>{f.key}</span>
+                        </td>
+                        <td className="p-2 font-medium text-slate-700">
+                          {f.label}
+                          {f.isCustom && (
+                            <span className="ml-1.5 px-1 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800">
+                              Custom
+                            </span>
+                          )}
+                        </td>
                         <td className="p-2">
                           <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[10px]">
                             {f.type}
@@ -1587,8 +1832,23 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
                             </div>
                           )}
                         </td>
+                        <td className="p-2 text-center">
+                          {f.isCustom && matchedCustom ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCustomColumn(matchedCustom.id)}
+                              className="p-1 rounded text-rose-600 hover:text-rose-800 hover:bg-rose-50 cursor-pointer transition"
+                              title="Delete this custom column from schema and SQL database"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <span className="text-slate-300 text-[11px] font-mono">—</span>
+                          )}
+                        </td>
                       </tr>
-                    ))}
+                    );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1752,6 +2012,158 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Add Custom Column Modal (Admin Only) */}
+      {isAddColumnModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-3 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-300 w-full max-w-lg overflow-hidden flex flex-col">
+            <div className="bg-[#1a3055] text-white px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Plus className="w-4 h-4 text-emerald-400" />
+                <h3 className="font-bold text-sm">Add Custom Column to Schema</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddColumnModalOpen(false)}
+                className="text-white/80 hover:text-white font-bold text-lg cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveNewColumn} className="p-4 space-y-3.5 text-xs">
+              <div className="bg-blue-50 border border-blue-200 rounded p-2 text-[11px] text-blue-900 leading-tight">
+                Target Model: <strong className="text-[#1a3055]">{activeTableName}</strong> ({activeSqlTable})
+                <br />
+                This new column will be saved directly to the database schema and appear live for all users.
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Column Display Name / Label <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder='e.g. "BHA Assembly No", "Thread Spec", "Inspector Badge"'
+                  value={newColLabel}
+                  onChange={(e) => {
+                    setNewColLabel(e.target.value);
+                    if (!newColKey) {
+                      setNewColKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'));
+                    }
+                  }}
+                  className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Field Key (Database Identifier)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. bha_assembly_no"
+                    value={newColKey}
+                    onChange={(e) => setNewColKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                    className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs font-mono text-slate-700 outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Data Type
+                  </label>
+                  <select
+                    value={newColType}
+                    onChange={(e) => setNewColType(e.target.value as any)}
+                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="string">Text (String)</option>
+                    <option value="number">Numeric (Number)</option>
+                    <option value="date">Date (Calendar DD-MM-YYYY)</option>
+                    <option value="select">Dropdown List (Select)</option>
+                    <option value="boolean">Yes / No (Checkbox)</option>
+                  </select>
+                </div>
+              </div>
+
+              {newColType === 'select' && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Dropdown Options (Comma-Separated)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder='e.g. "Approved, Rejected, Under Review, Pending"'
+                    value={newColOptions}
+                    onChange={(e) => setNewColOptions(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Default Column Width (px)
+                  </label>
+                  <input
+                    type="number"
+                    min="60"
+                    max="600"
+                    value={newColWidth}
+                    onChange={(e) => setNewColWidth(parseInt(e.target.value, 10) || 140)}
+                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs font-mono text-slate-800 outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Excel Resizable
+                  </label>
+                  <div className="py-2 text-[11px] text-emerald-700 font-semibold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>Yes (Full Excel Drag Support)</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Description / Instructions for Users
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Optional guidelines for what operators should enter in this column..."
+                  value={newColDescription}
+                  onChange={(e) => setNewColDescription(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded p-2 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsAddColumnModalOpen(false)}
+                  className="px-3.5 py-1.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSyncingSql}
+                  className="px-5 py-1.5 rounded bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5 transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{isSyncingSql ? 'Saving to Azure SQL...' : 'Save & Publish Live'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

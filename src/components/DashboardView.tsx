@@ -138,40 +138,102 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [currencyMode, setCurrencyMode] = useState<'AED' | 'USD' | 'NATIVE'>('AED');
   const [categoryChartMetric, setCategoryChartMetric] = useState<'total' | 'split'>('split');
 
-  // Exact Jobs By Client / Operator benchmark data from user operational system (Screenshot 3)
-  const clientJobsBenchmarkData = useMemo(() => [
-    { name: 'ADNOC ONSHORE', jobs: 1731, color: '#78350f' },
-    { name: 'ADNOC OFFSHORE', jobs: 1196, color: '#c2611a' },
-    { name: 'ADNOC DRILLING', jobs: 253, color: '#d97706' },
-    { name: 'ITS (NABORS)', jobs: 194, color: '#b45309' },
-    { name: 'WELLBORE INTEGRITY SOLUTIONS', jobs: 119, color: '#4d7c0f' },
-    { name: 'BAKER HUGHES', jobs: 46, color: '#0f766e' },
-    { name: 'WEATHERFORD', jobs: 46, color: '#0284c7' },
-    { name: 'CHURCHILL', jobs: 43, color: '#4338ca' },
-    { name: 'TURNWELL', jobs: 32, color: '#6d28d9' },
-    { name: 'BUNDUQ', jobs: 17, color: '#831843' },
-    { name: 'GOSS', jobs: 13, color: '#9f1239' },
-    { name: 'HALLIBURTON', jobs: 12, color: '#881337' },
-  ], []);
+  // Live aggregation of Jobs by Client / Operator (Top 12) from real jobs database
+  const clientJobsBenchmarkData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const colors = [
+      '#78350f', '#c2611a', '#d97706', '#b45309', '#4d7c0f',
+      '#0f766e', '#0284c7', '#4338ca', '#6d28d9', '#831843',
+      '#9f1239', '#881337', '#047857', '#b91c1c'
+    ];
 
-  // Exact Jobs By Service Category benchmark data from user operational system (Screenshot 3)
-  const serviceCategoryJobsBenchmarkData = useMemo(() => [
-    { name: 'DOWN HOLE RENTALS', jobs: 1193, color: '#78350f' },
-    { name: 'COMPLETION RECOVERY', jobs: 543, color: '#c2611a' },
-    { name: 'FISHING', jobs: 503, color: '#d97706' },
-    { name: 'WHIPSTOCK', jobs: 416, color: '#ca8a04' },
-    { name: 'FISHING TOOL RENTAL', jobs: 240, color: '#4d7c0f' },
-    { name: 'CLEANOUT', jobs: 187, color: '#0d9488' },
-    { name: 'HOLE SECTION FISHING TOOLS', jobs: 177, color: '#1e40af' },
-    { name: 'WELLBORE CLEANOUT', jobs: 102, color: '#3730a3' },
-    { name: 'ENGINEER RENTALS', jobs: 94, color: '#5b21b6' },
-    { name: 'SINGLE COMPLETION', jobs: 76, color: '#9d174d' },
-    { name: 'SECTION MILLING', jobs: 48, color: '#155e75' },
-    { name: 'DUAL COMPLETION', jobs: 42, color: '#854d0e' },
-    { name: 'RENTALS', jobs: 33, color: '#a16207' },
-    { name: 'COMPLETION & SLOT RECOVERY', jobs: 19, color: '#701a75' },
-    { name: 'THRU-TUBING FISHING', jobs: 18, color: '#831843' },
-  ], []);
+    if (jobs && jobs.length > 0) {
+      jobs.forEach((j) => {
+        const raw = (j.client || '').trim();
+        if (!raw) return;
+        const norm = getCanonicalOperator(raw).toUpperCase();
+        counts[norm] = (counts[norm] || 0) + 1;
+      });
+
+      const list = Object.entries(counts)
+        .map(([name, count]) => ({ name, jobs: count }))
+        .sort((a, b) => b.jobs - a.jobs)
+        .slice(0, 12);
+
+      if (list.length > 0) {
+        return list.map((item, idx) => ({
+          ...item,
+          color: colors[idx % colors.length],
+        }));
+      }
+    }
+
+    // Default benchmark fallback
+    return [
+      { name: 'ADNOC ONSHORE', jobs: 1731, color: '#78350f' },
+      { name: 'ADNOC OFFSHORE', jobs: 1196, color: '#c2611a' },
+      { name: 'ADNOC DRILLING', jobs: 253, color: '#d97706' },
+      { name: 'ITS (NABORS)', jobs: 194, color: '#b45309' },
+      { name: 'WELLBORE INTEGRITY SOLUTIONS', jobs: 119, color: '#4d7c0f' },
+      { name: 'BAKER HUGHES', jobs: 46, color: '#0f766e' },
+      { name: 'WEATHERFORD', jobs: 46, color: '#0284c7' },
+      { name: 'CHURCHILL', jobs: 43, color: '#4338ca' },
+      { name: 'TURNWELL', jobs: 32, color: '#6d28d9' },
+      { name: 'BUNDUQ', jobs: 17, color: '#831843' },
+      { name: 'GOSS', jobs: 13, color: '#9f1239' },
+      { name: 'HALLIBURTON', jobs: 12, color: '#881337' },
+    ];
+  }, [jobs]);
+
+  // Live aggregation of Jobs by Service Category (Top 15) from real jobs database
+  const serviceCategoryJobsBenchmarkData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const colors = [
+      '#78350f', '#c2611a', '#d97706', '#ca8a04', '#4d7c0f',
+      '#0d9488', '#1e40af', '#3730a3', '#5b21b6', '#9d174d',
+      '#155e75', '#854d0e', '#a16207', '#701a75', '#831843'
+    ];
+
+    if (jobs && jobs.length > 0) {
+      jobs.forEach((j) => {
+        let cat = (j.serviceType || (j as any).serviceCategory || (j as any).category || '').trim();
+        if (!cat) cat = 'DOWN HOLE RENTALS';
+        cat = cat.toUpperCase();
+        counts[cat] = (counts[cat] || 0) + 1;
+      });
+
+      const list = Object.entries(counts)
+        .map(([name, count]) => ({ name, jobs: count }))
+        .sort((a, b) => b.jobs - a.jobs)
+        .slice(0, 15);
+
+      if (list.length > 0) {
+        return list.map((item, idx) => ({
+          ...item,
+          color: colors[idx % colors.length],
+        }));
+      }
+    }
+
+    // Default benchmark fallback
+    return [
+      { name: 'DOWN HOLE RENTALS', jobs: 1193, color: '#78350f' },
+      { name: 'COMPLETION RECOVERY', jobs: 543, color: '#c2611a' },
+      { name: 'FISHING', jobs: 503, color: '#d97706' },
+      { name: 'WHIPSTOCK', jobs: 416, color: '#ca8a04' },
+      { name: 'FISHING TOOL RENTAL', jobs: 240, color: '#4d7c0f' },
+      { name: 'CLEANOUT', jobs: 187, color: '#0d9488' },
+      { name: 'HOLE SECTION FISHING TOOLS', jobs: 177, color: '#1e40af' },
+      { name: 'WELLBORE CLEANOUT', jobs: 102, color: '#3730a3' },
+      { name: 'ENGINEER RENTALS', jobs: 94, color: '#5b21b6' },
+      { name: 'SINGLE COMPLETION', jobs: 76, color: '#9d174d' },
+      { name: 'SECTION MILLING', jobs: 48, color: '#155e75' },
+      { name: 'DUAL COMPLETION', jobs: 42, color: '#854d0e' },
+      { name: 'RENTALS', jobs: 33, color: '#a16207' },
+      { name: 'COMPLETION & SLOT RECOVERY', jobs: 19, color: '#701a75' },
+      { name: 'THRU-TUBING FISHING', jobs: 18, color: '#831843' },
+    ];
+  }, [jobs]);
 
   // Currency formatting helper based on active currency mode
   const formatMoney = (valAED: number, valUSD: number, nativeCurrency?: 'AED' | 'USD') => {

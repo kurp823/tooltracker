@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { ToolItem, User } from '../types';
 import { TOOL_SIZES } from '../data/initialData';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
+import { useResizableColumns, ResizerHandle, useCustomColumns } from '../services/customColumnService';
 
 interface InventoryViewProps {
   user?: User | null;
@@ -66,6 +67,20 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [selectedOwner, setSelectedOwner] = useState('ALL');
   const [page, setPage] = useState(1);
   const pageSize = 48;
+
+  // Dynamic Custom Columns & Excel-like Resizable Grid Columns
+  const inventoryCustomCols = useCustomColumns('inventory');
+  const inventoryResizer = useResizableColumns('inventory_grid', {
+    serial: 120,
+    assetNo: 110,
+    size: 90,
+    toolType: 140,
+    description: 250,
+    owner: 110,
+    location: 110,
+    status: 120,
+    action: 110,
+  });
 
   const renderToolStatusBadge = (status: ToolItem['status']) => {
     switch (status) {
@@ -656,23 +671,61 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-50 text-[#1a3055] border-b border-slate-200 font-bold">
+              <thead className="bg-slate-50 text-[#1a3055] border-b border-slate-200 font-bold select-none">
                 <tr>
-                  <th className="px-3 py-2">Serial #</th>
-                  <th className="px-3 py-2">Asset No</th>
-                  <th className="px-3 py-2">Size</th>
-                  <th className="px-3 py-2">Tool Type</th>
-                  <th className="px-3 py-2">Description</th>
-                  <th className="px-3 py-2">Owner</th>
-                  <th className="px-3 py-2">Location</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2 text-center">Action</th>
+                  <th style={{ width: inventoryResizer.widths.serial || 120 }} className="px-3 py-2 relative">
+                    <span>Serial #</span>
+                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('serial', e)} />
+                  </th>
+                  <th style={{ width: inventoryResizer.widths.assetNo || 110 }} className="px-3 py-2 relative">
+                    <span>Asset No</span>
+                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('assetNo', e)} />
+                  </th>
+                  <th style={{ width: inventoryResizer.widths.size || 90 }} className="px-3 py-2 relative">
+                    <span>Size</span>
+                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('size', e)} />
+                  </th>
+                  <th style={{ width: inventoryResizer.widths.toolType || 140 }} className="px-3 py-2 relative">
+                    <span>Tool Type</span>
+                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('toolType', e)} />
+                  </th>
+                  <th style={{ width: inventoryResizer.widths.description || 250 }} className="px-3 py-2 relative">
+                    <span>Description</span>
+                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('description', e)} />
+                  </th>
+                  <th style={{ width: inventoryResizer.widths.owner || 110 }} className="px-3 py-2 relative">
+                    <span>Owner</span>
+                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('owner', e)} />
+                  </th>
+                  <th style={{ width: inventoryResizer.widths.location || 110 }} className="px-3 py-2 relative">
+                    <span>Location</span>
+                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('location', e)} />
+                  </th>
+                  <th style={{ width: inventoryResizer.widths.status || 120 }} className="px-3 py-2 relative">
+                    <span>Status</span>
+                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('status', e)} />
+                  </th>
+                  {inventoryCustomCols.map((c) => (
+                    <th
+                      key={c.key}
+                      style={{ width: inventoryResizer.widths[c.key] || c.width || 120 }}
+                      className="px-3 py-2 relative bg-indigo-50/50 text-indigo-950 font-bold border-l border-indigo-200 whitespace-nowrap"
+                      title={`Custom Column: ${c.label}`}
+                    >
+                      <span>{c.label}</span>
+                      <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize(c.key, e)} />
+                    </th>
+                  ))}
+                  <th style={{ width: inventoryResizer.widths.action || 110 }} className="px-3 py-2 text-center relative">
+                    <span>Action</span>
+                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('action', e)} />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {pagedList.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-slate-500 font-medium">
+                    <td colSpan={9 + inventoryCustomCols.length} className="p-8 text-center text-slate-500 font-medium">
                       No tool assets found matching the selected criteria.
                     </td>
                   </tr>
@@ -693,6 +746,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       <td className="px-3 py-2">
                         {renderToolStatusBadge(t.status)}
                       </td>
+                      {inventoryCustomCols.map((c) => {
+                        const val = (t as any)[c.key] ?? (t as any).customFields?.[c.key];
+                        return (
+                          <td key={c.key} className="px-3 py-2 text-slate-700 text-xs font-mono border-l border-slate-100 whitespace-nowrap">
+                            {val !== undefined && val !== null && String(val).trim() !== ''
+                              ? String(val)
+                              : <span className="text-slate-300 font-sans">—</span>}
+                          </td>
+                        );
+                      })}
                       <td className="px-3 py-2 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
                           {onOpenToolHistory && (

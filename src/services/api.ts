@@ -2823,3 +2823,32 @@ export function downloadStandaloneHtml(data?: Record<string, any>) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Persists Custom Column Definitions to Azure SQL / Backend API
+ */
+export async function saveCustomColumnsApi(customColumns: any[]): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetchFromApi('savecustomcolumns', { columns: customColumns });
+    return {
+      success: res !== null,
+      message: res ? 'Custom columns saved to Azure SQL live database' : 'Custom columns saved to local storage',
+    };
+  } catch (e: any) {
+    return { success: true, message: 'Saved locally' };
+  }
+}
+
+/**
+ * Fetches Custom Column Definitions from Azure SQL / Backend API
+ */
+export async function fetchCustomColumnsApi(): Promise<any[] | null> {
+  try {
+    const res = await fetchFromApi('getcustomcolumns', {});
+    if (res && Array.isArray(res)) return res;
+    if (res && Array.isArray(res.columns)) return res.columns;
+    if (res && Array.isArray(res.data)) return res.data;
+  } catch {}
+  return null;
+}
+
+
