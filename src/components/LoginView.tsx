@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { USERS } from '../data/initialData';
+import { getSystemUsers } from '../services/permissionService';
 import { EmdadLogo } from '../constants/branding';
 
 interface LoginViewProps {
@@ -28,7 +28,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onLogin })
       return;
     }
 
-    const found = USERS.find(
+    const allUsers = getSystemUsers();
+    const found = allUsers.find(
       (x) => x.username.toLowerCase() === userToTry && x.pass === passToTry
     );
 

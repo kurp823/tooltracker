@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavModule, User } from '../types';
-import { MODULE_PERMISSIONS } from '../data/initialData';
-import { getRolePermissions } from '../services/permissionService';
+import { canViewModule } from '../services/permissionService';
 
 interface SidebarProps {
   activeView?: NavModule;
@@ -36,17 +35,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const current = activeView || currentModule || 'dashboard';
   const handleNav = onNavigate || onSelectModule || (() => {});
 
-  // Dynamic Role Permissions Matrix loaded from localStorage with default fallback
-  const [rolePermissions, setRolePermissions] = useState<Record<string, NavModule[]>>(() => getRolePermissions());
+  // Dynamic Permissions revision loaded from localStorage with default fallback
+  const [, setPermRevision] = useState(0);
 
   useEffect(() => {
     const handlePermissionsChange = () => {
-      setRolePermissions(getRolePermissions());
+      setPermRevision((r) => r + 1);
     };
     window.addEventListener('permissions_updated', handlePermissionsChange);
+    window.addEventListener('users_updated', handlePermissionsChange);
     window.addEventListener('storage', handlePermissionsChange);
     return () => {
       window.removeEventListener('permissions_updated', handlePermissionsChange);
+      window.removeEventListener('users_updated', handlePermissionsChange);
       window.removeEventListener('storage', handlePermissionsChange);
     };
   }, []);
@@ -54,9 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isAllowed = (id: NavModule) => {
     if (id === 'settings' && user?.role !== 'Admin') return false;
     if (user?.role === 'Admin') return true;
-    const currentRole = user?.role || 'Viewer';
-    const allowed = rolePermissions[currentRole] || MODULE_PERMISSIONS[currentRole as any] || [];
-    return allowed.includes(id);
+    return canViewModule(user, id);
   };
 
   interface NavItem {

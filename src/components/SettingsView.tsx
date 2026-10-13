@@ -2,6 +2,16 @@ import React, { useState } from 'react';
 import { User, UserRole, NavModule } from '../types';
 import { MODULE_PERMISSIONS, WRITE_PERMISSIONS } from '../data/initialData';
 import { downloadStandaloneHtml, testAzureConnection, DbConnectionStatus } from '../services/api';
+import {
+  getSystemUsers,
+  saveSystemUsers,
+  getUserPermissions,
+  saveUserPermissions,
+  getRolePermissions,
+  getWritePermissions,
+  UserPermissionsMap,
+  UserPermissionOverride,
+} from '../services/permissionService';
 
 interface SettingsViewProps {
   user?: User | null;
@@ -54,21 +64,6 @@ const ALL_MODULES: { id: NavModule; label: string; group: string; icon: string; 
   { id: 'settings', label: 'System & Azure SQL Settings', group: 'System & Admin', icon: '⚙️', desc: 'Azure SQL parameters, API keys & RBAC matrix (Admin only)', canHaveWriteAccess: true },
 ];
 
-const FUNCTION_PERMISSIONS: { id: NavModule; label: string; desc: string }[] = [
-  { id: 'jobs', label: 'Jobs & Job File Management', desc: 'Create, modify drilling jobs, checklists, assign tools & re-open' },
-  { id: 'dt', label: 'Delivery Tickets Dispatch', desc: 'Create, sign, issue and ship delivery tickets to rigs' },
-  { id: 'rt', label: 'Receiving Tickets & Backloads', desc: 'Process backloads, inspect conditions (USED, NOT USED, LIH)' },
-  { id: 'callouts', label: 'Callouts Authorization', desc: 'Create, modify and approve rig callouts' },
-  { id: 'gatepass', label: 'Security Gate Pass Issuance', desc: 'Issue 3rd-party tool return & maintenance gate passes' },
-  { id: 'inventory', label: 'Asset Fleet Catalog', desc: 'Add new tools, update serials, change ownership & scrap tools' },
-  { id: 'categories-sizes', label: 'Tool Categories & Sizes Master', desc: 'Add, rename, and delete standardized categories & sizes' },
-  { id: 'inspection', label: 'QC Inspection Certification', desc: 'Perform MPI/visual inspections and sign off inspection reports' },
-  { id: 'maintenance', label: 'Maintenance Work Orders', desc: 'Create work orders, perform redressing, and close maintenance' },
-  { id: 'utilization', label: 'Fleet & Engineer Utilization', desc: 'Log daily standby/operational charges and engineer rates' },
-  { id: 'contracts', label: 'Contract Price Schedules', desc: 'Update ADNOC contract terms, rental rates and BHA items' },
-  { id: 'settings', label: 'System Configuration & SQL', desc: 'Modify Azure SQL parameters, API keys and reset operational data' },
-];
-
 export const SettingsView: React.FC<SettingsViewProps> = ({
   user,
   onUpdateUserRole,
@@ -96,27 +91,193 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [testResult, setTestResult] = useState<string | null>(null);
   const [importJsonText, setImportJsonText] = useState('');
 
-  // Role-Based Access Control (RBAC) Matrix State
+  // Access Control View Mode: 'users' (User-Specific Matrix) or 'roles' (Role Template Defaults)
+  const [matrixMode, setMatrixMode] = useState<'users' | 'roles'>('users');
+
+  // Registered Users State
+  const [users, setUsers] = useState<User[]>(() => getSystemUsers());
+  const [selectedUserId, setSelectedUserId] = useState<number>(() => {
+    const all = getSystemUsers();
+    // Default to first non-admin user (e.g. Azim in Operations/Handler) so admin immediately sees user granting
+    const nonAdmin = all.find((u) => u.role !== 'Admin');
+    return nonAdmin ? nonAdmin.id : (all[0]?.id || 1);
+  });
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState<string>('All');
+
+  // New User Creation Modal State
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserUsername, setNewUserUsername] = useState('');
+  const [newUserRole, setNewUserRole] = useState<UserRole>('Handler');
+  const [newUserPassword, setNewUserPassword] = useState('');
+
+  // Per-User Permissions Overrides Map
+  const [userPermissions, setUserPermissions] = useState<UserPermissionsMap>(() => getUserPermissions());
+
+  // Role Default Templates
   const [selectedRoleForMatrix, setSelectedRoleForMatrix] = useState<UserRole>('Operations');
+  const [rolePermissions, setRolePermissions] = useState<Record<UserRole, NavModule[]>>(() => getRolePermissions());
+  const [writePermissions, setWritePermissions] = useState<Record<UserRole, NavModule[]>>(() => getWritePermissions());
 
-  const [rolePermissions, setRolePermissions] = useState<Record<UserRole, NavModule[]>>(() => {
-    try {
-      const saved = localStorage.getItem('emdad_role_permissions');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return { ...MODULE_PERMISSIONS };
-  });
+  // Currently selected user object
+  const selectedUser = users.find((u) => u.id === selectedUserId) || users[0];
+  const selectedUserKey = selectedUser ? (selectedUser.username || '').toLowerCase() : '';
 
-  const [writePermissions, setWritePermissions] = useState<Record<UserRole, NavModule[]>>(() => {
-    try {
-      const saved = localStorage.getItem('emdad_write_permissions');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return { ...WRITE_PERMISSIONS };
-  });
+  // Determine if selected user has custom overrides
+  const userOverride = selectedUser ? (userPermissions[selectedUserKey] || userPermissions[String(selectedUser.id)]) : undefined;
+  const hasCustomOverride = Boolean(
+    userOverride && (Array.isArray(userOverride.visible) || Array.isArray(userOverride.editable))
+  );
 
-  const handleToggleScreen = (role: UserRole, modId: NavModule) => {
-    if (role === 'Admin') return; // Admin has full access
+  // Effective visible and editable permissions for the currently selected user
+  const effectiveUserVisible: NavModule[] = selectedUser?.role === 'Admin'
+    ? ALL_MODULES.map((m) => m.id)
+    : (hasCustomOverride && userOverride
+        ? userOverride.visible || []
+        : (rolePermissions[selectedUser?.role || 'Viewer'] || MODULE_PERMISSIONS[selectedUser?.role || 'Viewer'] || []));
+
+  const effectiveUserEditable: NavModule[] = selectedUser?.role === 'Admin'
+    ? ALL_MODULES.filter((m) => m.canHaveWriteAccess).map((m) => m.id)
+    : (hasCustomOverride && userOverride
+        ? userOverride.editable || []
+        : (writePermissions[selectedUser?.role || 'Viewer'] || WRITE_PERMISSIONS[selectedUser?.role || 'Viewer'] || []));
+
+  // Update permissions for currently selected user
+  const applyUserPermissionsChange = (newVisible: NavModule[], newEditable: NavModule[]) => {
+    if (!selectedUser || selectedUser.role === 'Admin') return;
+    const updatedMap: UserPermissionsMap = {
+      ...userPermissions,
+      [selectedUserKey]: {
+        visible: newVisible,
+        editable: newEditable,
+      },
+    };
+    setUserPermissions(updatedMap);
+    saveUserPermissions(updatedMap);
+  };
+
+  const handleToggleUserScreen = (modId: NavModule) => {
+    if (!selectedUser || selectedUser.role === 'Admin') return;
+    const currentVis = [...effectiveUserVisible];
+    let nextVis: NavModule[];
+    let nextEdit = [...effectiveUserEditable];
+
+    if (currentVis.includes(modId)) {
+      nextVis = currentVis.filter((m) => m !== modId);
+      nextEdit = nextEdit.filter((m) => m !== modId); // If screen is hidden, remove edit
+    } else {
+      nextVis = [...currentVis, modId];
+    }
+    applyUserPermissionsChange(nextVis, nextEdit);
+  };
+
+  const handleToggleUserFunction = (funcId: NavModule) => {
+    if (!selectedUser || selectedUser.role === 'Admin') return;
+    let nextVis = [...effectiveUserVisible];
+    let nextEdit: NavModule[];
+    const currentEdit = [...effectiveUserEditable];
+
+    if (currentEdit.includes(funcId)) {
+      nextEdit = currentEdit.filter((m) => m !== funcId);
+    } else {
+      nextEdit = [...currentEdit, funcId];
+      if (!nextVis.includes(funcId)) {
+        nextVis.push(funcId); // If granting edit, automatically ensure screen is visible
+      }
+    }
+    applyUserPermissionsChange(nextVis, nextEdit);
+  };
+
+  const handleUserSelectAllVisible = () => {
+    if (!selectedUser || selectedUser.role === 'Admin') return;
+    const allModIds = ALL_MODULES.map((m) => m.id);
+    applyUserPermissionsChange(allModIds, [...effectiveUserEditable]);
+    showToast(`All screens marked visible for ${selectedUser.name}.`, 'info');
+  };
+
+  const handleUserHideAllScreens = () => {
+    if (!selectedUser || selectedUser.role === 'Admin') return;
+    applyUserPermissionsChange([], []);
+    showToast(`All screens hidden for ${selectedUser.name}.`, 'info');
+  };
+
+  const handleUserGrantAllEdit = () => {
+    if (!selectedUser || selectedUser.role === 'Admin') return;
+    const allModIds = ALL_MODULES.map((m) => m.id);
+    const allEditable = ALL_MODULES.filter((m) => m.canHaveWriteAccess && m.id !== 'settings').map((m) => m.id);
+    applyUserPermissionsChange(allModIds, allEditable);
+    showToast(`All functional edit rights granted to ${selectedUser.name}.`, 'success');
+  };
+
+  const handleUserSetAllViewOnly = () => {
+    if (!selectedUser || selectedUser.role === 'Admin') return;
+    applyUserPermissionsChange([...effectiveUserVisible], []);
+    showToast(`Edit rights cleared. ${selectedUser.name} is now view-only for visible screens.`, 'info');
+  };
+
+  const handleUserResetToRoleDefaults = () => {
+    if (!selectedUser) return;
+    if (!window.confirm(`Reset ${selectedUser.name}'s permissions to inherit default permissions for role '${selectedUser.role}'?`)) return;
+    const updatedMap = { ...userPermissions };
+    delete updatedMap[selectedUserKey];
+    delete updatedMap[String(selectedUser.id)];
+    setUserPermissions(updatedMap);
+    saveUserPermissions(updatedMap);
+    showToast(`Reset ${selectedUser.name}'s access to inherit ${selectedUser.role} role defaults.`, 'info');
+  };
+
+  const handleSaveSelectedUser = () => {
+    if (!selectedUser) return;
+    // Persist current effective state
+    applyUserPermissionsChange([...effectiveUserVisible], [...effectiveUserEditable]);
+    showToast(`Permissions successfully saved and applied for ${selectedUser.name} (${selectedUser.role})!`, 'success');
+  };
+
+  const handleChangeSelectedUserRole = (newRole: UserRole) => {
+    if (!selectedUser) return;
+    const updatedUsers = users.map((u) => (u.id === selectedUser.id ? { ...u, role: newRole } : u));
+    setUsers(updatedUsers);
+    saveSystemUsers(updatedUsers);
+    if (user && user.id === selectedUser.id) {
+      onUpdateUserRole(newRole);
+    }
+    showToast(`Updated ${selectedUser.name}'s base role to ${newRole}.`, 'success');
+  };
+
+  const handleAddNewUserSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserName.trim() || !newUserUsername.trim()) {
+      showToast('User name and username are required.', 'error');
+      return;
+    }
+    const cleanUsername = newUserUsername.trim().toLowerCase();
+    if (users.some((u) => u.username.toLowerCase() === cleanUsername)) {
+      showToast(`Username '@${cleanUsername}' already exists. Please choose a different handle.`, 'error');
+      return;
+    }
+    const nextId = Math.max(...users.map((u) => u.id), 0) + 1;
+    const createdUser: User = {
+      id: nextId,
+      name: newUserName.trim(),
+      username: cleanUsername,
+      role: newUserRole,
+      pass: newUserPassword.trim() || `${cleanUsername}@2026`,
+    };
+    const updatedUsers = [...users, createdUser];
+    setUsers(updatedUsers);
+    saveSystemUsers(updatedUsers);
+    setSelectedUserId(nextId);
+    setShowAddUserModal(false);
+    setNewUserName('');
+    setNewUserUsername('');
+    setNewUserPassword('');
+    showToast(`User '${createdUser.name}' added with role '${createdUser.role}'!`, 'success');
+  };
+
+  // Role Default Templates Handlers
+  const handleToggleRoleScreen = (role: UserRole, modId: NavModule) => {
+    if (role === 'Admin') return;
     const currentList = rolePermissions[role] || [];
     const updated = currentList.includes(modId)
       ? currentList.filter((m) => m !== modId)
@@ -124,8 +285,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setRolePermissions({ ...rolePermissions, [role]: updated });
   };
 
-  const handleToggleFunction = (role: UserRole, funcId: NavModule) => {
-    if (role === 'Admin') return; // Admin has full access
+  const handleToggleRoleFunction = (role: UserRole, funcId: NavModule) => {
+    if (role === 'Admin') return;
     const currentList = writePermissions[role] || [];
     const updated = currentList.includes(funcId)
       ? currentList.filter((m) => m !== funcId)
@@ -133,43 +294,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setWritePermissions({ ...writePermissions, [role]: updated });
   };
 
-  const handleSelectAllVisible = (role: UserRole) => {
-    if (role === 'Admin') return;
-    const allModIds = ALL_MODULES.map((m) => m.id);
-    setRolePermissions({ ...rolePermissions, [role]: allModIds });
-  };
-
-  const handleHideAllScreens = (role: UserRole) => {
-    if (role === 'Admin') return;
-    setRolePermissions({ ...rolePermissions, [role]: [] });
-  };
-
-  const handleGrantAllEdit = (role: UserRole) => {
-    if (role === 'Admin') return;
-    const allModIds = ALL_MODULES.filter((m) => m.canHaveWriteAccess && m.id !== 'settings').map((m) => m.id);
-    setWritePermissions({ ...writePermissions, [role]: allModIds });
-  };
-
-  const handleSetAllViewOnly = (role: UserRole) => {
-    if (role === 'Admin') return;
-    setWritePermissions({ ...writePermissions, [role]: [] });
-  };
-
-  const handleSavePermissions = () => {
+  const handleSaveRoleTemplates = () => {
     localStorage.setItem('emdad_role_permissions', JSON.stringify(rolePermissions));
     localStorage.setItem('emdad_write_permissions', JSON.stringify(writePermissions));
     window.dispatchEvent(new Event('permissions_updated'));
-    showToast('Role permissions matrix saved successfully!', 'success');
+    showToast('Role default permissions templates saved successfully!', 'success');
   };
 
-  const handleResetPermissions = () => {
-    if (!window.confirm('Reset all role permissions to factory defaults?')) return;
+  const handleResetAllRoleTemplates = () => {
+    if (!window.confirm('Reset all role template defaults to factory definitions?')) return;
     localStorage.removeItem('emdad_role_permissions');
     localStorage.removeItem('emdad_write_permissions');
     setRolePermissions({ ...MODULE_PERMISSIONS });
     setWritePermissions({ ...WRITE_PERMISSIONS });
     window.dispatchEvent(new Event('permissions_updated'));
-    showToast('Role permissions reset to factory defaults.', 'info');
+    showToast('Role permissions templates reset to factory defaults.', 'info');
   };
 
   // Strict Admin RBAC Protection
@@ -475,228 +614,774 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* Role-Based Access Control (RBAC) & Screen / Function Permissions Matrix */}
+      {/* User-Based Access Control (RBAC) & Screen / Function Permissions Matrix */}
       <div className="bg-white border border-[#b8c9db] rounded p-4 shadow-sm space-y-4">
-        <div className="border-b pb-2 flex flex-wrap items-center justify-between gap-2">
+        {/* Header with Mode Switch */}
+        <div className="border-b pb-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-bold text-[#1a3055] flex items-center gap-1.5">
-              <span>🛡️</span>
-              <span>Role-Based Access Control (RBAC) &amp; Permissions Matrix</span>
-            </h3>
-            <div className="text-[11px] text-slate-500">
-              Configure which screens (view access) and operational functions (create/edit/delete access) are granted to each user role.
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🛡️</span>
+              <h3 className="text-sm font-bold text-[#1a3055]">User-Based Access Control &amp; Permissions Matrix</h3>
+            </div>
+            <div className="text-[11px] text-slate-500 mt-0.5">
+              Grant and configure screen visibility (View) and operational functions (Edit &amp; Save) per individual user.
+              Operations team members can be granted tailored access to other categories like Inventory, Invoicing, QC, or Contracts.
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleResetPermissions}
-              className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 border border-slate-300 font-bold text-slate-700 text-xs cursor-pointer transition"
-            >
-              🔄 Reset to Defaults
-            </button>
-            <button
-              type="button"
-              onClick={handleSavePermissions}
-              className="px-3.5 py-1 rounded bg-[#107c41] hover:bg-[#0c6233] text-white font-bold text-xs cursor-pointer transition shadow-xs flex items-center gap-1"
-            >
-              <span>💾</span>
-              <span>Save Permissions Matrix</span>
-            </button>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Mode Switcher */}
+            <div className="bg-slate-100 p-0.5 rounded border border-slate-300 flex items-center text-xs">
+              <button
+                type="button"
+                onClick={() => setMatrixMode('users')}
+                className={`px-3 py-1 rounded font-bold cursor-pointer transition flex items-center gap-1.5 ${
+                  matrixMode === 'users'
+                    ? 'bg-[#1a3055] text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>👤</span>
+                <span>Grant by User (Name &amp; Role)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMatrixMode('roles')}
+                className={`px-3 py-1 rounded font-bold cursor-pointer transition flex items-center gap-1.5 ${
+                  matrixMode === 'roles'
+                    ? 'bg-[#1a3055] text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>🛡️</span>
+                <span>Role Default Templates</span>
+              </button>
+            </div>
+
+            {matrixMode === 'users' ? (
+              <button
+                type="button"
+                onClick={handleSaveSelectedUser}
+                className="px-3 py-1 rounded bg-[#107c41] hover:bg-[#0c6233] text-white font-bold text-xs cursor-pointer transition shadow-xs flex items-center gap-1"
+              >
+                <span>💾</span>
+                <span>Save Permissions</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSaveRoleTemplates}
+                className="px-3 py-1 rounded bg-[#107c41] hover:bg-[#0c6233] text-white font-bold text-xs cursor-pointer transition shadow-xs flex items-center gap-1"
+              >
+                <span>💾</span>
+                <span>Save Role Templates</span>
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Role Selector Tabs */}
-        <div>
-          <label className="block text-[11px] font-bold text-slate-600 mb-1">Select Role to Configure:</label>
-          <div className="flex flex-wrap gap-1.5">
-            {ALL_ROLES.map((r) => {
-              const isSelected = selectedRoleForMatrix === r;
-              return (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setSelectedRoleForMatrix(r)}
-                  className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                    isSelected
-                      ? 'bg-[#1a3055] text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'
-                  }`}
-                >
-                  <span>{r === 'Admin' ? '👑' : r === 'Operations' ? '⚙️' : r === 'QC' || r === 'Inspector' ? '🔬' : r === 'Accounts' ? '💳' : '👤'}</span>
-                  <span>{r}</span>
-                  {r === 'Admin' && <span className="text-[10px] bg-amber-400 text-slate-900 px-1 rounded font-mono">Full</span>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        {/* ================= USER-SPECIFIC MATRIX MODE ================= */}
+        {matrixMode === 'users' && (
+          <div className="space-y-4">
+            {/* User Search & Role Filter Header */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-md border border-slate-200">
+              <div className="flex-1 flex flex-wrap items-center gap-2">
+                {/* Search Bar */}
+                <div className="relative min-w-[220px] flex-1 max-w-xs">
+                  <span className="absolute inset-y-0 left-2.5 flex items-center text-slate-400 text-xs pointer-events-none">🔍</span>
+                  <input
+                    type="text"
+                    value={userSearchTerm}
+                    onChange={(e) => setUserSearchTerm(e.target.value)}
+                    placeholder="Search by user name or role..."
+                    className="w-full bg-white border border-slate-300 rounded pl-7 pr-2.5 py-1 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  {userSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setUserSearchTerm('')}
+                      className="absolute inset-y-0 right-2 flex items-center text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
 
-        {/* Permission Controls for Selected Role */}
-        <div className="bg-slate-50/70 border border-slate-200 rounded p-3 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
+                {/* Filter Pills */}
+                <div className="flex flex-wrap items-center gap-1 text-[11px]">
+                  {[
+                    { key: 'All', label: `All (${users.length})` },
+                    { key: 'Operations', label: `Operations & Handlers (${users.filter((u) => u.role === 'Operations' || u.role === 'Handler').length})` },
+                    { key: 'QC', label: `QC & Inspection (${users.filter((u) => u.role === 'QC' || u.role === 'Inspector').length})` },
+                    { key: 'Accounts', label: `Accounts (${users.filter((u) => u.role === 'Accounts').length})` },
+                    { key: 'Admin', label: `Admin (${users.filter((u) => u.role === 'Admin').length})` },
+                  ].map((filter) => (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      onClick={() => setUserRoleFilter(filter.key)}
+                      className={`px-2 py-0.5 rounded cursor-pointer font-semibold transition ${
+                        userRoleFilter === filter.key
+                          ? 'bg-[#1a3055] text-white shadow-2xs'
+                          : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-300'
+                      }`}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Add User Button */}
+              <button
+                type="button"
+                onClick={() => setShowAddUserModal(true)}
+                className="px-2.5 py-1 rounded bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs cursor-pointer transition shadow-2xs flex items-center justify-center gap-1 shrink-0"
+              >
+                <span>➕</span>
+                <span>Add User</span>
+              </button>
+            </div>
+
+            {/* Add User Modal */}
+            {showAddUserModal && (
+              <div className="bg-blue-50/60 border border-blue-200 rounded-lg p-3 space-y-3">
+                <div className="flex items-center justify-between border-b border-blue-200 pb-1.5">
+                  <div className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                    <span>➕</span>
+                    <span>Register New Team Member</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddUserModal(false)}
+                    className="text-xs text-slate-500 hover:text-slate-800 font-bold cursor-pointer"
+                  >
+                    ✕ Cancel
+                  </button>
+                </div>
+                <form onSubmit={handleAddNewUserSubmit} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Prasoonan Nair"
+                      value={newUserName}
+                      onChange={(e) => setNewUserName(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded px-2.5 py-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Username Handle *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. prasoonan"
+                      value={newUserUsername}
+                      onChange={(e) => setNewUserUsername(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded px-2.5 py-1 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Base Role *</label>
+                    <select
+                      value={newUserRole}
+                      onChange={(e) => setNewUserRole(e.target.value as UserRole)}
+                      className="w-full bg-white border border-slate-300 rounded px-2 py-1 font-semibold"
+                    >
+                      {ALL_ROLES.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Password</label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        placeholder="Default: username@2026"
+                        value={newUserPassword}
+                        onChange={(e) => setNewUserPassword(e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded px-2.5 py-1 font-mono"
+                      />
+                      <button
+                        type="submit"
+                        className="px-3 py-1 rounded bg-[#107c41] hover:bg-[#0c6233] text-white font-bold cursor-pointer shrink-0"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* User Cards Grid Selector */}
             <div>
-              <span className="text-xs font-bold text-slate-900">
-                Editing Permissions for: <strong className="text-blue-900">{selectedRoleForMatrix}</strong>
-              </span>
-              {selectedRoleForMatrix === 'Admin' ? (
-                <span className="text-xs text-amber-900 ml-2 font-semibold">
-                  (Superuser clearance &mdash; Admin has unconditional read &amp; write access to all modules)
+              <div className="text-[11px] font-bold text-slate-600 mb-1.5 flex items-center justify-between">
+                <span>Select User to Configure Screen &amp; Edit Permissions:</span>
+                <span className="font-normal text-slate-500">
+                  Showing {users.filter((u) => {
+                    const match = u.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                      u.username.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                      u.role.toLowerCase().includes(userSearchTerm.toLowerCase());
+                    if (!match) return false;
+                    if (userRoleFilter === 'All') return true;
+                    if (userRoleFilter === 'Operations') return u.role === 'Operations' || u.role === 'Handler';
+                    if (userRoleFilter === 'QC') return u.role === 'QC' || u.role === 'Inspector';
+                    if (userRoleFilter === 'Accounts') return u.role === 'Accounts';
+                    if (userRoleFilter === 'Admin') return u.role === 'Admin';
+                    return u.role === userRoleFilter;
+                  }).length} users
                 </span>
-              ) : (
-                <span className="text-xs text-slate-500 ml-2 font-mono">
-                  ({(rolePermissions[selectedRoleForMatrix] || []).length} screens, {(writePermissions[selectedRoleForMatrix] || []).length} functions active)
-                </span>
-              )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 max-h-56 overflow-y-auto p-1 border border-slate-200 rounded-lg bg-slate-50/50">
+                {users
+                  .filter((u) => {
+                    const match =
+                      u.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                      u.username.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                      u.role.toLowerCase().includes(userSearchTerm.toLowerCase());
+                    if (!match) return false;
+                    if (userRoleFilter === 'All') return true;
+                    if (userRoleFilter === 'Operations') return u.role === 'Operations' || u.role === 'Handler';
+                    if (userRoleFilter === 'QC') return u.role === 'QC' || u.role === 'Inspector';
+                    if (userRoleFilter === 'Accounts') return u.role === 'Accounts';
+                    if (userRoleFilter === 'Admin') return u.role === 'Admin';
+                    return u.role === userRoleFilter;
+                  })
+                  .map((u) => {
+                    const isSelected = selectedUser?.id === u.id;
+                    const uKey = (u.username || '').toLowerCase();
+                    const uOverride = userPermissions[uKey] || userPermissions[String(u.id)];
+                    const isCustom = Boolean(uOverride && (Array.isArray(uOverride.visible) || Array.isArray(uOverride.editable)));
+
+                    const roleBadgeColor =
+                      u.role === 'Admin'
+                        ? 'bg-purple-100 text-purple-800 border-purple-300'
+                        : u.role === 'Operations' || u.role === 'Handler'
+                        ? 'bg-blue-100 text-blue-800 border-blue-300'
+                        : u.role === 'QC' || u.role === 'Inspector'
+                        ? 'bg-amber-100 text-amber-800 border-amber-300'
+                        : u.role === 'Accounts'
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        : 'bg-slate-100 text-slate-700 border-slate-300';
+
+                    const avatarColor =
+                      u.role === 'Admin'
+                        ? 'bg-purple-600 text-white'
+                        : u.role === 'Operations' || u.role === 'Handler'
+                        ? 'bg-[#1a3055] text-white'
+                        : u.role === 'QC' || u.role === 'Inspector'
+                        ? 'bg-amber-600 text-white'
+                        : u.role === 'Accounts'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-slate-500 text-white';
+
+                    const initials = u.name
+                      .split(' ')
+                      .map((p) => p[0])
+                      .join('')
+                      .slice(0, 2)
+                      .toUpperCase();
+
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => setSelectedUserId(u.id)}
+                        className={`text-left p-2 rounded-lg border transition cursor-pointer relative flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-blue-50/90 border-blue-500 ring-2 ring-blue-400/40 shadow-xs'
+                            : 'bg-white hover:bg-slate-100/80 border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0 ${avatarColor}`}>
+                            {initials}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-xs text-slate-900 truncate" title={u.name}>
+                              {u.name}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono truncate">
+                              @{u.username}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-100">
+                          <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${roleBadgeColor}`}>
+                            {u.role}
+                          </span>
+                          {u.role === 'Admin' ? (
+                            <span className="text-[9px] font-mono text-purple-700 font-bold">Full Access</span>
+                          ) : isCustom ? (
+                            <span className="text-[9px] font-mono font-bold text-emerald-700 bg-emerald-50 px-1 rounded border border-emerald-200" title="Custom per-user access active">
+                              ⚡ Custom
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-mono text-slate-400" title="Inheriting base role defaults">
+                              🛡️ Defaults
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+              </div>
             </div>
 
-            {selectedRoleForMatrix !== 'Admin' && (
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => handleSelectAllVisible(selectedRoleForMatrix)}
-                  className="px-2 py-0.5 rounded bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold text-[11px] cursor-pointer"
-                >
-                  👁️ Show All Screens
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleHideAllScreens(selectedRoleForMatrix)}
-                  className="px-2 py-0.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[11px] cursor-pointer"
-                >
-                  🚫 Hide All Screens
-                </button>
-                <span className="text-slate-300">|</span>
-                <button
-                  type="button"
-                  onClick={() => handleGrantAllEdit(selectedRoleForMatrix)}
-                  className="px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[11px] cursor-pointer"
-                >
-                  ✏️ Grant All Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSetAllViewOnly(selectedRoleForMatrix)}
-                  className="px-2 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px] cursor-pointer"
-                >
-                  🔒 Set All View-Only
-                </button>
+            {/* Selected User Access Configuration Card */}
+            {selectedUser && (
+              <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-3.5 space-y-4">
+                {/* User Summary & Quick Action Bar */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#1a3055] text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+                      {selectedUser.name
+                        .split(' ')
+                        .map((p) => p[0])
+                        .join('')
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold text-slate-900">{selectedUser.name}</span>
+                        <span className="text-xs text-slate-400 font-mono">@{selectedUser.username}</span>
+
+                        {/* Base Role Selector Dropdown */}
+                        <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-slate-300 text-xs">
+                          <span className="text-slate-500 font-medium text-[11px]">Base Role:</span>
+                          <select
+                            value={selectedUser.role}
+                            onChange={(e) => handleChangeSelectedUserRole(e.target.value as UserRole)}
+                            className="font-bold text-blue-900 bg-transparent border-0 cursor-pointer text-xs focus:ring-0 p-0"
+                          >
+                            {ALL_ROLES.map((r) => (
+                              <option key={r} value={r}>{r}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Status Badge */}
+                        {selectedUser.role === 'Admin' ? (
+                          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-purple-100 text-purple-900 border border-purple-300">
+                            👑 Superuser (Admin) &mdash; Unconditional Full Access
+                          </span>
+                        ) : hasCustomOverride ? (
+                          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1">
+                            <span>⚡</span>
+                            <span>Custom Access Overrides Active ({effectiveUserVisible.length} screens, {effectiveUserEditable.length} can edit)</span>
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-200 text-slate-700 border border-slate-300 flex items-center gap-1">
+                            <span>🛡️</span>
+                            <span>Inheriting Standard {selectedUser.role} Role Defaults ({effectiveUserVisible.length} screens)</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-[11px] text-slate-500 mt-1">
+                        {selectedUser.role === 'Admin'
+                          ? 'Admins automatically have clearance to view and edit all operational modules.'
+                          : hasCustomOverride
+                          ? 'User-specific permissions are overriding base role defaults. You can grant extra cross-category access to this user without affecting others.'
+                          : `Currently using standard defaults for role '${selectedUser.role}'. Toggle any checkbox below to grant extra screens or edit clearance to this user.`}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bulk Actions for Selected User */}
+                  {selectedUser.role !== 'Admin' && (
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleUserSelectAllVisible}
+                        className="px-2.5 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold text-[11px] cursor-pointer transition"
+                        title="Grant visibility to all screens"
+                      >
+                        👁️ Show All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleUserHideAllScreens}
+                        className="px-2.5 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[11px] cursor-pointer transition"
+                        title="Hide all screens for this user"
+                      >
+                        🚫 Hide All
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        onClick={handleUserGrantAllEdit}
+                        className="px-2.5 py-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[11px] cursor-pointer transition"
+                        title="Grant edit & save access to all functional modules"
+                      >
+                        ✏️ Grant All Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleUserSetAllViewOnly}
+                        className="px-2.5 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px] cursor-pointer transition"
+                        title="Remove edit access while keeping visible screens read-only"
+                      >
+                        🔒 Set All View-Only
+                      </button>
+                      {hasCustomOverride && (
+                        <>
+                          <span className="text-slate-300">|</span>
+                          <button
+                            type="button"
+                            onClick={handleUserResetToRoleDefaults}
+                            className="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-[11px] cursor-pointer transition"
+                            title="Remove custom overrides and restore role default permissions"
+                          >
+                            ↺ Reset to Role Defaults
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Module Cards Grid for Selected User */}
+                <div className="space-y-3">
+                  {['Operations', 'Inventory', 'Maintenance & QC', 'Finance & Invoicing', 'Contracts', 'System & Admin'].map((grp) => {
+                    const groupModules = ALL_MODULES.filter((m) => m.group === grp);
+                    if (groupModules.length === 0) return null;
+
+                    const activeInGrp = groupModules.filter((m) => effectiveUserVisible.includes(m.id)).length;
+                    const editInGrp = groupModules.filter((m) => effectiveUserEditable.includes(m.id)).length;
+
+                    return (
+                      <div key={grp} className="bg-white border border-slate-200 rounded-lg shadow-2xs overflow-hidden">
+                        <div className="bg-[#12233c] text-white px-3 py-2 flex items-center justify-between">
+                          <div className="font-bold text-xs tracking-wide flex items-center gap-2">
+                            <span>
+                              {grp === 'Operations' ? '⚙️' : grp === 'Inventory' ? '📦' : grp === 'Maintenance & QC' ? '🔬' : grp === 'Finance & Invoicing' ? '💳' : grp === 'Contracts' ? '📄' : '🔒'}
+                            </span>
+                            <span>{grp} Module</span>
+                          </div>
+                          <div className="text-[10px] text-slate-300 font-mono">
+                            {activeInGrp} of {groupModules.length} visible ({editInGrp} can edit)
+                          </div>
+                        </div>
+
+                        <div className="divide-y divide-slate-100">
+                          {groupModules.map((m) => {
+                            const isVisible =
+                              selectedUser.role === 'Admin' ||
+                              effectiveUserVisible.includes(m.id);
+
+                            const canEdit =
+                              selectedUser.role === 'Admin' ||
+                              effectiveUserEditable.includes(m.id);
+
+                            const isAdmin = selectedUser.role === 'Admin';
+                            const isSettingsRestricted = m.id === 'settings' && !isAdmin;
+
+                            return (
+                              <div
+                                key={m.id}
+                                className={`p-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs transition ${
+                                  !isVisible
+                                    ? 'bg-slate-50/60 opacity-60'
+                                    : canEdit
+                                    ? 'bg-emerald-50/20 hover:bg-emerald-50/40'
+                                    : 'bg-blue-50/20 hover:bg-blue-50/40'
+                                }`}
+                              >
+                                {/* Module Info */}
+                                <div className="flex-1 min-w-[220px]">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-base">{m.icon}</span>
+                                    <span className="font-bold text-slate-900">{m.label}</span>
+
+                                    {/* Status Badge */}
+                                    {!isVisible ? (
+                                      <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-200 text-slate-600">
+                                        🚫 Hidden
+                                      </span>
+                                    ) : canEdit ? (
+                                      <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                        ✅ Can Edit &amp; Save
+                                      </span>
+                                    ) : (
+                                      <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                                        👁️ View Only
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 mt-0.5 pl-6">
+                                    {m.desc}
+                                  </div>
+                                </div>
+
+                                {/* Controls: Visibility and Edit Access Checkboxes */}
+                                <div className="flex items-center gap-5 shrink-0 pl-6 md:pl-0">
+                                  {/* Visibility Checkbox */}
+                                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={isVisible}
+                                      disabled={isAdmin || isSettingsRestricted}
+                                      onChange={() => handleToggleUserScreen(m.id)}
+                                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
+                                    />
+                                    <span className={isVisible ? 'text-blue-900 font-bold' : 'text-slate-400'}>
+                                      👁️ Visible in Menu
+                                    </span>
+                                  </label>
+
+                                  {/* Edit / Write Checkbox */}
+                                  {m.canHaveWriteAccess ? (
+                                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={canEdit}
+                                        disabled={isAdmin || isSettingsRestricted}
+                                        onChange={() => handleToggleUserFunction(m.id)}
+                                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-50"
+                                      />
+                                      <span className={canEdit ? 'text-emerald-900 font-bold' : 'text-slate-500'}>
+                                        ✏️ Can Edit &amp; Save
+                                      </span>
+                                    </label>
+                                  ) : (
+                                    <span className="text-[11px] text-slate-400 italic">
+                                      Read-Only Screen
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
+        )}
 
-          {/* Unified Module Cards: Screen Visibility & Edit Access */}
-          <div className="space-y-3">
-            {['Operations', 'Inventory', 'Maintenance & QC', 'Finance & Invoicing', 'Contracts', 'System & Admin'].map((grp) => {
-              const groupModules = ALL_MODULES.filter((m) => m.group === grp);
-              if (groupModules.length === 0) return null;
+        {/* ================= ROLE DEFAULT TEMPLATES MODE ================= */}
+        {matrixMode === 'roles' && (
+          <div className="space-y-4">
+            <div className="bg-amber-50 border border-amber-200 rounded p-2.5 text-xs text-amber-900">
+              <strong>Role Defaults Template:</strong> These settings determine the fallback baseline permissions for any new or existing user assigned to each role who does not have custom per-user overrides.
+            </div>
 
-              return (
-                <div key={grp} className="bg-white border border-slate-200 rounded-lg shadow-2xs overflow-hidden">
-                  <div className="bg-[#12233c] text-white px-3 py-2 flex items-center justify-between">
-                    <div className="font-bold text-xs tracking-wide flex items-center gap-2">
-                      <span>{grp === 'Operations' ? '⚙️' : grp === 'Inventory' ? '📦' : grp === 'Maintenance & QC' ? '🔬' : grp === 'Finance & Invoicing' ? '💳' : grp === 'Contracts' ? '📄' : '🔒'}</span>
-                      <span>{grp} Module</span>
-                    </div>
-                    <div className="text-[10px] text-slate-300 font-mono">
-                      {groupModules.length} screen{groupModules.length > 1 ? 's' : ''}
-                    </div>
-                  </div>
+            {/* Role Tabs */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Select Role Template to Edit:</label>
+              <div className="flex flex-wrap gap-1.5">
+                {ALL_ROLES.map((r) => {
+                  const isSelected = selectedRoleForMatrix === r;
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setSelectedRoleForMatrix(r)}
+                      className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                        isSelected
+                          ? 'bg-[#1a3055] text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'
+                      }`}
+                    >
+                      <span>{r === 'Admin' ? '👑' : r === 'Operations' ? '⚙️' : r === 'QC' || r === 'Inspector' ? '🔬' : r === 'Accounts' ? '💳' : '👤'}</span>
+                      <span>{r}</span>
+                      {r === 'Admin' && <span className="text-[10px] bg-amber-400 text-slate-900 px-1 rounded font-mono">Full</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-                  <div className="divide-y divide-slate-100">
-                    {groupModules.map((m) => {
-                      const isVisible =
-                        selectedRoleForMatrix === 'Admin' ||
-                        (rolePermissions[selectedRoleForMatrix] || []).includes(m.id);
-
-                      const canEdit =
-                        selectedRoleForMatrix === 'Admin' ||
-                        (writePermissions[selectedRoleForMatrix] || []).includes(m.id);
-
-                      const isAdmin = selectedRoleForMatrix === 'Admin';
-                      const isSettingsRestricted = m.id === 'settings' && !isAdmin;
-
-                      return (
-                        <div
-                          key={m.id}
-                          className={`p-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs transition ${
-                            !isVisible
-                              ? 'bg-slate-50/60 opacity-60'
-                              : canEdit
-                              ? 'bg-emerald-50/20 hover:bg-emerald-50/40'
-                              : 'bg-blue-50/20 hover:bg-blue-50/40'
-                          }`}
-                        >
-                          {/* Module info */}
-                          <div className="flex-1 min-w-[220px]">
-                            <div className="flex items-center gap-2">
-                              <span className="text-base">{m.icon}</span>
-                              <span className="font-bold text-slate-900">{m.label}</span>
-                              {/* Status Badge */}
-                              {!isVisible ? (
-                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-200 text-slate-600">
-                                  🚫 Hidden
-                                </span>
-                              ) : canEdit ? (
-                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                  ✅ Can Edit
-                                </span>
-                              ) : (
-                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
-                                  👁️ View Only
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[11px] text-slate-500 mt-0.5 pl-6">
-                              {m.desc}
-                            </div>
-                          </div>
-
-                          {/* Controls: Visibility and Edit Access */}
-                          <div className="flex items-center gap-4 shrink-0 pl-6 md:pl-0">
-                            {/* Visibility Checkbox */}
-                            <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={isVisible}
-                                disabled={isAdmin || isSettingsRestricted}
-                                onChange={() => handleToggleScreen(selectedRoleForMatrix, m.id)}
-                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
-                              />
-                              <span className={isVisible ? 'text-blue-900 font-bold' : 'text-slate-400'}>
-                                👁️ Visible in Menu
-                              </span>
-                            </label>
-
-                            {/* Edit / Write Checkbox */}
-                            {m.canHaveWriteAccess ? (
-                              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={canEdit}
-                                  disabled={isAdmin || isSettingsRestricted}
-                                  onChange={() => handleToggleFunction(selectedRoleForMatrix, m.id)}
-                                  className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-50"
-                                />
-                                <span className={canEdit ? 'text-emerald-900 font-bold' : 'text-slate-500'}>
-                                  ✏️ Can Edit &amp; Save
-                                </span>
-                              </label>
-                            ) : (
-                              <span className="text-[11px] text-slate-400 italic">
-                                Read-Only Dashboard
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+            {/* Role Matrix Content */}
+            <div className="bg-slate-50/70 border border-slate-200 rounded p-3 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
+                <div>
+                  <span className="text-xs font-bold text-slate-900">
+                    Editing Role Template for: <strong className="text-blue-900">{selectedRoleForMatrix}</strong>
+                  </span>
+                  {selectedRoleForMatrix === 'Admin' ? (
+                    <span className="text-xs text-amber-900 ml-2 font-semibold">
+                      (Superuser clearance &mdash; Admin has unconditional read &amp; write access to all modules)
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-500 ml-2 font-mono">
+                      ({(rolePermissions[selectedRoleForMatrix] || []).length} screens, {(writePermissions[selectedRoleForMatrix] || []).length} functions active)
+                    </span>
+                  )}
                 </div>
-              );
-            })}
+
+                {selectedRoleForMatrix !== 'Admin' && (
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allModIds = ALL_MODULES.map((m) => m.id);
+                        setRolePermissions({ ...rolePermissions, [selectedRoleForMatrix]: allModIds });
+                      }}
+                      className="px-2 py-0.5 rounded bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold text-[11px] cursor-pointer"
+                    >
+                      👁️ Show All Screens
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRolePermissions({ ...rolePermissions, [selectedRoleForMatrix]: [] });
+                      }}
+                      className="px-2 py-0.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[11px] cursor-pointer"
+                    >
+                      🚫 Hide All Screens
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allEditable = ALL_MODULES.filter((m) => m.canHaveWriteAccess && m.id !== 'settings').map((m) => m.id);
+                        setWritePermissions({ ...writePermissions, [selectedRoleForMatrix]: allEditable });
+                      }}
+                      className="px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[11px] cursor-pointer"
+                    >
+                      ✏️ Grant All Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWritePermissions({ ...writePermissions, [selectedRoleForMatrix]: [] });
+                      }}
+                      className="px-2 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px] cursor-pointer"
+                    >
+                      🔒 Set All View-Only
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={handleResetAllRoleTemplates}
+                      className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold text-[11px] cursor-pointer"
+                    >
+                      ↺ Factory Defaults
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Module Cards for Role Template */}
+              <div className="space-y-3">
+                {['Operations', 'Inventory', 'Maintenance & QC', 'Finance & Invoicing', 'Contracts', 'System & Admin'].map((grp) => {
+                  const groupModules = ALL_MODULES.filter((m) => m.group === grp);
+                  if (groupModules.length === 0) return null;
+
+                  return (
+                    <div key={grp} className="bg-white border border-slate-200 rounded-lg shadow-2xs overflow-hidden">
+                      <div className="bg-[#12233c] text-white px-3 py-2 flex items-center justify-between">
+                        <div className="font-bold text-xs tracking-wide flex items-center gap-2">
+                          <span>{grp === 'Operations' ? '⚙️' : grp === 'Inventory' ? '📦' : grp === 'Maintenance & QC' ? '🔬' : grp === 'Finance & Invoicing' ? '💳' : grp === 'Contracts' ? '📄' : '🔒'}</span>
+                          <span>{grp} Module Template</span>
+                        </div>
+                        <div className="text-[10px] text-slate-300 font-mono">
+                          {groupModules.length} screen{groupModules.length > 1 ? 's' : ''}
+                        </div>
+                      </div>
+
+                      <div className="divide-y divide-slate-100">
+                        {groupModules.map((m) => {
+                          const isVisible =
+                            selectedRoleForMatrix === 'Admin' ||
+                            (rolePermissions[selectedRoleForMatrix] || []).includes(m.id);
+
+                          const canEdit =
+                            selectedRoleForMatrix === 'Admin' ||
+                            (writePermissions[selectedRoleForMatrix] || []).includes(m.id);
+
+                          const isAdmin = selectedRoleForMatrix === 'Admin';
+                          const isSettingsRestricted = m.id === 'settings' && !isAdmin;
+
+                          return (
+                            <div
+                              key={m.id}
+                              className={`p-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs transition ${
+                                !isVisible
+                                  ? 'bg-slate-50/60 opacity-60'
+                                  : canEdit
+                                  ? 'bg-emerald-50/20 hover:bg-emerald-50/40'
+                                  : 'bg-blue-50/20 hover:bg-blue-50/40'
+                              }`}
+                            >
+                              <div className="flex-1 min-w-[220px]">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-base">{m.icon}</span>
+                                  <span className="font-bold text-slate-900">{m.label}</span>
+                                  {!isVisible ? (
+                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-200 text-slate-600">
+                                      🚫 Hidden
+                                    </span>
+                                  ) : canEdit ? (
+                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                      ✅ Can Edit
+                                    </span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                                      👁️ View Only
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-500 mt-0.5 pl-6">
+                                  {m.desc}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-4 shrink-0 pl-6 md:pl-0">
+                                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={isVisible}
+                                    disabled={isAdmin || isSettingsRestricted}
+                                    onChange={() => handleToggleRoleScreen(selectedRoleForMatrix, m.id)}
+                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
+                                  />
+                                  <span className={isVisible ? 'text-blue-900 font-bold' : 'text-slate-400'}>
+                                    👁️ Visible in Menu
+                                  </span>
+                                </label>
+
+                                {m.canHaveWriteAccess ? (
+                                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={canEdit}
+                                      disabled={isAdmin || isSettingsRestricted}
+                                      onChange={() => handleToggleRoleFunction(selectedRoleForMatrix, m.id)}
+                                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-50"
+                                    />
+                                    <span className={canEdit ? 'text-emerald-900 font-bold' : 'text-slate-500'}>
+                                      ✏️ Can Edit &amp; Save
+                                    </span>
+                                  </label>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400 italic">
+                                    Read-Only Dashboard
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Data Backup & Restore */}
