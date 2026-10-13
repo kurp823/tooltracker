@@ -1751,6 +1751,7 @@ export const App: React.FC = () => {
               rtBatches={rtBatches}
               inventory={inventory}
               contracts={contracts}
+              inspections={inspections}
               onSaveJob={handleSaveJob}
               onDispatchJob={handleDispatchJob}
               onReceiveJob={(jobId) => {

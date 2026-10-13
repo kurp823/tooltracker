@@ -30,6 +30,7 @@ interface JobDossierViewProps {
   callouts: Callout[];
   inventory: ToolItem[];
   contracts?: ContractRecord[];
+  inspections?: InspectionRecord[];
   onSaveJob: (job: DrillingJob) => void;
   onRefresh?: () => void;
   onSaveDTBatch: (batch: DTBatch) => void;
@@ -308,6 +309,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   callouts,
   inventory,
   contracts = [],
+  inspections = [],
   onSaveJob,
   onRefresh,
   onSaveDTBatch,
@@ -920,9 +922,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Tool Selection Modal (itemsselect) State
   const [isToolSelectOpen, setIsToolSelectOpen] = useState(false);
   const [isToolModalMaximized, setIsToolModalMaximized] = useState(false);
-  const [categorySearchQuery, setCategorySearchQuery] = useState('CUTLIP GUIDE');
+  const [categorySearchQuery, setCategorySearchQuery] = useState('');
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('CUTLIP GUIDE');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedToolSize, setSelectedToolSize] = useState<string>('');
   const [checkedToolSerials, setCheckedToolSerials] = useState<string[]>([]);
 
@@ -4436,8 +4438,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           <div
             className={`bg-[#dce6f1] border-2 border-[#1a3055] rounded-md shadow-2xl flex flex-col overflow-hidden transition-all duration-150 ${
               isToolModalMaximized
-                ? 'w-[98vw] h-[95vh] max-w-none max-h-none'
-                : 'w-full max-w-5xl h-[640px] max-h-[92vh]'
+                ? 'w-[98vw] h-[96vh] max-w-none max-h-none'
+                : 'w-[96vw] max-w-[1450px] h-[820px] max-h-[95vh]'
             }`}
             style={{ fontFamily: "'Calibri', 'Arial Nova', 'Segoe UI', Arial, sans-serif", fontSize: '9pt' }}
           >
@@ -4481,17 +4483,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             setIsCategoryDropdownOpen(true);
                           }}
                           onFocus={() => setIsCategoryDropdownOpen(true)}
-                          placeholder="Type category..."
-                          className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs font-bold text-slate-800 w-56 sm:w-64 shadow-2xs cursor-text focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                          placeholder="Search or select category (All Categories)..."
+                          className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs font-bold text-slate-800 w-64 sm:w-80 shadow-2xs cursor-text focus:ring-1 focus:ring-blue-500 focus:outline-none"
                         />
-                        {categorySearchQuery && (
+                        {(categorySearchQuery || selectedCategory) && (
                           <button
                             type="button"
                             onClick={() => {
                               setCategorySearchQuery('');
+                              setSelectedCategory('');
+                              setSelectedToolSize('');
                               setIsCategoryDropdownOpen(true);
                             }}
-                            className="absolute right-2 text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+                            className="absolute right-2 text-slate-400 hover:text-slate-700 text-xs cursor-pointer font-bold"
+                            title="Clear to view All Categories"
                           >
                             ✕
                           </button>
@@ -4500,9 +4505,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
                       {/* Dropdown Options */}
                       {isCategoryDropdownOpen && (
-                        <div className="absolute left-0 top-full mt-1 w-72 max-h-60 overflow-y-auto bg-white border-2 border-[#1a3055] rounded shadow-2xl z-50 text-xs divide-y divide-slate-100">
-                          <div className="bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600 flex justify-between items-center sticky top-0 border-b border-slate-200">
-                            <span>Matching Categories ({filteredCategories.length})</span>
+                        <div className="absolute left-0 top-full mt-1 w-80 max-h-64 overflow-y-auto bg-white border-2 border-[#1a3055] rounded shadow-2xl z-50 text-xs divide-y divide-slate-100">
+                          <div className="bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600 flex justify-between items-center sticky top-0 border-b border-slate-200">
+                            <span>Select Category ({filteredCategories.length})</span>
                             <button
                               type="button"
                               onClick={() => setIsCategoryDropdownOpen(false)}
@@ -4511,6 +4516,27 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                               ✕
                             </button>
                           </div>
+                          {/* All Categories Option */}
+                          <div
+                            onClick={() => {
+                              setSelectedCategory('');
+                              setCategorySearchQuery('');
+                              setSelectedToolSize('');
+                              setIsCategoryDropdownOpen(false);
+                            }}
+                            className={`px-3 py-1.5 cursor-pointer hover:bg-blue-100 flex items-center justify-between transition ${
+                              !selectedCategory ? 'bg-blue-50 font-bold text-blue-900' : 'text-slate-800'
+                            }`}
+                          >
+                            <span className="font-bold flex items-center gap-1.5">
+                              <span className="text-amber-500">★</span>
+                              <span>All Categories</span>
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {inventory.length} tools in stock
+                            </span>
+                          </div>
+
                           {filteredCategories.length === 0 ? (
                             <div className="p-3 text-center text-slate-400 italic">No matching categories found</div>
                           ) : (
@@ -4561,34 +4587,68 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded px-2.5 py-1 text-[11px] text-blue-900 leading-tight flex-shrink-0">
-                Type in the category box above to filter downhole tools. Select with checkbox and click <strong>&quot;Insert Selected Tools&quot;</strong> to reserve tools for Job {jobData.id}.
+                Filter downhole tools by category or size. Select with the checkbox on the left and click <strong>&quot;Insert Selected Tools&quot;</strong> to reserve tools for Job {jobData.id}.
               </div>
 
-              {/* Tools Table */}
+              {/* Tools Table with Checkbox as Column 1 */}
               <div className="flex-1 min-h-0 bg-white border border-[#9fb6cf] rounded overflow-auto shadow-inner">
-                <table className="w-full text-left border-collapse text-[11.5px] min-w-[850px]">
+                <table className="w-full text-left border-collapse text-[11.5px] min-w-[950px]">
                   <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#9fb6cf] font-bold text-[11px] sticky top-0 z-10 shadow-2xs">
                     <tr>
-                      <th className="py-1 px-3 whitespace-nowrap min-w-[130px]">PartNo / Serial</th>
-                      <th className="py-1 px-3 whitespace-nowrap min-w-[340px]">Description</th>
+                      <th className="py-1.5 px-3 whitespace-nowrap text-center w-14 sticky left-0 bg-[#e9f0f8] z-20 shadow-2xs border-r border-[#9fb6cf]">
+                        <input
+                          type="checkbox"
+                          checked={modalAvailableTools.length > 0 && modalAvailableTools.every((t) => checkedToolSerials.includes(t.serial))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setCheckedToolSerials(modalAvailableTools.map((t) => t.serial));
+                            } else {
+                              setCheckedToolSerials([]);
+                            }
+                          }}
+                          className="cursor-pointer w-4 h-4 text-blue-600 rounded"
+                          title="Select All Visible"
+                        />
+                      </th>
+                      <th className="py-1 px-3 whitespace-nowrap min-w-[140px]">PartNo / Serial</th>
+                      <th className="py-1 px-3 whitespace-nowrap min-w-[320px]">Description</th>
+                      <th className="py-1 px-2 whitespace-nowrap text-center min-w-[80px]">Size</th>
                       <th className="py-1 px-2 whitespace-nowrap text-center w-16">DTQTY</th>
-                      <th className="py-1 px-3 whitespace-nowrap min-w-[120px]">Supplier</th>
-                      <th className="py-1 px-2 whitespace-nowrap min-w-[95px]">Ins_Date</th>
-                      <th className="py-1 px-2 whitespace-nowrap min-w-[130px]">Ins_Num</th>
+                      <th className="py-1 px-3 whitespace-nowrap min-w-[110px]">Supplier</th>
+                      <th className="py-1 px-2 whitespace-nowrap min-w-[105px]">Ins_Date</th>
+                      <th className="py-1 px-2 whitespace-nowrap min-w-[140px]">Ins_Num</th>
                       <th className="py-1 px-2 whitespace-nowrap min-w-[100px]">Condition</th>
-                      <th className="py-1 px-2 whitespace-nowrap text-center w-16">select [✓]</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {modalAvailableTools.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-slate-500 font-medium">
-                          No available tools found in yard for Category: <strong>{selectedCategory}</strong> {selectedToolSize && `(Size: ${selectedToolSize})`}.
+                        <td colSpan={9} className="p-8 text-center text-slate-500 font-medium">
+                          No available tools found in yard for Category: <strong>{selectedCategory || 'All Categories'}</strong> {selectedToolSize && `(Size: ${selectedToolSize})`}.
                         </td>
                       </tr>
                     ) : (
                       modalAvailableTools.map((tool) => {
                         const isChecked = checkedToolSerials.includes(tool.serial);
+
+                        // Look up genuine inspection record for this tool
+                        const toolInspections = (inspections || []).filter(
+                          (ins) =>
+                            (ins.serial && ins.serial.trim().toLowerCase() === tool.serial.trim().toLowerCase()) ||
+                            (tool.assetNo && ins.serial && ins.serial.trim().toLowerCase() === tool.assetNo.trim().toLowerCase())
+                        );
+                        const latestIns = toolInspections.length > 0
+                          ? [...toolInspections].sort((a, b) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime())[0]
+                          : null;
+
+                        const insDate = latestIns?.date
+                          ? formatDateDD_MM_YYYY(latestIns.date)
+                          : (tool.addedDate ? formatDateDD_MM_YYYY(tool.addedDate) : '—');
+                        const insNum = latestIns?.inspectionNumber || latestIns?.reportNumber || latestIns?.id || '—';
+                        const condition = latestIns?.status
+                          ? latestIns.status.toUpperCase()
+                          : (tool.status?.toUpperCase() === 'GOOD' ? 'ACCEPTED' : (tool.status?.toUpperCase() || 'ACCEPTED'));
+
                         return (
                           <tr
                             key={tool.serial}
@@ -4600,19 +4660,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                               }
                             }}
                             className={`cursor-pointer transition h-7 leading-none ${
-                              isChecked ? 'bg-amber-100/80 font-semibold' : 'hover:bg-blue-50/60'
+                              isChecked ? 'bg-amber-100/90 font-semibold' : 'hover:bg-blue-50/60'
                             }`}
                           >
-                            <td className="py-1 px-3 whitespace-nowrap font-mono font-bold text-slate-900">{tool.assetNo || tool.serial}</td>
-                            <td className="py-1 px-3 whitespace-nowrap font-medium text-slate-800" title={tool.desc || tool.shortDesc}>
-                              {tool.desc || tool.shortDesc}
-                            </td>
-                            <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{tool.qty || 1}</td>
-                            <td className="py-1 px-3 whitespace-nowrap text-slate-700">{tool.supplier || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')}</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">31-03-2023</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">GIS-Z-01073-2023</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-bold text-emerald-700">ACCEPTED</td>
-                            <td className="py-1 px-2 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
+                            <td className="py-1.5 px-3 whitespace-nowrap text-center sticky left-0 bg-inherit z-10 border-r border-slate-200" onClick={(e) => e.stopPropagation()}>
                               <input
                                 type="checkbox"
                                 checked={isChecked}
@@ -4623,9 +4674,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                                     setCheckedToolSerials((prev) => prev.filter((s) => s !== tool.serial));
                                   }
                                 }}
-                                className="cursor-pointer"
+                                className="cursor-pointer w-4 h-4 text-blue-600 rounded"
                               />
                             </td>
+                            <td className="py-1 px-3 whitespace-nowrap font-mono font-bold text-slate-900">{tool.assetNo || tool.serial}</td>
+                            <td className="py-1 px-3 whitespace-nowrap font-medium text-slate-800" title={tool.desc || tool.shortDesc}>
+                              {tool.desc || tool.shortDesc}
+                            </td>
+                            <td className="py-1 px-2 whitespace-nowrap text-center font-mono text-slate-700">{tool.size || '—'}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{tool.qty || 1}</td>
+                            <td className="py-1 px-3 whitespace-nowrap text-slate-700">{tool.supplier || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-700">{insDate}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700 font-semibold">{insNum}</td>
+                            <td className={`py-1 px-2 whitespace-nowrap font-bold ${condition === 'ACCEPTED' ? 'text-emerald-700' : 'text-amber-700'}`}>{condition}</td>
                           </tr>
                         );
                       })

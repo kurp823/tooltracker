@@ -134,8 +134,44 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenAddAsset,
   onOpenAddCallout,
 }) => {
+  const [dashboardMode, setDashboardMode] = useState<'operations' | 'management'>('operations');
   const [currencyMode, setCurrencyMode] = useState<'AED' | 'USD' | 'NATIVE'>('AED');
   const [categoryChartMetric, setCategoryChartMetric] = useState<'total' | 'split'>('split');
+
+  // Exact Jobs By Client / Operator benchmark data from user operational system (Screenshot 3)
+  const clientJobsBenchmarkData = useMemo(() => [
+    { name: 'ADNOC ONSHORE', jobs: 1731, color: '#78350f' },
+    { name: 'ADNOC OFFSHORE', jobs: 1196, color: '#c2611a' },
+    { name: 'ADNOC DRILLING', jobs: 253, color: '#d97706' },
+    { name: 'ITS (NABORS)', jobs: 194, color: '#b45309' },
+    { name: 'WELLBORE INTEGRITY SOLUTIONS', jobs: 119, color: '#4d7c0f' },
+    { name: 'BAKER HUGHES', jobs: 46, color: '#0f766e' },
+    { name: 'WEATHERFORD', jobs: 46, color: '#0284c7' },
+    { name: 'CHURCHILL', jobs: 43, color: '#4338ca' },
+    { name: 'TURNWELL', jobs: 32, color: '#6d28d9' },
+    { name: 'BUNDUQ', jobs: 17, color: '#831843' },
+    { name: 'GOSS', jobs: 13, color: '#9f1239' },
+    { name: 'HALLIBURTON', jobs: 12, color: '#881337' },
+  ], []);
+
+  // Exact Jobs By Service Category benchmark data from user operational system (Screenshot 3)
+  const serviceCategoryJobsBenchmarkData = useMemo(() => [
+    { name: 'DOWN HOLE RENTALS', jobs: 1193, color: '#78350f' },
+    { name: 'COMPLETION RECOVERY', jobs: 543, color: '#c2611a' },
+    { name: 'FISHING', jobs: 503, color: '#d97706' },
+    { name: 'WHIPSTOCK', jobs: 416, color: '#ca8a04' },
+    { name: 'FISHING TOOL RENTAL', jobs: 240, color: '#4d7c0f' },
+    { name: 'CLEANOUT', jobs: 187, color: '#0d9488' },
+    { name: 'HOLE SECTION FISHING TOOLS', jobs: 177, color: '#1e40af' },
+    { name: 'WELLBORE CLEANOUT', jobs: 102, color: '#3730a3' },
+    { name: 'ENGINEER RENTALS', jobs: 94, color: '#5b21b6' },
+    { name: 'SINGLE COMPLETION', jobs: 76, color: '#9d174d' },
+    { name: 'SECTION MILLING', jobs: 48, color: '#155e75' },
+    { name: 'DUAL COMPLETION', jobs: 42, color: '#854d0e' },
+    { name: 'RENTALS', jobs: 33, color: '#a16207' },
+    { name: 'COMPLETION & SLOT RECOVERY', jobs: 19, color: '#701a75' },
+    { name: 'THRU-TUBING FISHING', jobs: 18, color: '#831843' },
+  ], []);
 
   // Currency formatting helper based on active currency mode
   const formatMoney = (valAED: number, valUSD: number, nativeCurrency?: 'AED' | 'USD') => {
@@ -556,6 +592,57 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-4 w-full">
+      {/* Dashboard Mode Switcher Ribbon (Operations vs Executive Management) */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-2.5 sm:p-3 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setDashboardMode('operations')}
+              className={`px-4 py-2 rounded-lg text-xs font-black transition flex items-center gap-2 cursor-pointer ${
+                dashboardMode === 'operations'
+                  ? 'bg-amber-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span>Operations Dashboard</span>
+              <span className={`px-1.5 py-0.2 text-[10px] rounded font-bold ${
+                dashboardMode === 'operations' ? 'bg-amber-800 text-amber-100' : 'bg-slate-200 text-slate-700'
+              }`}>
+                Live
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDashboardMode('management')}
+              className={`px-4 py-2 rounded-lg text-xs font-black transition flex items-center gap-2 cursor-pointer ${
+                dashboardMode === 'management'
+                  ? 'bg-blue-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <DollarSign className="w-4 h-4 text-emerald-400" />
+              <span>Executive Management Dashboard</span>
+              <span className={`px-1.5 py-0.2 text-[10px] rounded font-bold ${
+                dashboardMode === 'management' ? 'bg-blue-800 text-blue-100' : 'bg-slate-200 text-slate-700'
+              }`}>
+                Commercial
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <span className="flex h-2 w-2 relative">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span className="font-semibold text-slate-700">
+            {dashboardMode === 'operations' ? 'Field Operational Deployment Matrix' : 'Commercial Billing & Financial Governance'}
+          </span>
+        </div>
+      </div>
 
       {/* 1. Primary Operational Field KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -656,7 +743,227 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 2. EXECUTIVE COMMERCIAL REVENUE & TOOL CATEGORY PERFORMANCE SECTION (UNIFIED LIGHT ENTERPRISE DESIGN) */}
+      {/* ========================================================================= */}
+      {/* OPERATIONS DASHBOARD: SCREENSHOT 3 (JOBS BY CLIENT + JOBS BY SERVICE CATEGORY) */}
+      {/* ========================================================================= */}
+      {dashboardMode === 'operations' && (
+        <div className="space-y-6">
+          {/* SECTION 1: JOBS BY CLIENT / OPERATOR (TOP 12) */}
+          <div className="bg-white border border-slate-300 rounded-lg shadow-sm overflow-hidden">
+            {/* Dark Mahogany Header Banner */}
+            <div className="bg-[#78350f] text-white px-4 py-2 font-black text-sm tracking-wider uppercase border-b border-[#5c270a] flex items-center justify-between">
+              <span>JOBS BY CLIENT / OPERATOR (TOP 12)</span>
+              <span className="text-[11px] font-mono font-medium text-amber-200/90 tracking-normal normal-case">
+                Total Top 12 Jobs: {clientJobsBenchmarkData.reduce((acc, c) => acc + c.jobs, 0).toLocaleString()}
+              </span>
+            </div>
+
+            {/* Content: Left Table (~35%) + Right Horizontal Bar Chart (~65%) */}
+            <div className="flex flex-col xl:flex-row border-t border-slate-200 bg-white">
+              {/* Left Table */}
+              <div className="w-full xl:w-[38%] border-b xl:border-b-0 xl:border-r border-slate-200 overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-300">
+                      <th className="py-2 px-3 border-r border-slate-200">Client / Operator</th>
+                      <th className="py-2 px-3 text-right w-24">Jobs</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {clientJobsBenchmarkData.map((row, idx) => (
+                      <tr
+                        key={row.name}
+                        className={`hover:bg-amber-50/50 transition-colors ${
+                          idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
+                        }`}
+                      >
+                        <td className="py-1.5 px-3 font-semibold text-slate-800 border-r border-slate-200 whitespace-nowrap">
+                          {row.name}
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                          {row.jobs.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Right Horizontal Bar Chart */}
+              <div className="w-full xl:w-[62%] p-3 sm:p-4 flex flex-col justify-center bg-white min-h-[380px]">
+                <div className="text-center font-bold text-xs text-slate-700 mb-1">
+                  Jobs by Client / Operator (Top 12)
+                </div>
+                <div className="h-[360px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      layout="vertical"
+                      data={[...clientJobsBenchmarkData].reverse()}
+                      margin={{ top: 25, right: 45, left: 160, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                      <XAxis
+                        type="number"
+                        domain={[0, 2000]}
+                        ticks={[0, 200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000]}
+                        orientation="top"
+                        tick={{ fontSize: 10, fill: '#64748b' }}
+                        axisLine={{ stroke: '#cbd5e1' }}
+                        tickLine={{ stroke: '#cbd5e1' }}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        width={155}
+                        tick={{ fontSize: 9.5, fill: '#334155', fontWeight: 600 }}
+                        axisLine={{ stroke: '#cbd5e1' }}
+                        tickLine={false}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#ffffff',
+                          color: '#0f172a',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          border: '1px solid #cbd5e1',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                        }}
+                        formatter={(val: any) => [`${Number(val).toLocaleString()} Jobs`, 'Volume']}
+                      />
+                      <Bar
+                        dataKey="jobs"
+                        barSize={10}
+                        radius={[0, 2, 2, 0]}
+                        label={{
+                          position: 'right',
+                          fontSize: 10,
+                          fontWeight: 700,
+                          fill: '#334155',
+                          formatter: (val: any) => Number(val).toLocaleString(),
+                        }}
+                      >
+                        {[...clientJobsBenchmarkData].reverse().map((entry, index) => (
+                          <Cell key={`client-bar-${index}`} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 2: JOBS BY SERVICE CATEGORY (TOP 15) */}
+          <div className="bg-white border border-slate-300 rounded-lg shadow-sm overflow-hidden">
+            {/* Dark Mahogany Header Banner */}
+            <div className="bg-[#78350f] text-white px-4 py-2 font-black text-sm tracking-wider uppercase border-b border-[#5c270a] flex items-center justify-between">
+              <span>JOBS BY SERVICE CATEGORY (TOP 15)</span>
+              <span className="text-[11px] font-mono font-medium text-amber-200/90 tracking-normal normal-case">
+                Total Top 15 Jobs: {serviceCategoryJobsBenchmarkData.reduce((acc, c) => acc + c.jobs, 0).toLocaleString()}
+              </span>
+            </div>
+
+            {/* Content: Left Table (~35%) + Right Horizontal Bar Chart (~65%) */}
+            <div className="flex flex-col xl:flex-row border-t border-slate-200 bg-white">
+              {/* Left Table */}
+              <div className="w-full xl:w-[38%] border-b xl:border-b-0 xl:border-r border-slate-200 overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-300">
+                      <th className="py-2 px-3 border-r border-slate-200">Service Category</th>
+                      <th className="py-2 px-3 text-right w-24">Jobs</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {serviceCategoryJobsBenchmarkData.map((row, idx) => (
+                      <tr
+                        key={row.name}
+                        className={`hover:bg-amber-50/50 transition-colors ${
+                          idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
+                        }`}
+                      >
+                        <td className="py-1.5 px-3 font-semibold text-slate-800 border-r border-slate-200 whitespace-nowrap">
+                          {row.name}
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                          {row.jobs.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Right Horizontal Bar Chart */}
+              <div className="w-full xl:w-[62%] p-3 sm:p-4 flex flex-col justify-center bg-white min-h-[440px]">
+                <div className="text-center font-bold text-xs text-slate-700 mb-1">
+                  Jobs by Service Category (Top 15)
+                </div>
+                <div className="h-[420px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      layout="vertical"
+                      data={[...serviceCategoryJobsBenchmarkData].reverse()}
+                      margin={{ top: 25, right: 45, left: 160, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                      <XAxis
+                        type="number"
+                        domain={[0, 1400]}
+                        ticks={[0, 200, 400, 600, 800, 1000, 1200, 1400]}
+                        orientation="top"
+                        tick={{ fontSize: 10, fill: '#64748b' }}
+                        axisLine={{ stroke: '#cbd5e1' }}
+                        tickLine={{ stroke: '#cbd5e1' }}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        width={155}
+                        tick={{ fontSize: 9.5, fill: '#334155', fontWeight: 600 }}
+                        axisLine={{ stroke: '#cbd5e1' }}
+                        tickLine={false}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#ffffff',
+                          color: '#0f172a',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          border: '1px solid #cbd5e1',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                        }}
+                        formatter={(val: any) => [`${Number(val).toLocaleString()} Jobs`, 'Volume']}
+                      />
+                      <Bar
+                        dataKey="jobs"
+                        barSize={10}
+                        radius={[0, 2, 2, 0]}
+                        label={{
+                          position: 'right',
+                          fontSize: 10,
+                          fontWeight: 700,
+                          fill: '#334155',
+                          formatter: (val: any) => Number(val).toLocaleString(),
+                        }}
+                      >
+                        {[...serviceCategoryJobsBenchmarkData].reverse().map((entry, index) => (
+                          <Cell key={`cat-bar-${index}`} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. EXECUTIVE COMMERCIAL REVENUE & TOOL CATEGORY PERFORMANCE SECTION (MANAGEMENT DASHBOARD) */}
+      {/* ========================================================================= */}
+      {dashboardMode === 'management' && (
       <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4">
         
         {/* Section Header with Navigation & Currency Mode Controls */}
@@ -1026,6 +1333,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
       </div>
+      )}
 
       {/* 3. OPERATIONAL RIG & DOWNHOLE TOOL DEPLOYMENT CHARTS ROW (MATCHING MOCKUP) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

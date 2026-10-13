@@ -53,6 +53,7 @@ interface JobsViewProps {
   rtBatches?: RTBatch[];
   inventory?: ToolItem[];
   contracts?: ContractRecord[];
+  inspections?: InspectionRecord[];
   onSaveJob: (job: DrillingJob) => void;
   onRefresh?: () => void;
   onDispatchJob: (jobId: string) => void;
@@ -212,6 +213,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   rtBatches = [],
   inventory = [],
   contracts = [],
+  inspections = [],
   onSaveJob,
   onRefresh,
   onDispatchJob,
@@ -2002,6 +2004,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                 callouts={callouts}
                 inventory={inventory || []}
                 contracts={contracts || []}
+                inspections={inspections || []}
                 onSaveJob={(updated) => {
                   onSaveJob(updated);
                   setDossierJob(updated);
