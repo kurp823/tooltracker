@@ -35,12 +35,18 @@ export function useResizableColumns(tableId: string, initialWidths: Record<strin
     return initialWidths;
   });
 
+  const widthsRef = useRef(widths);
+  useEffect(() => {
+    widthsRef.current = widths;
+  }, [widths]);
+
   const resizingRef = useRef<{ colKey: string; startX: number; startWidth: number } | null>(null);
 
   const startResize = useCallback((colKey: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const currentWidth = widths[colKey] || initialWidths[colKey] || 120;
+
+    const currentWidth = widthsRef.current[colKey] || initialWidths[colKey] || 120;
     resizingRef.current = {
       colKey,
       startX: e.clientX,
@@ -48,17 +54,19 @@ export function useResizableColumns(tableId: string, initialWidths: Record<strin
     };
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!resizingRef.current) return;
-      const deltaX = moveEvent.clientX - resizingRef.current.startX;
-      const newWidth = Math.max(50, resizingRef.current.startWidth + deltaX); // Min 50px
+      const active = resizingRef.current;
+      if (!active) return;
+      const deltaX = moveEvent.clientX - active.startX;
+      const newWidth = Math.max(40, active.startWidth + deltaX);
       setWidths((prev) => ({
         ...prev,
-        [resizingRef.current!.colKey]: newWidth,
+        [active.colKey]: newWidth,
       }));
     };
 
     const handleMouseUp = () => {
-      if (resizingRef.current) {
+      const active = resizingRef.current;
+      if (active) {
         setWidths((latest) => {
           try {
             localStorage.setItem(`${STORAGE_COL_WIDTHS_PREFIX}${tableId}`, JSON.stringify(latest));
@@ -67,17 +75,17 @@ export function useResizableColumns(tableId: string, initialWidths: Record<strin
         });
       }
       resizingRef.current = null;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
       document.body.style.cursor = 'default';
       document.body.style.userSelect = 'auto';
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
-  }, [widths, initialWidths, tableId]);
+  }, [initialWidths, tableId]);
 
   const resetWidths = useCallback(() => {
     setWidths(initialWidths);

@@ -4807,8 +4807,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
               {/* Tools Table with Checkbox as Column 1 */}
               <div className="flex-1 min-h-0 bg-white border border-[#9fb6cf] rounded overflow-auto shadow-inner">
-                <table className="w-full text-left border-collapse text-[11.5px] min-w-[950px]">
-                  <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#9fb6cf] font-bold text-[11px] sticky top-0 z-10 shadow-2xs">
+                <table className="w-full text-left border-collapse text-[11.5px]">
+                  <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#9fb6cf] font-bold text-[11px] sticky top-0 z-10 shadow-2xs select-none">
                     <tr>
                       <th
                         style={{ width: toolPickerResizer.widths.select || 48 }}
@@ -4965,6 +4965,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             </td>
                             <td className="py-1 px-2 whitespace-nowrap text-center font-mono text-slate-700">{tool.size || '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{tool.qty || 1}</td>
+                            <td className="py-1 px-3 whitespace-nowrap text-slate-700">{tool.ownership || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-700">{insDate}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700 font-semibold">{insNum}</td>
                             <td className={`py-1 px-2 whitespace-nowrap font-bold ${condition === 'ACCEPTED' ? 'text-emerald-700' : 'text-amber-700'}`}>{condition}</td>
