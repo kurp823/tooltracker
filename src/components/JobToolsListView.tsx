@@ -169,19 +169,22 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
         })
       : rtBatches;
 
-    // Map RT lines by serial and ticket number for rapid matching
-    const rtLineLookups: {
-      serial: string;
-      assetNo: string;
+    // 1. Build rapid O(1) Map index of RT tool lines by serial and assetNo
+    interface RTMatchedInfo {
       rtNumber: string;
       rtDate: string;
       used: boolean;
       condition?: string;
-      jobKey: string;
-      normJobKey: string;
-    }[] = [];
+    }
+    const rtByJobAndSerial = new Map<string, RTMatchedInfo>();
+    const rtGlobalBySerial = new Map<string, RTMatchedInfo>();
+    const rtByIdOrNum = new Map<string, RTBatch>();
 
-    targetRTs.forEach((rt) => {
+    rtBatches.forEach((rt) => {
+      if (rt.id) rtByIdOrNum.set(rt.id.trim().toUpperCase(), rt);
+      if (rt.rtNumber) rtByIdOrNum.set(rt.rtNumber.trim().toUpperCase(), rt);
+      if ((rt as any).rgtNo) rtByIdOrNum.set(String((rt as any).rgtNo).trim().toUpperCase(), rt);
+
       const rtJob = (rt.jobId || rt.jobNumber || '').trim().toUpperCase();
       const rtNormJob = normalizeJobKey(rt.jobId || rt.jobNumber || '');
       const rtBatchDate =
@@ -208,17 +211,26 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
 
         const ticketNum = rt.rtNumber || (rt as any).rgtNo || 'RT-GEN';
         const finalDate = lineDate || (historicalRtMap[ticketNum.toUpperCase()] || '');
-
-        rtLineLookups.push({
-          serial: (rtl.serial || '').trim().toUpperCase(),
-          assetNo: (rtl.assetNo || '').trim().toUpperCase(),
+        const info: RTMatchedInfo = {
           rtNumber: ticketNum,
           rtDate: finalDate,
           used: Boolean(rtl.used || rtl.condition === 'USED'),
           condition: rtl.condition,
-          jobKey: rtJob,
-          normJobKey: rtNormJob,
-        });
+        };
+
+        const s = (rtl.serial || '').trim().toUpperCase();
+        const a = (rtl.assetNo || '').trim().toUpperCase();
+
+        if (s) {
+          if (rtJob) rtByJobAndSerial.set(`${rtJob}::${s}`, info);
+          if (rtNormJob) rtByJobAndSerial.set(`${rtNormJob}::${s}`, info);
+          if (!rtGlobalBySerial.has(s)) rtGlobalBySerial.set(s, info);
+        }
+        if (a) {
+          if (rtJob) rtByJobAndSerial.set(`${rtJob}::${a}`, info);
+          if (rtNormJob) rtByJobAndSerial.set(`${rtNormJob}::${a}`, info);
+          if (!rtGlobalBySerial.has(a)) rtGlobalBySerial.set(a, info);
+        }
       });
     });
 
@@ -244,21 +256,16 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
         const lineSerial = (line.serial || '').trim().toUpperCase();
         const lineAsset = (line.assetNo || '').trim().toUpperCase();
 
-        // 1. Try finding matched RT within the same Job first
-        let matchedRT = rtLineLookups.find((r) => {
-          const serialMatch = lineSerial && (r.serial === lineSerial || r.assetNo === lineSerial);
-          const assetMatch = lineAsset && (r.serial === lineAsset || r.assetNo === lineAsset);
-          const jobMatches = r.jobKey === dtJobKey || (r.normJobKey && r.normJobKey === normJob);
-          return (serialMatch || assetMatch) && jobMatches;
-        });
+        // 1. O(1) Instant lookup within the same Job
+        let matchedRT =
+          (lineSerial && (rtByJobAndSerial.get(`${dtJobKey}::${lineSerial}`) || (normJob ? rtByJobAndSerial.get(`${normJob}::${lineSerial}`) : undefined))) ||
+          (lineAsset && (rtByJobAndSerial.get(`${dtJobKey}::${lineAsset}`) || (normJob ? rtByJobAndSerial.get(`${normJob}::${lineAsset}`) : undefined)));
 
-        // 2. Fallback: if not found within job and looking at all jobs, match across other jobs
+        // 2. Fallback: if not found within job and viewing all jobs, lookup globally
         if (!matchedRT && !selectedJobId) {
-          matchedRT = rtLineLookups.find((r) => {
-            const serialMatch = lineSerial && (r.serial === lineSerial || r.assetNo === lineSerial);
-            const assetMatch = lineAsset && (r.serial === lineAsset || r.assetNo === lineAsset);
-            return serialMatch || assetMatch;
-          });
+          matchedRT =
+            (lineSerial ? rtGlobalBySerial.get(lineSerial) : undefined) ||
+            (lineAsset ? rtGlobalBySerial.get(lineAsset) : undefined);
         }
 
         let remark: 'Used' | 'Not Used' | 'On Rig' = 'On Rig';
@@ -270,11 +277,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
           retDate = matchedRT.rtDate;
           remark = matchedRT.used ? 'Used' : 'Not Used';
         } else if (line.status === 'Returned' || line.rtBatchId) {
-          const directRt = rtBatches.find(
-            (b) =>
-              (line.rtBatchId && (b.id === line.rtBatchId || b.rtNumber === line.rtBatchId || (b as any).rgtNo === line.rtBatchId)) ||
-              ((b.toolLines || []).some((rtl) => (rtl.serial && rtl.serial.trim().toUpperCase() === lineSerial) || (rtl.assetNo && rtl.assetNo.trim().toUpperCase() === lineSerial)))
-          );
+          const directRt = line.rtBatchId ? rtByIdOrNum.get(line.rtBatchId.trim().toUpperCase()) : undefined;
           retNum = directRt?.rtNumber || (directRt as any)?.rgtNo || line.rtBatchId || 'Returned';
           retDate =
             directRt?.rtDate ||
@@ -303,7 +306,7 @@ export const JobToolsListView: React.FC<JobToolsListViewProps> = ({
 
         // If still missing return date, check job utilization index for this tool serial
         if (!retDate || retDate === '—' || retDate === '-') {
-          const histRet = jobHistSerialMap.get(lineSerial) || (lineAsset ? jobHistSerialMap.get(lineAsset) : undefined);
+          const histRet = (lineSerial ? jobHistSerialMap.get(lineSerial) : undefined) || (lineAsset ? jobHistSerialMap.get(lineAsset) : undefined);
           if (histRet) {
             retDate = histRet;
             if (!retNum || retNum === '—') {

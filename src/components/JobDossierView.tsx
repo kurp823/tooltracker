@@ -373,6 +373,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const [isReopenModalOpen, setIsReopenModalOpen] = useState(false);
   const [reopenJustification, setReopenJustification] = useState('');
 
+  // When user has no edit clearance, or when closed or legally invoiced, entire job is locked in VIEW ONLY mode unless Admin unlocks with justification
+  const isJobLocked = isClosedOrInvoiced && !adminUnlocked;
+  const isLocked = !canEditJobs || isJobLocked;
+
   // Resizable columns & custom columns for Checklist table
   const checklistCustomCols = useCustomColumns('dossier_checklist');
   const checklistResizer = useResizableColumns('dossier_checklist_grid', {
