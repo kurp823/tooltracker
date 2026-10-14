@@ -428,6 +428,41 @@ export function generateInvoicePackageForJob(
           toolDescDisplay = `${toolDescDisplay} [${selectedHoleSectionOpt.holeSection}]`;
         }
 
+        // Sub-Contractor / Supplier Cost Lookup from Job or Master Inventory
+        const rawSupplier = (tl.supplier || (tl as any).ownership || '').trim();
+        const isSubTool = Boolean(tl.isEmdad === false || (rawSupplier && rawSupplier.toUpperCase() !== 'EMDAD'));
+        const supplierName = isSubTool ? (rawSupplier || 'MOTORMAX') : 'EMDAD';
+
+        // Check for saved sub-rental overrides
+        let subSbDays = isSubTool ? standbyDays : 0;
+        let subOpsDays = isSubTool ? operDays : 0;
+        let subSbRateUSD = isSubTool ? Math.round(rateLookup.standbyRate * 0.75 * 100) / 100 : 0;
+        let subOpsRateUSD = isSubTool ? Math.round(rateLookup.operRate * 0.75 * 100) / 100 : 0;
+        let subRunChargeUSD = 0;
+        let subRedressChargeUSD = 0;
+
+        try {
+          const savedCosts = typeof localStorage !== 'undefined'
+            ? localStorage.getItem(`emdad_job_subrental_costs_${job.id || job.jobNumber}`)
+            : null;
+          if (savedCosts) {
+            const parsedCosts = JSON.parse(savedCosts);
+            const subSaved = parsedCosts[serial] || parsedCosts[(tl as any).id];
+            if (subSaved) {
+              if (subSaved.subSbDays !== undefined) subSbDays = Number(subSaved.subSbDays);
+              if (subSaved.subOpsDays !== undefined) subOpsDays = Number(subSaved.subOpsDays);
+              if (subSaved.subSbRate !== undefined) subSbRateUSD = Math.round((Number(subSaved.subSbRate) / USD_TO_AED_EXCHANGE_RATE) * 100) / 100;
+              if (subSaved.subOpsRate !== undefined) subOpsRateUSD = Math.round((Number(subSaved.subOpsRate) / USD_TO_AED_EXCHANGE_RATE) * 100) / 100;
+              if (subSaved.subRunCharge !== undefined) subRunChargeUSD = Math.round((Number(subSaved.subRunCharge) / USD_TO_AED_EXCHANGE_RATE) * 100) / 100;
+              if (subSaved.subRedressCharge !== undefined) subRedressChargeUSD = Math.round((Number(subSaved.subRedressCharge) / USD_TO_AED_EXCHANGE_RATE) * 100) / 100;
+            }
+          }
+        } catch {}
+
+        const totalSubCostUSD = isSubTool
+          ? Math.round(((subSbDays * subSbRateUSD) + (subOpsDays * subOpsRateUSD) + subRunChargeUSD + subRedressChargeUSD) * 100) / 100
+          : 0;
+
         lines.push({
           itemNo: itemSeq++,
           serialNumber: serial,
@@ -447,6 +482,16 @@ export function generateInvoicePackageForJob(
           operTotalUSD,
           standbyTotalUSD,
           totalChargesUSD,
+          // Subcontractor Cost Data
+          supplier: supplierName,
+          isSubTool,
+          subSbDays,
+          subOpsDays,
+          subSbRateUSD,
+          subOpsRateUSD,
+          subRunChargeUSD,
+          subRedressChargeUSD,
+          totalSubCostUSD,
         });
       });
     });

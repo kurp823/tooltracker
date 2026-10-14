@@ -248,6 +248,24 @@ export interface DrillingJob {
   utilizationStatuses?: Record<string, string>;
   lastRtNumber?: string;
   docsSignedDate?: string | null;
+  // Sub-Contractor Tool Cost Tracking per Tool & Month
+  subRentalCosts?: Record<string, JobToolSubRentalCost>;
+}
+
+export interface JobToolSubRentalCost {
+  toolKey: string;           // Serial or AssetNo
+  supplier: string;          // MOTORMAX, EPIS, ELITE, SALTIRE, etc.
+  subSbDays?: number | null; // Subcontract Standby Days
+  subOpsDays?: number | null;// Subcontract Operating Days
+  subSbRate?: number | null; // Subcontract Standby Rate (AED/day)
+  subOpsRate?: number | null;// Subcontract Operating Rate (AED/day)
+  subRunCharge?: number | null; // Subcontract Run Charge
+  subRedressCharge?: number | null; // Subcontract Redress Charge
+  subMonthlyRate?: number | null; // Monthly Pool Charge if applicable
+  totalSubCost?: number | null; // Total Accrued Subcontract Cost
+  currency?: string;         // AED / USD
+  poNumber?: string;         // Supplier PO Number
+  notes?: string;
 }
 
 export interface DailyFieldLog {
@@ -602,6 +620,16 @@ export interface CalculationTicketLine {
   operTotalUSD: number;
   standbyTotalUSD: number;
   totalChargesUSD: number;
+  // Sub-Contractor / Supplier Payable Cost Breakdown
+  supplier?: string;
+  isSubTool?: boolean;
+  subSbDays?: number;
+  subOpsDays?: number;
+  subSbRateUSD?: number;
+  subOpsRateUSD?: number;
+  subRunChargeUSD?: number;
+  subRedressChargeUSD?: number;
+  totalSubCostUSD?: number;
 }
 
 export interface VerificationPackageDoc {

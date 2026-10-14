@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { DrillingJob, DTBatch, RTBatch, ToolItem, User, ContractRecord } from '../types';
+import { DrillingJob, DTBatch, RTBatch, ToolItem, User, ContractRecord, JobToolSubRentalCost } from '../types';
 import { formatDateDDMMYY, formatQty } from '../utils';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
 import { normalizeJobKey, saveDailyFieldLogsApi, saveJobToolHoleSectionApi } from '../services/api';
@@ -59,6 +59,8 @@ export interface EpicorLineItem {
   rotHours?: string;
   returnDate?: string;
   rtNumber?: string;
+  supplier?: string;
+  isSubTool?: boolean;
 }
 
 const MONTH_NAMES = [
@@ -200,6 +202,51 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
     [activeContract, selectedJobId]
   );
 
+  // Subcontractor Tool Cost Overrides per tool & month (e.g. subSbDays, subOpsDays, subSbRate, subOpsRate, subRunCharge, subRedressCharge)
+  const [jobSubRentalCosts, setJobSubRentalCosts] = useState<Record<string, Partial<JobToolSubRentalCost>>>(() => {
+    try {
+      const saved = localStorage.getItem(`emdad_job_subrental_costs_${currentJob?.id || selectedJobId}`);
+      if (saved) return JSON.parse(saved);
+      if (currentJob?.subRentalCosts) return currentJob.subRentalCosts;
+    } catch {}
+    return {};
+  });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`emdad_job_subrental_costs_${currentJob?.id || selectedJobId}`);
+      if (saved) {
+        setJobSubRentalCosts(JSON.parse(saved));
+      } else if (currentJob?.subRentalCosts) {
+        setJobSubRentalCosts(currentJob.subRentalCosts);
+      } else {
+        setJobSubRentalCosts({});
+      }
+    } catch {
+      setJobSubRentalCosts({});
+    }
+  }, [currentJob?.id, selectedJobId, currentJob?.subRentalCosts]);
+
+  const handleUpdateSubRentalCost = useCallback(
+    (toolKey: string, updates: Partial<JobToolSubRentalCost>) => {
+      setJobSubRentalCosts((prev) => {
+        const existing = prev[toolKey] || {};
+        const next = { ...prev, [toolKey]: { ...existing, ...updates } };
+        try {
+          localStorage.setItem(`emdad_job_subrental_costs_${currentJob?.id || selectedJobId}`, JSON.stringify(next));
+        } catch {}
+        if (onUpdateJob && currentJob) {
+          onUpdateJob({
+            ...currentJob,
+            subRentalCosts: next as Record<string, any>,
+          });
+        }
+        return next;
+      });
+    },
+    [currentJob, selectedJobId, onUpdateJob]
+  );
+
   // Searchable Active Job Combobox
   const [isJobDropdownOpen, setIsJobDropdownOpen] = useState(false);
   const [jobSearchQuery, setJobSearchQuery] = useState('');
@@ -314,6 +361,8 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
 
           const retDate = matchedRT?.rtDate || matchedRT?.backloadRmDate || (tl as any).returnDate || (tl as any).dateIn || '';
           const isReturned = Boolean(retDate || (tl.status && tl.status.toLowerCase().includes('return')));
+          const rawSupplier = ((tl as any).supplier || (tl as any).ownership || toolInv?.supplier || toolInv?.ownership || '').trim();
+          const isSub = Boolean(rawSupplier && rawSupplier.toUpperCase() !== 'EMDAD') || Boolean(toolInv?.subRentalDailyRate || toolInv?.subRentalMonthlyRate);
 
           items.push({
             id: `tool-${dt.dtNumber}-${tl.serial}-${lineSeq}`,
@@ -328,6 +377,8 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
             rotHours: '',
             returnDate: retDate,
             rtNumber: matchedRT?.rtNumber || (tl as any).rtBatchId || '',
+            supplier: rawSupplier,
+            isSubTool: isSub,
           });
         });
       });
@@ -357,29 +408,30 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
     if (items.length === 0) {
       // Standard Epicor representative fleet tools fallback
       const sampleTools = [
-        { asset: 'EW-024', desc: '16FT CARGO BASKET FOR DRILLING ASSEMBLY', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '' },
-        { asset: 'OS818FS-1224', desc: '8-1/8" OD LOGAN SERIES 150 FULL STRENGTH RELEASING OVERSHOT', dt: 'DT-03161', dtDate: `${curYM}-03`, retDate: `${curYM}-24`, rt: 'RT-0042' },
-        { asset: 'OSEXT818FS-1', desc: '8-1/8" OD X 6-9/16" REG PIN X BOX OVERSHOT EXTENSION SUB', dt: 'DT-03161', dtDate: `${curYM}-03`, retDate: `${curYM}-24`, rt: 'RT-0042' },
-        { asset: 'SN-1121', desc: '8-1/8" OD SH OVERSHOT SPIRAL GRAPPLE & PACKER ASSY', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '' },
-        { asset: 'SN-1022', desc: '8-1/8" SH OVERSHOT BASKET GRAPPLE CONTROL', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '' },
-        { asset: 'SN-1202', desc: '6-1/2" OD X 2-1/4" ID DRILLING BUMPER SUB W/ 4-1/2" IF PIN X BOX', dt: 'DT-03161', dtDate: `${curYM}-02`, retDate: '', rt: '' },
-        { asset: 'FA612-001', desc: '6-1/2" FISHING ACCELERATOR C/W 4-1/2" IF PIN X BOX', dt: 'DT-03161', dtDate: `${curYM}-04`, retDate: '', rt: '' },
-        { asset: 'SN-1134', desc: '6-1/2" OD FISHING BUMPER JAR DOUBLE ACTING HYDRAULIC', dt: 'DT-03161', dtDate: `${curYM}-05`, retDate: `${curYM}-26`, rt: 'RT-0043' },
-        { asset: 'SM850-008', desc: '8-1/2" STRING MILL W/ 4-1/2" IF PIN X BOX CRUSHED CARBIDE', dt: 'DT-03161', dtDate: `${curYM}-02`, retDate: '', rt: '' },
-        { asset: 'SN-1104', desc: '6-5/8" OD JUNK SUB W/ 4-1/2" IF PIN X BOX', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '' },
-        { asset: 'SN-1205', desc: 'BIT SUB W/ 4-1/2" IF BOX X 6-5/8" REG BOX BORED FOR FLOAT', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '' },
-        { asset: 'SN-1269', desc: 'CROSSOVER SUB W/ 4-1/2" IF PIN X 4-1/2" XH BOX', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '' },
-        { asset: 'SN-1375', desc: '36" LONG DITCH MAGNET C/W CLEANING BRACKET & HANDLES', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '' },
-        { asset: 'SN-1265', desc: '5-3/4" ITCO RELEASING SPEAR W/ 3-1/2" IF PIN X BOX', dt: 'DT-03161', dtDate: `${curYM}-06`, retDate: `${curYM}-22`, rt: 'RT-0044' },
-        { asset: 'STS8312-1498', desc: 'SPEAR STOP SUB W/ 3-1/2" IF PIN X BOX', dt: 'DT-03161', dtDate: `${curYM}-06`, retDate: `${curYM}-22`, rt: 'RT-0044' },
-        { asset: 'SN-1115', desc: '7-7/8" RCJB W/ 8-3/8" MAGNET INSERT REVERSE CIRCULATING', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '' },
-        { asset: 'JAR-800-HM', desc: '8" OD DOUBLE ACTING HYDRO-MECHANICAL DRILLING JAR C/W 6-5/8" REG', dt: 'DT-03162', dtDate: `${curYM}-02`, retDate: '', rt: '' },
-        { asset: 'ST-950-00', desc: '9-1/2" SHOCK TOOL C/W 7-5/8" REG PIN X BOX ST950', dt: 'DT-03162', dtDate: `${curYM}-02`, retDate: '', rt: '' },
-        { asset: 'NMDC-634', desc: '6-3/4" NON-MAGNETIC DRILL COLLAR (NMDC) MONEL', dt: 'DT-03163', dtDate: `${curYM}-03`, retDate: '', rt: '' },
-        { asset: 'STAB-1214', desc: '12-1/4" INTEGRAL BLADE NEAR BIT STABILIZER C/W WEAR BUTTONS', dt: 'DT-03163', dtDate: `${curYM}-03`, retDate: '', rt: '' },
+        { asset: 'EW-024', desc: '16FT CARGO BASKET FOR DRILLING ASSEMBLY', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '', supplier: 'EMDAD' },
+        { asset: 'OS818FS-1224', desc: '8-1/8" OD LOGAN SERIES 150 FULL STRENGTH RELEASING OVERSHOT', dt: 'DT-03161', dtDate: `${curYM}-03`, retDate: `${curYM}-24`, rt: 'RT-0042', supplier: 'EMDAD' },
+        { asset: 'OSEXT818FS-1', desc: '8-1/8" OD X 6-9/16" REG PIN X BOX OVERSHOT EXTENSION SUB', dt: 'DT-03161', dtDate: `${curYM}-03`, retDate: `${curYM}-24`, rt: 'RT-0042', supplier: 'EMDAD' },
+        { asset: 'SN-1121', desc: '8-1/8" OD SH OVERSHOT SPIRAL GRAPPLE & PACKER ASSY', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '', supplier: 'EPIS' },
+        { asset: 'SN-1022', desc: '8-1/8" SH OVERSHOT BASKET GRAPPLE CONTROL', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '', supplier: 'EMDAD' },
+        { asset: 'SN-1202', desc: '6-1/2" OD X 2-1/4" ID DRILLING BUMPER SUB W/ 4-1/2" IF PIN X BOX', dt: 'DT-03161', dtDate: `${curYM}-02`, retDate: '', rt: '', supplier: 'EMDAD' },
+        { asset: 'FA612-001', desc: '6-1/2" FISHING ACCELERATOR C/W 4-1/2" IF PIN X BOX', dt: 'DT-03161', dtDate: `${curYM}-04`, retDate: '', rt: '', supplier: 'EMDAD' },
+        { asset: 'SN-1134', desc: '6-1/2" OD FISHING BUMPER JAR DOUBLE ACTING HYDRAULIC', dt: 'DT-03161', dtDate: `${curYM}-05`, retDate: `${curYM}-26`, rt: 'RT-0043', supplier: 'MOTORMAX' },
+        { asset: 'SM850-008', desc: '8-1/2" STRING MILL W/ 4-1/2" IF PIN X BOX CRUSHED CARBIDE', dt: 'DT-03161', dtDate: `${curYM}-02`, retDate: '', rt: '', supplier: 'EMDAD' },
+        { asset: 'SN-1104', desc: '6-5/8" OD JUNK SUB W/ 4-1/2" IF PIN X BOX', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '', supplier: 'EMDAD' },
+        { asset: 'SN-1205', desc: 'BIT SUB W/ 4-1/2" IF BOX X 6-5/8" REG BOX BORED FOR FLOAT', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '', supplier: 'EMDAD' },
+        { asset: 'SN-1269', desc: 'CROSSOVER SUB W/ 4-1/2" IF PIN X 4-1/2" XH BOX', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '', supplier: 'EMDAD' },
+        { asset: 'SN-1375', desc: '36" LONG DITCH MAGNET C/W CLEANING BRACKET & HANDLES', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '', supplier: 'EMDAD' },
+        { asset: 'SN-1265', desc: '5-3/4" ITCO RELEASING SPEAR W/ 3-1/2" IF PIN X BOX', dt: 'DT-03161', dtDate: `${curYM}-06`, retDate: `${curYM}-22`, rt: 'RT-0044', supplier: 'EMDAD' },
+        { asset: 'STS8312-1498', desc: 'SPEAR STOP SUB W/ 3-1/2" IF PIN X BOX', dt: 'DT-03161', dtDate: `${curYM}-06`, retDate: `${curYM}-22`, rt: 'RT-0044', supplier: 'EMDAD' },
+        { asset: 'SN-1115', desc: '7-7/8" RCJB W/ 8-3/8" MAGNET INSERT REVERSE CIRCULATING', dt: 'DT-03161', dtDate: `${curYM}-01`, retDate: '', rt: '', supplier: 'EMDAD' },
+        { asset: 'JAR-800-HM', desc: '8" OD DOUBLE ACTING HYDRO-MECHANICAL DRILLING JAR C/W 6-5/8" REG', dt: 'DT-03162', dtDate: `${curYM}-02`, retDate: '', rt: '', supplier: 'MOTORMAX' },
+        { asset: 'ST-950-00', desc: '9-1/2" SHOCK TOOL C/W 7-5/8" REG PIN X BOX ST950', dt: 'DT-03162', dtDate: `${curYM}-02`, retDate: '', rt: '', supplier: 'ELITE' },
+        { asset: 'NMDC-634', desc: '6-3/4" NON-MAGNETIC DRILL COLLAR (NMDC) MONEL', dt: 'DT-03163', dtDate: `${curYM}-03`, retDate: '', rt: '', supplier: 'EMDAD' },
+        { asset: 'STAB-1214', desc: '12-1/4" INTEGRAL BLADE NEAR BIT STABILIZER C/W WEAR BUTTONS', dt: 'DT-03163', dtDate: `${curYM}-03`, retDate: '', rt: '', supplier: 'EMDAD' },
       ];
 
       sampleTools.forEach((st) => {
+        const isSub = Boolean(st.supplier && st.supplier.toUpperCase() !== 'EMDAD');
         items.push({
           id: `sample-tool-${lineSeq}`,
           category: 'Tools',
@@ -393,6 +445,8 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
           rotHours: '',
           returnDate: st.retDate || '',
           rtNumber: st.rt || '',
+          supplier: st.supplier,
+          isSubTool: isSub,
         });
       });
     }
@@ -676,6 +730,40 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
       const opsAmount = opsCount * effectiveOpsRate;
       const totalAmount = sbAmount + opsAmount;
 
+      // Subcontractor / Supplier Cost determination
+      const invMatch = inventory.find(
+        (t) =>
+          (t.serial && t.serial.trim().toUpperCase() === item.assetNumber.trim().toUpperCase()) ||
+          (t.assetNo && t.assetNo.trim().toUpperCase() === item.assetNumber.trim().toUpperCase())
+      );
+      const rawSupplier = (item.supplier || (item as any).ownership || invMatch?.supplier || invMatch?.ownership || '').trim();
+      const isSubTool = item.category === 'Tools' && Boolean(
+        (rawSupplier && rawSupplier.toUpperCase() !== 'EMDAD') ||
+        invMatch?.subRentalDailyRate ||
+        invMatch?.subRentalMonthlyRate ||
+        item.isSubTool
+      );
+      const supplierName = isSubTool ? (rawSupplier || 'MOTORMAX') : 'EMDAD';
+
+      const toolKey = item.assetNumber || item.id;
+      const subSaved = jobSubRentalCosts[toolKey] || {};
+      const subSbDays = subSaved.subSbDays !== undefined && subSaved.subSbDays !== null ? Number(subSaved.subSbDays) : (isSubTool ? billedSb : 0);
+      const subOpsDays = subSaved.subOpsDays !== undefined && subSaved.subOpsDays !== null ? Number(subSaved.subOpsDays) : (isSubTool ? opsCount : 0);
+
+      const defaultDailyCost = invMatch?.subRentalDailyRate || (invMatch?.subRentalMonthlyRate ? Math.round(invMatch.subRentalMonthlyRate / 30) : 0);
+      const subSbRate = subSaved.subSbRate !== undefined && subSaved.subSbRate !== null
+        ? Number(subSaved.subSbRate)
+        : (isSubTool ? (defaultDailyCost ? Math.round(defaultDailyCost * 0.7) : Math.round(effectiveSbRate * 0.75)) : 0);
+      const subOpsRate = subSaved.subOpsRate !== undefined && subSaved.subOpsRate !== null
+        ? Number(subSaved.subOpsRate)
+        : (isSubTool ? (defaultDailyCost || Math.round(effectiveOpsRate * 0.75)) : 0);
+      const subRunCharge = subSaved.subRunCharge !== undefined && subSaved.subRunCharge !== null ? Number(subSaved.subRunCharge) : 0;
+      const subRedressCharge = subSaved.subRedressCharge !== undefined && subSaved.subRedressCharge !== null ? Number(subSaved.subRedressCharge) : 0;
+
+      const totalSubCost = isSubTool
+        ? (subSbDays * subSbRate) + (subOpsDays * subOpsRate) + subRunCharge + subRedressCharge
+        : 0;
+
       return {
         sbCount,
         billedSb,
@@ -686,9 +774,20 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
         effectiveOpsRate,
         effectiveSbRate,
         selectedRate: itemRate,
+        // Sub-rental details
+        isSubTool,
+        supplierName,
+        toolKey,
+        subSbDays,
+        subOpsDays,
+        subSbRate,
+        subOpsRate,
+        subRunCharge,
+        subRedressCharge,
+        totalSubCost,
       };
     },
-    [cells, rateConfig, toolHoleSectionSelections, activeContract, currentJob]
+    [cells, rateConfig, toolHoleSectionSelections, activeContract, currentJob, inventory, jobSubRentalCosts]
   );
 
   // Totals for active month
@@ -696,15 +795,37 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
     let totalSb = 0;
     let totalOps = 0;
     let totalRev = 0;
+    let totalSubSbDays = 0;
+    let totalSubOpsDays = 0;
+    let totalSubRunCharge = 0;
+    let totalSubRedress = 0;
+    let totalSubCost = 0;
 
     displayedItems.forEach((item) => {
       const s = calcItemStats(item, activeYM);
       totalSb += s.billedSb;
       totalOps += s.opsCount;
       totalRev += s.totalAmount;
+      if (s.isSubTool) {
+        totalSubSbDays += s.subSbDays;
+        totalSubOpsDays += s.subOpsDays;
+        totalSubRunCharge += s.subRunCharge;
+        totalSubRedress += s.subRedressCharge;
+        totalSubCost += s.totalSubCost;
+      }
     });
 
-    return { totalSb, totalOps, totalRev, count: displayedItems.length };
+    return {
+      totalSb,
+      totalOps,
+      totalRev,
+      totalSubSbDays,
+      totalSubOpsDays,
+      totalSubRunCharge,
+      totalSubRedress,
+      totalSubCost,
+      count: displayedItems.length,
+    };
   }, [displayedItems, activeYM, calcItemStats]);
 
   // Active month invoice breakdown by category (Tools, Man Power, Inventory + 5% UAE VAT)
@@ -1270,7 +1391,20 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
     for (let d = 1; d <= daysInActiveMonth; d++) {
       headers.push(String(d));
     }
-    headers.push('Standby Days', 'Ops Days', `Rate (${rateConfig.currency})`, `Total Net (${rateConfig.currency})`);
+    headers.push(
+      'Standby Days',
+      'Ops Days',
+      `Rate (${rateConfig.currency})`,
+      `Total Net (${rateConfig.currency})`,
+      'Supplier',
+      'Sub SB Days',
+      'Sub Ops Days',
+      'Sub SB Rate',
+      'Sub Ops Rate',
+      'Sub Run Chg',
+      'Sub Redress',
+      `Total Sub Cost (${rateConfig.currency})`
+    );
     wsData.push(headers);
 
     displayedItems.forEach((item) => {
@@ -1292,7 +1426,20 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
           rowArr.push('-');
         }
       }
-      rowArr.push(stats.billedSb, stats.opsCount, rateConfig.ops, stats.totalAmount);
+      rowArr.push(
+        stats.billedSb,
+        stats.opsCount,
+        rateConfig.ops,
+        stats.totalAmount,
+        stats.isSubTool ? stats.supplierName : 'EMDAD (Owned)',
+        stats.isSubTool ? stats.subSbDays : 0,
+        stats.isSubTool ? stats.subOpsDays : 0,
+        stats.isSubTool ? stats.subSbRate : 0,
+        stats.isSubTool ? stats.subOpsRate : 0,
+        stats.isSubTool ? stats.subRunCharge : 0,
+        stats.isSubTool ? stats.subRedressCharge : 0,
+        stats.isSubTool ? stats.totalSubCost : 0
+      );
       wsData.push(rowArr);
     });
 
@@ -1922,6 +2069,11 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                 >
                   Submit for Invoice
                 </button>
+                {monthTotals.totalSubCost > 0 && (
+                  <span className="text-orange-950 font-mono text-xs font-bold bg-orange-100 px-2 py-0.5 rounded border border-orange-300">
+                    Sub-Rental Cost: {monthTotals.totalSubCost.toLocaleString()} {rateConfig.currency}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -1930,7 +2082,7 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
               ref={scrollContainerRef}
               className="overflow-x-auto w-full border border-[#b8c9db] rounded shadow-2xs max-h-[650px] overflow-y-auto"
             >
-              <table className="w-full text-xs text-left border-collapse min-w-[1400px]">
+              <table className="w-full text-xs text-left border-collapse min-w-[2400px]">
                 <thead className="bg-[#1a3055] text-white font-bold uppercase text-[9px] tracking-wider sticky top-0 z-30">
                   <tr>
                     {/* 1. Line Number */}
@@ -1987,17 +2139,43 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                     })}
 
                     {/* Summary Columns */}
-                    <th className="px-1.5 py-1.5 text-center w-12 text-blue-300 sticky right-[160px] bg-[#1a3055] z-30">
+                    <th className="px-1.5 py-1.5 text-center min-w-[60px] text-blue-300 bg-[#1a3055]">
                       SB Days
                     </th>
-                    <th className="px-1.5 py-1.5 text-center w-12 text-emerald-300 sticky right-[108px] bg-[#1a3055] z-30">
+                    <th className="px-1.5 py-1.5 text-center min-w-[60px] text-emerald-300 bg-[#1a3055]">
                       Ops Days
                     </th>
-                    <th className="px-1.5 py-1.5 text-center w-14 sticky right-[52px] bg-[#1a3055] z-30">
+                    <th className="px-1.5 py-1.5 text-center min-w-[90px] bg-[#1a3055]">
                       Rate ({rateConfig.currency})
                     </th>
-                    <th className="px-2 py-1.5 text-right w-20 sticky right-0 bg-[#1a3055] z-30">
+                    <th className="px-2 py-1.5 text-right min-w-[110px] bg-[#1a3055] border-r-2 border-slate-400">
                       Total ({rateConfig.currency})
+                    </th>
+
+                    {/* Sub-Contractor / Supplier Cost Columns */}
+                    <th className="px-2 py-1.5 text-left bg-orange-100 text-orange-950 font-bold whitespace-nowrap min-w-[110px]">
+                      SUPPLIER
+                    </th>
+                    <th className="px-1 py-1.5 text-center bg-orange-100 text-orange-950 font-bold whitespace-nowrap min-w-[80px]">
+                      SUB SB DAYS
+                    </th>
+                    <th className="px-1 py-1.5 text-center bg-orange-100 text-orange-950 font-bold whitespace-nowrap min-w-[80px]">
+                      SUB OPS DAYS
+                    </th>
+                    <th className="px-1.5 py-1.5 text-right bg-orange-50 text-orange-950 font-bold whitespace-nowrap min-w-[95px]">
+                      SUB SB RATE
+                    </th>
+                    <th className="px-1.5 py-1.5 text-right bg-orange-50 text-orange-950 font-bold whitespace-nowrap min-w-[95px]">
+                      SUB OPS RATE
+                    </th>
+                    <th className="px-1.5 py-1.5 text-right bg-orange-50 text-orange-950 font-bold whitespace-nowrap min-w-[90px]">
+                      SUB RUN CHG
+                    </th>
+                    <th className="px-1.5 py-1.5 text-right bg-orange-50 text-orange-950 font-bold whitespace-nowrap min-w-[95px]">
+                      SUB REDRESS
+                    </th>
+                    <th className="px-2 py-1.5 text-right bg-orange-200 text-orange-950 font-bold whitespace-nowrap min-w-[130px]">
+                      TOTAL SUB COST
                     </th>
                   </tr>
                 </thead>
@@ -2005,7 +2183,7 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                   {displayedItems.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={8 + daysInActiveMonth + 4}
+                        colSpan={8 + daysInActiveMonth + 4 + 8}
                         className="p-10 text-center text-slate-500 font-medium"
                       >
                         No line items found for this tab or search query.
@@ -2208,17 +2386,17 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                           })}
 
                           {/* Standby Days */}
-                          <td className="px-1.5 py-1 text-center font-mono font-bold text-blue-800 bg-blue-50/50 sticky right-[160px] z-10 text-[11px]">
+                          <td className="px-1.5 py-1 text-center font-mono font-bold text-blue-800 bg-blue-50/50 text-[11px]">
                             {stats.billedSb}
                           </td>
 
                           {/* Ops Days */}
-                          <td className="px-1.5 py-1 text-center font-mono font-bold text-emerald-800 bg-emerald-50/50 sticky right-[108px] z-10 text-[11px]">
+                          <td className="px-1.5 py-1 text-center font-mono font-bold text-emerald-800 bg-emerald-50/50 text-[11px]">
                             {stats.opsCount}
                           </td>
 
                           {/* Day Rate */}
-                          <td className="px-1.5 py-1 text-center font-mono text-slate-700 sticky right-[52px] bg-white z-10 text-[11px]">
+                          <td className="px-1.5 py-1 text-center font-mono text-slate-700 bg-white text-[11px]">
                             <div className="font-bold text-[#1a3055]">
                               {stats.selectedRate?.currency || rateConfig.currency} {stats.effectiveOpsRate.toLocaleString()}
                             </div>
@@ -2228,8 +2406,149 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                           </td>
 
                           {/* Total Line Amount */}
-                          <td className="px-2 py-1 text-right font-mono font-bold text-[#1a3055] sticky right-0 bg-slate-50 z-10 text-[11px]">
+                          <td className="px-2 py-1 text-right font-mono font-bold text-[#1a3055] bg-slate-50 text-[11px] border-r-2 border-slate-300">
                             {stats.selectedRate?.currency || rateConfig.currency} {stats.totalAmount.toLocaleString()}
+                          </td>
+
+                          {/* Subcontractor / Supplier Cost Columns */}
+                          <td className="px-2 py-1 whitespace-nowrap font-medium text-slate-800 bg-orange-50/30">
+                            {stats.isSubTool ? (
+                              <span className="px-1.5 py-0.5 rounded font-bold text-[10px] bg-orange-100 text-orange-900 border border-orange-200">
+                                {stats.supplierName}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-sans text-[10px]">EMDAD (Owned)</span>
+                            )}
+                          </td>
+
+                          <td className="px-1 py-1 text-center bg-orange-50/20">
+                            {stats.isSubTool ? (
+                              <input
+                                type="number"
+                                min={0}
+                                max={31}
+                                value={stats.subSbDays ?? ''}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                                  handleUpdateSubRentalCost(stats.toolKey, { subSbDays: val });
+                                }}
+                                className="w-12 text-center font-mono font-bold text-[11px] bg-white border border-orange-300 rounded px-1 py-0.5 text-orange-950 focus:ring-1 focus:ring-orange-500 outline-none"
+                              />
+                            ) : (
+                              <span className="text-slate-300 font-mono text-[10px]">—</span>
+                            )}
+                          </td>
+
+                          <td className="px-1 py-1 text-center bg-orange-50/20">
+                            {stats.isSubTool ? (
+                              <input
+                                type="number"
+                                min={0}
+                                max={31}
+                                value={stats.subOpsDays ?? ''}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                                  handleUpdateSubRentalCost(stats.toolKey, { subOpsDays: val });
+                                }}
+                                className="w-12 text-center font-mono font-bold text-[11px] bg-white border border-orange-300 rounded px-1 py-0.5 text-orange-950 focus:ring-1 focus:ring-orange-500 outline-none"
+                              />
+                            ) : (
+                              <span className="text-slate-300 font-mono text-[10px]">—</span>
+                            )}
+                          </td>
+
+                          <td className="px-1 py-1 text-right bg-orange-50/10">
+                            {stats.isSubTool ? (
+                              <input
+                                type="number"
+                                step="any"
+                                min={0}
+                                value={stats.subSbRate ?? ''}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                  handleUpdateSubRentalCost(stats.toolKey, { subSbRate: val });
+                                }}
+                                className="w-16 text-right font-mono text-[11px] bg-white border border-orange-200 rounded px-1 py-0.5 text-slate-800 focus:ring-1 focus:ring-orange-500 outline-none"
+                              />
+                            ) : (
+                              <span className="text-slate-300 font-mono text-[10px]">—</span>
+                            )}
+                          </td>
+
+                          <td className="px-1 py-1 text-right bg-orange-50/10">
+                            {stats.isSubTool ? (
+                              <input
+                                type="number"
+                                step="any"
+                                min={0}
+                                value={stats.subOpsRate ?? ''}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                  handleUpdateSubRentalCost(stats.toolKey, { subOpsRate: val });
+                                }}
+                                className="w-16 text-right font-mono text-[11px] bg-white border border-orange-200 rounded px-1 py-0.5 text-slate-800 focus:ring-1 focus:ring-orange-500 outline-none"
+                              />
+                            ) : (
+                              <span className="text-slate-300 font-mono text-[10px]">—</span>
+                            )}
+                          </td>
+
+                          <td className="px-1 py-1 text-right bg-orange-50/10">
+                            {stats.isSubTool ? (
+                              <input
+                                type="number"
+                                step="any"
+                                min={0}
+                                value={stats.subRunCharge || ''}
+                                placeholder="0"
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                  handleUpdateSubRentalCost(stats.toolKey, { subRunCharge: val });
+                                }}
+                                className="w-14 text-right font-mono text-[10px] bg-white border border-orange-200 rounded px-1 py-0.5 text-slate-700 focus:ring-1 focus:ring-orange-500 outline-none"
+                              />
+                            ) : (
+                              <span className="text-slate-300 font-mono text-[10px]">—</span>
+                            )}
+                          </td>
+
+                          <td className="px-1 py-1 text-right bg-orange-50/10">
+                            {stats.isSubTool ? (
+                              <input
+                                type="number"
+                                step="any"
+                                min={0}
+                                value={stats.subRedressCharge || ''}
+                                placeholder="0"
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                  handleUpdateSubRentalCost(stats.toolKey, { subRedressCharge: val });
+                                }}
+                                className="w-14 text-right font-mono text-[10px] bg-white border border-orange-200 rounded px-1 py-0.5 text-slate-700 focus:ring-1 focus:ring-orange-500 outline-none"
+                              />
+                            ) : (
+                              <span className="text-slate-300 font-mono text-[10px]">—</span>
+                            )}
+                          </td>
+
+                          <td className="px-2 py-1 text-right font-mono font-bold bg-orange-100/60 text-orange-950 text-[11px]">
+                            {stats.isSubTool ? (
+                              <span>{stats.totalSubCost.toLocaleString()} {rateConfig.currency}</span>
+                            ) : (
+                              <span className="text-slate-400 font-sans text-[10px] font-normal">— (Owned Fleet)</span>
+                            )}
                           </td>
                         </tr>
                       );
@@ -2249,15 +2568,36 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                         style={{ width: '22px', minWidth: '22px' }}
                       />
                     ))}
-                    <td className="px-1.5 py-1.5 text-center font-mono font-bold text-blue-900 sticky right-[160px] bg-slate-100 z-10 text-[11px]">
+                    <td className="px-1.5 py-1.5 text-center font-mono font-bold text-blue-900 bg-slate-100 text-[11px]">
                       {monthTotals.totalSb}
                     </td>
-                    <td className="px-1.5 py-1.5 text-center font-mono font-bold text-emerald-900 sticky right-[108px] bg-slate-100 z-10 text-[11px]">
+                    <td className="px-1.5 py-1.5 text-center font-mono font-bold text-emerald-900 bg-slate-100 text-[11px]">
                       {monthTotals.totalOps}
                     </td>
-                    <td className="sticky right-[52px] bg-slate-100 z-10 text-center text-slate-400 font-mono text-[10px]">-</td>
-                    <td className="px-2 py-1.5 text-right font-mono font-bold text-[#1a3055] sticky right-0 bg-slate-200 z-10 text-[11px]">
+                    <td className="bg-slate-100 text-center text-slate-400 font-mono text-[10px]">-</td>
+                    <td className="px-2 py-1.5 text-right font-mono font-bold text-[#1a3055] bg-slate-200 text-[11px] border-r-2 border-slate-400">
                       {monthTotals.totalRev.toLocaleString()}
+                    </td>
+                    {/* Subcontractor Footers */}
+                    <td className="px-2 py-1.5 text-left text-orange-900 text-[10px] font-bold bg-orange-100">
+                      Sub-Rental Cost:
+                    </td>
+                    <td className="px-1 py-1.5 text-center font-mono font-bold text-orange-950 bg-orange-50 text-[11px]">
+                      {monthTotals.totalSubSbDays}
+                    </td>
+                    <td className="px-1 py-1.5 text-center font-mono font-bold text-orange-950 bg-orange-50 text-[11px]">
+                      {monthTotals.totalSubOpsDays}
+                    </td>
+                    <td className="px-1 py-1.5 text-right font-mono text-slate-400 bg-orange-50 text-[10px]">—</td>
+                    <td className="px-1 py-1.5 text-right font-mono text-slate-400 bg-orange-50 text-[10px]">—</td>
+                    <td className="px-1 py-1.5 text-right font-mono text-slate-700 bg-orange-50 text-[10px]">
+                      {monthTotals.totalSubRunCharge.toLocaleString()}
+                    </td>
+                    <td className="px-1 py-1.5 text-right font-mono text-slate-700 bg-orange-50 text-[10px]">
+                      {monthTotals.totalSubRedress.toLocaleString()}
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono font-bold text-orange-950 bg-orange-200 text-[11px]">
+                      {monthTotals.totalSubCost.toLocaleString()} {rateConfig.currency}
                     </td>
                   </tr>
                 </tbody>

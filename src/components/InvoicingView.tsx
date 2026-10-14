@@ -239,11 +239,13 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
     let operTotal = 0;
     let standbyTotal = 0;
     let redressTotal = 0;
+    let totalSubCostUSD = 0;
 
     editableLines.forEach((l) => {
       operTotal += l.operTotalUSD || 0;
       standbyTotal += l.standbyTotalUSD || 0;
       redressTotal += (l as any).redressTotalUSD || 0;
+      totalSubCostUSD += l.totalSubCostUSD || 0;
     });
 
     const subtotalUSD = Math.round((operTotal + standbyTotal + redressTotal) * 100) / 100;
@@ -253,6 +255,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
     const subtotalAED = Math.round(subtotalUSD * USD_TO_AED_EXCHANGE_RATE * 100) / 100;
     const vatAED = Math.round(vatUSD * USD_TO_AED_EXCHANGE_RATE * 100) / 100;
     const grandTotalAED = Math.round((subtotalAED + vatAED) * 100) / 100;
+    const totalSubCostAED = Math.round(totalSubCostUSD * USD_TO_AED_EXCHANGE_RATE * 100) / 100;
 
     const words = convertAmountToWords(grandTotalUSD);
 
@@ -266,6 +269,8 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
       subtotalAED,
       vatAED,
       grandTotalAED,
+      totalSubCostUSD,
+      totalSubCostAED,
       words,
     };
   }, [editableLines]);
@@ -282,6 +287,22 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
       }
       if (field === 'standbyDays' || field === 'standbyRateUSD') {
         target.standbyTotalUSD = Math.round((target.standbyDays || 0) * (target.standbyRateUSD || 0) * 100) / 100;
+      }
+      if (
+        field === 'subSbDays' ||
+        field === 'subOpsDays' ||
+        field === 'subSbRateUSD' ||
+        field === 'subOpsRateUSD' ||
+        field === 'subRunChargeUSD' ||
+        field === 'subRedressChargeUSD'
+      ) {
+        const subSb = target.subSbDays || 0;
+        const subOps = target.subOpsDays || 0;
+        const subSbR = target.subSbRateUSD || 0;
+        const subOpsR = target.subOpsRateUSD || 0;
+        const subRun = target.subRunChargeUSD || 0;
+        const subRed = target.subRedressChargeUSD || 0;
+        target.totalSubCostUSD = Math.round(((subSb * subSbR) + (subOps * subOpsR) + subRun + subRed) * 100) / 100;
       }
 
       target.totalChargesUSD =
@@ -764,13 +785,20 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                 <th className="py-2.5 px-2 text-right bg-blue-50/60 text-blue-950">Oper Rate ($)</th>
                 <th className="py-2.5 px-2 text-center bg-amber-50/60 text-amber-950">Standby Days</th>
                 <th className="py-2.5 px-2 text-right bg-amber-50/60 text-amber-950">Standby Rate ($)</th>
-                <th className="py-2.5 px-3 text-right">Total ($ USD)</th>
+                <th className="py-2.5 px-3 text-right border-r-2 border-slate-300">Total ($ USD)</th>
+                {/* Subcontractor Cost Breakdown */}
+                <th className="py-2.5 px-3 text-left bg-orange-100 text-orange-950">Supplier</th>
+                <th className="py-2.5 px-2 text-center bg-orange-100 text-orange-950">Sub SB Days</th>
+                <th className="py-2.5 px-2 text-center bg-orange-100 text-orange-950">Sub Ops Days</th>
+                <th className="py-2.5 px-2 text-right bg-orange-50 text-orange-950">Sub SB Rate ($)</th>
+                <th className="py-2.5 px-2 text-right bg-orange-50 text-orange-950">Sub Ops Rate ($)</th>
+                <th className="py-2.5 px-3 text-right bg-orange-200/80 text-orange-950">Sub Cost ($ USD)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {editableLines.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-6 text-center text-slate-400">
+                  <td colSpan={19} className="py-6 text-center text-slate-400">
                     No tools or services found for this job.
                   </td>
                 </tr>
@@ -834,9 +862,86 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                       />
                     </td>
 
-                    {/* Total */}
-                    <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
+                    {/* Total Revenue */}
+                    <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 border-r-2 border-slate-300">
                       ${(line.totalChargesUSD || 0).toFixed(2)}
+                    </td>
+
+                    {/* Subcontractor Columns */}
+                    <td className="py-2 px-3 whitespace-nowrap bg-orange-50/30 font-medium">
+                      {line.isSubTool ? (
+                        <span className="px-1.5 py-0.5 rounded font-bold text-[10px] bg-orange-100 text-orange-900 border border-orange-200">
+                          {line.supplier}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-sans text-[10px]">EMDAD (Owned)</span>
+                      )}
+                    </td>
+
+                    <td className="py-2 px-2 text-center bg-orange-50/20">
+                      {line.isSubTool ? (
+                        <input
+                          type="number"
+                          min="0"
+                          value={line.subSbDays ?? 0}
+                          onChange={(e) => handleUpdateLine(idx, 'subSbDays', parseInt(e.target.value, 10) || 0)}
+                          className="w-12 text-center py-0.5 text-xs font-mono font-bold bg-white border border-orange-300 rounded outline-none focus:border-orange-500 text-orange-950"
+                        />
+                      ) : (
+                        <span className="text-slate-300 font-mono text-[10px]">—</span>
+                      )}
+                    </td>
+
+                    <td className="py-2 px-2 text-center bg-orange-50/20">
+                      {line.isSubTool ? (
+                        <input
+                          type="number"
+                          min="0"
+                          value={line.subOpsDays ?? 0}
+                          onChange={(e) => handleUpdateLine(idx, 'subOpsDays', parseInt(e.target.value, 10) || 0)}
+                          className="w-12 text-center py-0.5 text-xs font-mono font-bold bg-white border border-orange-300 rounded outline-none focus:border-orange-500 text-orange-950"
+                        />
+                      ) : (
+                        <span className="text-slate-300 font-mono text-[10px]">—</span>
+                      )}
+                    </td>
+
+                    <td className="py-2 px-2 text-right bg-orange-50/10">
+                      {line.isSubTool ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={line.subSbRateUSD ?? 0}
+                          onChange={(e) => handleUpdateLine(idx, 'subSbRateUSD', parseFloat(e.target.value) || 0)}
+                          className="w-16 text-right py-0.5 text-xs font-mono bg-white border border-orange-200 rounded outline-none focus:border-orange-500 text-slate-800"
+                        />
+                      ) : (
+                        <span className="text-slate-300 font-mono text-[10px]">—</span>
+                      )}
+                    </td>
+
+                    <td className="py-2 px-2 text-right bg-orange-50/10">
+                      {line.isSubTool ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={line.subOpsRateUSD ?? 0}
+                          onChange={(e) => handleUpdateLine(idx, 'subOpsRateUSD', parseFloat(e.target.value) || 0)}
+                          className="w-16 text-right py-0.5 text-xs font-mono bg-white border border-orange-200 rounded outline-none focus:border-orange-500 text-slate-800"
+                        />
+                      ) : (
+                        <span className="text-slate-300 font-mono text-[10px]">—</span>
+                      )}
+                    </td>
+
+                    <td className="py-2 px-3 text-right font-mono font-bold text-orange-950 bg-orange-100/60">
+                      {line.isSubTool ? (
+                        <span>${(line.totalSubCostUSD || 0).toFixed(2)}</span>
+                      ) : (
+                        <span className="text-slate-400 font-sans text-[10px] font-normal">— (Owned Fleet)</span>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -885,6 +990,14 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                 <span>Grand Total (AED @ 3.6725):</span>
                 <span className="font-mono">{financialTotals.grandTotalAED.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AED</span>
               </div>
+              {financialTotals.totalSubCostUSD > 0 && (
+                <div className="flex justify-between py-1 bg-orange-100/70 border border-orange-200 px-2 rounded font-bold text-orange-950 text-xs">
+                  <span>Sub-Rental Supplier Cost Accrual:</span>
+                  <span className="font-mono">
+                    ${financialTotals.totalSubCostUSD.toFixed(2)} USD ({financialTotals.totalSubCostAED.toLocaleString()} AED)
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>

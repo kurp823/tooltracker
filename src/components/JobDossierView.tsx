@@ -2008,26 +2008,48 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return {};
   });
 
+  // Subcontractor Tool Cost Overrides per tool & month (e.g. subSbDays, subOpsDays, subSbRate, subOpsRate, subRunCharge, subRedressCharge)
+  const [jobSubRentalCosts, setJobSubRentalCosts] = useState<Record<string, Partial<JobToolSubRentalCost>>>(() => {
+    try {
+      const saved = localStorage.getItem(`emdad_job_subrental_costs_${jobData.id || jobData.jobNumber}`);
+      if (saved) return JSON.parse(saved);
+      if (jobData.subRentalCosts) return jobData.subRentalCosts;
+    } catch {}
+    return {};
+  });
+
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(`emdad_job_tool_sections_${jobData.id || jobData.jobNumber}`);
+      const saved = localStorage.getItem(`emdad_job_subrental_costs_${jobData.id || jobData.jobNumber}`);
       if (saved) {
-        const parsed = JSON.parse(saved);
-        const cleaned: Record<string, ToolHoleSectionOption> = {};
-        for (const [k, v] of Object.entries(parsed)) {
-          const opt = v as ToolHoleSectionOption;
-          if (opt && opt.contractRef !== 'Ref' && opt.holeSection !== 'Hole Section' && opt.category !== 'From ERP') {
-            cleaned[k] = opt;
-          }
-        }
-        setToolHoleSectionSelections(cleaned);
+        setJobSubRentalCosts(JSON.parse(saved));
+      } else if (jobData.subRentalCosts) {
+        setJobSubRentalCosts(jobData.subRentalCosts);
       } else {
-        setToolHoleSectionSelections({});
+        setJobSubRentalCosts({});
       }
     } catch {
-      setToolHoleSectionSelections({});
+      setJobSubRentalCosts({});
     }
-  }, [jobData.id, jobData.jobNumber]);
+  }, [jobData.id, jobData.jobNumber, jobData.subRentalCosts]);
+
+  const handleUpdateSubRentalCost = useCallback((toolKey: string, updates: Partial<JobToolSubRentalCost>) => {
+    setJobSubRentalCosts((prev) => {
+      const existing = prev[toolKey] || {};
+      const next = { ...prev, [toolKey]: { ...existing, ...updates } };
+      try {
+        localStorage.setItem(`emdad_job_subrental_costs_${jobData.id || jobData.jobNumber}`, JSON.stringify(next));
+      } catch {}
+      // Update job in memory and notify parent
+      if (onSaveJob) {
+        onSaveJob({
+          ...jobData,
+          subRentalCosts: next as Record<string, JobToolSubRentalCost>,
+        });
+      }
+      return next;
+    });
+  }, [jobData, onSaveJob]);
 
   const handleSelectToolHoleSection = useCallback(
     (toolKey: string, tool: any, selectedRateKey: string) => {
@@ -2147,6 +2169,39 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       const redressCharge = (t as any).redressCharge || chosenOption?.redress || 0;
       const totalMonthValue = totalStandbyRate + totalOpsRate + runCharge + redressCharge;
 
+      // Subcontractor / Supplier Cost Reconciliation
+      const invMatch = inventory.find((inv) => {
+        const iSer = (inv.serial || '').trim().toUpperCase();
+        const iAsset = (inv.assetNo || '').trim().toUpperCase();
+        const tSer = (t.serial || '').trim().toUpperCase();
+        const tAss = (t.assetNo || '').trim().toUpperCase();
+        return (tSer && (iSer === tSer || iAsset === tSer)) || (tAss && (iSer === tAss || iAsset === tAss));
+      });
+
+      const rawSupplier = (t.supplier || (t as any).ownership || invMatch?.supplier || invMatch?.ownership || (t.isEmdad ? 'EMDAD' : 'MOTORMAX')).trim();
+      const isSubTool = !t.isEmdad && rawSupplier.toUpperCase() !== 'EMDAD';
+      const supplierName = isSubTool ? rawSupplier : 'EMDAD';
+
+      // Saved overrides or defaults
+      const subSaved = jobSubRentalCosts[toolKey] || {};
+      const subSbDays = subSaved.subSbDays !== undefined && subSaved.subSbDays !== null ? Number(subSaved.subSbDays) : (isSubTool ? sbCount : 0);
+      const subOpsDays = subSaved.subOpsDays !== undefined && subSaved.subOpsDays !== null ? Number(subSaved.subOpsDays) : (isSubTool ? opsCount : 0);
+      
+      // Default rate from inventory subRentalDailyRate or 70% of ops/standby if not set
+      const defaultDailyCost = invMatch?.subRentalDailyRate || (invMatch?.subRentalMonthlyRate ? Math.round(invMatch.subRentalMonthlyRate / 30) : 0);
+      const subSbRate = subSaved.subSbRate !== undefined && subSaved.subSbRate !== null
+        ? Number(subSaved.subSbRate)
+        : (isSubTool ? (defaultDailyCost ? Math.round(defaultDailyCost * 0.7) : Math.round(standbyRate * 0.75)) : 0);
+      const subOpsRate = subSaved.subOpsRate !== undefined && subSaved.subOpsRate !== null
+        ? Number(subSaved.subOpsRate)
+        : (isSubTool ? (defaultDailyCost || Math.round(opsRate * 0.75)) : 0);
+      const subRunCharge = subSaved.subRunCharge !== undefined && subSaved.subRunCharge !== null ? Number(subSaved.subRunCharge) : 0;
+      const subRedressCharge = subSaved.subRedressCharge !== undefined && subSaved.subRedressCharge !== null ? Number(subSaved.subRedressCharge) : 0;
+
+      const totalSubCost = isSubTool
+        ? (subSbDays * subSbRate) + (subOpsDays * subOpsRate) + subRunCharge + subRedressCharge
+        : 0;
+
       return {
         ...t,
         rowSeq: idx + 1,
@@ -2166,6 +2221,16 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         runCharge,
         redressCharge,
         totalMonthValue,
+        // Sub-Contractor fields
+        isSubTool,
+        supplierName,
+        subSbDays,
+        subOpsDays,
+        subSbRate,
+        subOpsRate,
+        subRunCharge,
+        subRedressCharge,
+        totalSubCost,
       };
     });
   }, [
@@ -2176,6 +2241,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     activeContract,
     customUtilStatuses,
     toolHoleSectionSelections,
+    jobSubRentalCosts,
+    inventory,
     jobData.client,
     jobData.currency,
     (jobData as any).holeSection,
@@ -2188,6 +2255,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const monthTotalRunCharge = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.runCharge, 0), [toolUtilizationRows]);
   const monthTotalRedress = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.redressCharge, 0), [toolUtilizationRows]);
   const totalToolRevenueAED = useMemo(() => toolUtilizationRows.reduce((a, r) => a + r.totalMonthValue, 0), [toolUtilizationRows]);
+  const totalSubcontractCostAED = useMemo(() => toolUtilizationRows.reduce((a, r) => a + (r.totalSubCost || 0), 0), [toolUtilizationRows]);
 
   // Engineer Utilization calculation
   const engineerUtilizationRows = useMemo(() => {
@@ -4392,12 +4460,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             <div className="pt-2">
               <div className="bg-[#1a3055] text-white px-3 py-1.5 rounded-t font-bold text-xs flex items-center justify-between">
                 <span>Downhole Tool Fleet Utilization &bull; {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}</span>
-                <span className="text-emerald-400 font-mono text-[11px]">
-                  Total Tool Revenue: {totalToolRevenueAED.toLocaleString()} AED
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-emerald-400 font-mono text-[11px]">
+                    Total Tool Revenue: {totalToolRevenueAED.toLocaleString()} AED
+                  </span>
+                  {totalSubcontractCostAED > 0 && (
+                    <span className="text-orange-300 font-mono text-[11px] bg-orange-950/60 px-2 py-0.5 rounded border border-orange-700/60">
+                      Total Sub-Rental Cost: {totalSubcontractCostAED.toLocaleString()} AED
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="border border-slate-300 rounded-b overflow-x-auto bg-white shadow-inner">
-                <table className="w-full text-left text-[11px] border-collapse min-w-[2600px]">
+                <table className="w-full text-left text-[11px] border-collapse min-w-[3400px]">
                   <thead className="bg-[#e9f0f8] text-[#1a3055] font-bold border-b border-slate-300">
                     <tr>
                       <th className="p-1.5 text-center w-9 min-w-[36px]">#</th>
@@ -4426,13 +4501,40 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <th className="p-1.5 text-right bg-emerald-50 text-emerald-950 font-bold whitespace-nowrap min-w-[120px]">TOTAL OPS RATE</th>
                       <th className="p-1.5 text-right bg-slate-100 text-slate-900 font-bold whitespace-nowrap min-w-[100px]">RUN CHARGE</th>
                       <th className="p-1.5 text-right bg-slate-100 text-slate-900 font-bold whitespace-nowrap min-w-[105px]">REDRESS CHARGE</th>
-                      <th className="p-1.5 text-right bg-amber-100 text-amber-950 font-bold pr-3 whitespace-nowrap min-w-[160px]">TOTAL VALUE FOR MONTH</th>
+                      <th className="p-1.5 text-right bg-amber-100 text-amber-950 font-bold pr-3 whitespace-nowrap min-w-[160px] border-r-2 border-slate-400">
+                        TOTAL VALUE FOR MONTH
+                      </th>
+                      {/* Sub-Contractor / Supplier Cost Columns */}
+                      <th className="p-1.5 text-left bg-orange-100 text-orange-950 font-bold whitespace-nowrap min-w-[120px]">
+                        SUPPLIER
+                      </th>
+                      <th className="p-1.5 text-center bg-orange-100 text-orange-950 font-bold whitespace-nowrap min-w-[85px]">
+                        SUB SB DAYS
+                      </th>
+                      <th className="p-1.5 text-center bg-orange-100 text-orange-950 font-bold whitespace-nowrap min-w-[85px]">
+                        SUB OPS DAYS
+                      </th>
+                      <th className="p-1.5 text-right bg-orange-50 text-orange-950 font-bold whitespace-nowrap min-w-[105px]">
+                        SUB SB RATE
+                      </th>
+                      <th className="p-1.5 text-right bg-orange-50 text-orange-950 font-bold whitespace-nowrap min-w-[105px]">
+                        SUB OPS RATE
+                      </th>
+                      <th className="p-1.5 text-right bg-orange-50 text-orange-950 font-bold whitespace-nowrap min-w-[100px]">
+                        SUB RUN CHG
+                      </th>
+                      <th className="p-1.5 text-right bg-orange-50 text-orange-950 font-bold whitespace-nowrap min-w-[105px]">
+                        SUB REDRESS
+                      </th>
+                      <th className="p-1.5 text-right bg-orange-200 text-orange-950 font-bold pr-3 whitespace-nowrap min-w-[150px]">
+                        TOTAL SUB COST
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {toolUtilizationRows.length === 0 ? (
                       <tr>
-                        <td colSpan={utilDaysList.length + 18} className="p-8 text-center text-slate-500 font-medium">
+                        <td colSpan={utilDaysList.length + 26} className="p-8 text-center text-slate-500 font-medium">
                           No mobilized tools found for Job {jobData.id} in {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}.
                         </td>
                       </tr>
@@ -4510,8 +4612,143 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             <td className="p-1 text-right font-mono font-bold text-emerald-900 bg-emerald-50/30">{row.totalOpsRate.toLocaleString()}</td>
                             <td className="p-1 text-right font-mono text-slate-600">{row.runCharge.toLocaleString()}</td>
                             <td className="p-1 text-right font-mono text-slate-600">{row.redressCharge.toLocaleString()}</td>
-                            <td className="p-1 text-right font-mono font-bold pr-2 text-slate-900 bg-amber-50/50">
+                            <td className="p-1 text-right font-mono font-bold pr-2 text-slate-900 bg-amber-50/50 border-r-2 border-slate-300">
                               {row.totalMonthValue.toLocaleString()} {row.currency || 'AED'}
+                            </td>
+
+                            {/* Subcontractor / Supplier Cost Columns */}
+                            <td className="p-1 whitespace-nowrap font-medium text-slate-800 bg-orange-50/30">
+                              {row.isSubTool ? (
+                                <span className="px-1.5 py-0.5 rounded font-bold text-[10px] bg-orange-100 text-orange-900 border border-orange-200">
+                                  {row.supplierName}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-sans text-[10px]">EMDAD (Owned)</span>
+                              )}
+                            </td>
+
+                            <td className="p-1 text-center bg-orange-50/20">
+                              {row.isSubTool ? (
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={31}
+                                  disabled={isLocked}
+                                  value={row.subSbDays ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                                    handleUpdateSubRentalCost(row.toolKey, { subSbDays: val });
+                                  }}
+                                  className="w-12 text-center font-mono font-bold text-[11px] bg-white border border-orange-300 rounded px-1 py-0.5 text-orange-950 focus:ring-1 focus:ring-orange-500 outline-none"
+                                />
+                              ) : (
+                                <span className="text-slate-300 font-mono text-[10px]">—</span>
+                              )}
+                            </td>
+
+                            <td className="p-1 text-center bg-orange-50/20">
+                              {row.isSubTool ? (
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={31}
+                                  disabled={isLocked}
+                                  value={row.subOpsDays ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                                    handleUpdateSubRentalCost(row.toolKey, { subOpsDays: val });
+                                  }}
+                                  className="w-12 text-center font-mono font-bold text-[11px] bg-white border border-orange-300 rounded px-1 py-0.5 text-orange-950 focus:ring-1 focus:ring-orange-500 outline-none"
+                                />
+                              ) : (
+                                <span className="text-slate-300 font-mono text-[10px]">—</span>
+                              )}
+                            </td>
+
+                            <td className="p-1 text-right bg-orange-50/10">
+                              {row.isSubTool ? (
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min={0}
+                                  disabled={isLocked}
+                                  value={row.subSbRate ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                    handleUpdateSubRentalCost(row.toolKey, { subSbRate: val });
+                                  }}
+                                  className="w-16 text-right font-mono text-[11px] bg-white border border-orange-200 rounded px-1 py-0.5 text-slate-800 focus:ring-1 focus:ring-orange-500 outline-none"
+                                />
+                              ) : (
+                                <span className="text-slate-300 font-mono text-[10px]">—</span>
+                              )}
+                            </td>
+
+                            <td className="p-1 text-right bg-orange-50/10">
+                              {row.isSubTool ? (
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min={0}
+                                  disabled={isLocked}
+                                  value={row.subOpsRate ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                    handleUpdateSubRentalCost(row.toolKey, { subOpsRate: val });
+                                  }}
+                                  className="w-16 text-right font-mono text-[11px] bg-white border border-orange-200 rounded px-1 py-0.5 text-slate-800 focus:ring-1 focus:ring-orange-500 outline-none"
+                                />
+                              ) : (
+                                <span className="text-slate-300 font-mono text-[10px]">—</span>
+                              )}
+                            </td>
+
+                            <td className="p-1 text-right bg-orange-50/10">
+                              {row.isSubTool ? (
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min={0}
+                                  disabled={isLocked}
+                                  value={row.subRunCharge || ''}
+                                  placeholder="0"
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                    handleUpdateSubRentalCost(row.toolKey, { subRunCharge: val });
+                                  }}
+                                  className="w-14 text-right font-mono text-[10px] bg-white border border-orange-200 rounded px-1 py-0.5 text-slate-700 focus:ring-1 focus:ring-orange-500 outline-none"
+                                />
+                              ) : (
+                                <span className="text-slate-300 font-mono text-[10px]">—</span>
+                              )}
+                            </td>
+
+                            <td className="p-1 text-right bg-orange-50/10">
+                              {row.isSubTool ? (
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min={0}
+                                  disabled={isLocked}
+                                  value={row.subRedressCharge || ''}
+                                  placeholder="0"
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                    handleUpdateSubRentalCost(row.toolKey, { subRedressCharge: val });
+                                  }}
+                                  className="w-14 text-right font-mono text-[10px] bg-white border border-orange-200 rounded px-1 py-0.5 text-slate-700 focus:ring-1 focus:ring-orange-500 outline-none"
+                                />
+                              ) : (
+                                <span className="text-slate-300 font-mono text-[10px]">—</span>
+                              )}
+                            </td>
+
+                            <td className="p-1 text-right font-mono font-bold pr-2 bg-orange-100/60 text-orange-950">
+                              {row.isSubTool ? (
+                                <span>{row.totalSubCost.toLocaleString()} {row.currency || 'AED'}</span>
+                              ) : (
+                                <span className="text-slate-400 font-sans text-[10px] font-normal">— (Owned Fleet)</span>
+                              )}
                             </td>
                           </tr>
                         );
@@ -4538,8 +4775,27 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <td className="p-1.5 text-right font-mono text-emerald-900">{monthTotalOpsRate.toLocaleString()}</td>
                         <td className="p-1.5 text-right font-mono text-slate-700">{monthTotalRunCharge.toLocaleString()}</td>
                         <td className="p-1.5 text-right font-mono text-slate-700">{monthTotalRedress.toLocaleString()}</td>
-                        <td className="p-1.5 text-right font-mono text-base text-slate-900 pr-2">
+                        <td className="p-1.5 text-right font-mono text-base text-slate-900 pr-2 border-r-2 border-slate-400">
                           {totalToolRevenueAED.toLocaleString()} {activeContract?.currency || jobData.currency || 'AED'}
+                        </td>
+                        {/* Subcontractor Footers */}
+                        <td className="p-1.5 text-left text-orange-900 text-[10px] font-bold">Sub-Rental Cost:</td>
+                        <td className="p-1.5 text-center font-mono text-orange-950">
+                          {toolUtilizationRows.reduce((a, r) => a + (r.subSbDays || 0), 0)}
+                        </td>
+                        <td className="p-1.5 text-center font-mono text-orange-950">
+                          {toolUtilizationRows.reduce((a, r) => a + (r.subOpsDays || 0), 0)}
+                        </td>
+                        <td className="p-1.5 text-right font-mono text-slate-400">—</td>
+                        <td className="p-1.5 text-right font-mono text-slate-400">—</td>
+                        <td className="p-1.5 text-right font-mono text-slate-600">
+                          {toolUtilizationRows.reduce((a, r) => a + (r.subRunCharge || 0), 0).toLocaleString()}
+                        </td>
+                        <td className="p-1.5 text-right font-mono text-slate-600">
+                          {toolUtilizationRows.reduce((a, r) => a + (r.subRedressCharge || 0), 0).toLocaleString()}
+                        </td>
+                        <td className="p-1.5 text-right font-mono text-base text-orange-950 bg-orange-200/80 pr-2">
+                          {totalSubcontractCostAED.toLocaleString()} {activeContract?.currency || jobData.currency || 'AED'}
                         </td>
                       </tr>
                     </tfoot>
