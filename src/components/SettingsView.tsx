@@ -111,6 +111,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [newUserUsername, setNewUserUsername] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserRole>('Handler');
   const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserMustChangePassword, setNewUserMustChangePassword] = useState(true);
 
   // Per-User Permissions Overrides Map
   const [userPermissions, setUserPermissions] = useState<UserPermissionsMap>(() => getUserPermissions());
@@ -245,6 +246,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     showToast(`Updated ${selectedUser.name}'s base role to ${newRole}.`, 'success');
   };
 
+  const handleToggleMustChangePassword = () => {
+    if (!selectedUser) return;
+    const currentVal = Boolean(selectedUser.mustChangePassword);
+    const updatedUsers = users.map((u) =>
+      u.id === selectedUser.id ? { ...u, mustChangePassword: !currentVal } : u
+    );
+    setUsers(updatedUsers);
+    saveSystemUsers(updatedUsers);
+    showToast(
+      !currentVal
+        ? `User @${selectedUser.username} will be prompted to change their password on next login.`
+        : `Cancelled password change requirement for @${selectedUser.username}.`,
+      'info'
+    );
+  };
+
   const handleAddNewUserSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUserName.trim() || !newUserUsername.trim()) {
@@ -263,6 +280,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       username: cleanUsername,
       role: newUserRole,
       pass: newUserPassword.trim() || `${cleanUsername}@2026`,
+      mustChangePassword: newUserMustChangePassword,
     };
     const updatedUsers = [...users, createdUser];
     setUsers(updatedUsers);
@@ -272,7 +290,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setNewUserName('');
     setNewUserUsername('');
     setNewUserPassword('');
-    showToast(`User '${createdUser.name}' added with role '${createdUser.role}'!`, 'success');
+    setNewUserMustChangePassword(true);
+    showToast(`User '${createdUser.name}' registered! (First-time password change: ${newUserMustChangePassword ? 'Required' : 'Optional'})`, 'success');
   };
 
   // Role Default Templates Handlers
@@ -812,6 +831,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       </button>
                     </div>
                   </div>
+                  <div className="sm:col-span-2 md:col-span-4 flex items-center gap-2 pt-1 text-[11px] text-slate-700 bg-white/70 p-2 rounded border border-blue-100">
+                    <input
+                      type="checkbox"
+                      id="newUserMustChangePassword"
+                      checked={newUserMustChangePassword}
+                      onChange={(e) => setNewUserMustChangePassword(e.target.checked)}
+                      className="w-4 h-4 rounded text-blue-600 cursor-pointer"
+                    />
+                    <label htmlFor="newUserMustChangePassword" className="cursor-pointer font-semibold text-blue-950 flex items-center gap-1.5">
+                      <span>🔑</span>
+                      <span>Require user to choose and set their own private password on first login</span>
+                    </label>
+                  </div>
                 </form>
               </div>
             )}
@@ -982,6 +1014,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             <span>Inheriting Standard {selectedUser.role} Role Defaults ({effectiveUserVisible.length} screens)</span>
                           </span>
                         )}
+
+                        {/* Password Change Status & Force Toggle */}
+                        <button
+                          type="button"
+                          onClick={handleToggleMustChangePassword}
+                          className={`px-2 py-0.5 rounded text-[11px] font-bold border transition cursor-pointer flex items-center gap-1 ${
+                            selectedUser.mustChangePassword
+                              ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
+                              : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
+                          }`}
+                          title="Click to toggle mandatory password change on this user's next login"
+                        >
+                          <span>🔑</span>
+                          <span>{selectedUser.mustChangePassword ? '✓ Force Password Change Active' : 'Require Password Change'}</span>
+                        </button>
                       </div>
 
                       <div className="text-[11px] text-slate-500 mt-1">

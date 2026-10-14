@@ -610,6 +610,7 @@ export const App: React.FC = () => {
   // Non-blocking initial startup: Do NOT block user with a 2-3 minute splash screen
   const [isInitialLoading, setIsInitialLoading] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isChangingPasswordOpen, setIsChangingPasswordOpen] = useState(false);
   const initialLoadUserRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -1594,16 +1595,26 @@ export const App: React.FC = () => {
     );
   }
 
-  // If user must change password
-  if (currentUser.mustChangePassword) {
+  // If user must change password (first-time login mandatory setup or voluntary change)
+  if (currentUser.mustChangePassword || isChangingPasswordOpen) {
     return (
       <ChangePasswordView
         user={currentUser}
+        isVoluntary={!currentUser.mustChangePassword && isChangingPasswordOpen}
         onPasswordChanged={(updatedUser) => {
           setCurrentUser(updatedUser);
+          setIsChangingPasswordOpen(false);
           showToast('Password updated successfully.', 'success');
         }}
-        onCancel={() => setCurrentUser(null)}
+        onCancel={() => {
+          if (currentUser.mustChangePassword) {
+            // Mandatory first-time password setup cancelled: log out
+            setCurrentUser(null);
+          } else {
+            // Voluntary change password cancelled: return to platform
+            setIsChangingPasswordOpen(false);
+          }
+        }}
       />
     );
   }
@@ -1665,6 +1676,7 @@ export const App: React.FC = () => {
             } catch (e) {}
             setCurrentUser(null);
           }}
+          onChangePassword={() => setIsChangingPasswordOpen(true)}
           pendingCalloutsCount={pendingCalloutsCount}
           pendingSignedDTsCount={pendingSignedDTsCount}
           onRigToolsCount={onRigToolsCount}

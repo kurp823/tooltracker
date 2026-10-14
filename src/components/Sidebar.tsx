@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavModule, User } from '../types';
 import { canViewModule } from '../services/permissionService';
+import { KeyRound } from 'lucide-react';
 
 interface SidebarProps {
   activeView?: NavModule;
@@ -14,6 +15,7 @@ interface SidebarProps {
   onSelectModule?: (mod: NavModule) => void;
   user?: User | null;
   onLogout?: () => void;
+  onChangePassword?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -29,6 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectModule,
   user,
   onLogout,
+  onChangePassword,
   isCollapsed = false,
   onToggleCollapse,
 }) => {
@@ -348,16 +351,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </div>
 
-            {onLogout && (
-              <button
-                type="button"
-                onClick={onLogout}
-                className="px-2 py-1 text-[11px] font-bold text-slate-300 hover:text-rose-300 hover:bg-rose-500/10 rounded border border-slate-700/50 hover:border-rose-500/30 transition cursor-pointer shrink-0"
-                title="Sign out of system"
-              >
-                Sign Out
-              </button>
-            )}
+            <div className="flex items-center gap-1 shrink-0">
+              {onChangePassword && (
+                <button
+                  type="button"
+                  onClick={onChangePassword}
+                  className="p-1.5 text-slate-300 hover:text-amber-300 hover:bg-amber-400/10 rounded border border-slate-700/50 hover:border-amber-400/40 transition cursor-pointer"
+                  title="Change Password"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="px-2 py-1 text-[11px] font-bold text-slate-300 hover:text-rose-300 hover:bg-rose-500/10 rounded border border-slate-700/50 hover:border-rose-500/30 transition cursor-pointer"
+                  title="Sign out of system"
+                >
+                  Sign Out
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2">
@@ -367,6 +382,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               {userInitial}
             </div>
+            {onChangePassword && (
+              <button
+                type="button"
+                onClick={onChangePassword}
+                className="text-slate-400 hover:text-amber-300 transition cursor-pointer p-1"
+                title="Change Password"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+              </button>
+            )}
             {onLogout && (
               <button
                 type="button"
