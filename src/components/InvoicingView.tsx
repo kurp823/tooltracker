@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { normalizeJobKey } from '../services/api';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
+import { JobSearchSelect } from './JobSearchSelect';
 
 interface InvoicingViewProps {
   user: User;
@@ -604,24 +605,18 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
       {/* 2. Job Search, Selector & Audit Timeline */}
       <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-5 space-y-4">
         <div className="flex flex-col md:flex-row items-center justify-between gap-3">
-          {/* Job Dropdown Selector */}
+          {/* Job Dropdown Selector with Type-to-Search */}
           <div className="flex-1 w-full flex items-center space-x-2">
             <span className="text-xs font-bold text-slate-600 uppercase tracking-wider shrink-0">Selected Job:</span>
-            <select
-              value={selectedJobId}
-              onChange={(e) => setSelectedJobId(e.target.value)}
-              className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 cursor-pointer shadow-2xs"
-            >
-              {filteredJobs.length === 0 ? (
-                <option value="">No jobs match filter criteria</option>
-              ) : (
-                filteredJobs.map((j) => (
-                  <option key={j.id} value={j.id}>
-                    {j.id} | {j.client} | Rig: {j.rig} | Well: {j.well} | Status: [{j.status}]
-                  </option>
-                ))
-              )}
-            </select>
+            <div className="flex-1 w-full min-w-0">
+              <JobSearchSelect
+                jobs={filteredJobs.length > 0 ? filteredJobs : jobs}
+                selectedJobId={selectedJobId}
+                onSelectJob={(jobId) => setSelectedJobId(jobId)}
+                buttonClassName="py-2 px-3 text-xs font-semibold rounded-lg"
+                placeholder="Type to search and select drilling job..."
+              />
+            </div>
           </div>
 
           {/* Search Box with Clear */}

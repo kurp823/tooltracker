@@ -4,6 +4,7 @@ import { DocumentAttachmentModal } from './DocumentAttachmentModal';
 import { extractSizeFromDescription, extractToolType, normalizeJobKey } from '../services/api';
 import { EMDAD_LOGO_BASE64, EmdadLogo } from '../constants/branding';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
+import { JobSearchSelect } from './JobSearchSelect';
 
 interface DeliveryTicketsViewProps {
   user?: User | null;
@@ -913,23 +914,17 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
             <form onSubmit={handleCreateDTSubmit} className="p-4 overflow-y-auto flex-1 text-xs space-y-3">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="col-span-2 sm:col-span-1">
-                  <label className="block font-bold mb-1">Select Drilling Job *</label>
-                  <select
-                    required
-                    value={newJobId}
-                    onChange={(e) => {
-                      setNewJobId(e.target.value);
+                  <label className="block font-bold mb-1 text-slate-700">Select Drilling Job *</label>
+                  <JobSearchSelect
+                    jobs={activeJobs}
+                    selectedJobId={newJobId}
+                    onSelectJob={(jobId) => {
+                      setNewJobId(jobId);
                       setCheckedToolIds([]);
                     }}
-                    className="w-full border rounded px-2.5 py-1.5 font-bold"
-                  >
-                    <option value="">— Select job —</option>
-                    {activeJobs.map((j) => (
-                      <option key={j.id} value={j.id}>
-                        {j.id} — {j.rig}/{j.well} ({j.client}{j.contract ? ` | ${j.contract}` : ''})
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="— Type to search & select job —"
+                    buttonClassName="py-1.5 px-2.5 font-bold"
+                  />
                 </div>
                 <div>
                   <label className="block font-bold mb-1">DT Number *</label>
