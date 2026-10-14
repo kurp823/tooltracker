@@ -1009,18 +1009,73 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [availableCategories, categorySearchQuery]);
 
   const categoryInventory = useMemo(() => {
-    // Strictly exclude Lost in Hole (LIH) and Removed tools from ever being selected for a job
-    const validInventory = inventory.filter((t) => {
-      const st = (t.status || '').toUpperCase();
-      return st !== 'LOST IN HOLE' && st !== 'LIH' && st !== 'REMOVED';
+    // Collect all serials already added to this job's checklist to prevent duplicate assignment
+    const alreadyInChecklist = new Set<string>();
+    checklistItems.forEach((item) => {
+      if (item.serialNos && Array.isArray(item.serialNos)) {
+        item.serialNos.forEach((s) => s && alreadyInChecklist.add(s.trim().toUpperCase()));
+      }
+      if (item.partNo) alreadyInChecklist.add(item.partNo.trim().toUpperCase());
     });
+
+    // Strictly enforce:
+    // 1. Tool must be In Base / Yard (location is 'Emdad Base', contains 'base' or 'yard', and NOT 'On Rig', 'Workshop', etc.)
+    // 2. Tool must be in 'Good' / Ready operational status (NOT 'Repair', 'Redress', 'Inspection', 'On Rig', 'Lost in Hole', 'Scrapped', 'Removed')
+    // 3. Tool must have ACCEPTED / Pass inspection condition (not Rejected / Fail)
+    // 4. Tool must NOT already be in the current job's checklist
+    const validInventory = inventory.filter((t) => {
+      const sKey = (t.serial || '').trim().toUpperCase();
+      const aKey = (t.assetNo || '').trim().toUpperCase();
+
+      // Exclude if already in checklist for this job
+      if (sKey && alreadyInChecklist.has(sKey)) return false;
+      if (aKey && alreadyInChecklist.has(aKey)) return false;
+
+      // Status check: must be 'Good' (or 'Ready', 'Accepted', 'Available')
+      const st = (t.status || 'Good').trim().toUpperCase();
+      const isGoodStatus = st === 'GOOD' || st === 'READY' || st === 'ACCEPTED' || st === 'AVAILABLE';
+      if (!isGoodStatus) return false;
+
+      // Location check: must be in Base / Yard, and not On Rig or Workshop or Inspection Bay
+      const loc = (t.location || 'Emdad Base').trim().toUpperCase();
+      const isAtBase =
+        loc.includes('BASE') ||
+        loc.includes('YARD') ||
+        loc === 'EMDAD BASE' ||
+        loc === 'EMDAD' ||
+        loc === 'WAREHOUSE' ||
+        loc === 'STORE';
+      const isDispatched = loc.includes('RIG') || loc.includes('WORKSHOP') || loc.includes('SUPPLIER') || loc.includes('INSPECTION');
+      if (!isAtBase || isDispatched) return false;
+
+      // Inspection check: if inspection records exist, latest inspection must not be Fail / Rejected / Scrapped
+      const toolInspections = (inspections || []).filter(
+        (ins) =>
+          (ins.serial && ins.serial.trim().toUpperCase() === sKey) ||
+          (aKey && ins.serial && ins.serial.trim().toUpperCase() === aKey)
+      );
+      if (toolInspections.length > 0) {
+        const latestIns = [...toolInspections].sort(
+          (a, b) =>
+            new Date(b.inspectionDate || b.reportDate || b.receivedDate || '').getTime() -
+            new Date(a.inspectionDate || a.reportDate || a.receivedDate || '').getTime()
+        )[0];
+        const insSt = (latestIns?.status || '').trim().toUpperCase();
+        if (insSt === 'REJECTED' || insSt === 'FAIL' || insSt === 'FAILED' || insSt === 'SCRAP' || insSt === 'SCRAPPED' || insSt === 'REPAIR') {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
     if (!selectedCategory) return validInventory;
     return validInventory.filter((t) => {
       const matchShort = (t.shortDesc || '').toUpperCase().includes(selectedCategory.toUpperCase());
       const matchDesc = (t.desc || '').toUpperCase().includes(selectedCategory.toUpperCase());
       return matchShort || matchDesc;
     });
-  }, [inventory, selectedCategory]);
+  }, [inventory, selectedCategory, checklistItems, inspections]);
 
   const availableSizes = useMemo(() => {
     const set = new Set<string>(customSizes);
@@ -4806,8 +4861,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </div>
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded px-2.5 py-1 text-[11px] text-blue-900 leading-tight flex-shrink-0">
-                Filter downhole tools by category or size. Select with the checkbox on the left and click <strong>&quot;Insert Selected Tools&quot;</strong> to reserve tools for Job {jobData.id}.
+              <div className="bg-emerald-50 border border-emerald-200 rounded px-2.5 py-1.5 text-[11px] text-emerald-950 leading-tight flex-shrink-0 flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-emerald-800">✓ Base &amp; Good Condition Filter Active:</span> Only tools physically located in <strong>Base</strong> and in verified <strong>Good / Accepted</strong> condition appear for mobilization. Tools on rig, in repair/redress, in inspection, or already assigned to this checklist are strictly excluded.
+                </div>
+                <div className="text-[11px] text-slate-600 font-medium pl-2 whitespace-nowrap">
+                  Job: <strong className="text-slate-900">{jobData.id}</strong>
+                </div>
               </div>
 
               {/* Tools Table with Checkbox as Column 1 */}
