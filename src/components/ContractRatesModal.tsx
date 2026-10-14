@@ -296,42 +296,47 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
           </div>
         </div>
 
-        {/* PURPLE ACCENT BAR */}
-        <div className="bg-[#6b21a8] text-white px-6 py-2 text-xs font-semibold flex flex-wrap justify-between items-center shadow-inner">
+        {/* PURPLE/NAVY ACCENT BAR */}
+        <div className="bg-[#1e293b] text-white px-6 py-2.5 text-xs font-medium flex flex-wrap justify-between items-center border-b border-slate-700/60 shadow-inner">
           <div className="flex items-center gap-2">
-            <span>
-              Currency: <strong className="text-amber-300">{contract.currency || 'USD'}</strong> · Tool OD = Hole Section (both columns match). Direct size-to-rate lookup.
+            <span className="inline-flex items-center gap-1.5 bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded border border-slate-700 font-mono text-[11px]">
+              Currency: <strong className="text-amber-400 font-bold">{contract.currency || 'USD'}</strong>
+            </span>
+            <span className="text-slate-400 hidden sm:inline">•</span>
+            <span className="text-slate-300 text-[11px]">
+              Direct Tool OD &amp; Hole Section rate lookup schedule
             </span>
           </div>
-          <div className="flex items-center gap-3 text-[11px] text-purple-100">
-            <span>Total Items: <strong className="text-white">{rates.length}</strong></span>
-            <span>Standby Discount: <strong className="text-white">{contract.standbyDiscountPct ?? 50}%</strong></span>
+          <div className="flex items-center gap-3 text-[11px] text-slate-300">
+            <span>Total Items: <strong className="text-white font-mono">{rates.length}</strong></span>
+            <span className="text-slate-500">•</span>
+            <span>Standby Discount: <strong className="text-amber-300 font-mono">{contract.standbyDiscountPct ?? 50}%</strong></span>
           </div>
         </div>
 
         {/* TOOLBAR & CONTROLS */}
-        <div className="bg-slate-50 p-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="bg-slate-50/90 p-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
           {/* Left: Search & Filter */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-2 text-slate-400" />
+              <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search category, tool, size, ref..."
-                className="pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded text-xs w-64 outline-none focus:ring-1 focus:ring-purple-500 font-medium"
+                className="pl-8 pr-3 py-1.5 bg-white border border-[#b8c9db] rounded text-xs w-64 outline-none focus:ring-1 focus:ring-blue-500 font-medium placeholder:text-slate-400"
               />
             </div>
 
             {/* Hole Section Filter */}
-            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded px-2 py-1">
+            <div className="flex items-center gap-1.5 bg-white border border-[#b8c9db] rounded px-2.5 py-1">
               <Filter size={12} className="text-slate-500" />
-              <span className="text-[10px] font-bold text-slate-500 uppercase">Hole Section:</span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Hole Section:</span>
               <select
                 value={selectedHoleSection}
                 onChange={(e) => setSelectedHoleSection(e.target.value)}
-                className="text-xs bg-transparent outline-none font-bold text-[#1a3055]"
+                className="text-xs bg-transparent outline-none font-bold text-[#1a3055] cursor-pointer"
               >
                 <option value="ALL">All Sections ({rates.length})</option>
                 {holeSections.map((sec) => (
@@ -343,12 +348,12 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
             </div>
 
             {/* Category Filter */}
-            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded px-2 py-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase">Category:</span>
+            <div className="flex items-center gap-1.5 bg-white border border-[#b8c9db] rounded px-2.5 py-1">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Category:</span>
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="text-xs bg-transparent outline-none font-bold text-[#1a3055]"
+                className="text-xs bg-transparent outline-none font-bold text-[#1a3055] cursor-pointer"
               >
                 <option value="ALL">All Categories</option>
                 {categories.map((cat) => (
@@ -366,25 +371,25 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
               <>
                 <button
                   onClick={handleOpenAdd}
-                  className="px-3 py-1.5 bg-[#1a3055] hover:bg-[#24426d] text-white font-bold rounded flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                  className="px-3 py-1.5 bg-[#1a3055] hover:bg-[#24426d] text-white font-bold rounded flex items-center gap-1.5 shadow-xs transition cursor-pointer text-xs"
                 >
-                  <Plus size={14} /> Add Rate Line
+                  <Plus size={13} /> Add Rate Line
                 </button>
                 <button
                   onClick={() => setIsPasteOpen(true)}
-                  className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                  className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white font-bold rounded flex items-center gap-1.5 shadow-xs transition cursor-pointer text-xs"
                   title="Paste tabulated lines directly from Excel or Google Sheets"
                 >
-                  <FileSpreadsheet size={14} /> Paste from Excel
+                  <FileSpreadsheet size={13} /> Paste from Excel
                 </button>
               </>
             )}
             <button
               onClick={handleExportCSV}
-              className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+              className="px-3 py-1.5 bg-white border border-[#b8c9db] hover:bg-slate-100 text-slate-700 font-bold rounded flex items-center gap-1.5 shadow-xs transition cursor-pointer text-xs"
               title="Download Price Book as CSV"
             >
-              <Download size={14} /> Export CSV
+              <Download size={13} /> Export CSV
             </button>
           </div>
         </div>
@@ -392,40 +397,40 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
         {/* RATES TABLE CONTAINER */}
         <div className="flex-1 overflow-auto bg-white min-h-[350px]">
           <table className="w-full text-left text-xs border-collapse font-sans">
-            <thead className="bg-[#1a3055] text-white sticky top-0 z-10 shadow-sm text-[11px] uppercase tracking-wider">
+            <thead className="bg-[#1a3055] text-white sticky top-0 z-10 shadow-sm text-[11px] uppercase tracking-wider select-none">
               <tr>
-                <th className="py-2.5 px-3 border border-slate-700 w-12 text-center">No</th>
-                <th className="py-2.5 px-3 border border-slate-700 w-28">Contract Ref</th>
-                <th className="py-2.5 px-3 border border-slate-700">Category (ERP Name)</th>
-                <th className="py-2.5 px-3 border border-slate-700">EMDAD ShortDesc (Inventory Match)</th>
-                <th className="py-2.5 px-3 border border-slate-700 w-24 text-center">Size (Tool OD)</th>
-                <th className="py-2.5 px-3 border border-slate-700 w-28 text-center">Hole Section</th>
-                <th className="py-2.5 px-3 border border-slate-700 w-28 text-right bg-[#154625]">Ops Rate</th>
-                <th className="py-2.5 px-3 border border-slate-700 w-28 text-right bg-[#154625]">Standby Rate</th>
-                <th className="py-2.5 px-3 border border-slate-700 w-24 text-right">Run Charges</th>
-                <th className="py-2.5 px-3 border border-slate-700 w-28 text-right">Monthly Charges</th>
-                <th className="py-2.5 px-3 border border-slate-700 w-24 text-right">Redress</th>
-                <th className="py-2.5 px-3 border border-slate-700 w-16 text-center">Currency</th>
-                {!isReadOnly && <th className="py-2.5 px-3 border border-slate-700 w-20 text-center">Actions</th>}
+                <th className="py-2.5 px-3 border border-[#2d4b7a] w-12 text-center font-bold">No</th>
+                <th className="py-2.5 px-3 border border-[#2d4b7a] w-28 font-bold whitespace-nowrap">Contract Ref</th>
+                <th className="py-2.5 px-3 border border-[#2d4b7a] font-bold">Category (ERP Name)</th>
+                <th className="py-2.5 px-3 border border-[#2d4b7a] font-bold">Tool Short Description</th>
+                <th className="py-2.5 px-3 border border-[#2d4b7a] w-24 text-center font-bold whitespace-nowrap">Tool OD</th>
+                <th className="py-2.5 px-3 border border-[#2d4b7a] w-28 text-center font-bold whitespace-nowrap">Hole Section</th>
+                <th className="py-2.5 px-3 border border-[#2d4b7a] w-28 text-right font-bold bg-[#1d4332] whitespace-nowrap">Ops Rate</th>
+                <th className="py-2.5 px-3 border border-[#2d4b7a] w-28 text-right font-bold bg-[#1d4332] whitespace-nowrap">Standby Rate</th>
+                <th className="py-2.5 px-3 border border-[#2d4b7a] w-24 text-right font-bold whitespace-nowrap">Run Charge</th>
+                <th className="py-2.5 px-3 border border-[#2d4b7a] w-28 text-right font-bold whitespace-nowrap">Monthly</th>
+                <th className="py-2.5 px-3 border border-[#2d4b7a] w-24 text-right font-bold whitespace-nowrap">Redress</th>
+                <th className="py-2.5 px-3 border border-[#2d4b7a] w-16 text-center font-bold">Curr</th>
+                {!isReadOnly && <th className="py-2.5 px-3 border border-[#2d4b7a] w-20 text-center font-bold">Actions</th>}
               </tr>
-              {/* Secondary Subheader matching user screenshot */}
+              {/* Secondary Subheader */}
               <tr className="bg-slate-100 text-slate-500 font-semibold normal-case text-[10px]">
-                <th className="py-1 px-3 border border-slate-200 text-center italic">Num</th>
-                <th className="py-1 px-3 border border-slate-200 italic">Ref</th>
-                <th className="py-1 px-3 border border-slate-200 italic">From ERP</th>
-                <th className="py-1 px-3 border border-slate-200 italic">Our Name</th>
-                <th className="py-1 px-3 border border-slate-200 text-center italic">Tool OD</th>
-                <th className="py-1 px-3 border border-slate-200 text-center italic">Rate Section</th>
-                <th className="py-1 px-3 border border-slate-200 text-right italic font-mono text-emerald-800 bg-[#e8f7ec]">{contract.currency}/Day</th>
-                <th className="py-1 px-3 border border-slate-200 text-right italic font-mono text-emerald-800 bg-[#e8f7ec]">{contract.currency}/Day</th>
-                <th className="py-1 px-3 border border-slate-200 text-right italic">If any</th>
-                <th className="py-1 px-3 border border-slate-200 text-right italic">Fixed</th>
-                <th className="py-1 px-3 border border-slate-200 text-right italic">If any</th>
-                <th className="py-1 px-3 border border-slate-200 text-center italic">Cur</th>
-                {!isReadOnly && <th className="py-1 px-3 border border-slate-200 text-center italic">Edit/Del</th>}
+                <th className="py-1 px-3 border border-slate-200 text-center">#</th>
+                <th className="py-1 px-3 border border-slate-200">Ref Code</th>
+                <th className="py-1 px-3 border border-slate-200">ERP Catalog</th>
+                <th className="py-1 px-3 border border-slate-200">Inventory Standard</th>
+                <th className="py-1 px-3 border border-slate-200 text-center">OD Size</th>
+                <th className="py-1 px-3 border border-slate-200 text-center">Section Size</th>
+                <th className="py-1 px-3 border border-slate-200 text-right font-mono text-emerald-800 bg-[#eaf7ee]">{contract.currency}/Day</th>
+                <th className="py-1 px-3 border border-slate-200 text-right font-mono text-emerald-800 bg-[#eaf7ee]">{contract.currency}/Day</th>
+                <th className="py-1 px-3 border border-slate-200 text-right">Per Run</th>
+                <th className="py-1 px-3 border border-slate-200 text-right">Fixed</th>
+                <th className="py-1 px-3 border border-slate-200 text-right">Per Job</th>
+                <th className="py-1 px-3 border border-slate-200 text-center">Code</th>
+                {!isReadOnly && <th className="py-1 px-3 border border-slate-200 text-center">Edit / Del</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 text-slate-700 font-medium">
+            <tbody className="divide-y divide-slate-100 text-slate-700 font-normal">
               {filteredRates.length === 0 ? (
                 <tr>
                   <td colSpan={13} className="py-12 text-center text-slate-400 italic">
@@ -438,86 +443,86 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
                   return (
                     <tr 
                       key={index}
-                      className={`hover:bg-amber-50/50 transition duration-75 ${
-                        index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'
+                      className={`hover:bg-blue-50/40 transition duration-75 ${
+                        index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
                       }`}
                     >
                       {/* 1. No */}
-                      <td className="py-2 px-3 border border-slate-200 text-center font-mono text-slate-500 text-[11px]">
+                      <td className="py-2 px-3 border border-slate-100 text-center font-mono text-slate-500 text-[11px]">
                         {r.no}
                       </td>
 
                       {/* 2. Contract Ref */}
-                      <td className="py-2 px-3 border border-slate-200 font-mono text-slate-600 text-[11px]">
+                      <td className="py-2 px-3 border border-slate-100 font-mono text-slate-600 text-[11px] whitespace-nowrap">
                         {r.contractRef || '—'}
                       </td>
 
                       {/* 3. Category (ERP Name) */}
-                      <td className="py-2 px-3 border border-slate-200 font-bold text-[#1a3055]">
+                      <td className="py-2 px-3 border border-slate-100 font-semibold text-slate-900 whitespace-nowrap">
                         {r.category}
                       </td>
 
                       {/* 4. EMDAD ShortDesc */}
-                      <td className="py-2 px-3 border border-slate-200 font-bold text-amber-900">
-                        <span className="bg-amber-100/80 px-1.5 py-0.5 rounded text-[11px]">
+                      <td className="py-2 px-3 border border-slate-100 text-slate-800">
+                        <span className="font-medium text-[11px] text-slate-800">
                           {r.shortDesc}
                         </span>
                       </td>
 
                       {/* 5. Size (Tool OD) */}
-                      <td className="py-2 px-3 border border-slate-200 text-center font-bold text-blue-700 font-mono text-[11px]">
+                      <td className="py-2 px-3 border border-slate-100 text-center font-semibold text-slate-800 font-mono text-[11px] whitespace-nowrap">
                         {r.size || '—'}
                       </td>
 
                       {/* 6. Hole Section */}
-                      <td className="py-2 px-3 border border-slate-200 text-center font-bold text-purple-700 font-mono text-[11px]">
+                      <td className="py-2 px-3 border border-slate-100 text-center font-semibold text-slate-800 font-mono text-[11px] whitespace-nowrap">
                         {r.holeSection || '—'}
                       </td>
 
-                      {/* 7. Ops Rate (Green highlighted column) */}
-                      <td className="py-2 px-3 border border-slate-200 text-right font-mono font-bold text-[#0e5c2b] bg-[#eefbf1]">
+                      {/* 7. Ops Rate (Clean executive highlight) */}
+                      <td className="py-2 px-3 border border-slate-100 text-right font-mono font-bold text-emerald-900 bg-emerald-50/60 whitespace-nowrap">
                         {r.opsRate?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
 
-                      {/* 8. Standby Rate (Green highlighted column) */}
-                      <td className="py-2 px-3 border border-slate-200 text-right font-mono font-bold text-[#0e5c2b] bg-[#eefbf1]">
+                      {/* 8. Standby Rate (Clean executive highlight) */}
+                      <td className="py-2 px-3 border border-slate-100 text-right font-mono font-bold text-emerald-900 bg-emerald-50/60 whitespace-nowrap">
                         {r.standbyRate?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
 
                       {/* 9. Run Charges */}
-                      <td className="py-2 px-3 border border-slate-200 text-right font-mono text-slate-600 text-[11px]">
-                        {r.runCharges != null ? r.runCharges.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}
+                      <td className="py-2 px-3 border border-slate-100 text-right font-mono text-slate-600 text-[11px] whitespace-nowrap">
+                        {r.runCharges != null ? r.runCharges.toLocaleString(undefined, { minimumFractionDigits: 2 }) : <span className="text-slate-300">—</span>}
                       </td>
 
                       {/* 10. Monthly Charges */}
-                      <td className="py-2 px-3 border border-slate-200 text-right font-mono text-slate-700 font-semibold text-[11px]">
-                        {r.monthlyCharges != null ? r.monthlyCharges.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}
+                      <td className="py-2 px-3 border border-slate-100 text-right font-mono text-slate-700 text-[11px] whitespace-nowrap">
+                        {r.monthlyCharges != null ? r.monthlyCharges.toLocaleString(undefined, { minimumFractionDigits: 2 }) : <span className="text-slate-300">—</span>}
                       </td>
 
                       {/* 11. Redress */}
-                      <td className="py-2 px-3 border border-slate-200 text-right font-mono text-rose-700 font-semibold text-[11px]">
-                        {r.redress != null ? r.redress.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}
+                      <td className="py-2 px-3 border border-slate-100 text-right font-mono text-slate-700 text-[11px] whitespace-nowrap">
+                        {r.redress != null ? r.redress.toLocaleString(undefined, { minimumFractionDigits: 2 }) : <span className="text-slate-300">—</span>}
                       </td>
 
                       {/* 12. Currency */}
-                      <td className="py-2 px-3 border border-slate-200 text-center font-bold text-[10px] text-slate-500">
+                      <td className="py-2 px-3 border border-slate-100 text-center font-bold text-[10px] text-slate-500">
                         {r.currency || contract.currency || 'USD'}
                       </td>
 
                       {/* 13. Actions */}
                       {!isReadOnly && (
-                        <td className="py-2 px-3 border border-slate-200 text-center">
-                          <div className="flex items-center justify-center gap-1">
+                        <td className="py-2 px-3 border border-slate-100 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1.5">
                             <button
                               onClick={() => handleOpenEdit(originalIndex)}
-                              className="p-1 hover:bg-slate-200 text-blue-700 rounded transition cursor-pointer"
+                              className="p-1 hover:bg-blue-50 text-slate-500 hover:text-blue-700 rounded transition cursor-pointer"
                               title="Edit line"
                             >
                               <Edit3 size={13} />
                             </button>
                             <button
                               onClick={() => handleDelete(originalIndex)}
-                              className="p-1 hover:bg-rose-100 text-rose-600 rounded transition cursor-pointer"
+                              className="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
                               title="Delete line"
                             >
                               <Trash2 size={13} />

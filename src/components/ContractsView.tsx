@@ -19,7 +19,8 @@ import {
   CheckCircle2, 
   AlertCircle, 
   Info,
-  Building2
+  Building2,
+  Eye
 } from 'lucide-react';
 
 interface ContractsViewProps {
@@ -47,6 +48,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
   
   const [selectedContract, setSelectedContract] = useState<ContractRecord | null>(null);
+  const [detailActiveTab, setDetailActiveTab] = useState<'overview' | 'rates'>('overview');
   const [contractForRates, setContractForRates] = useState<ContractRecord | null>(null);
   const [isNewContractOpen, setIsNewContractOpen] = useState(false);
 
@@ -516,10 +518,10 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                     </th>
                   ))}
                   <th style={{ width: contractsResizer.widths.rates || 120 }} className="py-2.5 px-3 text-center relative">
-                    <span>Price Book / Rates</span>
+                    <span>Rate Schedule</span>
                     <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('rates', e)} />
                   </th>
-                  <th style={{ width: contractsResizer.widths.actions || 90 }} className="py-2.5 px-3 text-center relative">
+                  <th style={{ width: contractsResizer.widths.actions || 100 }} className="py-2.5 px-3 text-center relative">
                     <span>Actions</span>
                     <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('actions', e)} />
                   </th>
@@ -631,24 +633,43 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                           );
                         })}
                         <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                          <button
-                            onClick={() => setContractForRates(c)}
-                            className={`px-2 py-1 rounded text-[11px] font-bold flex items-center justify-center gap-1 mx-auto transition cursor-pointer shadow-xs ${
-                              rateCount > 0
-                                ? 'bg-purple-700 hover:bg-purple-800 text-white'
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
-                            }`}
-                          >
-                            <FileSpreadsheet size={12} />
-                            <span>{rateCount > 0 ? `${rateCount} Rates` : '+ Add Rates'}</span>
-                          </button>
+                          {rateCount > 0 ? (
+                            <button
+                              onClick={() => {
+                                setSelectedContract(c);
+                                setDetailActiveTab('rates');
+                              }}
+                              className="px-2.5 py-1 rounded text-[11px] font-bold flex items-center justify-center gap-1.5 mx-auto transition cursor-pointer bg-slate-100 hover:bg-purple-50 text-purple-900 border border-purple-200 hover:border-purple-300 shadow-2xs"
+                              title="View itemized rates schedule"
+                            >
+                              <FileSpreadsheet size={13} className="text-purple-700" />
+                              <span>View Rates ({rateCount})</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setSelectedContract(c);
+                                setDetailActiveTab('rates');
+                              }}
+                              className="px-2.5 py-1 rounded text-[11px] font-bold flex items-center justify-center gap-1 mx-auto transition cursor-pointer bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
+                              title="Add rates to this contract"
+                            >
+                              <Plus size={12} className="text-slate-500" />
+                              <span>Add Rates</span>
+                            </button>
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-center whitespace-nowrap">
                           <button
-                            onClick={() => setSelectedContract(c)}
-                            className="px-2 py-1 rounded bg-slate-100 hover:bg-blue-100 text-[#1a3055] font-bold text-[11px] border border-slate-300 hover:border-blue-300 transition cursor-pointer"
+                            onClick={() => {
+                              setSelectedContract(c);
+                              setDetailActiveTab('overview');
+                            }}
+                            className="px-2.5 py-1 rounded bg-slate-100 hover:bg-blue-100 text-[#1a3055] font-bold text-[11px] border border-slate-300 hover:border-blue-300 transition cursor-pointer flex items-center justify-center gap-1 mx-auto shadow-2xs"
+                            title="View full contract overview and details"
                           >
-                            Details
+                            <Eye size={12} className="text-blue-700" />
+                            <span>View</span>
                           </button>
                         </td>
                       </tr>
@@ -769,17 +790,23 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                   </span>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setContractForRates(c)}
+                      onClick={() => {
+                        setSelectedContract(c);
+                        setDetailActiveTab('rates');
+                      }}
                       className="text-purple-700 hover:text-purple-900 font-bold hover:underline cursor-pointer flex items-center gap-1"
                     >
-                      <FileSpreadsheet size={12} /> Rate Schedule
+                      <FileSpreadsheet size={12} /> View Rates
                     </button>
                     <span className="text-slate-300">|</span>
                     <button
-                      onClick={() => setSelectedContract(c)}
+                      onClick={() => {
+                        setSelectedContract(c);
+                        setDetailActiveTab('overview');
+                      }}
                       className="text-blue-700 hover:underline font-bold cursor-pointer"
                     >
-                      Full Details &rarr;
+                      View Details &rarr;
                     </button>
                   </div>
                 </div>
@@ -1033,146 +1060,301 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
         </div>
       )}
 
-      {/* Contract Detail Modal */}
+      {/* Contract Detail Modal with Built-in Rate Schedule */}
       {selectedContract && (
         <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 no-print"
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 no-print overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) setSelectedContract(null);
           }}
         >
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
-            <div className="px-4 py-3 bg-[#1a3055] text-white flex justify-between items-center shrink-0">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-5xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col border border-slate-300">
+            {/* Modal Header */}
+            <div className="px-5 py-3.5 bg-[#1a3055] text-white flex justify-between items-center shrink-0">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="px-2 py-0.5 bg-blue-600 text-white font-mono text-[10px] font-bold rounded">
                     ID #{selectedContract.id}
                   </span>
-                  <h3 className="font-bold text-sm">{selectedContract.shortDesc || selectedContract.name}</h3>
+                  <h3 className="font-bold text-sm tracking-wide text-white">
+                    {selectedContract.shortDesc || selectedContract.name}
+                  </h3>
                 </div>
-                <div className="text-[11px] text-slate-300 font-mono mt-0.5">
-                  Ref: {selectedContract.contractRef || selectedContract.contractNo}
+                <div className="text-[11px] text-slate-300 font-mono mt-0.5 flex items-center gap-2">
+                  <span>Client: <strong className="text-white">{selectedContract.client}</strong></span>
+                  <span>•</span>
+                  <span>Ref: {selectedContract.contractRef || selectedContract.contractNo}</span>
+                  {selectedContract.poNumber && <span>• PO: {selectedContract.poNumber}</span>}
                 </div>
               </div>
               <button
                 onClick={() => setSelectedContract(null)}
-                className="text-white/80 hover:text-amber-300 font-bold text-lg cursor-pointer"
+                className="text-white/80 hover:text-amber-300 font-bold text-lg cursor-pointer px-1.5"
               >
                 &times;
               </button>
             </div>
 
-            <div className="p-4 space-y-3 text-xs overflow-y-auto">
-              <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded border border-slate-200">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-500 block">Client Entity:</span>
-                  <span className="font-bold text-[#1a3055]">{selectedContract.client}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-500 block">Status:</span>
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold inline-block ${
-                      selectedContract.status === 'Active'
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                        : 'bg-slate-200 text-slate-700'
-                    }`}
-                  >
-                    {selectedContract.status}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-500 block">Validity Window:</span>
-                  <span className="font-mono text-slate-800">
-                    {selectedContract.startDate} &rarr; {selectedContract.endDate}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-500 block">Billing Currency:</span>
-                  <span className="font-bold">{selectedContract.currency}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-500 block">Contract Value:</span>
-                  <span className="font-bold font-mono text-[#1a3055]">
-                    {formatMoney(selectedContract.contractValue, selectedContract.currency)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-500 block">Standby Discount:</span>
-                  <span className="font-bold text-amber-800">{selectedContract.standbyDiscountPct}% of Operating Rate</span>
-                </div>
-              </div>
-
-              {/* PBG Breakdown */}
-              <div className="p-3 bg-purple-50/80 rounded border border-purple-200 space-y-2">
-                <div className="font-bold text-purple-950 flex items-center gap-1.5">
-                  <ShieldCheck size={14} className="text-purple-700" />
-                  <span>Performance Bank Guarantee (PBG)</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <span className="text-[10px] font-bold text-purple-900 block">PBG Number:</span>
-                    <span className="font-mono font-bold text-purple-950">
-                      {selectedContract.pbgNumber || '-'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-purple-900 block">PBG Value:</span>
-                    <span className="font-mono font-bold text-purple-950">
-                      {formatPbg(selectedContract.pbgValue)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-purple-900 block">Issue Date:</span>
-                    <span className="font-mono text-purple-900">{selectedContract.pbgIssueDate || '-'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-purple-900 block">Expiry Date:</span>
-                    <span className="font-mono font-bold text-purple-900">
-                      {selectedContract.pbgExpiryDate || '-'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {selectedContract.notes && (
-                <div>
-                  <h4 className="font-bold text-slate-700 mb-1">Contract Notes</h4>
-                  <div className="p-2.5 bg-slate-50 border rounded text-slate-700 whitespace-pre-wrap">
-                    {selectedContract.notes}
-                  </div>
-                </div>
-              )}
-
-              {/* Price Book & Rate Schedule Action */}
-              <div className="p-3 bg-purple-50 border border-purple-200 rounded">
-                <div className="flex justify-between items-center mb-1.5">
-                  <div className="flex items-center gap-1.5 text-purple-950 font-bold">
-                    <FileSpreadsheet size={14} className="text-purple-700" />
-                    <span>Price Book &amp; Rate Schedule</span>
-                  </div>
-                  <span className="bg-purple-200 text-purple-900 px-2 py-0.5 rounded font-mono font-bold text-[10px]">
-                    {selectedContract.rates?.length || 0} Rate Lines Defined
-                  </span>
-                </div>
-                <p className="text-[11px] text-purple-800 mb-2.5">
-                  Itemized rates for tools, hole sections, daily operating rates, standby discounts, run charges, and redress charges.
-                </p>
+            {/* Modal Navigation Tabs: Overview vs Rate Schedule */}
+            <div className="bg-slate-100 border-b border-slate-200 px-5 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-1">
                 <button
-                  onClick={() => {
-                    setContractForRates(selectedContract);
-                    setSelectedContract(null);
-                  }}
-                  className="w-full py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer transition"
+                  type="button"
+                  onClick={() => setDetailActiveTab('overview')}
+                  className={`px-3 py-2 text-xs font-bold transition border-b-2 cursor-pointer flex items-center gap-1.5 ${
+                    detailActiveTab === 'overview'
+                      ? 'border-[#1a3055] text-[#1a3055] bg-white'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
                 >
-                  <FileSpreadsheet size={13} /> Open &amp; Manage Rate Schedule &rarr;
+                  <Eye size={13} />
+                  <span>Contract Overview</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetailActiveTab('rates')}
+                  className={`px-3 py-2 text-xs font-bold transition border-b-2 cursor-pointer flex items-center gap-1.5 ${
+                    detailActiveTab === 'rates'
+                      ? 'border-purple-700 text-purple-900 bg-white'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <FileSpreadsheet size={13} className="text-purple-700" />
+                  <span>Itemized Rates Schedule ({selectedContract.rates?.length || 0})</span>
                 </button>
               </div>
+
+              {detailActiveTab === 'rates' && canEdit && (
+                <button
+                  onClick={() => {
+                    const c = selectedContract;
+                    setSelectedContract(null);
+                    setContractForRates(c);
+                  }}
+                  className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded font-bold text-[11px] shadow-2xs transition flex items-center gap-1 cursor-pointer"
+                  title="Open full editor to paste from Excel or modify lines"
+                >
+                  <FileSpreadsheet size={12} />
+                  <span>Edit Rate Schedule</span>
+                </button>
+              )}
             </div>
 
-            <div className="px-4 py-3 bg-slate-50 border-t border-[#b8c9db] flex justify-end shrink-0">
+            {/* Tab 1: Overview */}
+            {detailActiveTab === 'overview' && (
+              <div className="p-5 space-y-4 text-xs overflow-y-auto">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded border border-slate-200">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Client Entity</span>
+                    <span className="font-bold text-[#1a3055] text-sm">{selectedContract.client}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Contract Status</span>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold inline-block mt-0.5 ${
+                        selectedContract.status === 'Active'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {selectedContract.status}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Validity Window</span>
+                    <span className="font-mono text-slate-800 font-medium">
+                      {selectedContract.startDate} &rarr; {selectedContract.endDate}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Billing Currency</span>
+                    <span className="font-bold text-slate-900 font-mono">{selectedContract.currency}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Contract Value</span>
+                    <span className="font-bold font-mono text-[#1a3055] text-sm">
+                      {formatMoney(selectedContract.contractValue, selectedContract.currency)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Standby Discount</span>
+                    <span className="font-bold text-emerald-800 font-mono">{selectedContract.standbyDiscountPct}% of Ops Rate</span>
+                  </div>
+                </div>
+
+                {/* PBG Breakdown */}
+                <div className="p-3.5 bg-purple-50/70 rounded border border-purple-200 space-y-2.5">
+                  <div className="font-bold text-purple-950 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <ShieldCheck size={14} className="text-purple-700" />
+                      <span>Performance Bank Guarantee (PBG)</span>
+                    </div>
+                    {selectedContract.pbgExpiryDate && (
+                      <span className="text-[10px] font-mono font-bold text-purple-800 bg-purple-100 px-2 py-0.5 rounded border border-purple-200">
+                        Expiry: {selectedContract.pbgExpiryDate}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                    <div>
+                      <span className="text-[10px] font-bold text-purple-900 block">PBG Number</span>
+                      <span className="font-mono font-bold text-purple-950">
+                        {selectedContract.pbgNumber || '-'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-purple-900 block">PBG Security Value</span>
+                      <span className="font-mono font-bold text-purple-950">
+                        {formatPbg(selectedContract.pbgValue)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-purple-900 block">Issue Date</span>
+                      <span className="font-mono text-purple-900">{selectedContract.pbgIssueDate || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-purple-900 block">Expiry Date</span>
+                      <span className="font-mono text-purple-900">
+                        {selectedContract.pbgExpiryDate || '-'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedContract.notes && (
+                  <div>
+                    <h4 className="font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]">Contract Notes &amp; Scope Terms</h4>
+                    <div className="p-3 bg-slate-50 border rounded text-slate-700 whitespace-pre-wrap leading-relaxed text-xs">
+                      {selectedContract.notes}
+                    </div>
+                  </div>
+                )}
+
+                {/* Rates Schedule Callout */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileSpreadsheet size={16} className="text-purple-700" />
+                    <div>
+                      <span className="font-bold text-[#1a3055] block">
+                        Rate Schedule ({selectedContract.rates?.length || 0} Rate Lines)
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Operating &amp; standby rates, hole sections, redress and run charges
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setDetailActiveTab('rates')}
+                    className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-bold text-xs flex items-center gap-1 cursor-pointer transition shadow-2xs"
+                  >
+                    <span>View Rate Schedule</span>
+                    <ChevronRight size={13} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 2: Embedded Itemized Rate Schedule */}
+            {detailActiveTab === 'rates' && (
+              <div className="flex-1 flex flex-col overflow-hidden bg-white">
+                <div className="p-3 bg-slate-50 border-b border-slate-200 text-xs flex flex-wrap justify-between items-center gap-2">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <span className="font-semibold text-slate-800">
+                      Rates for {selectedContract.shortDesc || selectedContract.name}
+                    </span>
+                    <span>•</span>
+                    <span>Currency: <strong className="font-mono text-slate-900">{selectedContract.currency}</strong></span>
+                    <span>•</span>
+                    <span>Total Lines: <strong className="font-mono text-slate-900">{selectedContract.rates?.length || 0}</strong></span>
+                  </div>
+                  {canEdit && (
+                    <button
+                      onClick={() => {
+                        const c = selectedContract;
+                        setSelectedContract(null);
+                        setContractForRates(c);
+                      }}
+                      className="text-purple-700 hover:text-purple-900 font-bold hover:underline cursor-pointer flex items-center gap-1 text-[11px]"
+                    >
+                      <Plus size={12} /> Add / Edit in Full Editor &rarr;
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex-1 overflow-auto max-h-[55vh]">
+                  {(!selectedContract.rates || selectedContract.rates.length === 0) ? (
+                    <div className="py-12 text-center text-slate-400 italic text-xs">
+                      No rate lines defined for this contract. Click "Edit Rate Schedule" to add or paste lines.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs border-collapse font-sans">
+                      <thead className="bg-[#1a3055] text-white sticky top-0 z-10 text-[11px] select-none">
+                        <tr>
+                          <th className="py-2 px-3 border border-[#2d4b7a] w-12 text-center font-bold">#</th>
+                          <th className="py-2 px-3 border border-[#2d4b7a] font-bold">Category</th>
+                          <th className="py-2 px-3 border border-[#2d4b7a] font-bold">Tool Description</th>
+                          <th className="py-2 px-3 border border-[#2d4b7a] text-center font-bold whitespace-nowrap">Size / OD</th>
+                          <th className="py-2 px-3 border border-[#2d4b7a] text-center font-bold whitespace-nowrap">Hole Section</th>
+                          <th className="py-2 px-3 border border-[#2d4b7a] text-right font-bold bg-[#1d4332] whitespace-nowrap">Ops Rate ({selectedContract.currency})</th>
+                          <th className="py-2 px-3 border border-[#2d4b7a] text-right font-bold bg-[#1d4332] whitespace-nowrap">Standby Rate</th>
+                          <th className="py-2 px-3 border border-[#2d4b7a] text-right font-bold whitespace-nowrap">Run Charge</th>
+                          <th className="py-2 px-3 border border-[#2d4b7a] text-right font-bold whitespace-nowrap">Redress</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {selectedContract.rates.map((r, i) => (
+                          <tr
+                            key={i}
+                            className={`hover:bg-blue-50/40 transition duration-75 ${
+                              i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
+                            }`}
+                          >
+                            <td className="py-1.5 px-3 border border-slate-100 text-center font-mono text-slate-400 text-[11px]">
+                              {r.no || i + 1}
+                            </td>
+                            <td className="py-1.5 px-3 border border-slate-100 font-semibold text-slate-900 whitespace-nowrap">
+                              {r.category}
+                            </td>
+                            <td className="py-1.5 px-3 border border-slate-100 text-slate-800">
+                              {r.shortDesc}
+                            </td>
+                            <td className="py-1.5 px-3 border border-slate-100 text-center font-mono text-slate-700 whitespace-nowrap">
+                              {r.size || '—'}
+                            </td>
+                            <td className="py-1.5 px-3 border border-slate-100 text-center font-mono text-slate-700 whitespace-nowrap">
+                              {r.holeSection || '—'}
+                            </td>
+                            <td className="py-1.5 px-3 border border-slate-100 text-right font-mono font-bold text-emerald-900 bg-emerald-50/60 whitespace-nowrap">
+                              {r.opsRate?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-1.5 px-3 border border-slate-100 text-right font-mono font-bold text-emerald-900 bg-emerald-50/60 whitespace-nowrap">
+                              {r.standbyRate?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-1.5 px-3 border border-slate-100 text-right font-mono text-slate-600 text-[11px] whitespace-nowrap">
+                              {r.runCharges != null ? r.runCharges.toLocaleString(undefined, { minimumFractionDigits: 2 }) : <span className="text-slate-300">—</span>}
+                            </td>
+                            <td className="py-1.5 px-3 border border-slate-100 text-right font-mono text-slate-600 text-[11px] whitespace-nowrap">
+                              {r.redress != null ? r.redress.toLocaleString(undefined, { minimumFractionDigits: 2 }) : <span className="text-slate-300">—</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3 bg-slate-50 border-t border-[#b8c9db] flex justify-between items-center shrink-0">
+              <span className="text-slate-500 text-[11px]">
+                {detailActiveTab === 'overview'
+                  ? `Master Contract #${selectedContract.id} • ${selectedContract.status}`
+                  : `Showing ${selectedContract.rates?.length || 0} rate schedule entries`}
+              </span>
               <button
                 onClick={() => setSelectedContract(null)}
-                className="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold hover:bg-[#24426d] cursor-pointer"
+                className="px-4 py-1.5 rounded bg-[#1a3055] text-white font-bold hover:bg-[#24426d] cursor-pointer text-xs transition"
               >
                 Close
               </button>
