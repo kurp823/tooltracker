@@ -94,7 +94,17 @@ export function useResizableColumns(tableId: string, initialWidths: Record<strin
     } catch (e) {}
   }, [initialWidths, tableId]);
 
-  return { widths, startResize, resetWidths };
+  const resetColumn = useCallback((colKey: string) => {
+    setWidths((prev) => {
+      const next = { ...prev, [colKey]: initialWidths[colKey] || 120 };
+      try {
+        localStorage.setItem(`${STORAGE_COL_WIDTHS_PREFIX}${tableId}`, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  }, [initialWidths, tableId]);
+
+  return { widths, startResize, resetWidths, resetColumn };
 }
 
 /**
@@ -107,9 +117,12 @@ export const ResizerHandle: React.FC<{
   return (
     <div
       onMouseDown={onMouseDown}
-      onDoubleClick={onDoubleClick}
-      title="Click and drag to resize column. Double-click to auto-fit."
-      className="absolute top-0 right-0 w-2 h-full cursor-col-resize select-none group flex items-center justify-center z-20 hover:bg-amber-400/30 transition-colors"
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        onDoubleClick?.();
+      }}
+      title="Click and drag to resize column. Double-click to reset width."
+      className="absolute top-0 right-0 w-3.5 h-full cursor-col-resize select-none group flex items-center justify-center z-20 hover:bg-amber-400/40 transition-colors"
       style={{ transform: 'translateX(50%)' }}
       onClick={(e) => e.stopPropagation()}
     >

@@ -3359,49 +3359,49 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             </div>
 
             {/* Checklist Table */}
-            <div className="border border-[#b8cce0] rounded overflow-hidden">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
+            <div className="border border-[#b8cce0] rounded overflow-hidden overflow-x-auto">
+              <table className="min-w-full text-left text-xs border-collapse table-fixed">
+                <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px] select-none">
                   <tr>
-                    <th style={{ width: checklistResizer.widths.itemNo || 50 }} className="p-1.5 text-center relative">
+                    <th style={{ width: checklistResizer.widths.itemNo || 50 }} className="p-1.5 text-center relative overflow-hidden truncate">
                       <span>ItemNo</span>
-                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('itemNo', e)} />
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('itemNo', e)} onDoubleClick={() => checklistResizer.resetColumn('itemNo')} />
                     </th>
-                    <th style={{ width: checklistResizer.widths.partNo || 140 }} className="p-1.5 relative">
+                    <th style={{ width: checklistResizer.widths.partNo || 140 }} className="p-1.5 relative overflow-hidden truncate">
                       <span>PartNo / Serial</span>
-                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('partNo', e)} />
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('partNo', e)} onDoubleClick={() => checklistResizer.resetColumn('partNo')} />
                     </th>
-                    <th style={{ width: checklistResizer.widths.description || 300 }} className="p-1.5 relative">
+                    <th style={{ width: checklistResizer.widths.description || 300 }} className="p-1.5 relative overflow-hidden truncate">
                       <span>Description</span>
-                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('description', e)} />
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('description', e)} onDoubleClick={() => checklistResizer.resetColumn('description')} />
                     </th>
-                    <th style={{ width: checklistResizer.widths.qty || 60 }} className="p-1.5 text-center relative">
+                    <th style={{ width: checklistResizer.widths.qty || 60 }} className="p-1.5 text-center relative overflow-hidden truncate">
                       <span>DTQTY</span>
-                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('qty', e)} />
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('qty', e)} onDoubleClick={() => checklistResizer.resetColumn('qty')} />
                     </th>
-                    <th style={{ width: checklistResizer.widths.supplier || 110 }} className="p-1.5 relative">
+                    <th style={{ width: checklistResizer.widths.supplier || 110 }} className="p-1.5 relative overflow-hidden truncate">
                       <span>Supplier</span>
-                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('supplier', e)} />
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('supplier', e)} onDoubleClick={() => checklistResizer.resetColumn('supplier')} />
                     </th>
-                    <th style={{ width: checklistResizer.widths.qtyIn || 60 }} className="p-1.5 text-center relative">
+                    <th style={{ width: checklistResizer.widths.qtyIn || 60 }} className="p-1.5 text-center relative overflow-hidden truncate">
                       <span>QTYIN</span>
-                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('qtyIn', e)} />
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('qtyIn', e)} onDoubleClick={() => checklistResizer.resetColumn('qtyIn')} />
                     </th>
-                    <th style={{ width: checklistResizer.widths.insNum || 140 }} className="p-1.5 relative">
+                    <th style={{ width: checklistResizer.widths.insNum || 140 }} className="p-1.5 relative overflow-hidden truncate">
                       <span>INS_NUM</span>
-                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('insNum', e)} />
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('insNum', e)} onDoubleClick={() => checklistResizer.resetColumn('insNum')} />
                     </th>
-                    <th style={{ width: checklistResizer.widths.insDate || 105 }} className="p-1.5 relative">
+                    <th style={{ width: checklistResizer.widths.insDate || 105 }} className="p-1.5 relative overflow-hidden truncate">
                       <span>INS_DATE</span>
-                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('insDate', e)} />
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('insDate', e)} onDoubleClick={() => checklistResizer.resetColumn('insDate')} />
                     </th>
-                    <th style={{ width: checklistResizer.widths.comments || 110 }} className="p-1.5 relative">
+                    <th style={{ width: checklistResizer.widths.comments || 110 }} className="p-1.5 relative overflow-hidden truncate">
                       <span>Comments</span>
-                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('comments', e)} />
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('comments', e)} onDoubleClick={() => checklistResizer.resetColumn('comments')} />
                     </th>
-                    <th style={{ width: checklistResizer.widths.cat || 130 }} className="p-1.5 relative">
+                    <th style={{ width: checklistResizer.widths.cat || 130 }} className="p-1.5 relative overflow-hidden truncate">
                       <span>Category</span>
-                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('cat', e)} />
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('cat', e)} onDoubleClick={() => checklistResizer.resetColumn('cat')} />
                     </th>
 
                     {/* Custom columns registered in Database Inspector */}
@@ -3409,28 +3409,30 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <th
                         key={c.key}
                         style={{ width: checklistResizer.widths[c.key] || c.width || 130 }}
-                        className="p-1.5 relative bg-emerald-50 text-emerald-950 font-bold"
+                        className="p-1.5 relative bg-emerald-50 text-emerald-950 font-bold overflow-hidden truncate"
                       >
                         <div className="flex items-center gap-1">
                           <span className="text-emerald-600 text-[10px]">★</span>
-                          <span>{c.label}</span>
+                          <span className="truncate">{c.label}</span>
                         </div>
-                        <ResizerHandle onMouseDown={(e) => checklistResizer.startResize(c.key, e)} />
+                        <ResizerHandle onMouseDown={(e) => checklistResizer.startResize(c.key, e)} onDoubleClick={() => checklistResizer.resetColumn(c.key)} />
                       </th>
                     ))}
 
                     {!isClosedOrInvoiced && !isLocked && (
-                      <th style={{ width: checklistResizer.widths.actions || 60 }} className="p-1.5 text-center relative">
+                      <th style={{ width: checklistResizer.widths.actions || 60 }} className="p-1.5 text-center relative overflow-hidden truncate">
                         <span>Action</span>
-                        <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('actions', e)} />
+                        <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('actions', e)} onDoubleClick={() => checklistResizer.resetColumn('actions')} />
                       </th>
                     )}
+                    {/* Trailing flexible filler header to absorb excess table width */}
+                    <th className="p-0 border-0 pointer-events-none w-auto" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {checklistItems.length === 0 ? (
                     <tr>
-                      <td colSpan={isClosedOrInvoiced || isLocked ? 10 : 11} className="p-6 text-center text-slate-500 font-medium">
+                      <td colSpan={(isClosedOrInvoiced || isLocked ? 11 : 12) + checklistCustomCols.length} className="p-6 text-center text-slate-500 font-medium">
                         No tools in checklist.
                         {!isClosedOrInvoiced && !isLocked && (
                           <span> Click <strong>&quot;Select Tools&quot;</strong> above to pick available tools from yard inventory.</span>
@@ -3440,27 +3442,27 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   ) : (
                     checklistItems.map((item, i) => (
                       <tr key={i} className="hover:bg-blue-50/50 h-7 leading-none">
-                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{i + 1}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{item.partNo || item.serialNos?.[0] || '—'}</td>
-                        <td className="py-1 px-2 whitespace-nowrap truncate max-w-[320px] font-medium text-slate-800" title={item.description || item.shortDesc}>{item.description || item.shortDesc}</td>
-                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{item.qty || 1}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700">{item.supplier || 'EMDAD'}</td>
-                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{item.qtyIn || 1}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">{item.insNum || 'GIS-Z-01480-2023'}</td>
-                        <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600">{item.cat || item.shortDesc}</td>
+                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600 truncate">{i + 1}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={item.partNo || item.serialNos?.[0] || '—'}>{item.partNo || item.serialNos?.[0] || '—'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap truncate font-medium text-slate-800" title={item.description || item.shortDesc}>{item.description || item.shortDesc}</td>
+                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qty || 1}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700 truncate" title={item.supplier || 'EMDAD'}>{item.supplier || 'EMDAD'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qtyIn || 1}</td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700 truncate" title={item.insNum || 'GIS-Z-01480-2023'}>{item.insNum || 'GIS-Z-01480-2023'}</td>
+                        <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={item.cat || item.shortDesc}>{item.cat || item.shortDesc}</td>
 
                         {/* Custom Column cells for checklist */}
                         {checklistCustomCols.map((c) => {
                           const val = (item as any)[c.key] ?? (item as any).customFields?.[c.key] ?? '—';
                           return (
-                            <td key={c.key} className="py-1 px-2 whitespace-nowrap font-mono text-slate-800">
+                            <td key={c.key} className="py-1 px-2 whitespace-nowrap font-mono text-slate-800 truncate" title={String(val)}>
                               {String(val)}
                             </td>
                           );
                         })}
 
                         {!isClosedOrInvoiced && !isLocked && (
-                          <td className="py-1 px-2 whitespace-nowrap text-center">
+                          <td className="py-1 px-2 whitespace-nowrap text-center truncate">
                             <button
                               type="button"
                               onClick={() => handleDeleteChecklistRow(item.seq)}
@@ -3471,6 +3473,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             </button>
                           </td>
                         )}
+                        {/* Trailing filler cell */}
+                        <td className="p-0 border-0" />
                       </tr>
                     ))
                   )}
@@ -4808,12 +4812,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
               {/* Tools Table with Checkbox as Column 1 */}
               <div className="flex-1 min-h-0 bg-white border border-[#9fb6cf] rounded overflow-auto shadow-inner">
-                <table className="w-full text-left border-collapse text-[11.5px]">
+                <table className="min-w-full text-left border-collapse text-[11.5px] table-fixed">
                   <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#9fb6cf] font-bold text-[11px] sticky top-0 z-10 shadow-2xs select-none">
                     <tr>
                       <th
                         style={{ width: toolPickerResizer.widths.select || 48 }}
-                        className="py-1.5 px-3 whitespace-nowrap text-center sticky left-0 bg-[#e9f0f8] z-20 shadow-2xs border-r border-[#9fb6cf] relative"
+                        className="py-1.5 px-3 whitespace-nowrap text-center sticky left-0 bg-[#e9f0f8] z-20 shadow-2xs border-r border-[#9fb6cf] relative overflow-hidden"
                       >
                         <input
                           type="checkbox"
@@ -4828,63 +4832,63 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           className="cursor-pointer w-4 h-4 text-blue-600 rounded"
                           title="Select All Visible"
                         />
-                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('select', e)} />
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('select', e)} onDoubleClick={() => toolPickerResizer.resetColumn('select')} />
                       </th>
                       <th
                         style={{ width: toolPickerResizer.widths.serial || 140 }}
-                        className="py-1 px-3 whitespace-nowrap relative"
+                        className="py-1 px-3 whitespace-nowrap relative overflow-hidden truncate"
                       >
                         <span>PartNo / Serial</span>
-                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('serial', e)} />
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('serial', e)} onDoubleClick={() => toolPickerResizer.resetColumn('serial')} />
                       </th>
                       <th
                         style={{ width: toolPickerResizer.widths.description || 320 }}
-                        className="py-1 px-3 whitespace-nowrap relative"
+                        className="py-1 px-3 whitespace-nowrap relative overflow-hidden truncate"
                       >
                         <span>Description</span>
-                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('description', e)} />
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('description', e)} onDoubleClick={() => toolPickerResizer.resetColumn('description')} />
                       </th>
                       <th
                         style={{ width: toolPickerResizer.widths.size || 80 }}
-                        className="py-1 px-2 whitespace-nowrap text-center relative"
+                        className="py-1 px-2 whitespace-nowrap text-center relative overflow-hidden truncate"
                       >
                         <span>Size</span>
-                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('size', e)} />
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('size', e)} onDoubleClick={() => toolPickerResizer.resetColumn('size')} />
                       </th>
                       <th
                         style={{ width: toolPickerResizer.widths.qty || 60 }}
-                        className="py-1 px-2 whitespace-nowrap text-center relative"
+                        className="py-1 px-2 whitespace-nowrap text-center relative overflow-hidden truncate"
                       >
                         <span>DTQTY</span>
-                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('qty', e)} />
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('qty', e)} onDoubleClick={() => toolPickerResizer.resetColumn('qty')} />
                       </th>
                       <th
                         style={{ width: toolPickerResizer.widths.supplier || 110 }}
-                        className="py-1 px-3 whitespace-nowrap relative"
+                        className="py-1 px-3 whitespace-nowrap relative overflow-hidden truncate"
                       >
                         <span>Supplier</span>
-                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('supplier', e)} />
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('supplier', e)} onDoubleClick={() => toolPickerResizer.resetColumn('supplier')} />
                       </th>
                       <th
                         style={{ width: toolPickerResizer.widths.insDate || 105 }}
-                        className="py-1 px-2 whitespace-nowrap relative"
+                        className="py-1 px-2 whitespace-nowrap relative overflow-hidden truncate"
                       >
                         <span>Ins_Date</span>
-                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('insDate', e)} />
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('insDate', e)} onDoubleClick={() => toolPickerResizer.resetColumn('insDate')} />
                       </th>
                       <th
                         style={{ width: toolPickerResizer.widths.insNum || 140 }}
-                        className="py-1 px-2 whitespace-nowrap relative"
+                        className="py-1 px-2 whitespace-nowrap relative overflow-hidden truncate"
                       >
                         <span>Ins_Num</span>
-                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('insNum', e)} />
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('insNum', e)} onDoubleClick={() => toolPickerResizer.resetColumn('insNum')} />
                       </th>
                       <th
                         style={{ width: toolPickerResizer.widths.condition || 100 }}
-                        className="py-1 px-2 whitespace-nowrap relative"
+                        className="py-1 px-2 whitespace-nowrap relative overflow-hidden truncate"
                       >
                         <span>Condition</span>
-                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('condition', e)} />
+                        <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('condition', e)} onDoubleClick={() => toolPickerResizer.resetColumn('condition')} />
                       </th>
 
                       {/* Custom Columns registered in Database Inspector */}
@@ -4892,21 +4896,23 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <th
                           key={c.key}
                           style={{ width: toolPickerResizer.widths[c.key] || c.width || 130 }}
-                          className="py-1 px-2 whitespace-nowrap relative bg-emerald-50/70 text-emerald-950 font-bold"
+                          className="py-1 px-2 whitespace-nowrap relative bg-emerald-50/70 text-emerald-950 font-bold overflow-hidden truncate"
                         >
                           <div className="flex items-center gap-1">
                             <span className="text-emerald-600 text-[10px]">★</span>
-                            <span>{c.label}</span>
+                            <span className="truncate">{c.label}</span>
                           </div>
-                          <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize(c.key, e)} />
+                          <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize(c.key, e)} onDoubleClick={() => toolPickerResizer.resetColumn(c.key)} />
                         </th>
                       ))}
+                      {/* Trailing flexible filler header to absorb excess table width */}
+                      <th className="p-0 border-0 pointer-events-none w-auto" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {modalAvailableTools.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="p-8 text-center text-slate-500 font-medium">
+                        <td colSpan={10 + toolPickerCustomCols.length} className="p-8 text-center text-slate-500 font-medium">
                           No available tools found in yard for Category: <strong>{selectedCategory || 'All Categories'}</strong> {selectedToolSize && `(Size: ${selectedToolSize})`}.
                         </td>
                       </tr>
@@ -4951,7 +4957,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                               isChecked ? 'bg-amber-100/90 font-semibold' : 'hover:bg-blue-50/60'
                             }`}
                           >
-                            <td className="py-1.5 px-3 whitespace-nowrap text-center sticky left-0 bg-inherit z-10 border-r border-slate-200" onClick={(e) => e.stopPropagation()}>
+                            <td className="py-1.5 px-3 whitespace-nowrap text-center sticky left-0 bg-inherit z-10 border-r border-slate-200 overflow-hidden" onClick={(e) => e.stopPropagation()}>
                               <input
                                 type="checkbox"
                                 checked={isChecked}
@@ -4965,26 +4971,28 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                                 className="cursor-pointer w-4 h-4 text-blue-600 rounded"
                               />
                             </td>
-                            <td className="py-1 px-3 whitespace-nowrap font-mono font-bold text-slate-900">{tool.assetNo || tool.serial}</td>
-                            <td className="py-1 px-3 whitespace-nowrap font-medium text-slate-800" title={tool.desc || tool.shortDesc}>
+                            <td className="py-1 px-3 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={tool.assetNo || tool.serial}>{tool.assetNo || tool.serial}</td>
+                            <td className="py-1 px-3 whitespace-nowrap font-medium text-slate-800 truncate" title={tool.desc || tool.shortDesc}>
                               {tool.desc || tool.shortDesc}
                             </td>
-                            <td className="py-1 px-2 whitespace-nowrap text-center font-mono text-slate-700">{tool.size || '—'}</td>
-                            <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{tool.qty || 1}</td>
-                            <td className="py-1 px-3 whitespace-nowrap text-slate-700">{tool.ownership || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')}</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-700">{insDate}</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700 font-semibold">{insNum}</td>
-                            <td className={`py-1 px-2 whitespace-nowrap font-bold ${condition === 'ACCEPTED' ? 'text-emerald-700' : 'text-amber-700'}`}>{condition}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-center font-mono text-slate-700 truncate" title={tool.size || '—'}>{tool.size || '—'}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{tool.qty || 1}</td>
+                            <td className="py-1 px-3 whitespace-nowrap text-slate-700 truncate" title={tool.ownership || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')}>{tool.ownership || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-700 truncate" title={insDate}>{insDate}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700 font-semibold truncate" title={insNum}>{insNum}</td>
+                            <td className={`py-1 px-2 whitespace-nowrap font-bold truncate ${condition === 'ACCEPTED' ? 'text-emerald-700' : 'text-amber-700'}`} title={condition}>{condition}</td>
 
                             {/* Custom Column Values */}
                             {toolPickerCustomCols.map((c) => {
                               const val = (tool as any)[c.key] ?? (tool as any).customFields?.[c.key] ?? '—';
                               return (
-                                <td key={c.key} className="py-1 px-2 whitespace-nowrap font-mono text-slate-800">
+                                <td key={c.key} className="py-1 px-2 whitespace-nowrap font-mono text-slate-800 truncate" title={String(val)}>
                                   {String(val)}
                                 </td>
                               );
                             })}
+                            {/* Trailing filler cell */}
+                            <td className="p-0 border-0" />
                           </tr>
                         );
                       })
