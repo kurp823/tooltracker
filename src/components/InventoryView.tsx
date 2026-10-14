@@ -79,6 +79,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     owner: 110,
     location: 110,
     status: 120,
+    agreementType: 120,
+    subRate: 140,
+    supplierPo: 130,
     action: 110,
   });
 
@@ -124,8 +127,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   };
 
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
+  const [editingTool, setEditingTool] = useState<ToolItem | null>(null);
   const [editStatus, setEditStatus] = useState<ToolItem['status']>('Good');
   const [editLocation, setEditLocation] = useState('Emdad Base');
+  const [editAgreementType, setEditAgreementType] = useState<'Daily' | 'BackToBack' | 'MonthlyPool'>('Daily');
+  const [editDailyRate, setEditDailyRate] = useState<string>('');
+  const [editMonthlyRate, setEditMonthlyRate] = useState<string>('');
+  const [editSupplierPo, setEditSupplierPo] = useState<string>('');
+  const [editCurrency, setEditCurrency] = useState<string>('AED');
+  const [editStartDate, setEditStartDate] = useState<string>('');
+  const [editEndDate, setEditEndDate] = useState<string>('');
 
   // Form states for Add Tool
   const [newOwnershipType, setNewOwnershipType] = useState<'emdad' | 'sub'>('emdad');
@@ -137,6 +148,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [newSupplier, setNewSupplier] = useState('');
   const [newLocation, setNewLocation] = useState('Emdad Base');
   const [newStatus, setNewStatus] = useState<ToolItem['status']>('Good');
+  // New sub-rental cost fields for Add Tool
+  const [newSubAgreementType, setNewSubAgreementType] = useState<'Daily' | 'BackToBack' | 'MonthlyPool'>('Daily');
+  const [newSubDailyRate, setNewSubDailyRate] = useState<string>('');
+  const [newSubMonthlyRate, setNewSubMonthlyRate] = useState<string>('');
+  const [newSupplierPo, setNewSupplierPo] = useState<string>('');
+  const [newSupplierCurrency, setNewSupplierCurrency] = useState<string>('AED');
+  const [newRentalStartDate, setNewRentalStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [newRentalEndDate, setNewRentalEndDate] = useState<string>('');
 
   // Inline add state for new categories and sizes in modal
   const [isAddingNewCat, setIsAddingNewCat] = useState(false);
@@ -243,6 +262,40 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     return `EMD-${maxNum + 1}`;
   }, [inventory]);
 
+  // Compute sub-rental statistics for Sub-Contractor Tools KPI banner
+  const subRentalStats = useMemo(() => {
+    const subTools = inventory.filter((t) => !t.isEmdad);
+    const totalSub = subTools.length;
+    const activeSub = subTools.filter((t) => t.status !== 'Removed' && t.location !== 'Returned to Supplier');
+    const onRigSub = subTools.filter((t) => t.location === 'On Rig' || t.status === 'On Rig');
+    
+    // Total monthly accrual estimation
+    // Daily tools * dailyRate * 30 + MonthlyPool tools * monthlyRate
+    let estMonthlyAccrual = 0;
+    let dailyActiveBurnRate = 0;
+
+    activeSub.forEach((t) => {
+      if (t.subRentalAgreementType === 'MonthlyPool' && t.subRentalMonthlyRate) {
+        estMonthlyAccrual += Number(t.subRentalMonthlyRate);
+        dailyActiveBurnRate += Number(t.subRentalMonthlyRate) / 30;
+      } else if (t.subRentalDailyRate) {
+        estMonthlyAccrual += Number(t.subRentalDailyRate) * 30;
+        dailyActiveBurnRate += Number(t.subRentalDailyRate);
+      }
+    });
+
+    const uniqueVendors = Array.from(new Set(subTools.map((t) => t.supplier || t.ownership).filter(Boolean)));
+
+    return {
+      totalSub,
+      activeCount: activeSub.length,
+      onRigCount: onRigSub.length,
+      estMonthlyAccrual,
+      dailyActiveBurnRate,
+      vendorCount: uniqueVendors.length,
+    };
+  }, [inventory]);
+
   // Filtered inventory
   const filtered = useMemo(() => {
     return inventory.filter((t) => {
@@ -324,6 +377,18 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       isEmdad: isEmd,
       supplier: ownership,
       addedDate: new Date().toISOString().split('T')[0],
+      // Sub-rental details if non-EMDAD
+      ...(isEmd
+        ? {}
+        : {
+            subRentalAgreementType: newSubAgreementType,
+            subRentalDailyRate: newSubDailyRate ? parseFloat(newSubDailyRate) : null,
+            subRentalMonthlyRate: newSubMonthlyRate ? parseFloat(newSubMonthlyRate) : null,
+            supplierPoNumber: newSupplierPo.trim() || undefined,
+            supplierCurrency: newSupplierCurrency || 'AED',
+            rentalStartDate: newRentalStartDate || null,
+            rentalEndDate: newRentalEndDate || null,
+          }),
     };
 
     const catUpper = newType.trim().toUpperCase();
@@ -356,28 +421,59 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setNewDesc('');
     setNewSize('');
     setNewSupplier('');
+    setNewSubDailyRate('');
+    setNewSubMonthlyRate('');
+    setNewSupplierPo('');
+    setNewRentalEndDate('');
   };
 
   const startEditTool = (t: ToolItem) => {
     if (!canEdit) return;
     setEditingToolId(t.id);
+    setEditingTool(t);
     setEditStatus(t.status);
     setEditLocation(t.location);
+    setEditAgreementType(t.subRentalAgreementType || 'Daily');
+    setEditDailyRate(t.subRentalDailyRate ? String(t.subRentalDailyRate) : '');
+    setEditMonthlyRate(t.subRentalMonthlyRate ? String(t.subRentalMonthlyRate) : '');
+    setEditSupplierPo(t.supplierPoNumber || '');
+    setEditCurrency(t.supplierCurrency || 'AED');
+    setEditStartDate(t.rentalStartDate || '');
+    setEditEndDate(t.rentalEndDate || '');
   };
 
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canEdit || !editingToolId) return;
+
+    const isSub = editingTool && !editingTool.isEmdad;
+    const updates: Partial<ToolItem> = {
+      status: editStatus,
+      location: editLocation,
+      ...(isSub
+        ? {
+            subRentalAgreementType: editAgreementType,
+            subRentalDailyRate: editDailyRate ? parseFloat(editDailyRate) : null,
+            subRentalMonthlyRate: editMonthlyRate ? parseFloat(editMonthlyRate) : null,
+            supplierPoNumber: editSupplierPo.trim() || undefined,
+            supplierCurrency: editCurrency,
+            rentalStartDate: editStartDate || null,
+            rentalEndDate: editEndDate || null,
+          }
+        : {}),
+    };
+
     if (onUpdateTool) {
-      onUpdateTool(editingToolId, { status: editStatus, location: editLocation });
+      onUpdateTool(editingToolId, updates);
     } else if (onSaveInventory) {
       onSaveInventory(
         inventory.map((t) =>
-          t.id === editingToolId ? { ...t, status: editStatus, location: editLocation } : t
+          t.id === editingToolId ? { ...t, ...updates } : t
         )
       );
     }
     setEditingToolId(null);
+    setEditingTool(null);
   };
 
   return (
@@ -478,6 +574,77 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             Released to Suppliers ({inventory.filter((t) => t.status === 'Removed' || t.location === 'Returned to Supplier').length})
           </button>
         </div>
+
+        {/* Sub-Contractor Rental Cost & Utilization KPI Banner */}
+        {fleetTab === 'sub' && (
+          <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50/50 border-b border-amber-200 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🤝</span>
+                <div>
+                  <h3 className="text-xs font-bold text-amber-950 uppercase tracking-wide">
+                    Equipment Sub-Rental Cost &amp; Fleet Overview
+                  </h3>
+                  <p className="text-[11px] text-amber-800">
+                    Third-party equipment sub-rented from suppliers under Daily, Back-to-Back, or Monthly Pool agreements.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-amber-900 bg-amber-100/80 px-2.5 py-1 rounded-full border border-amber-300">
+                  {subRentalStats.vendorCount} Active Suppliers
+                </span>
+                <span className="text-[11px] font-semibold text-amber-900 bg-amber-100/80 px-2.5 py-1 rounded-full border border-amber-300">
+                  {subRentalStats.activeCount} In Fleet / Custody
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="bg-white rounded-lg p-2.5 border border-amber-200/80 shadow-2xs">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Sub-Rented Fleet Scope</div>
+                <div className="text-base font-bold text-[#1a3055] mt-0.5">
+                  {subRentalStats.totalSub} <span className="text-xs font-normal text-slate-500">Serials</span>
+                </div>
+                <div className="text-[10px] text-emerald-700 font-medium mt-0.5 flex items-center gap-1">
+                  <span>●</span> {subRentalStats.activeCount} Available / In Service
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg p-2.5 border border-amber-200/80 shadow-2xs">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Deployed to Rigs</div>
+                <div className="text-base font-bold text-amber-900 mt-0.5">
+                  {subRentalStats.onRigCount} <span className="text-xs font-normal text-slate-500">Tools</span>
+                </div>
+                <div className="text-[10px] text-amber-700 font-medium mt-0.5">
+                  Generating Client Revenue Back-to-Back
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg p-2.5 border border-amber-200/80 shadow-2xs">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Active Daily Burn Rate</div>
+                <div className="text-base font-bold text-rose-700 mt-0.5">
+                  AED {Math.round(subRentalStats.dailyActiveBurnRate).toLocaleString()}
+                  <span className="text-xs font-normal text-slate-500"> /day</span>
+                </div>
+                <div className="text-[10px] text-slate-500 font-medium mt-0.5">
+                  Supplier Daily Cost Commitment
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg p-2.5 border border-amber-200/80 shadow-2xs">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Est. Monthly Cost Accrual</div>
+                <div className="text-base font-bold text-rose-800 mt-0.5">
+                  AED {Math.round(subRentalStats.estMonthlyAccrual).toLocaleString()}
+                  <span className="text-xs font-normal text-slate-500"> /mo</span>
+                </div>
+                <div className="text-[10px] text-rose-600 font-medium mt-0.5">
+                  Feeds Lease Rental - Equipment P&amp;L
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="p-3 bg-[#dbe6f1] border-b border-[#b8c9db] flex flex-wrap items-center justify-between gap-2.5">
           <div className="flex flex-wrap items-center gap-2">
@@ -627,6 +794,31 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                           {t.desc}
                         </p>
                       </div>
+
+                      {/* Sub-Rental Financial Pill (if sub-rented) */}
+                      {!t.isEmdad && (
+                        <div className="mt-2.5 p-2 rounded bg-amber-50/70 border border-amber-200/60 text-[11px] space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-amber-950 flex items-center gap-1">
+                              <span>🏷️</span>
+                              <span>{t.subRentalAgreementType || 'Daily'} Sub-Rental</span>
+                            </span>
+                            <span className="font-bold text-rose-700 font-mono">
+                              {t.subRentalDailyRate
+                                ? `${t.supplierCurrency || 'AED'} ${t.subRentalDailyRate.toLocaleString()}/d`
+                                : t.subRentalMonthlyRate
+                                ? `${t.supplierCurrency || 'AED'} ${t.subRentalMonthlyRate.toLocaleString()}/mo`
+                                : 'Rate Pending'}
+                            </span>
+                          </div>
+                          {t.supplierPoNumber && (
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                              <span>PO: {t.supplierPoNumber}</span>
+                              {t.rig && <span className="text-amber-800 font-sans font-medium">On Rig: {t.rig}</span>}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Card Footer: Location, Ownership, Action */}
@@ -705,6 +897,22 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     <span>Status</span>
                     <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('status', e)} />
                   </th>
+                  {fleetTab === 'sub' && (
+                    <>
+                      <th style={{ width: inventoryResizer.widths.agreementType || 120 }} className="px-3 py-2 relative bg-amber-50 text-amber-950 font-bold border-l border-amber-200">
+                        <span>Agreement</span>
+                        <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('agreementType', e)} />
+                      </th>
+                      <th style={{ width: inventoryResizer.widths.subRate || 140 }} className="px-3 py-2 relative bg-amber-50 text-amber-950 font-bold border-l border-amber-200">
+                        <span>Supplier Cost Rate</span>
+                        <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('subRate', e)} />
+                      </th>
+                      <th style={{ width: inventoryResizer.widths.supplierPo || 130 }} className="px-3 py-2 relative bg-amber-50 text-amber-950 font-bold border-l border-amber-200">
+                        <span>Supplier PO #</span>
+                        <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('supplierPo', e)} />
+                      </th>
+                    </>
+                  )}
                   {inventoryCustomCols.map((c) => (
                     <th
                       key={c.key}
@@ -725,7 +933,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               <tbody className="divide-y divide-slate-200">
                 {pagedList.length === 0 ? (
                   <tr>
-                    <td colSpan={9 + inventoryCustomCols.length} className="p-8 text-center text-slate-500 font-medium">
+                    <td colSpan={9 + (fleetTab === 'sub' ? 3 : 0) + inventoryCustomCols.length} className="p-8 text-center text-slate-500 font-medium">
                       No tool assets found matching the selected criteria.
                     </td>
                   </tr>
@@ -742,10 +950,42 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       <td className="px-3 py-2 font-medium text-slate-700">
                         {t.ownership}
                       </td>
-                      <td className="px-3 py-2 text-slate-700 font-medium">{t.location}</td>
+                      <td className="px-3 py-2 text-slate-700 font-medium">
+                        {t.location}
+                        {t.rig && (
+                          <span className="block text-[10px] text-amber-800 font-semibold font-mono">
+                            Rig: {t.rig}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         {renderToolStatusBadge(t.status)}
                       </td>
+                      {fleetTab === 'sub' && (
+                        <>
+                          <td className="px-3 py-2 border-l border-amber-100">
+                            <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${
+                              t.subRentalAgreementType === 'BackToBack'
+                                ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                                : t.subRentalAgreementType === 'MonthlyPool'
+                                ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                            }`}>
+                              {t.subRentalAgreementType || 'Daily'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 font-mono font-bold text-rose-700 text-xs border-l border-amber-100 whitespace-nowrap">
+                            {t.subRentalDailyRate
+                              ? `${t.supplierCurrency || 'AED'} ${t.subRentalDailyRate.toLocaleString()} /d`
+                              : t.subRentalMonthlyRate
+                              ? `${t.supplierCurrency || 'AED'} ${t.subRentalMonthlyRate.toLocaleString()} /mo`
+                              : <span className="text-slate-400 font-sans font-normal">—</span>}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-slate-700 text-xs border-l border-amber-100 whitespace-nowrap">
+                            {t.supplierPoNumber || <span className="text-slate-300 font-sans">—</span>}
+                          </td>
+                        </>
+                      )}
                       {inventoryCustomCols.map((c) => {
                         const val = (t as any)[c.key] ?? (t as any).customFields?.[c.key];
                         return (
@@ -858,31 +1098,126 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               </div>
 
               {newOwnershipType === 'sub' ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold mb-1">Supplier / Vendor *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. MOTORMAX, SALTIRE"
-                      value={newSupplier}
-                      onChange={(e) => setNewSupplier(e.target.value)}
-                      className="w-full border rounded px-2.5 py-1.5"
-                    />
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold mb-1">Supplier / Vendor *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. MOTORMAX, SALTIRE"
+                        value={newSupplier}
+                        onChange={(e) => setNewSupplier(e.target.value)}
+                        className="w-full border rounded px-2.5 py-1.5"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold mb-1">Their Serial / ID *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. 351, EOE1076"
+                        value={newSerial}
+                        onChange={(e) => setNewSerial(e.target.value)}
+                        className="w-full border rounded px-2.5 py-1.5 font-mono"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block font-bold mb-1">Their Serial / ID *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. 351, EOE1076"
-                      value={newSerial}
-                      onChange={(e) => setNewSerial(e.target.value)}
-                      className="w-full border rounded px-2.5 py-1.5 font-mono"
-                    />
+
+                  {/* Sub-Rental Financial & Agreement Structure */}
+                  <div className="p-3 bg-amber-50/80 rounded border border-amber-200/90 space-y-2.5">
+                  <div className="font-bold text-amber-950 text-[11px] flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <span>💰</span>
+                      <span>Sub-Rental Agreement &amp; Cost Rate (Feeds P&amp;L Accrual)</span>
+                    </span>
+                    <span className="text-[10px] text-amber-800 font-normal">Commercial Cost Structure</span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block font-semibold mb-1 text-slate-700">Agreement Type</label>
+                      <select
+                        value={newSubAgreementType}
+                        onChange={(e) => setNewSubAgreementType(e.target.value as any)}
+                        className="w-full border rounded px-2 py-1 bg-white font-medium text-xs"
+                      >
+                        <option value="Daily">Daily Rental</option>
+                        <option value="BackToBack">Back-to-Back Job</option>
+                        <option value="MonthlyPool">Monthly Pool Lease</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold mb-1 text-slate-700">
+                        {newSubAgreementType === 'MonthlyPool' ? 'Monthly Cost Rate *' : 'Supplier Daily Rate (Cost) *'}
+                      </label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          step="any"
+                          required
+                          placeholder={newSubAgreementType === 'MonthlyPool' ? 'e.g. 45000' : 'e.g. 3850'}
+                          value={newSubAgreementType === 'MonthlyPool' ? newSubMonthlyRate : newSubDailyRate}
+                          onChange={(e) => {
+                            if (newSubAgreementType === 'MonthlyPool') {
+                              setNewSubMonthlyRate(e.target.value);
+                              if (e.target.value) {
+                                setNewSubDailyRate(String(Math.round(parseFloat(e.target.value) / 30)));
+                              }
+                            } else {
+                              setNewSubDailyRate(e.target.value);
+                            }
+                          }}
+                          className="w-full border rounded px-2 py-1 font-mono font-bold text-rose-700 text-xs"
+                        />
+                        <select
+                          value={newSupplierCurrency}
+                          onChange={(e) => setNewSupplierCurrency(e.target.value)}
+                          className="border rounded px-1.5 py-1 bg-white text-[11px] font-bold"
+                        >
+                          <option value="AED">AED</option>
+                          <option value="USD">USD</option>
+                          <option value="EUR">EUR</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold mb-1 text-slate-700">Supplier PO Number</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. PO-42002198"
+                        value={newSupplierPo}
+                        onChange={(e) => setNewSupplierPo(e.target.value)}
+                        className="w-full border rounded px-2 py-1 font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5 pt-1">
+                    <div>
+                      <label className="block font-semibold mb-1 text-slate-700">Delivery / On-Hire Date</label>
+                      <input
+                        type="date"
+                        value={newRentalStartDate}
+                        onChange={(e) => setNewRentalStartDate(e.target.value)}
+                        className="w-full border rounded px-2 py-1 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold mb-1 text-slate-700">Expected Off-Hire / Return Date</label>
+                      <input
+                        type="date"
+                        value={newRentalEndDate}
+                        onChange={(e) => setNewRentalEndDate(e.target.value)}
+                        className="w-full border rounded px-2 py-1 text-xs"
+                      />
+                    </div>
                   </div>
                 </div>
-              ) : (
+              </>
+            ) : (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block font-bold mb-1">System ID</label>
@@ -1143,6 +1478,90 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   className="w-full border rounded px-2.5 py-1.5"
                 />
               </div>
+
+              {/* Sub-Rental Agreement & Cost Rates (If Sub-contractor Tool) */}
+              {editingTool && !editingTool.isEmdad && (
+                <div className="p-3 bg-amber-50/80 rounded border border-amber-200/90 space-y-2 text-xs">
+                  <div className="font-bold text-amber-950 flex items-center justify-between text-[11px]">
+                    <span className="flex items-center gap-1">
+                      <span>🏷️</span>
+                      <span>Sub-Rental Cost Structure ({editingTool.ownership || editingTool.supplier})</span>
+                    </span>
+                    <span className="text-amber-800 font-mono text-[10px]">PO: {editSupplierPo || 'None'}</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-semibold mb-1 text-slate-700">Agreement Model</label>
+                      <select
+                        value={editAgreementType}
+                        onChange={(e) => setEditAgreementType(e.target.value as any)}
+                        className="w-full border rounded px-2 py-1 bg-white font-medium text-xs"
+                      >
+                        <option value="Daily">Daily Rental</option>
+                        <option value="BackToBack">Back-to-Back Job</option>
+                        <option value="MonthlyPool">Monthly Pool Lease</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold mb-1 text-slate-700">
+                        {editAgreementType === 'MonthlyPool' ? 'Monthly Cost Rate' : 'Supplier Daily Rate (Cost)'}
+                      </label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder={editAgreementType === 'MonthlyPool' ? 'e.g. 45000' : 'e.g. 3850'}
+                          value={editAgreementType === 'MonthlyPool' ? editMonthlyRate : editDailyRate}
+                          onChange={(e) => {
+                            if (editAgreementType === 'MonthlyPool') {
+                              setEditMonthlyRate(e.target.value);
+                              if (e.target.value) {
+                                setEditDailyRate(String(Math.round(parseFloat(e.target.value) / 30)));
+                              }
+                            } else {
+                              setEditDailyRate(e.target.value);
+                            }
+                          }}
+                          className="w-full border rounded px-2 py-1 font-mono font-bold text-rose-700 text-xs"
+                        />
+                        <select
+                          value={editCurrency}
+                          onChange={(e) => setEditCurrency(e.target.value)}
+                          className="border rounded px-1.5 py-1 bg-white text-[11px] font-bold"
+                        >
+                          <option value="AED">AED</option>
+                          <option value="USD">USD</option>
+                          <option value="EUR">EUR</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-semibold mb-1 text-slate-700">Supplier PO Number</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. PO-42002198"
+                        value={editSupplierPo}
+                        onChange={(e) => setEditSupplierPo(e.target.value)}
+                        className="w-full border rounded px-2 py-1 font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold mb-1 text-slate-700">On-Hire Date</label>
+                      <input
+                        type="date"
+                        value={editStartDate}
+                        onChange={(e) => setEditStartDate(e.target.value)}
+                        className="w-full border rounded px-2 py-1 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="pt-3 border-t flex justify-end space-x-2">
                 <button

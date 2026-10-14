@@ -110,6 +110,14 @@ function normalizeInventoryItem(row: any): any {
     well: row.Well || row.well || undefined,
     contract: row.Contract || row.contract || undefined,
     currentJobId: row.CurrentJobId || row.currentJobId || row.JobID || row.jobId || undefined,
+    // Sub-Rental Tracking
+    subRentalAgreementType: row.SubRentalAgreementType || row.subRentalAgreementType || undefined,
+    subRentalDailyRate: row.SubRentalDailyRate !== undefined && row.SubRentalDailyRate !== null ? Number(row.SubRentalDailyRate) : (row.subRentalDailyRate !== undefined && row.subRentalDailyRate !== null ? Number(row.subRentalDailyRate) : undefined),
+    subRentalMonthlyRate: row.SubRentalMonthlyRate !== undefined && row.SubRentalMonthlyRate !== null ? Number(row.SubRentalMonthlyRate) : (row.subRentalMonthlyRate !== undefined && row.subRentalMonthlyRate !== null ? Number(row.subRentalMonthlyRate) : undefined),
+    supplierPoNumber: row.SupplierPoNumber || row.supplierPoNumber || undefined,
+    supplierCurrency: row.SupplierCurrency || row.supplierCurrency || 'AED',
+    rentalStartDate: row.RentalStartDate || row.rentalStartDate || undefined,
+    rentalEndDate: row.RentalEndDate || row.rentalEndDate || undefined,
   };
 }
 
@@ -2656,6 +2664,20 @@ export async function saveInventoryApi(tool: any): Promise<{ success: boolean; m
     Vendor: supplier,
     AddedDate: addedDate,
     CreatedDate: addedDate,
+    subRentalAgreementType: tool.subRentalAgreementType,
+    subRentalDailyRate: tool.subRentalDailyRate,
+    subRentalMonthlyRate: tool.subRentalMonthlyRate,
+    supplierPoNumber: tool.supplierPoNumber,
+    supplierCurrency: tool.supplierCurrency || 'AED',
+    rentalStartDate: tool.rentalStartDate,
+    rentalEndDate: tool.rentalEndDate,
+    SubRentalAgreementType: tool.subRentalAgreementType,
+    SubRentalDailyRate: tool.subRentalDailyRate,
+    SubRentalMonthlyRate: tool.subRentalMonthlyRate,
+    SupplierPoNumber: tool.supplierPoNumber,
+    SupplierCurrency: tool.supplierCurrency || 'AED',
+    RentalStartDate: tool.rentalStartDate,
+    RentalEndDate: tool.rentalEndDate,
   };
 
   // Always persist to local custom tools store so user additions and modifications never vanish

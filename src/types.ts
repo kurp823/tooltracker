@@ -59,6 +59,14 @@ export interface ToolItem {
   well?: string;
   contract?: string;
   currentJobId?: string | null;
+  // Sub-Rental Financial & Commercial Tracking
+  subRentalAgreementType?: 'Daily' | 'BackToBack' | 'MonthlyPool';
+  subRentalDailyRate?: number | null;     // Supplier daily cost rate (e.g. AED 4,200)
+  subRentalMonthlyRate?: number | null;   // Supplier monthly cost (if MonthlyPool)
+  supplierPoNumber?: string;              // e.g. PO-4200222381
+  supplierCurrency?: string;              // AED / USD
+  rentalStartDate?: string | null;        // Delivery/custody start date
+  rentalEndDate?: string | null;          // Off-hire / return date
 }
 
 export interface CalloutItem {
