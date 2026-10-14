@@ -52,9 +52,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onLogin })
           <div className="bg-white rounded-lg p-3 shadow-lg mx-auto mb-4 inline-flex items-center justify-center border border-slate-200">
             <EmdadLogo className="h-11 w-auto object-contain" />
           </div>
-          <div className="font-extrabold text-xl text-white tracking-wide">EMDAD SERVICES LLC</div>
-          <div className="text-slate-400 text-xs mt-1">
-            Oilfield Tool Tracking, Rental Operations &amp; Azure SQL Sync
+          <div className="font-extrabold text-xl text-white tracking-wide">Well Intervention - Upstream</div>
+          <div className="text-slate-300 text-xs mt-1 font-medium">
+            Fishing, Whipstock &amp; Downhole Rental Services
           </div>
         </div>
 
@@ -134,12 +134,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onLogin })
               <span>&rarr;</span>
             </button>
           </form>
-
-          <div className="mt-5 pt-3 border-t border-slate-100 text-center">
-            <span className="text-[10px] text-slate-400">
-              Authorized Personnel Only • EMDAD Services LLC
-            </span>
-          </div>
         </div>
       </div>
     </div>
