@@ -23,7 +23,6 @@ import {
   INITIAL_MAINTENANCE,
   INITIAL_GATE_PASSES,
   INITIAL_CONTRACTS,
-  INITIAL_USER,
 } from './data/initialData';
 import {
   syncWithAzureSql,
@@ -113,15 +112,21 @@ const safeSetLocalStorage = (key: string, value: unknown) => {
 };
 
 export const App: React.FC = () => {
-  // Auth state
+  // Auth state - Require explicit login when opening website link
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
+      // Clean up legacy persistent user from localStorage so existing browsers must log in
+      localStorage.removeItem('emdad_current_user');
+
       const explicitLogout = localStorage.getItem('emdad_logged_out');
       if (explicitLogout === 'true') return null;
-      const saved = localStorage.getItem('emdad_current_user');
-      return saved ? JSON.parse(saved) : INITIAL_USER;
+
+      // Use sessionStorage so opening a new tab/link always starts at the Login page,
+      // while page refreshes within the same tab preserve the active session.
+      const saved = sessionStorage.getItem('emdad_current_user');
+      return saved ? JSON.parse(saved) : null;
     } catch {
-      return INITIAL_USER;
+      return null;
     }
   });
 
@@ -449,9 +454,15 @@ export const App: React.FC = () => {
   // data store.
   useEffect(() => {
     if (currentUser) {
-      safeSetLocalStorage('emdad_current_user', currentUser);
+      try {
+        sessionStorage.setItem('emdad_current_user', JSON.stringify(currentUser));
+        localStorage.removeItem('emdad_logged_out');
+      } catch (e) {}
     } else {
-      localStorage.removeItem('emdad_current_user');
+      try {
+        sessionStorage.removeItem('emdad_current_user');
+        localStorage.removeItem('emdad_current_user');
+      } catch (e) {}
     }
   }, [currentUser]);
 
@@ -1647,7 +1658,11 @@ export const App: React.FC = () => {
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
           onLogout={() => {
-            localStorage.setItem('emdad_logged_out', 'true');
+            try {
+              sessionStorage.removeItem('emdad_current_user');
+              localStorage.removeItem('emdad_current_user');
+              localStorage.setItem('emdad_logged_out', 'true');
+            } catch (e) {}
             setCurrentUser(null);
           }}
           pendingCalloutsCount={pendingCalloutsCount}
