@@ -533,9 +533,10 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
     category: 'Commercial',
     description: 'Client frame agreements, PO numbers, contract duration, day rates, and bank guarantees.',
     fields: [
-      { key: 'id', label: 'Contract ID', type: 'string', required: true, description: 'Unique Contract reference (e.g. CON-ADNOC-01)', sample: 'CON-ADNOC-01' },
-      { key: 'contractNo', label: 'Contract / Tender No', type: 'string', description: 'Official agreement reference', sample: '444558' },
+      { key: 'id', label: 'ContractID', type: 'string', required: true, description: 'Unique Contract reference (e.g. 1 or CON-ADNOC-01)', sample: '1' },
       { key: 'client', label: 'Client', type: 'string', required: true, description: 'Client operator name', sample: 'ADNOC OFFSHORE' },
+      { key: 'contractRef', label: 'ContractRef', type: 'string', description: 'Contract Reference / SAP Number', sample: '444558' },
+      { key: 'shortDesc', label: 'Short Desc', type: 'string', description: 'Short agreement description or package title', sample: 'ADNOC OFFSHORE - Fishing Services' },
       {
         key: 'currency',
         label: 'Currency',
@@ -545,21 +546,25 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
         defaultSample: 'USD',
         allowedValues: ['USD', 'AED'],
       },
-      { key: 'contractValue', label: 'Contract Ceiling Value', type: 'number', description: 'Total contract amount', sample: 5000000 },
-      { key: 'startDate', label: 'Effective Start Date', type: 'date', description: 'Start date (YYYY-MM-DD)', sample: '2023-01-01' },
-      { key: 'endDate', label: 'Expiry Date', type: 'date', description: 'Expiry date (YYYY-MM-DD)', sample: '2026-12-31' },
+      { key: 'startDate', label: 'StartDate', type: 'date', description: 'Start date (YYYY-MM-DD)', sample: '2023-01-01' },
+      { key: 'endDate', label: 'EndDate', type: 'date', description: 'Expiry date (YYYY-MM-DD)', sample: '2028-12-31' },
       {
         key: 'status',
-        label: 'Contract Status',
+        label: 'Status',
         type: 'string',
-        description: 'Contract agreement status: Active, Completed, Expired, Closed',
-        sample: 'Active (Options: Active | Completed | Expired | Closed)',
+        description: 'Contract agreement status: Active, Closed, Completed, Expired',
+        sample: 'Active (Options: Active | Closed | Completed | Expired)',
         defaultSample: 'Active',
-        allowedValues: ['Active', 'Completed', 'Expired', 'Closed'],
+        allowedValues: ['Active', 'Closed', 'Completed', 'Expired'],
       },
-      { key: 'poNumber', label: 'Governing PO Number', type: 'string', description: 'Framework purchase order', sample: '4200222381' },
-      { key: 'pbgNumber', label: 'PBG Number', type: 'string', description: 'Performance bank guarantee reference', sample: 'PBG-99214' },
-      { key: 'notes', label: 'Notes', type: 'string', description: 'Contract remarks', sample: 'Includes fishing jars, shock tools, and hole openers' },
+      { key: 'contractValue', label: 'ContractValue', type: 'number', description: 'Total contract amount (leave blank for Unit Rate)', sample: 5000000 },
+      { key: 'pbgNumber', label: 'PBGNumber', type: 'string', description: 'Performance bank guarantee reference', sample: 'ACLG1900238' },
+      { key: 'pbgValue', label: 'PBGValue', type: 'number', description: 'PBG security amount in AED', sample: 626510 },
+      { key: 'pbgIssueDate', label: 'PBGIssueDate', type: 'date', description: 'PBG issuance date (YYYY-MM-DD)', sample: '2019-01-01' },
+      { key: 'pbgExpiryDate', label: 'PBGExpiryDate', type: 'string', description: 'PBG expiry date (YYYY-MM-DD or OPEN ENDED)', sample: 'OPEN ENDED' },
+      { key: 'poNumber', label: 'PONumber', type: 'string', description: 'Governing Purchase Order number', sample: '4200222381' },
+      { key: 'invoicedToDate', label: 'InvoicedToDate', type: 'number', description: 'Cumulative invoiced amount to date', sample: 0 },
+      { key: 'notes', label: 'Notes', type: 'string', description: 'Contract remarks and scope terms', sample: 'Provision of Fishing & Downhole tool rental services' },
     ],
   },
 };
@@ -771,6 +776,22 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
     ? selectedDef.detailSqlTable
     : selectedDef.sqlTable;
 
+  // Flexible resolver helper that matches key, label, uppercase, lowercase, stripped spaces
+  const resolveFieldVal = (row: any, fieldKey: string, fieldLabel?: string) => {
+    if (!row) return undefined;
+    if (row[fieldKey] !== undefined && row[fieldKey] !== '') return row[fieldKey];
+    if (fieldLabel && row[fieldLabel] !== undefined && row[fieldLabel] !== '') return row[fieldLabel];
+    
+    const targetKeys = [fieldKey.toLowerCase(), (fieldLabel || '').toLowerCase(), fieldKey.replace(/[^a-z0-9]/gi, '').toLowerCase()];
+    for (const k of Object.keys(row)) {
+      const cleanK = k.replace(/[^a-z0-9]/gi, '').toLowerCase();
+      if (targetKeys.includes(cleanK) && row[k] !== undefined && row[k] !== '') {
+        return row[k];
+      }
+    }
+    return undefined;
+  };
+
   // Generate blank template Excel with columns and notes
   const handleDownloadTemplate = () => {
     const headers = activeFields.map((f) => f.key);
@@ -957,7 +978,8 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
     parsedRows.forEach((row, index) => {
       const rowNum = index + 2; // Accounting for header row
       // Check Primary / Foreign Key
-      const pkValue = row[pk] || row[pk.toUpperCase()] || row[pk.toLowerCase()];
+      const pkDef = fieldsToValidate.find((f) => f.key === pk);
+      const pkValue = resolveFieldVal(row, pk, pkDef?.label);
       if (!pkValue || String(pkValue).trim() === '') {
         errors.push({
           row: rowNum,
@@ -971,7 +993,8 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
       // Check other required fields
       requiredFields.forEach((reqKey) => {
         if (reqKey !== pk) {
-          const val = row[reqKey] || row[reqKey.toUpperCase()] || row[reqKey.toLowerCase()];
+          const reqDef = fieldsToValidate.find((f) => f.key === reqKey);
+          const val = resolveFieldVal(row, reqKey, reqDef?.label);
           if (!val || String(val).trim() === '') {
             errors.push({
               row: rowNum,
@@ -1068,7 +1091,7 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
     const cleanRow = (raw: any, fields: FieldDefinition[]): any => {
       const cleaned: any = {};
       fields.forEach((f) => {
-        let val = raw[f.key] ?? raw[f.label] ?? raw[f.key.toUpperCase()] ?? raw[f.key.toLowerCase()];
+        let val = resolveFieldVal(raw, f.key, f.label);
         if (f.type === 'number') {
           if (val !== undefined && val !== '' && val !== null) {
             const num = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
@@ -1247,7 +1270,9 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
 
     for (let i = 0; i < parsedRows.length; i++) {
       const raw = parsedRows[i];
-      const pkVal = String(raw[pk] || raw[pk.toUpperCase()] || raw[pk.toLowerCase()] || '').trim();
+      const pkDef = activeFields.find((f) => f.key === pk);
+      const pkValRaw = resolveFieldVal(raw, pk, pkDef?.label);
+      const pkVal = String(pkValRaw || '').trim();
 
       if (!pkVal) {
         errorCount++;

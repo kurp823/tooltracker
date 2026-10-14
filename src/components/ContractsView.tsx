@@ -3,6 +3,7 @@ import { ContractRecord, DrillingJob, User, NavModule } from '../types';
 import { ContractRatesModal } from './ContractRatesModal';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 import { useResizableColumns, ResizerHandle, useCustomColumns } from '../services/customColumnService';
+import * as XLSX from 'xlsx';
 import { 
   FileSpreadsheet, 
   Plus, 
@@ -158,52 +159,49 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
   };
 
   const handleExportCsv = () => {
-    const headers = [
-      'ContractID',
-      'Client',
-      'ContractRef',
-      'Short Desc',
-      'Currency',
-      'StartDate',
-      'EndDate',
-      'Status',
-      'ContractValue',
-      'PBGNumber',
-      'PBGValue',
-      'PBGIssueDate',
-      'PBGExpiryDate',
-      'InvoicedToDate',
-      'RateLinesCount',
-      'Notes'
+    const exportRows = filteredContracts.map((c) => ({
+      id: c.id,
+      client: c.client,
+      contractRef: c.contractRef || c.contractNo || '',
+      shortDesc: c.shortDesc || c.name || '',
+      currency: c.currency || 'USD',
+      startDate: c.startDate || '',
+      endDate: c.endDate || '',
+      status: c.status || 'Active',
+      contractValue: c.contractValue !== null && c.contractValue !== undefined ? c.contractValue : '',
+      pbgNumber: c.pbgNumber && c.pbgNumber !== '-' ? c.pbgNumber : '',
+      pbgValue: c.pbgValue !== null && c.pbgValue !== undefined ? c.pbgValue : '',
+      pbgIssueDate: c.pbgIssueDate || '',
+      pbgExpiryDate: c.pbgExpiryDate || '',
+      poNumber: c.poNumber || '',
+      invoicedToDate: c.invoicedToDate || 0,
+      notes: c.notes || c.description || '',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    worksheet['!cols'] = [
+      { wch: 12 }, // id
+      { wch: 28 }, // client
+      { wch: 18 }, // contractRef
+      { wch: 32 }, // shortDesc
+      { wch: 10 }, // currency
+      { wch: 14 }, // startDate
+      { wch: 14 }, // endDate
+      { wch: 12 }, // status
+      { wch: 18 }, // contractValue
+      { wch: 18 }, // pbgNumber
+      { wch: 16 }, // pbgValue
+      { wch: 14 }, // pbgIssueDate
+      { wch: 16 }, // pbgExpiryDate
+      { wch: 16 }, // poNumber
+      { wch: 16 }, // invoicedToDate
+      { wch: 45 }, // notes
     ];
 
-    const rows = filteredContracts.map((c) => [
-      `"${c.id}"`,
-      `"${c.client.replace(/"/g, '""')}"`,
-      `"${(c.contractRef || c.contractNo).replace(/"/g, '""')}"`,
-      `"${(c.shortDesc || c.name).replace(/"/g, '""')}"`,
-      `"${c.currency}"`,
-      `"${c.startDate || ''}"`,
-      `"${c.endDate || ''}"`,
-      `"${c.status}"`,
-      c.contractValue !== null && c.contractValue !== undefined ? c.contractValue : 'UNIT RATE',
-      `"${(c.pbgNumber || '').replace(/"/g, '""')}"`,
-      c.pbgValue !== null && c.pbgValue !== undefined ? c.pbgValue : '',
-      `"${c.pbgIssueDate || ''}"`,
-      `"${c.pbgExpiryDate || ''}"`,
-      c.invoicedToDate || '',
-      c.rates?.length || 0,
-      `"${(c.notes || c.description || '').replace(/"/g, '""')}"`
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `tbl_Contracts_Master_Register_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Contracts_Master');
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(workbook, `tbl_Contracts_Master_Register_${dateStamp}.xlsx`);
   };
 
   const handleCreateContract = (e: React.FormEvent) => {
@@ -305,10 +303,10 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
             <button
               onClick={handleExportCsv}
               className="px-2.5 py-1.5 rounded border border-[#b8c9db] text-slate-700 bg-slate-50 hover:bg-slate-100 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-              title="Export filtered contracts to CSV"
+              title="Export filtered contracts to Excel"
             >
               <Download size={13} className="text-slate-600" />
-              <span>Export CSV</span>
+              <span>Export Excel</span>
             </button>
 
             {canEdit && (
