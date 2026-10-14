@@ -2114,6 +2114,7 @@ export const App: React.FC = () => {
                     setMaintenance((prev) => updater(prev));
                     break;
                   case 'contracts':
+                  case 'contractRates':
                     setContracts((prev) => updater(prev));
                     break;
                 }

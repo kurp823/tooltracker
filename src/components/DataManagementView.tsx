@@ -11,6 +11,7 @@ import {
   MaintenanceRecord,
   GatePass,
   ContractRecord,
+  ContractRateItem,
 } from '../types';
 import {
   saveJobApi,
@@ -20,6 +21,7 @@ import {
   saveCalloutApi,
   saveGatePassApi,
   saveContractApi,
+  saveContractRatesApi,
   saveInspectionApi,
   saveMaintenanceApi,
   saveCustomColumnsApi,
@@ -66,6 +68,7 @@ export type TableEntityKey =
   | 'inspections'
   | 'maintenance'
   | 'contracts'
+  | 'contractRates'
   // Job Dossier Sub-Screens
   | 'dossier_checklist'
   | 'dossier_itemsselect'
@@ -528,10 +531,10 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
     key: 'contracts',
     sqlTable: 'tbl_Contracts',
     epicorCode: 'UD109 - Master Contracts',
-    name: 'Master Contracts & Rates',
+    name: 'Master Contracts Register',
     primaryKey: 'id',
     category: 'Commercial',
-    description: 'Client frame agreements, PO numbers, contract duration, day rates, and bank guarantees.',
+    description: 'Client frame agreements, PO numbers, contract duration, status, and bank guarantees.',
     fields: [
       { key: 'id', label: 'ContractID', type: 'string', required: true, description: 'Unique Contract reference (e.g. 1 or CON-ADNOC-01)', sample: '1' },
       { key: 'client', label: 'Client', type: 'string', required: true, description: 'Client operator name', sample: 'ADNOC OFFSHORE' },
@@ -565,6 +568,38 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
       { key: 'poNumber', label: 'PONumber', type: 'string', description: 'Governing Purchase Order number', sample: '4200222381' },
       { key: 'invoicedToDate', label: 'InvoicedToDate', type: 'number', description: 'Cumulative invoiced amount to date', sample: 0 },
       { key: 'notes', label: 'Notes', type: 'string', description: 'Contract remarks and scope terms', sample: 'Provision of Fishing & Downhole tool rental services' },
+    ],
+  },
+  contractRates: {
+    key: 'contractRates',
+    sqlTable: 'tbl_ContractRates',
+    epicorCode: 'UD110 - Contract Rates Schedule',
+    name: 'Contract Rates Schedule',
+    primaryKey: 'rateId',
+    category: 'Commercial',
+    description: 'Itemized equipment day rates, standby rates, run charges, and redress fees linked to master contracts.',
+    fields: [
+      { key: 'contractCode', label: 'ContractCode', type: 'string', required: true, description: 'Master Contract ID or Ref (e.g. 1, 2, AOF, 444558)', sample: '1' },
+      { key: 'rateId', label: 'RateID', type: 'string', required: true, description: 'Line sequence number or Rate ID', sample: '1' },
+      { key: 'contractRef', label: 'ContractRef', type: 'string', description: 'Schedule / Ref Code (e.g. SCHEDULE 2)', sample: 'SCHEDULE 2' },
+      { key: 'category', label: 'Category', type: 'string', required: true, description: 'Tool category / ERP catalog name', sample: 'FAST REAMER' },
+      { key: 'shortDesc', label: 'ToolDescription', type: 'string', required: true, description: 'EMDAD Tool Description / ShortDesc', sample: 'FAST REAMER' },
+      { key: 'size', label: 'ToolOD', type: 'string', description: 'Tool OD / Size', sample: '12-1/4"' },
+      { key: 'holeSection', label: 'HoleSection', type: 'string', description: 'Hole section', sample: '12-1/4"' },
+      { key: 'opsRate', label: 'OperatingRate', type: 'number', required: true, description: 'Operating day rate', sample: 3445.00 },
+      { key: 'standbyRate', label: 'StandbyRate', type: 'number', required: true, description: 'Standby day rate (typically 50%)', sample: 1722.50 },
+      { key: 'runCharges', label: 'RunCharges', type: 'number', description: 'Run charges per trip', sample: 0 },
+      { key: 'monthlyCharges', label: 'MonthlyCharges', type: 'number', description: 'Monthly fixed charges', sample: 0 },
+      { key: 'redress', label: 'RedressFee', type: 'number', description: 'Redress / inspection fee', sample: 0 },
+      {
+        key: 'currency',
+        label: 'Currency',
+        type: 'string',
+        description: 'Currency: USD or AED',
+        sample: 'USD (Options: USD | AED)',
+        defaultSample: 'USD',
+        allowedValues: ['USD', 'AED'],
+      },
     ],
   },
 };
@@ -722,6 +757,31 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
         return maintenance;
       case 'contracts':
         return contracts;
+      case 'contractRates': {
+        const allRates: any[] = [];
+        contracts.forEach((c) => {
+          if (Array.isArray(c.rates)) {
+            c.rates.forEach((r, idx) => {
+              allRates.push({
+                contractCode: c.id || c.contractRef || '',
+                rateId: r.no ?? `${idx + 1}`,
+                contractRef: r.contractRef || c.contractRef || '',
+                category: r.category || '',
+                shortDesc: r.shortDesc || '',
+                size: r.size || '',
+                holeSection: r.holeSection || '',
+                opsRate: r.opsRate ?? 0,
+                standbyRate: r.standbyRate ?? 0,
+                runCharges: r.runCharges ?? null,
+                monthlyCharges: r.monthlyCharges ?? null,
+                redress: r.redress ?? null,
+                currency: r.currency || c.currency || 'USD',
+              });
+            });
+          }
+        });
+        return allRates;
+      }
       default:
         return [];
     }
@@ -782,7 +842,27 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
     if (row[fieldKey] !== undefined && row[fieldKey] !== '') return row[fieldKey];
     if (fieldLabel && row[fieldLabel] !== undefined && row[fieldLabel] !== '') return row[fieldLabel];
     
-    const targetKeys = [fieldKey.toLowerCase(), (fieldLabel || '').toLowerCase(), fieldKey.replace(/[^a-z0-9]/gi, '').toLowerCase()];
+    const targetKeys = [
+      fieldKey.toLowerCase(),
+      (fieldLabel || '').toLowerCase(),
+      fieldKey.replace(/[^a-z0-9]/gi, '').toLowerCase(),
+      (fieldLabel || '').replace(/[^a-z0-9]/gi, '').toLowerCase(),
+    ];
+    if (fieldKey === 'rateId' || fieldKey === 'no') {
+      targetKeys.push('rateid', 'no', 'itemno', 'item', 'seq', 'linenumber', 'line');
+    }
+    if (fieldKey === 'contractCode' || fieldKey === 'id') {
+      targetKeys.push('contractcode', 'contractid', 'contractref', 'contract', 'contractno');
+    }
+    if (fieldKey === 'shortDesc' || fieldKey === 'toolDescription') {
+      targetKeys.push('shortdesc', 'tooldescription', 'description', 'emdadshortdesc', 'toolname');
+    }
+    if (fieldKey === 'opsRate') {
+      targetKeys.push('opsrate', 'operatingrate', 'dayrate', 'oprate', 'operatingdayrate');
+    }
+    if (fieldKey === 'standbyRate') {
+      targetKeys.push('standbyrate', 'stbyrate', 'standby');
+    }
     for (const k of Object.keys(row)) {
       const cleanK = k.replace(/[^a-z0-9]/gi, '').toLowerCase();
       if (targetKeys.includes(cleanK) && row[k] !== undefined && row[k] !== '') {
@@ -1257,6 +1337,137 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
       return;
     }
 
+    // BRANCH C: Contract Rates Schedule Import (tbl_ContractRates)
+    if (selectedEntityKey === 'contractRates') {
+      try {
+        const modifiedContracts = [...contracts];
+        const findContractIndex = (code: string) => {
+          const cClean = code.trim().toUpperCase();
+          let idx = modifiedContracts.findIndex((c) => String(c.id).trim().toUpperCase() === cClean);
+          if (idx >= 0) return idx;
+          idx = modifiedContracts.findIndex((c) => String(c.contractRef || '').trim().toUpperCase() === cClean);
+          if (idx >= 0) return idx;
+          idx = modifiedContracts.findIndex((c) => String(c.contractNo || '').trim().toUpperCase() === cClean);
+          if (idx >= 0) return idx;
+          idx = modifiedContracts.findIndex((c) => String(c.name || '').trim().toUpperCase().includes(cClean));
+          if (idx >= 0) return idx;
+          idx = modifiedContracts.findIndex((c) => String(c.client || '').trim().toUpperCase().includes(cClean));
+          return idx;
+        };
+
+        const ratesByContract = new Map<string, any[]>();
+        for (let i = 0; i < parsedRows.length; i++) {
+          const raw = parsedRows[i];
+          const contractCodeVal = String(
+            resolveFieldVal(raw, 'contractCode', 'ContractCode') ||
+            resolveFieldVal(raw, 'contractRef', 'ContractRef') ||
+            resolveFieldVal(raw, 'contract', 'Contract') ||
+            resolveFieldVal(raw, 'id', 'ContractID') ||
+            ''
+          ).trim();
+
+          const rateIdVal = String(
+            resolveFieldVal(raw, 'rateId', 'RateID') ||
+            resolveFieldVal(raw, 'no', 'No') ||
+            `${i + 1}`
+          ).trim();
+
+          if (!contractCodeVal) {
+            errorCount++;
+            continue;
+          }
+
+          const cleaned = cleanRow(raw, selectedDef.fields);
+          const rateItem: ContractRateItem = {
+            no: rateIdVal,
+            contractRef: cleaned.contractRef || '',
+            category: cleaned.category || 'GENERAL',
+            shortDesc: cleaned.shortDesc || cleaned.category || 'TOOL',
+            size: cleaned.size || '',
+            holeSection: cleaned.holeSection || cleaned.size || '',
+            opsRate: Number(cleaned.opsRate) || 0,
+            standbyRate: Number(cleaned.standbyRate) || (Number(cleaned.opsRate) * 0.5),
+            runCharges: cleaned.runCharges ?? null,
+            monthlyCharges: cleaned.monthlyCharges ?? null,
+            redress: cleaned.redress ?? null,
+            currency: cleaned.currency || 'USD',
+          };
+
+          const existingList = ratesByContract.get(contractCodeVal.toUpperCase()) || [];
+          existingList.push(rateItem);
+          ratesByContract.set(contractCodeVal.toUpperCase(), existingList);
+
+          if (i % 25 === 0 || i === total - 1) {
+            const elapsedMin = (Date.now() - startTime) / 60000;
+            const rpm = elapsedMin > 0 ? Math.round((i + 1) / elapsedMin) : 0;
+            setProcessProgress({ current: i + 1, total, rpm });
+          }
+        }
+
+        for (const [cCode, importedRates] of ratesByContract.entries()) {
+          const cIdx = findContractIndex(cCode);
+          if (cIdx >= 0) {
+            const targetContract = { ...modifiedContracts[cIdx] };
+            const currentRates = Array.isArray(targetContract.rates) ? [...targetContract.rates] : [];
+
+            importedRates.forEach((impRate) => {
+              const existingRateIdx = currentRates.findIndex(
+                (r) => String(r.no).trim().toUpperCase() === String(impRate.no).trim().toUpperCase() ||
+                       (String(r.shortDesc).trim().toUpperCase() === String(impRate.shortDesc).trim().toUpperCase() &&
+                        String(r.size || '').trim().toUpperCase() === String(impRate.size || '').trim().toUpperCase() &&
+                        String(r.holeSection || '').trim().toUpperCase() === String(impRate.holeSection || '').trim().toUpperCase())
+              );
+
+              if (existingRateIdx >= 0) {
+                if (allowUpdate) {
+                  currentRates[existingRateIdx] = { ...currentRates[existingRateIdx], ...impRate };
+                  updatedCount++;
+                }
+              } else {
+                if (allowAdd) {
+                  currentRates.push(impRate);
+                  addedCount++;
+                }
+              }
+            });
+
+            targetContract.rates = currentRates;
+            modifiedContracts[cIdx] = targetContract;
+
+            // Persist to Azure SQL
+            await saveContractRatesApi(targetContract.id, targetContract.rates);
+            await saveContractApi(targetContract);
+          } else {
+            errorCount += importedRates.length;
+            newLogs.unshift({
+              time: new Date().toLocaleTimeString(),
+              type: 'warn',
+              msg: `Contract "${cCode}" not found in Master Contracts Register. Skipped ${importedRates.length} rate line(s).`,
+            });
+          }
+        }
+
+        onUpdateState('contracts', () => modifiedContracts);
+
+        const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
+        const summaryMsg = `Processed ${total} contract rate items in ${elapsedSec}s: ${addedCount} Added, ${updatedCount} Updated, ${errorCount} Skipped.`;
+        setProcessLogs((prev) => [
+          { time: new Date().toLocaleTimeString(), type: 'success', msg: summaryMsg },
+          ...prev,
+        ]);
+        showToast(summaryMsg, 'success');
+      } catch (err: any) {
+        setProcessLogs((prev) => [
+          { time: new Date().toLocaleTimeString(), type: 'error', msg: `Rates schedule write failure: ${err?.message || 'Network error'}` },
+          ...prev,
+        ]);
+        showToast('Error persisting contract rates schedule to Azure SQL.', 'error');
+      } finally {
+        setIsProcessing(false);
+      }
+      return;
+    }
+
     // BRANCH B: Standard Header Table Import
     const pk = selectedDef.primaryKey;
     const existingMap = new Map<string, any>();
@@ -1495,6 +1706,7 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
                         case 'inspections': count = inspections.length; break;
                         case 'maintenance': count = maintenance.length; break;
                         case 'contracts': count = contracts.length; break;
+                        case 'contractRates': count = contracts.reduce((acc, c) => acc + (c.rates?.length || 0), 0); break;
                       }
 
                       return (

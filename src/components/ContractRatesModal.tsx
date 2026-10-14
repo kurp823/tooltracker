@@ -5,8 +5,6 @@ import {
   X, 
   Plus, 
   Search, 
-  Download, 
-  FileSpreadsheet, 
   Trash2, 
   Edit3, 
   Check, 
@@ -36,9 +34,7 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
   
   // Modals / forms state
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isPasteOpen, setIsPasteOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [pasteText, setPasteText] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
 
   // Form state for single item (Add / Edit)
@@ -155,108 +151,6 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
     }));
   };
 
-  // Parse Excel / CSV pasted text
-  const handlePasteSubmit = () => {
-    if (!pasteText.trim()) return;
-    const lines = pasteText.trim().split(/\r?\n/);
-    const newItems: ContractRateItem[] = [];
-
-    lines.forEach((line, idx) => {
-      // Split by tab (Excel copy) or comma
-      const delimiter = line.includes('\t') ? '\t' : ',';
-      const parts = line.split(delimiter).map((p) => p.trim().replace(/^["']|["']$/g, ''));
-      
-      // Skip header if it contains words like 'Ops' or 'Category' or 'No'
-      if (idx === 0 && (parts[0]?.toLowerCase() === 'no' || parts[2]?.toLowerCase().includes('category'))) {
-        return;
-      }
-
-      if (parts.length >= 4) {
-        // Fallback or flexible column parsing
-        // Typical structure: No, Ref, Category, ShortDesc, Size, HoleSection, OpsRate, StandbyRate, RunCharges, Monthly, Redress, Cur
-        const noVal = parts[0] || `${rates.length + newItems.length + 1}`;
-        const refVal = parts[1] || 'SCHEDULE 2';
-        const catVal = parts[2] || parts[3] || 'TOOL';
-        const shortVal = parts[3] || parts[2] || catVal;
-        const sizeVal = parts[4] || '';
-        const holeVal = parts[5] || sizeVal || '';
-        const opsVal = parseFloat(parts[6]?.replace(/[^0-9.-]/g, '')) || 0;
-        const stbyVal = parseFloat(parts[7]?.replace(/[^0-9.-]/g, '')) || (opsVal * 0.5);
-        const runVal = parts[8] ? parseFloat(parts[8].replace(/[^0-9.-]/g, '')) : null;
-        const monthVal = parts[9] ? parseFloat(parts[9].replace(/[^0-9.-]/g, '')) : null;
-        const redVal = parts[10] ? parseFloat(parts[10].replace(/[^0-9.-]/g, '')) : null;
-        const curVal = parts[11] || contract.currency || 'USD';
-
-        newItems.push({
-          no: noVal,
-          contractRef: refVal,
-          category: catVal,
-          shortDesc: shortVal,
-          size: sizeVal,
-          holeSection: holeVal,
-          opsRate: opsVal,
-          standbyRate: stbyVal,
-          runCharges: isNaN(runVal as number) ? null : runVal,
-          monthlyCharges: isNaN(monthVal as number) ? null : monthVal,
-          redress: isNaN(redVal as number) ? null : redVal,
-          currency: curVal,
-        });
-      }
-    });
-
-    if (newItems.length > 0) {
-      setRates([...rates, ...newItems]);
-      setHasChanges(true);
-      setIsPasteOpen(false);
-      setPasteText('');
-      alert(`Successfully added ${newItems.length} rate line items from spreadsheet!`);
-    } else {
-      alert('Could not parse any valid rows. Please check format or delimiter.');
-    }
-  };
-
-  // Export CSV
-  const handleExportCSV = () => {
-    const headers = [
-      'No',
-      'Contract Ref',
-      'Category (ERP Name)',
-      'EMDAD ShortDesc',
-      'Size (Tool OD)',
-      'Hole Section',
-      'Ops Rate',
-      'Standby Rate',
-      'Run Charges',
-      'Monthly Charges',
-      'Redress',
-      'Currency',
-    ];
-
-    const rows = rates.map((r) => [
-      r.no,
-      `"${r.contractRef || ''}"`,
-      `"${r.category || ''}"`,
-      `"${r.shortDesc || ''}"`,
-      `"${r.size || ''}"`,
-      `"${r.holeSection || ''}"`,
-      r.opsRate,
-      r.standbyRate,
-      r.runCharges ?? '',
-      r.monthlyCharges ?? '',
-      r.redress ?? '',
-      r.currency || 'USD',
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Contract_Rates_${contract.client}_${contract.contractNo || 'RateSchedule'}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   // Save changes to parent state
   const handleFinalSave = () => {
     const updatedContract: ContractRecord = {
@@ -368,29 +262,13 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
           {/* Right: Actions */}
           <div className="flex items-center gap-2">
             {!isReadOnly && (
-              <>
-                <button
-                  onClick={handleOpenAdd}
-                  className="px-3 py-1.5 bg-[#1a3055] hover:bg-[#24426d] text-white font-bold rounded flex items-center gap-1.5 shadow-xs transition cursor-pointer text-xs"
-                >
-                  <Plus size={13} /> Add Rate Line
-                </button>
-                <button
-                  onClick={() => setIsPasteOpen(true)}
-                  className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white font-bold rounded flex items-center gap-1.5 shadow-xs transition cursor-pointer text-xs"
-                  title="Paste tabulated lines directly from Excel or Google Sheets"
-                >
-                  <FileSpreadsheet size={13} /> Paste from Excel
-                </button>
-              </>
+              <button
+                onClick={handleOpenAdd}
+                className="px-3.5 py-1.5 bg-[#1a3055] hover:bg-[#24426d] text-white font-bold rounded flex items-center gap-1.5 shadow-xs transition cursor-pointer text-xs"
+              >
+                <Plus size={14} /> Add Rate Line
+              </button>
             )}
-            <button
-              onClick={handleExportCSV}
-              className="px-3 py-1.5 bg-white border border-[#b8c9db] hover:bg-slate-100 text-slate-700 font-bold rounded flex items-center gap-1.5 shadow-xs transition cursor-pointer text-xs"
-              title="Download Price Book as CSV"
-            >
-              <Download size={13} /> Export CSV
-            </button>
           </div>
         </div>
 
@@ -434,7 +312,7 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
               {filteredRates.length === 0 ? (
                 <tr>
                   <td colSpan={13} className="py-12 text-center text-slate-400 italic">
-                    No rate lines found matching your filters. Click <strong>"+ Add Rate Line"</strong> or <strong>"Paste from Excel"</strong> to add contract rates.
+                    No rate lines found matching your filters. Click <strong>"+ Add Rate Line"</strong> to add rate items, or use <strong>DMT (Commercial &rarr; Contract Rates Schedule)</strong> for bulk Excel template download and import.
                   </td>
                 </tr>
               ) : (
@@ -759,67 +637,6 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
           </div>
         </div>
       )}
-
-      {/* PASTE FROM EXCEL MODAL */}
-      {isPasteOpen && (
-        <div className="fixed inset-0 bg-black/60 z-60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 border border-slate-300">
-            <div className="bg-purple-900 text-white px-4 py-3 flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <FileSpreadsheet size={16} />
-                <h3 className="font-bold text-sm">Bulk Import Rates from Excel or Google Sheets</h3>
-              </div>
-              <button
-                onClick={() => setIsPasteOpen(false)}
-                className="text-slate-300 hover:text-white font-bold text-lg cursor-pointer"
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="p-5 space-y-3 text-xs">
-              <div className="p-3 bg-purple-50 border border-purple-200 rounded text-purple-900 text-[11px] space-y-1">
-                <div className="font-bold">Instructions:</div>
-                <p>1. Open your contract rate schedule in Microsoft Excel or Google Sheets.</p>
-                <p>2. Select the cells matching these columns (or with headers):</p>
-                <p className="font-mono text-[10px] bg-white p-1 rounded border border-purple-200">
-                  No | Contract Ref | Category | EMDAD ShortDesc | Size | Hole Section | Ops Rate | Standby Rate | Run Charges | Monthly | Redress | Currency
-                </p>
-                <p>3. Copy (Ctrl+C) and Paste (Ctrl+V) directly into the text box below, then click "Process &amp; Import".</p>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Paste Tab-Separated or CSV Data:</label>
-                <textarea
-                  rows={8}
-                  value={pasteText}
-                  onChange={(e) => setPasteText(e.target.value)}
-                  placeholder={`173\tSCHEDULE 2\tFAST REAMER\tFAST REAMER\t12-1/4"\t12-1/4"\t3445.00\t1722.50\t\t\t\tUSD\n174\tSCHEDULE 2\tFAST REAMER\tFAST REAMER\t16"\t16"\t3692.00\t1846.00\t\t\t\tUSD`}
-                  className="w-full border border-slate-300 rounded p-2 font-mono text-[11px] outline-none focus:ring-1 focus:ring-purple-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <button
-                  type="button"
-                  onClick={() => setIsPasteOpen(false)}
-                  className="px-3 py-1.5 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePasteSubmit}
-                  className="px-4 py-1.5 rounded bg-purple-700 text-white font-bold hover:bg-purple-800 shadow-sm cursor-pointer"
-                >
-                  Process &amp; Import Rows &rarr;
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 };
