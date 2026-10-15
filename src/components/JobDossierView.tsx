@@ -1116,6 +1116,57 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return jobDTs.find((d) => d.dtNumber === selectedDTNumber) || jobDTs[0] || null;
   }, [jobDTs, selectedDTNumber]);
 
+  const draftDT = useMemo<DTBatch>(() => {
+    const curYr = new Date().getFullYear().toString().slice(-2);
+    const existingSeqs = dtBatches
+      .map((b) => {
+        const m = (b.dtNumber || '').match(/\d+$/);
+        return m ? parseInt(m[0], 10) : 0;
+      })
+      .filter((n) => !isNaN(n));
+    const nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2120 + jobDTs.length;
+    const nextDTNum = `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`;
+    const dispatchDateStr = formatDateDD_MM_YYYY(jobData.mobDate || new Date().toISOString());
+
+    const tools: any[] = (checklistItems && checklistItems.length > 0)
+      ? checklistItems.map((ci, idx) => ({
+          id: idx + 1,
+          itemNo: idx + 1,
+          serial: ci.serialNos?.[0] || ci.partNo || `TOOL-${idx + 1}`,
+          assetNo: ci.partNo || ci.serialNos?.[0] || '',
+          shortDesc: ci.cat || ci.shortDesc || 'Downhole Tool',
+          desc: ci.description || ci.shortDesc || '',
+          size: ci.size || '—',
+          status: 'OnRig' as const,
+          ownership: ci.supplier || 'EMDAD',
+          isEmdad: (ci.supplier || '').toUpperCase().includes('EMDAD'),
+          qty: ci.qty || 1,
+          remarks: 'Reserved in Checklist',
+        }))
+      : [];
+
+    return {
+      id: `DT-DRAFT-${jobData.id}`,
+      dtNumber: nextDTNum,
+      jobId: jobData.id,
+      jobNumber: jobData.id,
+      rmDate: dispatchDateStr,
+      rmRef: `MR-${jobData.id.slice(-4) || '881'}`,
+      dispatchDate: dispatchDateStr,
+      deliveryDate: dispatchDateStr,
+      rig: jobData.rig,
+      well: jobData.well,
+      contract: jobData.contractNo || jobData.contract,
+      dispatchedBy: user?.name || 'Operations',
+      recipient: `${jobData.rig} Toolpusher`,
+      notes: '',
+      isLocked: false,
+      toolLines: tools,
+    };
+  }, [dtBatches, jobData, checklistItems, jobDTs.length, user]);
+
+  const effectiveDT = activeDT || draftDT;
+
   // Selected RT for RT Tab
   const [selectedRTNumber, setSelectedRTNumber] = useState<string>(() => {
     return jobRTs[0]?.rtNumber || '';
@@ -1130,51 +1181,144 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return jobRTs.find((r) => r.rtNumber === selectedRTNumber) || jobRTs[0] || null;
   }, [jobRTs, selectedRTNumber]);
 
+  const draftRT = useMemo<RTBatch>(() => {
+    const curYr = new Date().getFullYear().toString().slice(-2);
+    const rtNums = rtBatches
+      .map((b) => {
+        const m = (b.rtNumber || '').match(/^RT-\d+-(\d+)$/);
+        return m ? parseInt(m[1], 10) : 0;
+      })
+      .filter((n) => !isNaN(n));
+    const nextSeq = rtNums.length > 0 ? Math.max(...rtNums) + 1 : 1;
+    const newRtNumber = `RT-${curYr}-${String(nextSeq).padStart(5, '0')}`;
+    const defaultDate = jobData.demobDate || new Date().toISOString().split('T')[0];
+
+    return {
+      id: `RT-DRAFT-${jobData.id}`,
+      rtNumber: newRtNumber,
+      jobId: jobData.id || jobData.jobNumber || '',
+      rtDate: defaultDate,
+      backloadRmDate: defaultDate,
+      loadingNoteNo: '',
+      loadingNoteDate: '',
+      contract: jobData.contractNo || jobData.contract || '',
+      rig: jobData.rig || '',
+      well: jobData.well || '',
+      receivedBy: '',
+      carrier: '',
+      toolLines: [],
+    };
+  }, [rtBatches, jobData]);
+
+  const effectiveRT = activeRT || draftRT;
+
+  // Delivery Ticket Creation handler
+  const handleCreateNewDTInJob = () => {
+    if (isClosedOrInvoiced || isLocked) {
+      showToast('Cannot create delivery ticket: this job is invoiced and locked.', 'error');
+      return;
+    }
+    const curYr = new Date().getFullYear().toString().slice(-2);
+    const existingSeqs = dtBatches
+      .map((b) => {
+        const m = (b.dtNumber || '').match(/\d+$/);
+        return m ? parseInt(m[0], 10) : 0;
+      })
+      .filter((n) => !isNaN(n));
+    const nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2120 + jobDTs.length;
+    const nextDTNum = `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`;
+    const dispatchDateStr = formatDateDD_MM_YYYY(jobData.mobDate || new Date().toISOString());
+
+    const toolsToInclude: any[] = checklistItems.length > 0
+      ? checklistItems.map((ci, idx) => ({
+          id: idx + 1,
+          itemNo: idx + 1,
+          serial: ci.serialNos?.[0] || ci.partNo || `TOOL-${idx + 1}`,
+          assetNo: ci.partNo || ci.serialNos?.[0] || '',
+          shortDesc: ci.cat || ci.shortDesc || 'Downhole Tool',
+          desc: ci.description || ci.shortDesc || '',
+          size: ci.size || '—',
+          status: 'OnRig' as const,
+          ownership: ci.supplier || 'EMDAD',
+          isEmdad: (ci.supplier || '').toUpperCase().includes('EMDAD'),
+          qty: ci.qty || 1,
+          remarks: 'Mobilized',
+        }))
+      : [];
+
+    const newDT: DTBatch = {
+      id: `DTB-${Date.now()}`,
+      dtNumber: nextDTNum,
+      jobId: jobData.id,
+      jobNumber: jobData.id,
+      rmDate: dispatchDateStr,
+      rmRef: `MR-${jobData.id.slice(-4) || '881'}`,
+      dispatchDate: dispatchDateStr,
+      deliveryDate: dispatchDateStr,
+      rig: jobData.rig,
+      well: jobData.well,
+      contract: jobData.contractNo || jobData.contract,
+      dispatchedBy: user?.name || 'Operations',
+      recipient: `${jobData.rig} Toolpusher`,
+      notes: '',
+      isLocked: false,
+      toolLines: toolsToInclude,
+    };
+
+    onSaveDTBatch(newDT);
+    setSelectedDTNumber(newDT.dtNumber);
+    showToast(`Delivery Ticket ${newDT.dtNumber} created for Job ${jobData.id}.`, 'success');
+  };
+
   // Delivery Ticket & Return Ticket Notes states (same style as Job Header)
   const [dtNotesInput, setDtNotesInput] = useState('');
   useEffect(() => {
-    if (activeDT) {
-      setDtNotesInput(activeDT.notes || '');
+    if (effectiveDT) {
+      setDtNotesInput(effectiveDT.notes || '');
     } else {
       setDtNotesInput('');
     }
-  }, [activeDT?.id, activeDT?.dtNumber, activeDT?.notes]);
+  }, [effectiveDT?.id, effectiveDT?.dtNumber, effectiveDT?.notes]);
 
   const handleSaveDTNotes = () => {
-    if (!activeDT) return;
+    const targetDT = effectiveDT;
+    if (!targetDT) return;
     const updated: DTBatch = {
-      ...activeDT,
+      ...targetDT,
       notes: dtNotesInput.trim(),
     };
-    if (onUpdateDTBatch) {
+    if (activeDT && onUpdateDTBatch) {
       onUpdateDTBatch(updated);
     } else {
       onSaveDTBatch(updated);
+      setSelectedDTNumber(updated.dtNumber);
     }
-    showToast(`Delivery Ticket ${activeDT.dtNumber} notes saved successfully.`, 'success');
+    showToast(`Delivery Ticket ${targetDT.dtNumber} notes saved successfully.`, 'success');
   };
 
   const [rtNotesInput, setRtNotesInput] = useState('');
   useEffect(() => {
-    if (activeRT) {
-      setRtNotesInput(activeRT.notes || '');
+    if (effectiveRT) {
+      setRtNotesInput(effectiveRT.notes || '');
     } else {
       setRtNotesInput('');
     }
-  }, [activeRT?.id, activeRT?.rtNumber, activeRT?.notes]);
+  }, [effectiveRT?.id, effectiveRT?.rtNumber, effectiveRT?.notes]);
 
   const handleSaveRTNotes = () => {
-    if (!activeRT) return;
+    const targetRT = effectiveRT;
+    if (!targetRT) return;
     const updated: RTBatch = {
-      ...activeRT,
+      ...targetRT,
       notes: rtNotesInput.trim(),
     };
-    if (onUpdateRTBatch) {
+    if (activeRT && onUpdateRTBatch) {
       onUpdateRTBatch(updated);
     } else {
       onSaveRTBatch(updated);
+      setSelectedRTNumber(updated.rtNumber);
     }
-    showToast(`Receiving Ticket ${activeRT.rtNumber} notes saved successfully.`, 'success');
+    showToast(`Receiving Ticket ${targetRT.rtNumber} notes saved successfully.`, 'success');
   };
 
   // Robust field resolvers for Return Tickets
@@ -1272,9 +1416,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   };
 
   const handleUpdateRTHeaderField = (field: keyof RTBatch | string, value: any) => {
-    if (!activeRT || isClosedOrInvoiced || isLocked) return;
+    const targetRT = effectiveRT;
+    if (!targetRT || isClosedOrInvoiced || isLocked) return;
     const updatedRT: RTBatch = {
-      ...activeRT,
+      ...targetRT,
       [field]: value,
     };
     if (field === 'loadingNoteNo') {
@@ -1289,10 +1434,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     if (field === 'rtDate') {
       (updatedRT as any).backloadRmDate = value;
     }
-    if (onUpdateRTBatch) {
+    if (activeRT && onUpdateRTBatch) {
       onUpdateRTBatch(updatedRT);
     } else {
       onSaveRTBatch(updatedRT);
+      setSelectedRTNumber(updatedRT.rtNumber);
     }
   };
 
@@ -1551,10 +1697,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Delivery Ticket Confirmation & Lock (Ship to Rig)
   const handleConfirmAndLockDT = () => {
-    if (!activeDT) return;
-    const count = activeDT.toolLines?.length || 0;
+    const targetDT = effectiveDT;
+    if (!targetDT) return;
+    const count = targetDT.toolLines?.length || 0;
     const confirmed = window.confirm(
-      `Are you sure you want to confirm dispatch and lock Delivery Ticket ${activeDT.dtNumber}?\n\n` +
+      `Are you sure you want to confirm dispatch and lock Delivery Ticket ${targetDT.dtNumber}?\n\n` +
       `• Tools to release: ${count}\n` +
       `• Destination: Rig ${jobData.rig} / Well ${jobData.well}\n\n` +
       `This confirms equipment has been released from yard and locks this ticket against modifications.`
@@ -1562,17 +1709,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     if (!confirmed) return;
 
     const updatedBatch: DTBatch = {
-      ...activeDT,
+      ...targetDT,
       isLocked: true,
       lockedBy: user?.name || 'Operations',
       lockedDate: new Date().toISOString(),
-      dispatchDate: activeDT.dispatchDate || formatDateDD_MM_YYYY(new Date().toISOString()),
+      dispatchDate: targetDT.dispatchDate || formatDateDD_MM_YYYY(new Date().toISOString()),
     };
 
-    if (onUpdateDTBatch) {
+    if (activeDT && onUpdateDTBatch) {
       onUpdateDTBatch(updatedBatch);
     } else {
       onSaveDTBatch(updatedBatch);
+      setSelectedDTNumber(updatedBatch.dtNumber);
     }
 
     if (onSaveCallout) {
@@ -1582,7 +1730,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       });
     }
 
-    showToast(`Delivery Ticket ${activeDT.dtNumber} confirmed dispatched and locked. Tools mobilized to Rig ${jobData.rig}.`, 'success');
+    showToast(`Delivery Ticket ${updatedBatch.dtNumber} confirmed dispatched and locked. Tools mobilized to Rig ${jobData.rig}.`, 'success');
   };
 
   // Transfer checked tools from Lower DT to Upper RT
@@ -1665,7 +1813,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Official EMDAD Ticket & Manifest Print Handlers
   const handlePrintDeliveryTicket = (dt?: DTBatch) => {
-    const targetDT = dt || activeDT;
+    const targetDT = dt || effectiveDT;
     if (!targetDT) {
       alert('Please select or create a Delivery Ticket first.');
       return;
@@ -1703,7 +1851,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   };
 
   const handlePrintDispatchChecklist = (dt?: DTBatch) => {
-    const targetDT = dt || activeDT;
+    const targetDT = dt || effectiveDT;
     let tools: Array<{ lineNo?: number | string; partNo?: string; description: string; qty: number }> = [];
 
     if (targetDT && targetDT.toolLines && targetDT.toolLines.length > 0) {
@@ -1751,7 +1899,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   };
 
   const handlePrintReceivingTicket = (rt?: RTBatch) => {
-    const targetRT = rt || activeRT;
+    const targetRT = rt || effectiveRT;
     if (!targetRT) {
       alert('Please select or create a Receiving Ticket first.');
       return;
@@ -3606,7 +3754,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               <div className="flex items-center gap-2">
                 <label className="text-xs font-bold text-slate-700 whitespace-nowrap">Select Delivery Ticket:</label>
                 {jobDTs.length === 0 ? (
-                  <span className="text-xs text-slate-400 italic">No delivery tickets yet.</span>
+                  <span className="text-xs font-mono font-bold text-blue-900 bg-blue-50 border border-blue-200 rounded px-2.5 py-1">
+                    {effectiveDT.dtNumber} (Draft Manifest)
+                  </span>
                 ) : (
                   <select
                     value={selectedDTNumber}
@@ -3620,30 +3770,52 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     ))}
                   </select>
                 )}
-              </div>
-              <div className="flex items-center gap-2">
-                {activeDT && (
-                  activeDT.isLocked || isClosedOrInvoiced ? (
-                    <span className="bg-purple-100 text-purple-900 border border-purple-300 font-bold text-xs px-3 py-1 rounded flex items-center gap-1 shadow-2xs">
-                      <span>🔒</span>
-                      <span>Dispatched &amp; Locked (Shipped to Rig)</span>
-                    </span>
-                  ) : (
-                    !isClosedOrInvoiced && !isLocked && (
+                {!isClosedOrInvoiced && !isLocked && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleCreateNewDTInJob}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs transition cursor-pointer flex items-center gap-1"
+                      title="Create a new Delivery Ticket manifest for this job"
+                    >
+                      <span>+</span>
+                      <span>New DT</span>
+                    </button>
+                    {checklistItems.length > 0 && jobDTs.length === 0 && (
                       <button
                         type="button"
-                        onClick={handleConfirmAndLockDT}
-                        className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                        onClick={handleGenerateDTFromChecklist}
+                        className="bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs px-3 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                        title="Transfer reserved checklist tools directly into a new Delivery Ticket"
                       >
                         <span>🚚</span>
-                        <span>Confirm Dispatch &amp; Lock DT (Ship to Rig)</span>
+                        <span>Generate DT from Checklist ({checklistItems.length})</span>
                       </button>
-                    )
+                    )}
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {effectiveDT.isLocked || isClosedOrInvoiced ? (
+                  <span className="bg-purple-100 text-purple-900 border border-purple-300 font-bold text-xs px-3 py-1 rounded flex items-center gap-1 shadow-2xs">
+                    <span>🔒</span>
+                    <span>Dispatched &amp; Locked (Shipped to Rig)</span>
+                  </span>
+                ) : (
+                  !isClosedOrInvoiced && !isLocked && (
+                    <button
+                      type="button"
+                      onClick={handleConfirmAndLockDT}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>🚚</span>
+                      <span>Confirm Dispatch &amp; Lock DT (Ship to Rig)</span>
+                    </button>
                   )
                 )}
                 <button
                   type="button"
-                  onClick={() => handlePrintDeliveryTicket(activeDT)}
+                  onClick={() => handlePrintDeliveryTicket(effectiveDT)}
                   className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer shadow-2xs"
                   title="Print Official Delivery Ticket (Form DSF-001)"
                 >
@@ -3651,7 +3823,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => handlePrintDispatchChecklist(activeDT)}
+                  onClick={() => handlePrintDispatchChecklist(effectiveDT)}
                   className="bg-amber-50 hover:bg-amber-100 text-amber-900 font-semibold text-xs px-2.5 py-1 rounded border border-amber-300 cursor-pointer shadow-2xs"
                   title="Print Official Dispatch Checklist (Form DSF-003)"
                 >
@@ -3661,71 +3833,71 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             </div>
 
             {/* Rental Ticket Form / Details */}
-            {activeDT ? (
-              <div className="space-y-3">
-                <div className="bg-[#f0f5fb] border border-[#b8cce0] rounded p-3 text-xs">
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-2">
-                    <h3 className="font-bold text-blue-900 text-sm">Rental Ticket / Delivery Manifest</h3>
-                    <span className="text-xs font-mono">
-                      Ticket No : <strong className="text-red-600 font-bold text-base">{activeDT.dtNumber}</strong>
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                    <div>
-                      <span className="font-bold text-slate-600">Customer:</span>{' '}
-                      <span className="font-bold">{jobData.client}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-slate-600">Project No:</span>{' '}
-                      <span className="font-mono">{jobData.contractNo || '444558'}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-slate-600">Purpose:</span>{' '}
-                      <span>{jobData.serviceCategory || jobData.jobDescription || 'Downhole Rentals'}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-slate-600">Rig:</span>{' '}
-                      <span className="font-bold">{jobData.rig}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-slate-600">Job Number:</span>{' '}
-                      <span className="font-mono font-bold text-blue-800">{jobData.id}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-slate-600">Well:</span>{' '}
-                      <span>{jobData.well}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-slate-600">DateShipped:</span>{' '}
-                      <span className="font-mono font-bold">{formatDateDD_MM_YYYY(activeDT.dispatchDate)}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-slate-600">RM Ref / Manifest:</span>{' '}
-                      <span className="font-mono">{activeDT.rmRef || 'MR-881'}</span>
-                    </div>
-                  </div>
+            <div className="space-y-3">
+              <div className="bg-[#f0f5fb] border border-[#b8cce0] rounded p-3 text-xs">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-2">
+                  <h3 className="font-bold text-blue-900 text-sm">Rental Ticket / Delivery Manifest</h3>
+                  <span className="text-xs font-mono">
+                    Ticket No : <strong className="text-red-600 font-bold text-base">{effectiveDT.dtNumber}</strong>
+                  </span>
                 </div>
 
-                {/* Mobilized Tools Table */}
-                <div className="border border-[#b8cce0] rounded overflow-hidden">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
-                      <tr>
-                        <th className="p-1.5 text-center w-12">ItemNo</th>
-                        <th className="p-1.5">PartNo / Serial</th>
-                        <th className="p-1.5">Description</th>
-                        <th className="p-1.5 text-center w-14">DTQTY</th>
-                        <th className="p-1.5">DATEOUT</th>
-                        <th className="p-1.5">Job Number</th>
-                        <th className="p-1.5">RGT_No</th>
-                        <th className="p-1.5">Date_In</th>
-                        <th className="p-1.5">Supplier</th>
-                        <th className="p-1.5">Category</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {activeDT.toolLines?.map((t, idx) => {
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                  <div>
+                    <span className="font-bold text-slate-600">Customer:</span>{' '}
+                    <span className="font-bold">{jobData.client}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">Project No:</span>{' '}
+                    <span className="font-mono">{jobData.contractNo || cleanContractName(jobData.contract) || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">Purpose:</span>{' '}
+                    <span>{jobData.serviceCategory || jobData.jobDescription || 'Downhole Rentals'}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">Rig:</span>{' '}
+                    <span className="font-bold">{jobData.rig}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">Job Number:</span>{' '}
+                    <span className="font-mono font-bold text-blue-800">{jobData.id}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">Well:</span>{' '}
+                    <span>{jobData.well}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">DateShipped:</span>{' '}
+                    <span className="font-mono font-bold">{formatDateDD_MM_YYYY(effectiveDT.dispatchDate)}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">RM Ref / Manifest:</span>{' '}
+                    <span className="font-mono">{effectiveDT.rmRef || 'MR-881'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mobilized Tools Table */}
+              <div className="border border-[#b8cce0] rounded overflow-hidden">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
+                    <tr>
+                      <th className="p-1.5 text-center w-12">ItemNo</th>
+                      <th className="p-1.5">PartNo / Serial</th>
+                      <th className="p-1.5">Description</th>
+                      <th className="p-1.5 text-center w-14">DTQTY</th>
+                      <th className="p-1.5">DATEOUT</th>
+                      <th className="p-1.5">Job Number</th>
+                      <th className="p-1.5">RGT_No</th>
+                      <th className="p-1.5">Date_In</th>
+                      <th className="p-1.5">Supplier</th>
+                      <th className="p-1.5">Category</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {effectiveDT.toolLines && effectiveDT.toolLines.length > 0 ? (
+                      effectiveDT.toolLines.map((t, idx) => {
                         const tSerial = (t.serial || '').trim().toUpperCase();
                         const tAsset = (t.assetNo || '').trim().toUpperCase();
                         const directRtRef = String((t as any).returnedRtNumber || t.rtBatchId || (t as any).rgtNo || '').trim();
@@ -3742,7 +3914,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           });
                         });
 
-                        const dtDate = activeDT.dispatchDate || activeDT.rmDate;
+                        const dtDate = effectiveDT.dispatchDate || effectiveDT.rmDate;
                         const candidateReturnDate = (t as any).returnDate ||
                           (t as any).dateIn ||
                           (t as any).Date_In ||
@@ -3772,7 +3944,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
                             <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{t.qty || 1}</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{formatDateDD_MM_YYYY(activeDT.dispatchDate)}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{formatDateDD_MM_YYYY(effectiveDT.dispatchDate)}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-blue-700">{jobData.id}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-emerald-700">{rgtNo || '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{rgtDate ? formatDateDD_MM_YYYY(rgtDate) : '—'}</td>
@@ -3780,151 +3952,158 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             <td className="py-1 px-2 whitespace-nowrap text-slate-600 text-[11px] font-medium">{categoryName}</td>
                           </tr>
                         );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={10} className="p-6 text-center text-slate-500 font-medium bg-slate-50">
+                          No tools added to Delivery Ticket yet.
+                          {!isClosedOrInvoiced && !isLocked && (
+                            <span>
+                              {' '}Select tools in the <button type="button" onClick={() => setActiveTab('checklist')} className="text-blue-700 underline font-bold cursor-pointer">Checklistheader</button> tab and click &quot;Generate DT from Checklist&quot;, or click <button type="button" onClick={handleCreateNewDTInJob} className="text-emerald-700 underline font-bold cursor-pointer">+ New DT</button> to add tools.
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-                {/* Bottom Logistics fields - Balanced 3-column layout without 'Ready to Go' */}
-                <div className="bg-[#f8fafc] border border-slate-300 rounded p-3 text-xs grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Column 1: Dispatch Authority */}
-                  <div className="space-y-1.5 bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
-                    <div className="font-bold text-slate-700 border-b pb-1 text-[11px] uppercase tracking-wider text-blue-900">
-                      1. Dispatch Authority
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-600">Prepared By:</span>
-                      <input
-                        type="text"
-                        defaultValue={activeDT.dispatchedBy || 'Operations'}
-                        disabled={isLocked}
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-600">Designation:</span>
-                      <input
-                        type="text"
-                        defaultValue="WORKSHOP COORDINATOR"
-                        disabled={isLocked}
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-600">Dispatch Date:</span>
-                      <span className="font-mono font-bold text-slate-800 text-xs">{formatDateDD_MM_YYYY(activeDT.dispatchDate)}</span>
-                    </div>
+              {/* Bottom Logistics fields - Balanced 3-column layout without 'Ready to Go' */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs bg-[#f8fafc] p-3 rounded border border-slate-200">
+                {/* Column 1: Dispatch Authority */}
+                <div className="space-y-1.5 bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
+                  <div className="font-bold text-slate-700 border-b pb-1 text-[11px] uppercase tracking-wider text-blue-900">
+                    1. Warehouse &amp; Operations Dispatch
                   </div>
-
-                  {/* Column 2: Logistics & Destination */}
-                  <div className="space-y-1.5 bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
-                    <div className="font-bold text-slate-700 border-b pb-1 text-[11px] uppercase tracking-wider text-blue-900">
-                      2. Destination &amp; Marine Logistics
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-600">Delivered To:</span>
-                      <input
-                        type="text"
-                        defaultValue="ESNAD JETTY"
-                        disabled={isLocked}
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-600">Vessel / Boat:</span>
-                      <input
-                        type="text"
-                        defaultValue="ZAKHER STAR"
-                        disabled={isLocked}
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-600">Transport:</span>
-                      <input
-                        type="text"
-                        defaultValue="EMDAD"
-                        disabled={isLocked}
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
-                      />
-                    </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-600">Dispatched By:</span>
+                    <input
+                      type="text"
+                      defaultValue={effectiveDT.dispatchedBy || 'Operations'}
+                      disabled={isLocked}
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
+                    />
                   </div>
-
-                  {/* Column 3: Road Haulage & Driver */}
-                  <div className="space-y-1.5 bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
-                    <div className="font-bold text-slate-700 border-b pb-1 text-[11px] uppercase tracking-wider text-blue-900">
-                      3. Haulage &amp; Driver Details
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-600">Vehicle No:</span>
-                      <input
-                        type="text"
-                        defaultValue="54912"
-                        disabled={isLocked}
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100 font-mono"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-600">Driver Name:</span>
-                      <input
-                        type="text"
-                        defaultValue="LUQMAN KHAN"
-                        disabled={isLocked}
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-600">Contact No:</span>
-                      <input
-                        type="text"
-                        defaultValue="+971565256707"
-                        disabled={isLocked}
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs font-mono disabled:bg-slate-100"
-                      />
-                    </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-600">Designation:</span>
+                    <input
+                      type="text"
+                      defaultValue="WORKSHOP COORDINATOR"
+                      disabled={isLocked}
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-600">Dispatch Date:</span>
+                    <span className="font-mono font-bold text-slate-800 text-xs">{formatDateDD_MM_YYYY(effectiveDT.dispatchDate)}</span>
                   </div>
                 </div>
 
-                {/* Delivery Ticket Notes & Non-Invoiced Manifest Items (same style as Job Header) */}
-                <div className="bg-white border border-[#b8cce0] rounded-md p-3 space-y-2 shadow-2xs mt-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm">📝</span>
-                      <label className="text-xs font-bold text-[#1a3055]">
-                        Delivery Ticket Notes &amp; Manifest Remarks (Slings, Protectors, Non-Invoiced Spares, Baskets)
-                      </label>
-                    </div>
-                    <span className="text-[10px] text-slate-500 font-medium">
-                      Prints directly on Delivery Ticket Form DSF-001 under "Notes :"
-                    </span>
+                {/* Column 2: Logistics & Destination */}
+                <div className="space-y-1.5 bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
+                  <div className="font-bold text-slate-700 border-b pb-1 text-[11px] uppercase tracking-wider text-blue-900">
+                    2. Destination &amp; Marine Logistics
                   </div>
-                  <textarea
-                    rows={4}
-                    value={dtNotesInput}
-                    disabled={isLocked || activeDT.isLocked}
-                    onChange={(e) => setDtNotesInput(e.target.value)}
-                    placeholder="Enter items with no invoicing value to print on the Delivery Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
-                    className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
-                  />
-                  {!isLocked && !activeDT.isLocked && (
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={handleSaveDTNotes}
-                        className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
-                      >
-                        <span>💾</span>
-                        <span>Save Delivery Ticket Notes</span>
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-600">Delivered To:</span>
+                    <input
+                      type="text"
+                      defaultValue="ESNAD JETTY"
+                      disabled={isLocked}
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-600">Vessel / Boat:</span>
+                    <input
+                      type="text"
+                      defaultValue="ZAKHER STAR"
+                      disabled={isLocked}
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-600">Transport:</span>
+                    <input
+                      type="text"
+                      defaultValue="EMDAD"
+                      disabled={isLocked}
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
+                    />
+                  </div>
+                </div>
+
+                {/* Column 3: Road Haulage & Driver */}
+                <div className="space-y-1.5 bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
+                  <div className="font-bold text-slate-700 border-b pb-1 text-[11px] uppercase tracking-wider text-blue-900">
+                    3. Haulage &amp; Driver Details
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-600">Vehicle No:</span>
+                    <input
+                      type="text"
+                      defaultValue="54912"
+                      disabled={isLocked}
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100 font-mono"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-600">Driver Name:</span>
+                    <input
+                      type="text"
+                      defaultValue="LUQMAN KHAN"
+                      disabled={isLocked}
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-600">Contact No:</span>
+                    <input
+                      type="text"
+                      defaultValue="+971565256707"
+                      disabled={isLocked}
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs font-mono disabled:bg-slate-100"
+                    />
+                  </div>
                 </div>
               </div>
-            ) : (
-              <div className="p-8 text-center text-slate-500 font-medium">
-                No Delivery Tickets issued yet for Job {jobData.id}.
+
+              {/* Delivery Ticket Notes & Non-Invoiced Manifest Items (same style as Job Header) */}
+              <div className="bg-white border border-[#b8cce0] rounded-md p-3 space-y-2 shadow-2xs mt-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm">📝</span>
+                    <label className="text-xs font-bold text-[#1a3055]">
+                      Delivery Ticket Notes &amp; Manifest Remarks (Slings, Protectors, Non-Invoiced Spares, Baskets)
+                    </label>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    Prints directly on Delivery Ticket Form DSF-001 under "Notes :"
+                  </span>
+                </div>
+                <textarea
+                  rows={4}
+                  value={dtNotesInput}
+                  disabled={isLocked || effectiveDT.isLocked}
+                  onChange={(e) => setDtNotesInput(e.target.value)}
+                  placeholder="Enter items with no invoicing value to print on the Delivery Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
+                  className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
+                />
+                {!isLocked && !effectiveDT.isLocked && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleSaveDTNotes}
+                      className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>💾</span>
+                      <span>Save Delivery Ticket Notes</span>
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -3936,7 +4115,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               <div className="flex items-center gap-2">
                 <label className="text-xs font-bold text-slate-700 whitespace-nowrap">Select Return Ticket:</label>
                 {jobRTs.length === 0 ? (
-                  <span className="text-xs text-slate-400 italic">No return tickets for this job yet.</span>
+                  <span className="text-xs font-mono font-bold text-blue-900 bg-blue-50 border border-blue-200 rounded px-2.5 py-1">
+                    {effectiveRT.rtNumber} (Draft Manifest)
+                  </span>
                 ) : (
                   <select
                     value={selectedRTNumber}
@@ -3965,7 +4146,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => activeRT && handlePrintReceivingTicket(activeRT)}
+                  onClick={() => handlePrintReceivingTicket(effectiveRT)}
                   className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer shadow-2xs"
                   title="Print Official Receiving Ticket (Form DSF-001)"
                 >
@@ -3974,109 +4155,104 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </div>
             </div>
 
-            {activeRT ? (
-              <div className="bg-[#f0f5fb] border border-[#b8cce0] rounded p-3 text-xs space-y-2">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                  <h3 className="font-bold text-blue-900 text-sm">RETURN TICKET</h3>
-                  <span className="text-xs font-mono">
-                    TicketNo: <strong className="text-red-600 font-bold text-base">{activeRT.rtNumber || '—'}</strong>
-                  </span>
-                </div>
+            {/* Return Ticket Header Details */}
+            <div className="bg-[#f0f5fb] border border-[#b8cce0] rounded p-3 text-xs space-y-2">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <h3 className="font-bold text-blue-900 text-sm">RETURN TICKET</h3>
+                <span className="text-xs font-mono">
+                  TicketNo: <strong className="text-red-600 font-bold text-base">{effectiveRT.rtNumber || '—'}</strong>
+                </span>
+              </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-[11px]">
-                  <div>
-                    <span className="font-bold text-slate-600 block mb-0.5">Customer:</span>
-                    <span className="font-bold text-slate-900">{jobData.client}</span>
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-600 block mb-0.5">Contract / Project:</span>
-                    <span className="font-mono text-slate-800">{jobData.contractNo || cleanContractName(jobData.contract) || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-600 block mb-0.5">Rig / Well:</span>
-                    <span className="font-mono font-bold text-blue-900">{jobData.rig} / {jobData.well}</span>
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-600 block mb-0.5">Date:</span>
-                    {isClosedOrInvoiced || isLocked ? (
-                      <span className="font-mono font-bold text-slate-900">{resolveRtDate(activeRT)}</span>
-                    ) : (
-                      <input
-                        type="date"
-                        value={toInputDateFormat(activeRT.rtDate || activeRT.backloadRmDate || jobData.demobDate)}
-                        onChange={(e) => handleUpdateRTHeaderField('rtDate', e.target.value)}
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-full cursor-pointer focus:border-blue-500 focus:outline-none"
-                      />
-                    )}
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-600 block mb-0.5">Shipped Via:</span>
-                    {isClosedOrInvoiced || isLocked ? (
-                      <span className="text-slate-800">{resolveRtCarrier(activeRT)}</span>
-                    ) : (
-                      <input
-                        type="text"
-                        placeholder="Shipped Via (Carrier)"
-                        value={activeRT.carrier || activeRT.shippedVia || ''}
-                        onChange={(e) => handleUpdateRTHeaderField('carrier', e.target.value)}
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs text-slate-800 w-full focus:border-blue-500 focus:outline-none"
-                      />
-                    )}
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-600 block mb-0.5">L/Note Date:</span>
-                    {isClosedOrInvoiced || isLocked ? (
-                      <span className="font-mono text-slate-800">{resolveRtLoadingNoteDate(activeRT)}</span>
-                    ) : (
-                      <input
-                        type="date"
-                        value={toInputDateFormat(activeRT.loadingNoteDate || activeRT.lNoteDate)}
-                        onChange={(e) => handleUpdateRTHeaderField('loadingNoteDate', e.target.value)}
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-mono text-slate-800 w-full cursor-pointer focus:border-blue-500 focus:outline-none"
-                      />
-                    )}
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-600 block mb-0.5">L/Note No:</span>
-                    {isClosedOrInvoiced || isLocked ? (
-                      <span className="font-mono font-bold text-slate-900">{resolveRtLoadingNoteNo(activeRT)}</span>
-                    ) : (
-                      <input
-                        type="text"
-                        placeholder="Loading Note No"
-                        value={activeRT.loadingNoteNo || activeRT.lNoteNo || ''}
-                        onChange={(e) => handleUpdateRTHeaderField('loadingNoteNo', e.target.value)}
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-full focus:border-blue-500 focus:outline-none"
-                      />
-                    )}
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-600 block mb-0.5">Received By:</span>
-                    {isClosedOrInvoiced || isLocked ? (
-                      <span className="font-medium text-slate-800">{activeRT.receivedBy || '—'}</span>
-                    ) : (
-                      <input
-                        type="text"
-                        placeholder="Received By (Name / Lead)"
-                        value={activeRT.receivedBy || ''}
-                        onChange={(e) => handleUpdateRTHeaderField('receivedBy', e.target.value)}
-                        className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs text-slate-800 w-full focus:border-blue-500 focus:outline-none"
-                      />
-                    )}
-                  </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-[11px]">
+                <div>
+                  <span className="font-bold text-slate-600 block mb-0.5">Customer:</span>
+                  <span className="font-bold text-slate-900">{jobData.client}</span>
+                </div>
+                <div>
+                  <span className="font-bold text-slate-600 block mb-0.5">Contract / Project:</span>
+                  <span className="font-mono text-slate-800">{jobData.contractNo || cleanContractName(jobData.contract) || '—'}</span>
+                </div>
+                <div>
+                  <span className="font-bold text-slate-600 block mb-0.5">Rig / Well:</span>
+                  <span className="font-mono font-bold text-blue-900">{jobData.rig} / {jobData.well}</span>
+                </div>
+                <div>
+                  <span className="font-bold text-slate-600 block mb-0.5">Date:</span>
+                  {isClosedOrInvoiced || isLocked ? (
+                    <span className="font-mono font-bold text-slate-900">{resolveRtDate(effectiveRT)}</span>
+                  ) : (
+                    <input
+                      type="date"
+                      value={toInputDateFormat(effectiveRT.rtDate || effectiveRT.backloadRmDate || jobData.demobDate)}
+                      onChange={(e) => handleUpdateRTHeaderField('rtDate', e.target.value)}
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-full cursor-pointer focus:border-blue-500 focus:outline-none"
+                    />
+                  )}
+                </div>
+                <div>
+                  <span className="font-bold text-slate-600 block mb-0.5">Shipped Via:</span>
+                  {isClosedOrInvoiced || isLocked ? (
+                    <span className="text-slate-800">{resolveRtCarrier(effectiveRT)}</span>
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="Shipped Via (Carrier)"
+                      value={effectiveRT.carrier || effectiveRT.shippedVia || ''}
+                      onChange={(e) => handleUpdateRTHeaderField('carrier', e.target.value)}
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs text-slate-800 w-full focus:border-blue-500 focus:outline-none"
+                    />
+                  )}
+                </div>
+                <div>
+                  <span className="font-bold text-slate-600 block mb-0.5">L/Note Date:</span>
+                  {isClosedOrInvoiced || isLocked ? (
+                    <span className="font-mono text-slate-800">{resolveRtLoadingNoteDate(effectiveRT)}</span>
+                  ) : (
+                    <input
+                      type="date"
+                      value={toInputDateFormat(effectiveRT.loadingNoteDate || effectiveRT.lNoteDate)}
+                      onChange={(e) => handleUpdateRTHeaderField('loadingNoteDate', e.target.value)}
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-mono text-slate-800 w-full cursor-pointer focus:border-blue-500 focus:outline-none"
+                    />
+                  )}
+                </div>
+                <div>
+                  <span className="font-bold text-slate-600 block mb-0.5">L/Note No:</span>
+                  {isClosedOrInvoiced || isLocked ? (
+                    <span className="font-mono font-bold text-slate-900">{resolveRtLoadingNoteNo(effectiveRT)}</span>
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="Loading Note No"
+                      value={effectiveRT.loadingNoteNo || effectiveRT.lNoteNo || ''}
+                      onChange={(e) => handleUpdateRTHeaderField('loadingNoteNo', e.target.value)}
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-full focus:border-blue-500 focus:outline-none"
+                    />
+                  )}
+                </div>
+                <div>
+                  <span className="font-bold text-slate-600 block mb-0.5">Received By:</span>
+                  {isClosedOrInvoiced || isLocked ? (
+                    <span className="font-medium text-slate-800">{effectiveRT.receivedBy || '—'}</span>
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="Received By (Name / Lead)"
+                      value={effectiveRT.receivedBy || ''}
+                      onChange={(e) => handleUpdateRTHeaderField('receivedBy', e.target.value)}
+                      className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs text-slate-800 w-full focus:border-blue-500 focus:outline-none"
+                    />
+                  )}
                 </div>
               </div>
-            ) : (
-              <div className="p-8 text-center text-slate-500 font-medium bg-slate-50 border border-slate-200 rounded">
-                No Return Tickets issued yet for Job {jobData.id}.
-              </div>
-            )}
+            </div>
 
             {/* Upper Table: Tools in active RT */}
             <div className="border border-[#b8cce0] rounded overflow-hidden">
               <div className="bg-slate-100 px-3 py-1 border-b border-slate-200 font-bold text-xs text-slate-700 flex justify-between">
                 <span>Received Tools in Return Ticket</span>
-                <span className="text-emerald-700">Total Returned: {activeRT?.toolLines?.length || 0} tools</span>
+                <span className="text-emerald-700">Total Returned: {effectiveRT?.toolLines?.length || 0} tools</span>
               </div>
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
@@ -4090,14 +4266,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {!activeRT || !activeRT.toolLines || activeRT.toolLines.length === 0 ? (
+                  {!effectiveRT || !effectiveRT.toolLines || effectiveRT.toolLines.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="p-4 text-center text-slate-500">
                         No returned tools added to this ticket yet.
                       </td>
                     </tr>
                   ) : (
-                    activeRT.toolLines.map((t, idx) => {
+                    effectiveRT.toolLines.map((t, idx) => {
                       const matchedDTLine = jobDTs.flatMap((dt) => dt.toolLines || []).find(
                         (dtl: any) => dtl.serial && t.serial && String(dtl.serial).trim().toUpperCase() === String(t.serial).trim().toUpperCase()
                       );
@@ -4113,10 +4289,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         (matchedDTLine as any)?.returnDate,
                         (matchedDTLine as any)?.dateIn,
                         (matchedDTLine as any)?.Date_In,
-                        activeRT.rtDate,
-                        activeRT.backloadRmDate,
-                        (activeRT as any).Date_In,
-                        (activeRT as any).dateIn,
+                        effectiveRT.rtDate,
+                        effectiveRT.backloadRmDate,
+                        (effectiveRT as any).Date_In,
+                        (effectiveRT as any).dateIn,
                         jobData.demobDate,
                         jobData.lastRtDate
                       );
@@ -4129,7 +4305,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
                           <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
                           <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
-                          <td className="py-1 px-2 whitespace-nowrap text-center font-mono font-bold text-blue-800">{activeRT.rtNumber}</td>
+                          <td className="py-1 px-2 whitespace-nowrap text-center font-mono font-bold text-blue-800">{effectiveRT.rtNumber}</td>
                           <td className="py-1 px-2 whitespace-nowrap">
                             {isClosedOrInvoiced || isLocked ? (
                               <span className="font-mono text-[11px] text-slate-700 font-medium">{displayDateIn}</span>
