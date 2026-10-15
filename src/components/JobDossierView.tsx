@@ -390,6 +390,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Resizable columns & custom columns for Checklist table
   const checklistCustomCols = useCustomColumns('dossier_checklist');
   const checklistResizer = useResizableColumns('dossier_checklist_grid', {
+    select: 40,
     itemNo: 50,
     partNo: 140,
     description: 280,
@@ -1054,6 +1055,57 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       return !assigned;
     });
   }, [checklistItems, getAssignedDTForChecklistItem]);
+
+  // Selected checklist item sequence numbers for generating Delivery Ticket
+  const [selectedChecklistSeqs, setSelectedChecklistSeqs] = useState<number[]>([]);
+
+  // Automatically select all pending (not dispatched on a locked DT) checklist items
+  useEffect(() => {
+    const pendingSeqs = checklistItems
+      .filter((ci) => {
+        const assigned = getAssignedDTForChecklistItem(ci);
+        return !assigned || !assigned.isLocked;
+      })
+      .map((ci) => ci.seq);
+
+    setSelectedChecklistSeqs((prev) => {
+      const set = new Set(prev);
+      let changed = false;
+      pendingSeqs.forEach((seq) => {
+        if (!set.has(seq)) {
+          set.add(seq);
+          changed = true;
+        }
+      });
+      return changed ? Array.from(set) : prev;
+    });
+  }, [checklistItems, getAssignedDTForChecklistItem]);
+
+  const toggleChecklistItem = useCallback((seq: number) => {
+    setSelectedChecklistSeqs((prev) =>
+      prev.includes(seq) ? prev.filter((s) => s !== seq) : [...prev, seq]
+    );
+  }, []);
+
+  const allPendingSelected = useMemo(() => {
+    if (pendingChecklistItems.length === 0) return false;
+    return pendingChecklistItems.every((item) => selectedChecklistSeqs.includes(item.seq));
+  }, [pendingChecklistItems, selectedChecklistSeqs]);
+
+  const toggleSelectAllPending = useCallback(() => {
+    if (allPendingSelected) {
+      const pendingSet = new Set(pendingChecklistItems.map((item) => item.seq));
+      setSelectedChecklistSeqs((prev) => prev.filter((seq) => !pendingSet.has(seq)));
+    } else {
+      const newSeqs = new Set([...selectedChecklistSeqs, ...pendingChecklistItems.map((item) => item.seq)]);
+      setSelectedChecklistSeqs(Array.from(newSeqs));
+    }
+  }, [allPendingSelected, pendingChecklistItems, selectedChecklistSeqs]);
+
+  const selectedPendingCount = useMemo(() => {
+    const set = new Set(selectedChecklistSeqs);
+    return pendingChecklistItems.filter((item) => set.has(item.seq)).length;
+  }, [pendingChecklistItems, selectedChecklistSeqs]);
 
   const categoryInventory = useMemo(() => {
     // Collect all serials returned to base on an RT for this job
@@ -1729,13 +1781,16 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       return;
     }
 
-    // Determine pending tools that have not yet been assigned to a locked/dispatched DT
-    const toolsToMobilize = unassignedChecklistItems.length > 0
-      ? unassignedChecklistItems
-      : pendingChecklistItems;
+    // Determine pending tools that have been selected/checked by the user
+    const selectedSet = new Set(selectedChecklistSeqs);
+    const toolsToMobilize = pendingChecklistItems.filter((ci) => selectedSet.has(ci.seq));
 
     if (toolsToMobilize.length === 0) {
-      showToast('All tools in the checklist have already been dispatched on Delivery Tickets. Click "+ Select Tools" to add equipment for a new mobilization.', 'info');
+      if (pendingChecklistItems.length === 0) {
+        showToast('All tools in the checklist have already been dispatched on Delivery Tickets. Click "+ Select Tools" to add equipment for a new mobilization.', 'info');
+      } else {
+        showToast('Please check the box for at least one pending tool to generate a Delivery Ticket.', 'error');
+      }
       return;
     }
 
@@ -1797,6 +1852,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     });
     setChecklistItems(updatedChecklistItems);
 
+    // Remove mobilized seqs from selection
+    setSelectedChecklistSeqs((prev) => prev.filter((seq) => !mobilizeSeqs.has(seq)));
+
     if (onSaveCallout) {
       onSaveCallout({
         ...activeCallout,
@@ -1807,7 +1865,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
     setSelectedDTNumber(newDT.dtNumber);
     setActiveTab('delivery-tickets');
-    showToast(`Delivery Ticket ${newDT.dtNumber} generated from Checklist with ${toolsToMobilize.length} tool(s)!`, 'success');
+    showToast(`Delivery Ticket ${newDT.dtNumber} generated for ${toolsToMobilize.length} selected tool(s)!`, 'success');
   };
 
   // Delivery Ticket Confirmation & Lock (Ship to Rig)
@@ -3633,15 +3691,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         onClick={handleGenerateDTFromChecklist}
                         className="bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
                         title={
-                          unassignedChecklistItems.length > 0
-                            ? `Transfer ${unassignedChecklistItems.length} pending checklist tool(s) directly into a new Delivery Ticket`
-                            : 'All checklist tools have already been assigned to Delivery Tickets'
+                          selectedPendingCount > 0
+                            ? `Transfer ${selectedPendingCount} selected pending tool(s) directly into a new Delivery Ticket`
+                            : 'Check the boxes below for the tools you want to generate a Delivery Ticket for'
                         }
                       >
                         <span>🚚</span>
                         <span>
                           Generate DT from Checklist
-                          {unassignedChecklistItems.length > 0 ? ` (${unassignedChecklistItems.length} Pending)` : ''}
+                          {selectedPendingCount > 0 ? ` (${selectedPendingCount} Selected)` : pendingChecklistItems.length > 0 ? ` (${pendingChecklistItems.length} Pending)` : ''}
                         </span>
                       </button>
                     </>
@@ -3729,11 +3787,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     automatedChecklistStatus.includes('Closed')
                       ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
                       : automatedChecklistStatus.includes('Dispatched')
-                      ? 'bg-purple-100 text-purple-900 border-purple-300'
+                      ? 'bg-slate-100 text-slate-700 border-slate-300'
                       : automatedChecklistStatus.includes('Delivery Ticket')
-                      ? 'bg-blue-100 text-blue-900 border-blue-300'
+                      ? 'bg-blue-50 text-blue-800 border-blue-200'
                       : automatedChecklistStatus.includes('In Progress')
-                      ? 'bg-amber-100 text-amber-900 border-amber-300'
+                      ? 'bg-slate-50 text-slate-700 border-slate-200'
                       : 'bg-slate-100 text-slate-800 border-slate-300'
                   }`}>
                     {automatedChecklistStatus}
@@ -3747,6 +3805,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               <table className="min-w-full text-left text-xs border-collapse table-fixed">
                 <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px] select-none">
                   <tr>
+                    <th style={{ width: checklistResizer.widths.select || 40 }} className="p-1.5 text-center relative overflow-hidden truncate">
+                      <input
+                        type="checkbox"
+                        checked={allPendingSelected}
+                        onChange={toggleSelectAllPending}
+                        disabled={pendingChecklistItems.length === 0 || isClosedOrInvoiced || isLocked}
+                        title="Select / Deselect all pending tools"
+                        className="cursor-pointer accent-blue-600 rounded"
+                      />
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('select', e)} onDoubleClick={() => checklistResizer.resetColumn('select')} />
+                    </th>
                     <th style={{ width: checklistResizer.widths.itemNo || 50 }} className="p-1.5 text-center relative overflow-hidden truncate">
                       <span>ItemNo</span>
                       <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('itemNo', e)} onDoubleClick={() => checklistResizer.resetColumn('itemNo')} />
@@ -3820,7 +3889,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <tbody className="divide-y divide-slate-200">
                   {checklistItems.length === 0 ? (
                     <tr>
-                      <td colSpan={(isClosedOrInvoiced || isLocked ? 12 : 13) + checklistCustomCols.length} className="p-6 text-center text-slate-500 font-medium">
+                      <td colSpan={(isClosedOrInvoiced || isLocked ? 13 : 14) + checklistCustomCols.length} className="p-6 text-center text-slate-500 font-medium">
                         No tools in checklist.
                         {!isClosedOrInvoiced && !isLocked && (
                           <span> Click <strong>&quot;Select Tools&quot;</strong> above to pick available tools from yard inventory.</span>
@@ -3832,6 +3901,27 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       const assignedDT = getAssignedDTForChecklistItem(item);
                       return (
                         <tr key={i} className="hover:bg-blue-50/50 h-7 leading-none">
+                          {/* Selection Checkbox */}
+                          <td className="py-1 px-2 whitespace-nowrap text-center">
+                            {assignedDT?.isLocked ? (
+                              <input
+                                type="checkbox"
+                                checked
+                                disabled
+                                className="cursor-not-allowed opacity-40 accent-slate-500 rounded"
+                                title={`Locked: Tool already dispatched on Delivery Ticket ${assignedDT.dtNumber}`}
+                              />
+                            ) : (
+                              <input
+                                type="checkbox"
+                                checked={selectedChecklistSeqs.includes(item.seq)}
+                                disabled={isClosedOrInvoiced || isLocked}
+                                onChange={() => toggleChecklistItem(item.seq)}
+                                className="cursor-pointer accent-blue-600 rounded"
+                                title="Select tool to include in Delivery Ticket"
+                              />
+                            )}
+                          </td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600 truncate">{i + 1}</td>
                           <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={item.partNo || item.serialNos?.[0] || '—'}>{item.partNo || item.serialNos?.[0] || '—'}</td>
                           <td className="py-1 px-2 whitespace-nowrap truncate font-medium text-slate-800" title={item.description || item.shortDesc}>{item.description || item.shortDesc}</td>
@@ -3843,18 +3933,27 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={item.comments || 'ACCEPTED'}>{item.comments || 'ACCEPTED'}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={item.cat || item.shortDesc}>{item.cat || item.shortDesc}</td>
 
-                          {/* Mobilization / DT Status */}
+                          {/* Mobilization / DT Status: Light grey for locked, light slate for pending (no purple, no amber) */}
                           <td className="py-1 px-2 whitespace-nowrap text-center truncate">
                             {assignedDT?.isLocked ? (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-100 text-purple-900 border border-purple-300" title={`Dispatched on Delivery Ticket ${assignedDT.dtNumber}`}>
-                                Dispatched • {assignedDT.dtNumber}
+                              <span
+                                className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-300 inline-flex items-center gap-1"
+                                title={`Dispatched on Delivery Ticket ${assignedDT.dtNumber}`}
+                              >
+                                🔒 {assignedDT.dtNumber}
                               </span>
                             ) : assignedDT ? (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-100 text-blue-900 border border-blue-300" title={`Assigned to draft Delivery Ticket ${assignedDT.dtNumber}`}>
+                              <span
+                                className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-slate-100 text-slate-700 border border-slate-200 inline-flex items-center gap-1"
+                                title={`Assigned to draft Delivery Ticket ${assignedDT.dtNumber}`}
+                              >
                                 Draft • {assignedDT.dtNumber}
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300" title="Reserved in checklist; pending Delivery Ticket generation">
+                              <span
+                                className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-50 text-slate-600 border border-slate-200"
+                                title="Reserved in checklist; pending Delivery Ticket generation"
+                              >
                                 Pending Dispatch
                               </span>
                             )}
@@ -3973,7 +4072,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <span>+</span>
                       <span>New DT</span>
                     </button>
-                    {unassignedChecklistItems.length > 0 && (
+                    {pendingChecklistItems.length > 0 && (
                       <button
                         type="button"
                         onClick={handleGenerateDTFromChecklist}
@@ -3981,7 +4080,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         title="Transfer reserved checklist tools directly into a new Delivery Ticket"
                       >
                         <span>🚚</span>
-                        <span>Generate DT from Checklist ({unassignedChecklistItems.length})</span>
+                        <span>
+                          Generate DT from Checklist
+                          {selectedPendingCount > 0 ? ` (${selectedPendingCount} Selected)` : ` (${pendingChecklistItems.length} Pending)`}
+                        </span>
                       </button>
                     )}
                   </>
@@ -3989,7 +4091,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </div>
               <div className="flex items-center gap-2">
                 {effectiveDT.isLocked || isClosedOrInvoiced ? (
-                  <span className="bg-purple-100 text-purple-900 border border-purple-300 font-bold text-xs px-3 py-1 rounded flex items-center gap-1 shadow-2xs">
+                  <span className="bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs px-3 py-1 rounded flex items-center gap-1 shadow-2xs">
                     <span>🔒</span>
                     <span>Dispatched &amp; Locked (Shipped to Rig)</span>
                   </span>
@@ -4277,12 +4379,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <textarea
                   rows={4}
                   value={dtNotesInput}
-                  disabled={isClosedOrInvoiced || isLocked}
+                  disabled={isClosedOrInvoiced || isLocked || effectiveDT.isLocked}
                   onChange={(e) => setDtNotesInput(e.target.value)}
                   placeholder="Enter items with no invoicing value to print on the Delivery Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
-                  className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
+                  className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
-                {!isClosedOrInvoiced && !isLocked && (
+                {!isClosedOrInvoiced && !isLocked && !effectiveDT.isLocked ? (
                   <div className="flex justify-end">
                     <button
                       type="button"
@@ -4292,6 +4394,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <span>💾</span>
                       <span>Save Delivery Ticket Notes</span>
                     </button>
+                  </div>
+                ) : effectiveDT.isLocked && (
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium italic">
+                    <span>🔒</span>
+                    <span>Ticket dispatched &amp; locked. Manifest notes are sealed.</span>
                   </div>
                 )}
               </div>
@@ -4683,12 +4790,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <textarea
                     rows={4}
                     value={rtNotesInput}
-                    disabled={isClosedOrInvoiced || isLocked}
+                    disabled={isClosedOrInvoiced || isLocked || Boolean(effectiveRT.isLocked)}
                     onChange={(e) => setRtNotesInput(e.target.value)}
                     placeholder="Enter items with no invoicing value received from rig to print on the Receiving Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
-                    className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
+                    className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   />
-                  {!isClosedOrInvoiced && !isLocked && (
+                  {!isClosedOrInvoiced && !isLocked && !effectiveRT.isLocked ? (
                     <div className="flex justify-end">
                       <button
                         type="button"
@@ -4698,6 +4805,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <span>💾</span>
                         <span>Save Receiving Ticket Notes</span>
                       </button>
+                    </div>
+                  ) : effectiveRT.isLocked && (
+                    <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium italic">
+                      <span>🔒</span>
+                      <span>Receiving ticket locked. Manifest notes are sealed.</span>
                     </div>
                   )}
                 </div>
