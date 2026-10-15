@@ -51,13 +51,15 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   const [selectedDTId, setSelectedDTId] = useState<string | null>(null);
   const [modalToolSearch, setModalToolSearch] = useState('');
 
-  // Fast lookup index for inventory tools by serial
+  // Fast lookup index for inventory tools by serial, assetNo, and id
   const inventoryMap = useMemo(() => {
     const map = new Map<string, ToolItem>();
     if (Array.isArray(inventory)) {
       inventory.forEach((item) => {
-        if (item && item.serial) {
-          map.set(item.serial.trim().toUpperCase(), item);
+        if (item) {
+          if (item.serial) map.set(item.serial.trim().toUpperCase(), item);
+          if (item.assetNo) map.set(item.assetNo.trim().toUpperCase(), item);
+          if (item.id) map.set(String(item.id).trim().toUpperCase(), item);
         }
       });
     }
@@ -499,12 +501,15 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
       contactNo: (b as any).contactNo || '055 890 7562/0555971632',
       notes: b.notes,
       tools: (b.toolLines || []).map((t, i) => {
-        const invTool = t.serial ? inventoryMap.get(t.serial.trim().toUpperCase()) : undefined;
-        const displayDesc = t.desc || t.shortDesc || (t as any).toolDescription || invTool?.shortDesc || invTool?.desc || 'Downhole Tool';
+        const sKey = (t.serial || '').trim().toUpperCase();
+        const aKey = (t.assetNo || '').trim().toUpperCase();
+        const invTool = (sKey ? inventoryMap.get(sKey) : undefined) || (aKey ? inventoryMap.get(aKey) : undefined);
+        const resolvedAssetNo = invTool?.assetNo?.trim() || t.assetNo?.trim() || t.serial?.trim() || '—';
+        const displayDesc = invTool?.desc?.trim() || t.desc?.trim() || invTool?.shortDesc?.trim() || t.shortDesc?.trim() || (t as any).toolDescription || 'Downhole Tool';
         const displaySize = t.size || invTool?.size || extractSizeFromDescription(displayDesc) || '—';
         return {
           itemNo: i + 1,
-          partNo: t.serial || invTool?.serial || '—',
+          partNo: resolvedAssetNo,
           serial: t.serial || invTool?.serial || '—',
           description: displaySize !== '—' && !displayDesc.includes(displaySize) ? `${displayDesc} (${displaySize})` : displayDesc,
           qty: (t as any).qty || 1,
@@ -530,12 +535,15 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
       wellId: (job as any)?.wellId || (b as any)?.wellId,
       comments: b.notes ? b.notes : (job as any)?.wellId ? `WELL'S ID - ${(job as any).wellId}` : undefined,
       tools: (b.toolLines || []).map((t, i) => {
-        const invTool = t.serial ? inventoryMap.get(t.serial.trim().toUpperCase()) : undefined;
-        const displayDesc = t.desc || t.shortDesc || (t as any).toolDescription || invTool?.shortDesc || invTool?.desc || 'Downhole Tool';
+        const sKey = (t.serial || '').trim().toUpperCase();
+        const aKey = (t.assetNo || '').trim().toUpperCase();
+        const invTool = (sKey ? inventoryMap.get(sKey) : undefined) || (aKey ? inventoryMap.get(aKey) : undefined);
+        const resolvedAssetNo = invTool?.assetNo?.trim() || t.assetNo?.trim() || t.serial?.trim() || '—';
+        const displayDesc = invTool?.desc?.trim() || t.desc?.trim() || invTool?.shortDesc?.trim() || t.shortDesc?.trim() || (t as any).toolDescription || 'Downhole Tool';
         const displaySize = t.size || invTool?.size || extractSizeFromDescription(displayDesc) || '—';
         return {
           lineNo: i + 1,
-          partNo: t.serial || invTool?.serial || '—',
+          partNo: resolvedAssetNo,
           description: displaySize !== '—' && !displayDesc.includes(displaySize) ? `${displayDesc} (${displaySize})` : displayDesc,
           qty: (t as any).qty || 1,
         };
@@ -1591,6 +1599,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                         <thead className="bg-[#eef3f9] text-[#1a3055] border-b border-slate-200 font-bold sticky top-0 z-10 select-none">
                           <tr>
                             <th className="px-3 py-2 w-10 text-slate-500">#</th>
+                            <th className="px-3 py-2">Asset No</th>
                             <th className="px-3 py-2">Serial #</th>
                             <th className="px-3 py-2">Size</th>
                             <th className="px-3 py-2">Tool Type</th>
@@ -1608,13 +1617,17 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                             const filteredModalTools = allTools.filter((t) => {
                               if (!modalToolSearch.trim()) return true;
                               const q = modalToolSearch.toLowerCase();
-                              const invTool = t.serial ? inventoryMap.get(t.serial.trim().toUpperCase()) : undefined;
-                              const toolType = t.shortDesc || invTool?.shortDesc || '';
-                              const desc = t.desc || invTool?.desc || (t as any).toolDescription || '';
+                              const sKey = (t.serial || '').trim().toUpperCase();
+                              const aKey = (t.assetNo || '').trim().toUpperCase();
+                              const invTool = (sKey ? inventoryMap.get(sKey) : undefined) || (aKey ? inventoryMap.get(aKey) : undefined);
+                              const assetNo = invTool?.assetNo || t.assetNo || '';
+                              const toolType = invTool?.shortDesc || t.shortDesc || '';
+                              const desc = invTool?.desc || t.desc || (t as any).toolDescription || '';
                               const sz = t.size || invTool?.size || '';
                               const owner = t.ownership || invTool?.ownership || '';
                               return (
                                 t.serial?.toLowerCase().includes(q) ||
+                                assetNo.toLowerCase().includes(q) ||
                                 toolType.toLowerCase().includes(q) ||
                                 desc.toLowerCase().includes(q) ||
                                 sz.toLowerCase().includes(q) ||
@@ -1625,7 +1638,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                             if (filteredModalTools.length === 0) {
                               return (
                                 <tr>
-                                  <td colSpan={!isDTLocked && user?.role === 'Admin' ? 8 : 7} className="p-8 text-center text-slate-400 font-medium">
+                                  <td colSpan={!isDTLocked && user?.role === 'Admin' ? 9 : 8} className="p-8 text-center text-slate-400 font-medium">
                                     {allTools.length === 0
                                       ? 'No tool lines recorded for this delivery ticket.'
                                       : 'No tools match your search filter.'}
@@ -1635,9 +1648,12 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                             }
 
                             return filteredModalTools.map((t, i) => {
-                              const invTool = t.serial ? inventoryMap.get(t.serial.trim().toUpperCase()) : undefined;
-                              const toolType = t.shortDesc || invTool?.shortDesc || 'Downhole Tool';
-                              const description = t.desc || invTool?.desc || (t as any).toolDescription || toolType;
+                              const sKey = (t.serial || '').trim().toUpperCase();
+                              const aKey = (t.assetNo || '').trim().toUpperCase();
+                              const invTool = (sKey ? inventoryMap.get(sKey) : undefined) || (aKey ? inventoryMap.get(aKey) : undefined);
+                              const assetNo = invTool?.assetNo?.trim() || t.assetNo?.trim() || t.serial?.trim() || '—';
+                              const toolType = invTool?.shortDesc?.trim() || t.shortDesc?.trim() || 'Downhole Tool';
+                              const description = invTool?.desc?.trim() || t.desc?.trim() || (t as any).toolDescription || toolType;
                               const displaySize = t.size || invTool?.size || extractSizeFromDescription(description) || '—';
                               const displayOwnership = t.ownership || invTool?.ownership || (t.isEmdad ? 'EMDAD' : 'EMDAD');
                               const statusVal = t.status || (t.rtBatchId ? 'Returned' : 'OnRig');
@@ -1646,7 +1662,8 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                               return (
                                 <tr key={i} className="hover:bg-slate-50 transition">
                                   <td className="px-3 py-2 text-slate-400 font-mono text-[11px]">{i + 1}</td>
-                                  <td className="px-3 py-2 font-mono font-bold text-amber-900">{t.serial}</td>
+                                  <td className="px-3 py-2 font-mono font-bold text-slate-900">{assetNo}</td>
+                                  <td className="px-3 py-2 font-mono font-semibold text-amber-900">{t.serial}</td>
                                   <td className="px-3 py-2 font-mono font-semibold text-slate-800">{displaySize}</td>
                                   <td className="px-3 py-2 font-bold text-[#1a3055] whitespace-nowrap">{toolType}</td>
                                   <td className="px-3 py-2 text-slate-700 text-xs" title={description}>

@@ -894,30 +894,75 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     };
   }, [jobCallouts, selectedCalloutId, jobData, automatedChecklistStatus]);
 
+  // Fast multi-key inventory lookup map (by serial, by assetNo, by id, uppercase & trimmed)
+  const inventoryMap = useMemo(() => {
+    const map = new Map<string, ToolItem>();
+    (inventory || []).forEach((t) => {
+      if (t.serial) map.set(t.serial.trim().toUpperCase(), t);
+      if (t.assetNo) map.set(t.assetNo.trim().toUpperCase(), t);
+      if (t.id) map.set(String(t.id).trim().toUpperCase(), t);
+    });
+    return map;
+  }, [inventory]);
+
+  const resolveToolDetails = useCallback((
+    rawSerial?: string,
+    rawAssetNo?: string,
+    fallbackDesc?: string,
+    fallbackShortDesc?: string
+  ) => {
+    const sKey = (rawSerial || '').trim().toUpperCase();
+    const aKey = (rawAssetNo || '').trim().toUpperCase();
+    const inv = (sKey ? inventoryMap.get(sKey) : undefined) || (aKey ? inventoryMap.get(aKey) : undefined);
+
+    // Prefer genuine inventory assetNo; fallback to rawAssetNo, then rawSerial
+    const assetNo = (inv?.assetNo && inv.assetNo.trim()) ? inv.assetNo.trim() : (rawAssetNo && rawAssetNo.trim()) ? rawAssetNo.trim() : rawSerial || '—';
+    const serial = inv?.serial || rawSerial || inv?.assetNo || rawAssetNo || '—';
+    // Prefer genuine technical description from inventory; fallback to provided desc, then shortDesc
+    const desc = (inv?.desc && inv.desc.trim()) ? inv.desc.trim() : (fallbackDesc && fallbackDesc.trim()) ? fallbackDesc.trim() : (inv?.shortDesc && inv.shortDesc.trim()) ? inv.shortDesc.trim() : fallbackShortDesc || 'Downhole Tool';
+    const shortDesc = (inv?.shortDesc && inv.shortDesc.trim()) ? inv.shortDesc.trim() : fallbackShortDesc || extractToolType(desc, fallbackShortDesc) || 'Downhole Tool';
+
+    return { inv, assetNo, serial, desc, shortDesc };
+  }, [inventoryMap]);
+
   // Checklist Items State
   const [checklistItems, setChecklistItems] = useState<CalloutItem[]>(() => {
-    if (activeCallout.items && activeCallout.items.length > 0) return activeCallout.items;
+    if (activeCallout.items && activeCallout.items.length > 0) {
+      return activeCallout.items.map((it) => {
+        const resolved = resolveToolDetails(it.serialNos?.[0], it.partNo, it.description, it.shortDesc || it.cat);
+        return {
+          ...it,
+          partNo: resolved.assetNo,
+          description: resolved.desc,
+          shortDesc: resolved.shortDesc,
+          cat: it.cat || resolved.shortDesc,
+        };
+      });
+    }
     // Auto-populate from DTs if historical/completed job
     if (jobDTs.length > 0) {
       return jobDTs.flatMap((d, dIdx) =>
-        (d.toolLines || []).map((t, tIdx) => ({
-          seq: dIdx * 100 + tIdx + 1,
-          size: t.size || '—',
-          shortDesc: t.shortDesc || t.desc,
-          qty: t.qty || 1,
-          assigned: t.qty || 1,
-          serialNos: [t.serial],
-          status: 'Released' as const,
-          partNo: t.assetNo || t.serial,
-          description: t.desc || t.shortDesc,
-          supplier: t.ownership || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD'),
-          qtyIn: 1,
-          insNum: `GIS-Z-${Math.floor(10000 + (tIdx * 43) % 89999)}-2023`,
-          insDate: formatDateDD_MM_YYYY(d.dispatchDate),
-          comments: 'ACCEPTED',
-          cat: t.shortDesc || 'Downhole Tool',
-          condition: 'ACCEPTED',
-        }))
+        (d.toolLines || []).map((t, tIdx) => {
+          const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+          return {
+            seq: dIdx * 100 + tIdx + 1,
+            size: t.size || resolved.inv?.size || '—',
+            shortDesc: resolved.shortDesc,
+            qty: t.qty || 1,
+            assigned: t.qty || 1,
+            serialNos: [resolved.serial],
+            status: 'Released' as const,
+            partNo: resolved.assetNo,
+            description: resolved.desc,
+            supplier: t.ownership || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD'),
+            qtyIn: 1,
+            insNum: `GIS-Z-${Math.floor(10000 + (tIdx * 43) % 89999)}-2023`,
+            insDate: formatDateDD_MM_YYYY(d.dispatchDate),
+            comments: 'ACCEPTED',
+            cat: resolved.shortDesc,
+            condition: 'ACCEPTED',
+          };
+        })
       );
     }
     return [];
@@ -925,32 +970,46 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   useEffect(() => {
     if (activeCallout && activeCallout.items && activeCallout.items.length > 0) {
-      setChecklistItems(activeCallout.items);
+      setChecklistItems(
+        activeCallout.items.map((it) => {
+          const resolved = resolveToolDetails(it.serialNos?.[0], it.partNo, it.description, it.shortDesc || it.cat);
+          return {
+            ...it,
+            partNo: resolved.assetNo,
+            description: resolved.desc,
+            shortDesc: resolved.shortDesc,
+            cat: it.cat || resolved.shortDesc,
+          };
+        })
+      );
     } else if (jobDTs.length > 0 && checklistItems.length === 0) {
       setChecklistItems(
         jobDTs.flatMap((d, dIdx) =>
-          (d.toolLines || []).map((t, tIdx) => ({
-            seq: dIdx * 100 + tIdx + 1,
-            size: t.size || '—',
-            shortDesc: t.shortDesc || t.desc,
-            qty: t.qty || 1,
-            assigned: t.qty || 1,
-            serialNos: [t.serial],
-            status: 'Released' as const,
-            partNo: t.assetNo || t.serial,
-            description: t.desc || t.shortDesc,
-            supplier: t.ownership || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD'),
-            qtyIn: 1,
-            insNum: `GIS-Z-${Math.floor(10000 + (tIdx * 43) % 89999)}-2023`,
-            insDate: formatDateDD_MM_YYYY(d.dispatchDate),
-            comments: 'ACCEPTED',
-            cat: t.shortDesc || 'Downhole Tool',
-            condition: 'ACCEPTED',
-          }))
+          (d.toolLines || []).map((t, tIdx) => {
+            const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+            return {
+              seq: dIdx * 100 + tIdx + 1,
+              size: t.size || resolved.inv?.size || '—',
+              shortDesc: resolved.shortDesc,
+              qty: t.qty || 1,
+              assigned: t.qty || 1,
+              serialNos: [resolved.serial],
+              status: 'Released' as const,
+              partNo: resolved.assetNo,
+              description: resolved.desc,
+              supplier: t.ownership || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD'),
+              qtyIn: 1,
+              insNum: `GIS-Z-${Math.floor(10000 + (tIdx * 43) % 89999)}-2023`,
+              insDate: formatDateDD_MM_YYYY(d.dispatchDate),
+              comments: 'ACCEPTED',
+              cat: resolved.shortDesc,
+              condition: 'ACCEPTED',
+            };
+          })
         )
       );
     }
-  }, [activeCallout, jobDTs]);
+  }, [activeCallout, jobDTs, resolveToolDetails]);
 
   // Master Tool Categories & Sizes for Tool Picker
   const [customCategories] = useState<string[]>(() => {
@@ -1699,24 +1758,27 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const handleInsertSelectedTools = () => {
     if (isClosedOrInvoiced || isLocked) return;
     const newlySelectedTools = inventory.filter((t) => checkedToolSerials.includes(t.serial));
-    const newItems: CalloutItem[] = newlySelectedTools.map((t, idx) => ({
-      seq: checklistItems.length + idx + 1,
-      size: t.size || '—',
-      shortDesc: t.shortDesc || t.desc,
-      qty: 1,
-      assigned: 1,
-      serialNos: [t.serial],
-      status: 'Assigned',
-      partNo: t.assetNo || t.serial,
-      description: t.desc || t.shortDesc,
-      supplier: t.supplier || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD'),
-      qtyIn: 1,
-      insNum: `GIS-Z-${Math.floor(10000 + Math.random() * 90000)}-2023`,
-      insDate: formatDateDD_MM_YYYY(new Date().toISOString()),
-      comments: 'ACCEPTED',
-      cat: selectedCategory,
-      condition: 'ACCEPTED',
-    }));
+    const newItems: CalloutItem[] = newlySelectedTools.map((t, idx) => {
+      const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+      return {
+        seq: checklistItems.length + idx + 1,
+        size: t.size || resolved.inv?.size || '—',
+        shortDesc: resolved.shortDesc,
+        qty: 1,
+        assigned: 1,
+        serialNos: [resolved.serial],
+        status: 'Assigned',
+        partNo: resolved.assetNo,
+        description: resolved.desc,
+        supplier: t.supplier || resolved.inv?.supplier || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD'),
+        qtyIn: 1,
+        insNum: `GIS-Z-${Math.floor(10000 + Math.random() * 90000)}-2023`,
+        insDate: formatDateDD_MM_YYYY(new Date().toISOString()),
+        comments: 'ACCEPTED',
+        cat: resolved.shortDesc,
+        condition: 'ACCEPTED',
+      };
+    });
 
     const updated = [...checklistItems, ...newItems];
     setChecklistItems(updated);
@@ -1820,20 +1882,23 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       recipient: `${jobData.rig} Toolpusher`,
       notes: checklistNotesInput.trim(),
       isLocked: false,
-      toolLines: toolsToMobilize.map((ci, idx) => ({
-        id: idx + 1,
-        itemNo: idx + 1,
-        serial: ci.serialNos?.[0] || ci.partNo || `TOOL-${idx + 1}`,
-        assetNo: ci.partNo || ci.serialNos?.[0] || '',
-        shortDesc: ci.cat || ci.shortDesc || 'Downhole Tool',
-        desc: ci.description || ci.shortDesc || '',
-        size: ci.size || '—',
-        status: 'OnRig',
-        ownership: ci.supplier || 'EMDAD',
-        isEmdad: (ci.supplier || '').toUpperCase().includes('EMDAD'),
-        qty: ci.qty || 1,
-        remarks: 'Mobilized',
-      })),
+      toolLines: toolsToMobilize.map((ci, idx) => {
+        const resolved = resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.shortDesc || ci.cat);
+        return {
+          id: idx + 1,
+          itemNo: idx + 1,
+          serial: resolved.serial,
+          assetNo: resolved.assetNo,
+          shortDesc: resolved.shortDesc,
+          desc: resolved.desc,
+          size: ci.size || resolved.inv?.size || '—',
+          status: 'OnRig',
+          ownership: ci.supplier || resolved.inv?.ownership || 'EMDAD',
+          isEmdad: (ci.supplier || resolved.inv?.ownership || '').toUpperCase().includes('EMDAD'),
+          qty: ci.qty || 1,
+          remarks: 'Mobilized',
+        };
+      }),
     };
 
     onSaveDTBatch(newDT);
@@ -1952,22 +2017,25 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const effectiveReturnDate = rgtMoveDateIn || toInputDateFormat(resolveRtDate(targetRT)) || new Date().toISOString().split('T')[0];
     const formattedReturnDate = formatDateDD_MM_YYYY(effectiveReturnDate);
 
-    const newRTLines = selectedLines.map((t, idx) => ({
-      itemNo: (targetRT!.toolLines?.length || 0) + idx + 1,
-      serial: t.serial,
-      assetNo: t.assetNo || t.serial,
-      shortDesc: t.shortDesc,
-      desc: t.desc,
-      size: t.size,
-      used: true,
-      condition: 'USED',
-      routedTo: 'Inspection Bay',
-      remarks: 'USED',
-      dateIn: formattedReturnDate,
-      Date_In: formattedReturnDate,
-      rtDate: formattedReturnDate,
-      rtNumber: targetRT!.rtNumber,
-    }));
+    const newRTLines = selectedLines.map((t, idx) => {
+      const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+      return {
+        itemNo: (targetRT!.toolLines?.length || 0) + idx + 1,
+        serial: resolved.serial || t.serial,
+        assetNo: resolved.assetNo,
+        shortDesc: resolved.shortDesc,
+        desc: resolved.desc,
+        size: t.size,
+        used: true,
+        condition: 'USED',
+        routedTo: 'Inspection Bay',
+        remarks: 'USED',
+        dateIn: formattedReturnDate,
+        Date_In: formattedReturnDate,
+        rtDate: formattedReturnDate,
+        rtNumber: targetRT!.rtNumber,
+      };
+    });
 
     const updatedRT: RTBatch = {
       ...targetRT,
@@ -2010,14 +2078,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       driverName: (targetDT as any).driverName || 'SARWAN/JAGJEETH SINGH',
       contactNo: (targetDT as any).contactNo || '055 890 7562/0555971632',
       notes: targetDT.notes,
-      tools: (targetDT.toolLines || []).map((t, idx) => ({
-        itemNo: idx + 1,
-        partNo: t.serial || t.assetNo || '—',
-        serial: t.serial || t.assetNo || '—',
-        description: t.desc || t.shortDesc || (t as any).toolDescription || 'Downhole Tool',
-        qty: t.qty || 1,
-        size: t.size || '—',
-      })),
+      tools: (targetDT.toolLines || []).map((t, idx) => {
+        const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+        return {
+          itemNo: idx + 1,
+          partNo: resolved.assetNo,
+          serial: resolved.serial,
+          description: resolved.desc,
+          qty: t.qty || 1,
+          size: t.size || resolved.inv?.size || '—',
+        };
+      }),
     };
     const html = generateDeliveryTicketHtml(printData);
     openPrintWindow(html, `Delivery Ticket - ${targetDT.dtNumber}`);
@@ -2028,28 +2099,35 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     let tools: Array<{ lineNo?: number | string; partNo?: string; description: string; qty: number }> = [];
 
     if (targetDT && targetDT.toolLines && targetDT.toolLines.length > 0) {
-      tools = targetDT.toolLines.map((t, idx) => ({
-        lineNo: idx + 1,
-        partNo: t.serial || t.assetNo || '—',
-        description: t.desc || t.shortDesc || (t as any).toolDescription || 'Downhole Tool',
-        qty: t.qty || 1,
-      }));
+      tools = targetDT.toolLines.map((t, idx) => {
+        const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+        return {
+          lineNo: idx + 1,
+          partNo: resolved.assetNo,
+          description: resolved.desc,
+          qty: t.qty || 1,
+        };
+      });
     } else if (activeCallout && activeCallout.items && activeCallout.items.length > 0) {
       tools = activeCallout.items.flatMap((it, idx) => {
         const serials = it.serialNos || [];
         if (serials.length > 0) {
-          return serials.map((s, sIdx) => ({
-            lineNo: `${idx + 1}.${sIdx + 1}`,
-            partNo: s,
-            description: it.toolDescription || 'Downhole Tool',
-            qty: 1,
-          }));
+          return serials.map((s, sIdx) => {
+            const resolved = resolveToolDetails(s, it.partNo, it.description, it.shortDesc || it.cat);
+            return {
+              lineNo: `${idx + 1}.${sIdx + 1}`,
+              partNo: resolved.assetNo,
+              description: resolved.desc,
+              qty: 1,
+            };
+          });
         }
+        const resolved = resolveToolDetails(undefined, it.partNo, it.description, it.shortDesc || it.cat);
         return [{
           lineNo: idx + 1,
-          partNo: '—',
-          description: it.toolDescription || 'Downhole Tool',
-          qty: it.qtyRequired || 1,
+          partNo: resolved.assetNo,
+          description: resolved.desc,
+          qty: (it as any).qtyRequired || it.qty || 1,
         }];
       });
     }
@@ -2091,13 +2169,16 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       well: jobData.well || targetRT.well || '—',
       lNoteDate: resolveRtLoadingNoteDate(targetRT) || resolveRtDate(targetRT) || '—',
       notes: (targetRT as any).notes || undefined,
-      tools: (targetRT.toolLines || []).map((t, idx) => ({
-        itemNo: idx + 1,
-        serialNo: t.serial || t.assetNo || '—',
-        description: t.desc || t.shortDesc || (t as any).toolDescription || 'Downhole Tool',
-        qty: (t as any).qty || 1,
-        remarks: t.used ? 'Used' : 'Not Used',
-      })),
+      tools: (targetRT.toolLines || []).map((t, idx) => {
+        const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+        return {
+          itemNo: idx + 1,
+          serialNo: resolved.assetNo,
+          description: resolved.desc,
+          qty: (t as any).qty || 1,
+          remarks: t.used ? 'Used' : 'Not Used',
+        };
+      }),
     };
     const html = generateReceivingTicketHtml(printData);
     openPrintWindow(html, `Receiving Ticket - ${targetRT.rtNumber}`);
@@ -3821,7 +3902,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('itemNo', e)} onDoubleClick={() => checklistResizer.resetColumn('itemNo')} />
                     </th>
                     <th style={{ width: checklistResizer.widths.partNo || 140 }} className="p-1.5 relative overflow-hidden truncate">
-                      <span>PartNo / Serial</span>
+                      <span>Asset No</span>
                       <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('partNo', e)} onDoubleClick={() => checklistResizer.resetColumn('partNo')} />
                     </th>
                     <th style={{ width: checklistResizer.widths.description || 280 }} className="p-1.5 relative overflow-hidden truncate">
@@ -3899,6 +3980,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   ) : (
                     checklistItems.map((item, i) => {
                       const assignedDT = getAssignedDTForChecklistItem(item);
+                      const resolved = resolveToolDetails(item.serialNos?.[0], item.partNo, item.description, item.cat || item.shortDesc);
                       return (
                         <tr key={i} className="hover:bg-blue-50/50 h-7 leading-none">
                           {/* Selection Checkbox */}
@@ -3923,15 +4005,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             )}
                           </td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600 truncate">{i + 1}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={item.partNo || item.serialNos?.[0] || '—'}>{item.partNo || item.serialNos?.[0] || '—'}</td>
-                          <td className="py-1 px-2 whitespace-nowrap truncate font-medium text-slate-800" title={item.description || item.shortDesc}>{item.description || item.shortDesc}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={resolved.assetNo}>{resolved.assetNo}</td>
+                          <td className="py-1 px-2 whitespace-nowrap truncate font-medium text-slate-800" title={resolved.desc}>{resolved.desc}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qty || 1}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700 truncate" title={item.supplier || 'EMDAD'}>{item.supplier || 'EMDAD'}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700 truncate" title={item.supplier || resolved.inv?.supplier || 'EMDAD'}>{item.supplier || resolved.inv?.supplier || 'EMDAD'}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qtyIn || 1}</td>
                           <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700 truncate" title={item.insNum || 'GIS-Z-01480-2023'}>{item.insNum || 'GIS-Z-01480-2023'}</td>
                           <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600 truncate" title={item.insDate || '—'}>{item.insDate || '—'}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={item.comments || 'ACCEPTED'}>{item.comments || 'ACCEPTED'}</td>
-                          <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={item.cat || item.shortDesc}>{item.cat || item.shortDesc}</td>
+                          <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={resolved.shortDesc}>{resolved.shortDesc}</td>
 
                           {/* Mobilization / DT Status: Light grey for locked, light slate for pending (no purple, no amber) */}
                           <td className="py-1 px-2 whitespace-nowrap text-center truncate">
@@ -4178,7 +4260,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
                     <tr>
                       <th className="p-1.5 text-center w-12">ItemNo</th>
-                      <th className="p-1.5">PartNo / Serial</th>
+                      <th className="p-1.5">Asset No</th>
                       <th className="p-1.5">Description</th>
                       <th className="p-1.5 text-center w-14">DTQTY</th>
                       <th className="p-1.5">DATEOUT</th>
@@ -4192,8 +4274,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <tbody className="divide-y divide-slate-200">
                     {effectiveDT.toolLines && effectiveDT.toolLines.length > 0 ? (
                       effectiveDT.toolLines.map((t, idx) => {
-                        const tSerial = (t.serial || '').trim().toUpperCase();
-                        const tAsset = (t.assetNo || '').trim().toUpperCase();
+                        const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+                        const tSerial = (resolved.serial || t.serial || '').trim().toUpperCase();
+                        const tAsset = (resolved.assetNo || t.assetNo || '').trim().toUpperCase();
                         const directRtRef = String((t as any).returnedRtNumber || t.rtBatchId || (t as any).rgtNo || '').trim();
 
                         const returnBatch = jobRTs.find((rt) => {
@@ -4230,20 +4313,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           rgtDate = candidateReturnDate;
                         }
 
-                        const categoryName = extractToolType(t.desc, t.shortDesc);
-
                         return (
                           <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
                             <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
-                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900" title={resolved.assetNo}>{resolved.assetNo}</td>
+                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={resolved.desc}>{resolved.desc}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{t.qty || 1}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{formatDateDD_MM_YYYY(effectiveDT.dispatchDate)}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-blue-700">{jobData.id}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-emerald-700">{rgtNo || '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{rgtDate ? formatDateDD_MM_YYYY(rgtDate) : '—'}</td>
-                            <td className="py-1 px-2 whitespace-nowrap text-slate-700">{t.ownership || 'EMDAD'}</td>
-                            <td className="py-1 px-2 whitespace-nowrap text-slate-600 text-[11px] font-medium">{categoryName}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-slate-700">{t.ownership || resolved.inv?.ownership || 'EMDAD'}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-slate-600 text-[11px] font-medium">{resolved.shortDesc}</td>
                           </tr>
                         );
                       })
@@ -4557,7 +4638,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
                   <tr>
                     <th className="p-1.5 text-center w-12">ItemNo</th>
-                    <th className="p-1.5">PartNo / Serial</th>
+                    <th className="p-1.5">Asset No</th>
                     <th className="p-1.5">Description</th>
                     <th className="p-1.5 text-center">RGT_No</th>
                     <th className="p-1.5">Date_In</th>
@@ -4573,6 +4654,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     </tr>
                   ) : (
                     effectiveRT.toolLines.map((t, idx) => {
+                      const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
                       const matchedDTLine = jobDTs.flatMap((dt) => dt.toolLines || []).find(
                         (dtl: any) => dtl.serial && t.serial && String(dtl.serial).trim().toUpperCase() === String(t.serial).trim().toUpperCase()
                       );
@@ -4602,8 +4684,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       return (
                         <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial || t.assetNo}</td>
-                          <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900" title={resolved.assetNo}>{resolved.assetNo}</td>
+                          <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={resolved.desc}>{resolved.desc}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-mono font-bold text-blue-800">{effectiveRT.rtNumber}</td>
                           <td className="py-1 px-2 whitespace-nowrap">
                             {isClosedOrInvoiced || isLocked ? (
@@ -4728,7 +4810,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <tr>
                         <th className="p-1.5 text-center w-12">TicketNo</th>
                         <th className="p-1.5 text-center w-12">ItemNo</th>
-                        <th className="p-1.5">PartNo / Serial</th>
+                        <th className="p-1.5">Asset No</th>
                         <th className="p-1.5">Description</th>
                         <th className="p-1.5 text-center w-14">DTQTY</th>
                         <th className="p-1.5 text-center w-16">Ret_ [✓]</th>
@@ -4743,13 +4825,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         </tr>
                       ) : (
                         rgtDTToolsToReturn.map((t, idx) => {
+                          const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
                           const isChecked = rgtCheckedSerials.includes(t.serial);
                           return (
                             <tr key={idx} className={`h-7 leading-none ${isChecked ? 'bg-amber-100/80 font-semibold' : 'hover:bg-slate-50'}`}>
                               <td className="py-1 px-2 whitespace-nowrap text-center font-mono text-slate-600">{rgtSearchDTNo}</td>
                               <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
-                              <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{t.serial}</td>
-                              <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || t.shortDesc}>{t.desc || t.shortDesc}</td>
+                              <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900" title={resolved.assetNo}>{resolved.assetNo}</td>
+                              <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={resolved.desc}>{resolved.desc}</td>
                               <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{t.qty || 1}</td>
                               <td className="py-1 px-2 whitespace-nowrap text-center">
                                 <input
