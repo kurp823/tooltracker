@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { DTBatch, DTLine, DrillingJob, Callout, ToolItem, User } from '../types';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
 import { extractSizeFromDescription, extractToolType, normalizeJobKey } from '../services/api';
@@ -154,6 +154,25 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
     () => dtBatches.find((b) => b.id === selectedDTId) || null,
     [dtBatches, selectedDTId]
   );
+
+  // Delivery Ticket Detail Notes editor state (same like Job header)
+  const [dtEditNotes, setDtEditNotes] = useState('');
+  useEffect(() => {
+    if (selectedDTDetail) {
+      setDtEditNotes(selectedDTDetail.notes || '');
+    }
+  }, [selectedDTDetail?.id, selectedDTDetail?.notes]);
+
+  const handleSaveDTDetailNotes = () => {
+    if (!selectedDTDetail) return;
+    const updated: DTBatch = {
+      ...selectedDTDetail,
+      notes: dtEditNotes.trim(),
+    };
+    if (onUpdateDTBatch) {
+      onUpdateDTBatch(updated);
+    }
+  };
 
   // Document Attachment Modal state
   const [attachTargetDT, setAttachTargetDT] = useState<DTBatch | null>(null);
@@ -1297,14 +1316,21 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block font-bold mb-1">Dispatch Remarks &amp; Notes</label>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Delivery Ticket Notes &amp; Manifest Remarks (Slings, Protectors, Non-Invoiced Spares, Baskets):
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    Prints on Delivery Ticket DSF-001 under "Notes :"
+                  </span>
+                </div>
                 <textarea
-                  rows={2}
-                  placeholder="e.g. Thread protectors installed, lifting slings inspected."
+                  rows={3}
+                  placeholder="Mention items with no invoicing value to print on the Delivery Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors installed, basket #EMD-04, spare O-rings, transport notes)..."
                   value={newNotes}
                   onChange={(e) => setNewNotes(e.target.value)}
-                  className="w-full border rounded px-2.5 py-1.5"
+                  className="w-full bg-white border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>
 
@@ -1658,15 +1684,37 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Remarks & Audit Trail */}
-                  {selectedDTDetail.notes && (
-                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs">
-                      <strong className="text-slate-700 block mb-1">Manifest Remarks &amp; Audit Trail:</strong>
-                      <div className="whitespace-pre-line text-slate-600 font-mono text-[11px] bg-white p-2.5 rounded border border-slate-200">
-                        {selectedDTDetail.notes}
-                      </div>
+                  {/* Delivery Ticket Notes & Non-Invoiced Manifest Items (same like Job header) */}
+                  <div className="p-3 bg-[#f8fafc] rounded-lg border border-[#b8cce0] text-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-slate-800">
+                        Delivery Ticket Notes &amp; Manifest Remarks (Slings, Protectors, Non-Invoiced Spares, Baskets):
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        These notes print directly on Delivery Ticket DSF-001 under "Notes :"
+                      </span>
                     </div>
-                  )}
+                    <textarea
+                      rows={3}
+                      value={dtEditNotes}
+                      disabled={isReadOnly}
+                      onChange={(e) => setDtEditNotes(e.target.value)}
+                      placeholder="Enter items with no invoicing value to print on the Delivery Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
+                      className="w-full bg-white border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
+                    />
+                    {!isReadOnly && (
+                      <div className="flex justify-end items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSaveDTDetailNotes}
+                          className="bg-[#1a3055] hover:bg-[#24426d] text-white font-bold text-xs px-3.5 py-1.5 rounded shadow-2xs transition cursor-pointer flex items-center gap-1.5"
+                        >
+                          <span>💾</span>
+                          <span>Save Delivery Ticket Notes</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })()}

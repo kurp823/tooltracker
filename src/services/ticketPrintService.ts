@@ -432,11 +432,10 @@ export function generateDeliveryTicketHtml(data: DeliveryTicketPrintData): strin
       </tbody>
     </table>
 
-    ${data.notes ? `
-      <div style="margin: 12px 0 8px 0; font-size: 8.5pt;">
-        <strong>Notes :</strong> ${data.notes}
-      </div>
-    ` : ''}
+    <!-- Notes / Manifest Remarks (e.g. Slings, Thread Protectors, Non-Invoiced Spares) -->
+    <div style="margin: 10px 0 8px 0; font-size: 8.5pt; line-height: 1.4; min-height: 22px;">
+      <strong>Notes :</strong> <span style="white-space: pre-wrap;">${data.notes || ''}</span>
+    </div>
 
     <!-- Signatures -->
     <div class="signature-block">
@@ -707,11 +706,10 @@ export function generateReceivingTicketHtml(data: ReceivingTicketPrintData): str
       </tbody>
     </table>
 
-    ${data.notes ? `
-      <div style="margin: 12px 0 8px 0; font-size: 8.5pt;">
-        <strong>Note :</strong> ${data.notes}
-      </div>
-    ` : ''}
+    <!-- Notes / Manifest Remarks (e.g. Returned Slings, Spares, Protectors) -->
+    <div style="margin: 10px 0 8px 0; font-size: 8.5pt; line-height: 1.4; min-height: 22px;">
+      <strong>Note :</strong> <span style="white-space: pre-wrap;">${data.notes || ''}</span>
+    </div>
 
     <!-- Signatures -->
     <div class="signature-block">

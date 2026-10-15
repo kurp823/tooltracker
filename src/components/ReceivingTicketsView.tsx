@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { RTBatch, RTLine, DTBatch, ToolItem, User, DrillingJob, Callout } from '../types';
 import { extractSizeFromDescription, extractToolType, normalizeJobKey } from '../services/api';
 import { DocumentAttachmentModal } from './DocumentAttachmentModal';
@@ -258,6 +258,29 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
   const [newBackloadRmDate, setNewBackloadRmDate] = useState(new Date().toISOString().split('T')[0]);
   const [newReceivedBy, setNewReceivedBy] = useState(user?.name || 'QC Inspector');
   const [newCondition, setNewCondition] = useState('');
+  const [newNotes, setNewNotes] = useState('');
+
+  // Receiving Ticket Detail Notes editor state (same like Job header)
+  const [rtEditNotes, setRtEditNotes] = useState('');
+  useEffect(() => {
+    if (selectedRTDetail) {
+      setRtEditNotes(selectedRTDetail.notes || '');
+    }
+  }, [selectedRTDetail?.id, selectedRTDetail?.notes]);
+
+  const handleSaveRTDetailNotes = () => {
+    if (!selectedRTDetail) return;
+    const updated: RTBatch = {
+      ...selectedRTDetail,
+      notes: rtEditNotes.trim(),
+    };
+    if (onUpdateRTBatch) {
+      onUpdateRTBatch(updated);
+    } else {
+      onSaveRTBatch(updated);
+    }
+    setSelectedRTDetail(updated);
+  };
 
   // Expand state for On-Rig rows in tab 'onrig'
   const [expandedRigKeys, setExpandedRigKeys] = useState<Record<string, boolean>>({});
@@ -337,6 +360,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
     setNewBackloadRmDate(new Date().toISOString().split('T')[0]);
     setNewReceivedBy(user?.name || 'QC Inspector');
     setNewCondition('');
+    setNewNotes('');
     setIsCreateModalOpen(true);
   };
 
@@ -396,6 +420,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
       receivedBy: newReceivedBy.trim() || user?.name || 'QC Inspector',
       toolLines: lines,
       condition: newCondition.trim(),
+      notes: newNotes.trim(),
     };
 
     onSaveRTBatch(newRT);
@@ -1143,6 +1168,25 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                 />
               </div>
 
+              {/* Receiving Ticket Notes (Slings, Baskets, Thread Protectors, Unbilled Accessories) */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="block font-bold text-slate-700">
+                    Receiving Ticket Notes &amp; Manifest Remarks:
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    Prints on Receiving Ticket DSF-001 under "Note :"
+                  </span>
+                </div>
+                <textarea
+                  rows={2}
+                  placeholder="Enter items with no invoicing value received from rig (e.g. 2 lifting slings, 4 thread protectors, baskets, shackles, spare O-rings, offloading notes)..."
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  className="w-full bg-white border border-[#b8c9db] rounded px-2.5 py-1.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-amber-400"
+                />
+              </div>
+
               {/* Modal Footer */}
               <div className="pt-3 border-t border-slate-200 flex justify-between items-center">
                 <span className="text-slate-500 text-[11px]">
@@ -1337,6 +1381,38 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Receiving Ticket Notes & Non-Invoiced Manifest Items (same like Job header) */}
+              <div className="p-3 bg-[#f8fafc] rounded-lg border border-[#b8cce0] text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Receiving Ticket Notes &amp; Manifest Remarks (Slings, Protectors, Non-Invoiced Spares, Baskets):
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    These notes print directly on Receiving Ticket DSF-001 under "Note :"
+                  </span>
+                </div>
+                <textarea
+                  rows={3}
+                  value={rtEditNotes}
+                  disabled={isReadOnly}
+                  onChange={(e) => setRtEditNotes(e.target.value)}
+                  placeholder="Enter items with no invoicing value received from rig to print on the Receiving Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
+                  className="w-full bg-white border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
+                />
+                {!isReadOnly && (
+                  <div className="flex justify-end items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveRTDetailNotes}
+                      className="bg-[#1a3055] hover:bg-[#24426d] text-white font-bold text-xs px-3.5 py-1.5 rounded shadow-2xs transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>💾</span>
+                      <span>Save Receiving Ticket Notes</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Footer */}

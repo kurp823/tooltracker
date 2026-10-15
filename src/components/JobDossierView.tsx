@@ -1130,6 +1130,53 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return jobRTs.find((r) => r.rtNumber === selectedRTNumber) || jobRTs[0] || null;
   }, [jobRTs, selectedRTNumber]);
 
+  // Delivery Ticket & Return Ticket Notes states (same style as Job Header)
+  const [dtNotesInput, setDtNotesInput] = useState('');
+  useEffect(() => {
+    if (activeDT) {
+      setDtNotesInput(activeDT.notes || '');
+    } else {
+      setDtNotesInput('');
+    }
+  }, [activeDT?.id, activeDT?.dtNumber, activeDT?.notes]);
+
+  const handleSaveDTNotes = () => {
+    if (!activeDT) return;
+    const updated: DTBatch = {
+      ...activeDT,
+      notes: dtNotesInput.trim(),
+    };
+    if (onUpdateDTBatch) {
+      onUpdateDTBatch(updated);
+    } else {
+      onSaveDTBatch(updated);
+    }
+    showToast(`Delivery Ticket ${activeDT.dtNumber} notes saved successfully.`, 'success');
+  };
+
+  const [rtNotesInput, setRtNotesInput] = useState('');
+  useEffect(() => {
+    if (activeRT) {
+      setRtNotesInput(activeRT.notes || '');
+    } else {
+      setRtNotesInput('');
+    }
+  }, [activeRT?.id, activeRT?.rtNumber, activeRT?.notes]);
+
+  const handleSaveRTNotes = () => {
+    if (!activeRT) return;
+    const updated: RTBatch = {
+      ...activeRT,
+      notes: rtNotesInput.trim(),
+    };
+    if (onUpdateRTBatch) {
+      onUpdateRTBatch(updated);
+    } else {
+      onSaveRTBatch(updated);
+    }
+    showToast(`Receiving Ticket ${activeRT.rtNumber} notes saved successfully.`, 'success');
+  };
+
   // Robust field resolvers for Return Tickets
   const resolveRtDate = (rt?: RTBatch | null): string => {
     if (!rt) return '—';
@@ -3837,6 +3884,41 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Delivery Ticket Notes & Non-Invoiced Manifest Items (same style as Job Header) */}
+                <div className="bg-white border border-[#b8cce0] rounded-md p-3 space-y-2 shadow-2xs mt-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm">📝</span>
+                      <label className="text-xs font-bold text-[#1a3055]">
+                        Delivery Ticket Notes &amp; Manifest Remarks (Slings, Protectors, Non-Invoiced Spares, Baskets)
+                      </label>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      Prints directly on Delivery Ticket Form DSF-001 under "Notes :"
+                    </span>
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={dtNotesInput}
+                    disabled={isLocked || activeDT.isLocked}
+                    onChange={(e) => setDtNotesInput(e.target.value)}
+                    placeholder="Enter items with no invoicing value to print on the Delivery Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
+                    className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
+                  />
+                  {!isLocked && !activeDT.isLocked && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleSaveDTNotes}
+                        className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span>💾</span>
+                        <span>Save Delivery Ticket Notes</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="p-8 text-center text-slate-500 font-medium">
@@ -4215,6 +4297,41 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Receiving Ticket Notes & Non-Invoiced Manifest Items (same style as Job Header) */}
+                <div className="bg-white border border-[#b8cce0] rounded-md p-3 space-y-2 shadow-2xs mt-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm">📝</span>
+                      <label className="text-xs font-bold text-[#1a3055]">
+                        Receiving Ticket Notes &amp; Manifest Remarks (Slings, Protectors, Non-Invoiced Spares, Baskets)
+                      </label>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      Prints directly on Receiving Ticket Form DSF-001 under "Note :"
+                    </span>
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={rtNotesInput}
+                    disabled={isClosedOrInvoiced || isLocked}
+                    onChange={(e) => setRtNotesInput(e.target.value)}
+                    placeholder="Enter items with no invoicing value received from rig to print on the Receiving Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
+                    className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
+                  />
+                  {!isClosedOrInvoiced && !isLocked && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleSaveRTNotes}
+                        className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span>💾</span>
+                        <span>Save Receiving Ticket Notes</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
