@@ -392,15 +392,16 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const checklistResizer = useResizableColumns('dossier_checklist_grid', {
     itemNo: 50,
     partNo: 140,
-    description: 300,
+    description: 280,
     qty: 60,
     supplier: 110,
     qtyIn: 60,
     insNum: 140,
     insDate: 105,
     comments: 110,
-    cat: 130,
-    actions: 60,
+    cat: 120,
+    status: 140,
+    actions: 75,
   });
 
   // Resizable columns & custom columns for itemsselect tool picker
@@ -1017,28 +1018,80 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return availableCategories.filter((c) => c.toLowerCase().includes(q));
   }, [availableCategories, categorySearchQuery]);
 
-  const categoryInventory = useMemo(() => {
-    // Collect all serials already added to this job's checklist to prevent duplicate assignment
-    const alreadyInChecklist = new Set<string>();
-    checklistItems.forEach((item) => {
-      if (item.serialNos && Array.isArray(item.serialNos)) {
-        item.serialNos.forEach((s) => s && alreadyInChecklist.add(s.trim().toUpperCase()));
+  // Helper to determine which DT an item belongs to in this job, and whether that DT is locked
+  const getAssignedDTForChecklistItem = useCallback((item: CalloutItem): { dtNumber: string; isLocked: boolean } | null => {
+    if (item.dtNumber) {
+      const match = jobDTs.find((d) => d.dtNumber === item.dtNumber);
+      return { dtNumber: item.dtNumber, isLocked: match?.isLocked ?? false };
+    }
+    const itemSerial = (item.serialNos?.[0] || item.partNo || '').trim().toUpperCase();
+    if (!itemSerial) return null;
+    for (const dt of jobDTs) {
+      const match = dt.toolLines?.some((l) => {
+        const s = (l.serial || '').trim().toUpperCase();
+        const a = (l.assetNo || '').trim().toUpperCase();
+        return s === itemSerial || a === itemSerial;
+      });
+      if (match) {
+        return { dtNumber: dt.dtNumber, isLocked: dt.isLocked ?? false };
       }
-      if (item.partNo) alreadyInChecklist.add(item.partNo.trim().toUpperCase());
+    }
+    return null;
+  }, [jobDTs]);
+
+  // Checklist items that are still pending or not yet locked on a dispatched DT
+  const pendingChecklistItems = useMemo(() => {
+    return checklistItems.filter((ci) => {
+      const assigned = getAssignedDTForChecklistItem(ci);
+      return !assigned || !assigned.isLocked;
+    });
+  }, [checklistItems, getAssignedDTForChecklistItem]);
+
+  // Checklist items that have not been assigned to ANY delivery ticket yet
+  const unassignedChecklistItems = useMemo(() => {
+    return checklistItems.filter((ci) => {
+      const assigned = getAssignedDTForChecklistItem(ci);
+      return !assigned;
+    });
+  }, [checklistItems, getAssignedDTForChecklistItem]);
+
+  const categoryInventory = useMemo(() => {
+    // Collect all serials returned to base on an RT for this job
+    const returnedSerialsInJob = new Set<string>();
+    jobRTs.forEach((rt) => {
+      rt.toolLines?.forEach((tl) => {
+        if (tl.serial) returnedSerialsInJob.add(tl.serial.trim().toUpperCase());
+        if (tl.assetNo) returnedSerialsInJob.add(tl.assetNo.trim().toUpperCase());
+      });
+    });
+
+    // Collect all serials currently pending or deployed on rig without return
+    const activeSerialsInJob = new Set<string>();
+    checklistItems.forEach((item) => {
+      const sKey = (item.serialNos?.[0] || item.partNo || '').trim().toUpperCase();
+      const aKey = (item.partNo || '').trim().toUpperCase();
+      const assigned = getAssignedDTForChecklistItem(item);
+      const isReturned = (sKey && returnedSerialsInJob.has(sKey)) || (aKey && returnedSerialsInJob.has(aKey));
+
+      // If pending dispatch, OR if deployed on rig and not yet returned on an RT:
+      if (!assigned?.isLocked || !isReturned) {
+        if (sKey) activeSerialsInJob.add(sKey);
+        if (aKey) activeSerialsInJob.add(aKey);
+      }
     });
 
     // Strictly enforce:
     // 1. Tool must be In Base / Yard (location is 'Emdad Base', contains 'base' or 'yard', and NOT 'On Rig', 'Workshop', etc.)
     // 2. Tool must be in 'Good' / Ready operational status (NOT 'Repair', 'Redress', 'Inspection', 'On Rig', 'Lost in Hole', 'Scrapped', 'Removed')
     // 3. Tool must have ACCEPTED / Pass inspection condition (not Rejected / Fail)
-    // 4. Tool must NOT already be in the current job's checklist
+    // 4. Tool must NOT currently be pending or active on rig for this job
     const validInventory = inventory.filter((t) => {
       const sKey = (t.serial || '').trim().toUpperCase();
       const aKey = (t.assetNo || '').trim().toUpperCase();
 
-      // Exclude if already in checklist for this job
-      if (sKey && alreadyInChecklist.has(sKey)) return false;
-      if (aKey && alreadyInChecklist.has(aKey)) return false;
+      // Exclude if currently pending or active on rig for this job
+      if (sKey && activeSerialsInJob.has(sKey)) return false;
+      if (aKey && activeSerialsInJob.has(aKey)) return false;
 
       // Status check: must be 'Good' (or 'Ready', 'Accepted', 'Available')
       const st = (t.status || 'Good').trim().toUpperCase();
@@ -1084,7 +1137,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       const matchDesc = (t.desc || '').toUpperCase().includes(selectedCategory.toUpperCase());
       return matchShort || matchDesc;
     });
-  }, [inventory, selectedCategory, checklistItems, inspections]);
+  }, [inventory, selectedCategory, checklistItems, inspections, jobRTs, getAssignedDTForChecklistItem]);
 
   const availableSizes = useMemo(() => {
     const set = new Set<string>(customSizes);
@@ -1268,6 +1321,28 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     onSaveDTBatch(newDT);
     setSelectedDTNumber(newDT.dtNumber);
     showToast(`Delivery Ticket ${newDT.dtNumber} created for Job ${jobData.id}.`, 'success');
+  };
+
+  // Checklist Notes state (matching Job Header & Delivery Ticket style)
+  const [checklistNotesInput, setChecklistNotesInput] = useState('');
+  useEffect(() => {
+    if (activeCallout) {
+      setChecklistNotesInput(activeCallout.notes || '');
+    } else {
+      setChecklistNotesInput('');
+    }
+  }, [activeCallout?.id, activeCallout?.notes]);
+
+  const handleSaveChecklistNotes = () => {
+    if (!activeCallout) return;
+    const updatedCallout: Callout = {
+      ...activeCallout,
+      notes: checklistNotesInput.trim(),
+    };
+    if (onSaveCallout) {
+      onSaveCallout(updatedCallout);
+    }
+    showToast('Checklist notes saved successfully.', 'success');
   };
 
   // Delivery Ticket & Return Ticket Notes states (same style as Job Header)
@@ -1621,6 +1696,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Delete row from checklist
   const handleDeleteChecklistRow = (seq: number) => {
     if (isClosedOrInvoiced || isLocked) return;
+    const itemToDelete = checklistItems.find((item) => item.seq === seq);
+    if (itemToDelete) {
+      const assigned = getAssignedDTForChecklistItem(itemToDelete);
+      if (assigned?.isLocked) {
+        showToast(`Cannot delete tool ${itemToDelete.serialNos?.[0] || itemToDelete.partNo}: already dispatched on Delivery Ticket ${assigned.dtNumber}.`, 'error');
+        return;
+      }
+    }
     const updated = checklistItems.filter((item) => item.seq !== seq);
     setChecklistItems(updated);
     const calloutToSave = ({
@@ -1646,8 +1729,25 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       return;
     }
 
+    // Determine pending tools that have not yet been assigned to a locked/dispatched DT
+    const toolsToMobilize = unassignedChecklistItems.length > 0
+      ? unassignedChecklistItems
+      : pendingChecklistItems;
+
+    if (toolsToMobilize.length === 0) {
+      showToast('All tools in the checklist have already been dispatched on Delivery Tickets. Click "+ Select Tools" to add equipment for a new mobilization.', 'info');
+      return;
+    }
+
     const curYr = new Date().getFullYear().toString().slice(-2);
-    const nextDTNum = `DT-${curYr}-${String(2120 + jobDTs.length).padStart(4, '0')}`;
+    const existingSeqs = dtBatches
+      .map((b) => {
+        const m = b.dtNumber.match(/^DT-\d+-(\d+)$/);
+        return m ? parseInt(m[1], 10) : 0;
+      })
+      .filter((n) => !isNaN(n));
+    const nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2120 + jobDTs.length;
+    const nextDTNum = `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`;
 
     const newDT: DTBatch = {
       id: `DTB-${Date.now()}`,
@@ -1663,12 +1763,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       contract: jobData.contractNo || jobData.contract,
       dispatchedBy: user?.name || 'Operations',
       recipient: `${jobData.rig} Toolpusher`,
-      notes: `Generated automatically from Checklist ${activeCallout.id}.`,
+      notes: checklistNotesInput.trim(),
       isLocked: false,
-      toolLines: checklistItems.map((ci, idx) => ({
+      toolLines: toolsToMobilize.map((ci, idx) => ({
         id: idx + 1,
         itemNo: idx + 1,
-        serial: ci.serialNos?.[0] || ci.partNo || `TOOL-${idx}`,
+        serial: ci.serialNos?.[0] || ci.partNo || `TOOL-${idx + 1}`,
         assetNo: ci.partNo || ci.serialNos?.[0] || '',
         shortDesc: ci.cat || ci.shortDesc || 'Downhole Tool',
         desc: ci.description || ci.shortDesc || '',
@@ -1683,16 +1783,31 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
     onSaveDTBatch(newDT);
 
+    // Update checklistItems so that mobilized items now link to this nextDTNum
+    const mobilizeSeqs = new Set(toolsToMobilize.map((t) => t.seq));
+    const updatedChecklistItems = checklistItems.map((ci) => {
+      if (mobilizeSeqs.has(ci.seq)) {
+        return {
+          ...ci,
+          dtNumber: nextDTNum,
+          status: 'Released' as const,
+        };
+      }
+      return ci;
+    });
+    setChecklistItems(updatedChecklistItems);
+
     if (onSaveCallout) {
       onSaveCallout({
         ...activeCallout,
         status: 'Delivery Ticket - Created',
+        items: updatedChecklistItems,
       });
     }
 
     setSelectedDTNumber(newDT.dtNumber);
     setActiveTab('delivery-tickets');
-    showToast(`Delivery Ticket ${newDT.dtNumber} generated from Checklist with ${checklistItems.length} tool(s)!`, 'success');
+    showToast(`Delivery Ticket ${newDT.dtNumber} generated from Checklist with ${toolsToMobilize.length} tool(s)!`, 'success');
   };
 
   // Delivery Ticket Confirmation & Lock (Ship to Rig)
@@ -3517,10 +3632,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         type="button"
                         onClick={handleGenerateDTFromChecklist}
                         className="bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
-                        title="Transfer reserved checklist tools directly into a new Delivery Ticket"
+                        title={
+                          unassignedChecklistItems.length > 0
+                            ? `Transfer ${unassignedChecklistItems.length} pending checklist tool(s) directly into a new Delivery Ticket`
+                            : 'All checklist tools have already been assigned to Delivery Tickets'
+                        }
                       >
                         <span>🚚</span>
-                        <span>Generate DT from Checklist</span>
+                        <span>
+                          Generate DT from Checklist
+                          {unassignedChecklistItems.length > 0 ? ` (${unassignedChecklistItems.length} Pending)` : ''}
+                        </span>
                       </button>
                     </>
                   )}
@@ -3633,7 +3755,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <span>PartNo / Serial</span>
                       <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('partNo', e)} onDoubleClick={() => checklistResizer.resetColumn('partNo')} />
                     </th>
-                    <th style={{ width: checklistResizer.widths.description || 300 }} className="p-1.5 relative overflow-hidden truncate">
+                    <th style={{ width: checklistResizer.widths.description || 280 }} className="p-1.5 relative overflow-hidden truncate">
                       <span>Description</span>
                       <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('description', e)} onDoubleClick={() => checklistResizer.resetColumn('description')} />
                     </th>
@@ -3661,9 +3783,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <span>Comments</span>
                       <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('comments', e)} onDoubleClick={() => checklistResizer.resetColumn('comments')} />
                     </th>
-                    <th style={{ width: checklistResizer.widths.cat || 130 }} className="p-1.5 relative overflow-hidden truncate">
+                    <th style={{ width: checklistResizer.widths.cat || 120 }} className="p-1.5 relative overflow-hidden truncate">
                       <span>Category</span>
                       <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('cat', e)} onDoubleClick={() => checklistResizer.resetColumn('cat')} />
+                    </th>
+                    <th style={{ width: checklistResizer.widths.status || 140 }} className="p-1.5 text-center relative overflow-hidden truncate">
+                      <span>Mobilization / DT</span>
+                      <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('status', e)} onDoubleClick={() => checklistResizer.resetColumn('status')} />
                     </th>
 
                     {/* Custom columns registered in Database Inspector */}
@@ -3682,7 +3808,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     ))}
 
                     {!isClosedOrInvoiced && !isLocked && (
-                      <th style={{ width: checklistResizer.widths.actions || 60 }} className="p-1.5 text-center relative overflow-hidden truncate">
+                      <th style={{ width: checklistResizer.widths.actions || 75 }} className="p-1.5 text-center relative overflow-hidden truncate">
                         <span>Action</span>
                         <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('actions', e)} onDoubleClick={() => checklistResizer.resetColumn('actions')} />
                       </th>
@@ -3694,7 +3820,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <tbody className="divide-y divide-slate-200">
                   {checklistItems.length === 0 ? (
                     <tr>
-                      <td colSpan={(isClosedOrInvoiced || isLocked ? 11 : 12) + checklistCustomCols.length} className="p-6 text-center text-slate-500 font-medium">
+                      <td colSpan={(isClosedOrInvoiced || isLocked ? 12 : 13) + checklistCustomCols.length} className="p-6 text-center text-slate-500 font-medium">
                         No tools in checklist.
                         {!isClosedOrInvoiced && !isLocked && (
                           <span> Click <strong>&quot;Select Tools&quot;</strong> above to pick available tools from yard inventory.</span>
@@ -3702,46 +3828,112 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    checklistItems.map((item, i) => (
-                      <tr key={i} className="hover:bg-blue-50/50 h-7 leading-none">
-                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600 truncate">{i + 1}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={item.partNo || item.serialNos?.[0] || '—'}>{item.partNo || item.serialNos?.[0] || '—'}</td>
-                        <td className="py-1 px-2 whitespace-nowrap truncate font-medium text-slate-800" title={item.description || item.shortDesc}>{item.description || item.shortDesc}</td>
-                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qty || 1}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700 truncate" title={item.supplier || 'EMDAD'}>{item.supplier || 'EMDAD'}</td>
-                        <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qtyIn || 1}</td>
-                        <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700 truncate" title={item.insNum || 'GIS-Z-01480-2023'}>{item.insNum || 'GIS-Z-01480-2023'}</td>
-                        <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={item.cat || item.shortDesc}>{item.cat || item.shortDesc}</td>
+                    checklistItems.map((item, i) => {
+                      const assignedDT = getAssignedDTForChecklistItem(item);
+                      return (
+                        <tr key={i} className="hover:bg-blue-50/50 h-7 leading-none">
+                          <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600 truncate">{i + 1}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={item.partNo || item.serialNos?.[0] || '—'}>{item.partNo || item.serialNos?.[0] || '—'}</td>
+                          <td className="py-1 px-2 whitespace-nowrap truncate font-medium text-slate-800" title={item.description || item.shortDesc}>{item.description || item.shortDesc}</td>
+                          <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qty || 1}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700 truncate" title={item.supplier || 'EMDAD'}>{item.supplier || 'EMDAD'}</td>
+                          <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qtyIn || 1}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700 truncate" title={item.insNum || 'GIS-Z-01480-2023'}>{item.insNum || 'GIS-Z-01480-2023'}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600 truncate" title={item.insDate || '—'}>{item.insDate || '—'}</td>
+                          <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={item.comments || 'ACCEPTED'}>{item.comments || 'ACCEPTED'}</td>
+                          <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={item.cat || item.shortDesc}>{item.cat || item.shortDesc}</td>
 
-                        {/* Custom Column cells for checklist */}
-                        {checklistCustomCols.map((c) => {
-                          const val = (item as any)[c.key] ?? (item as any).customFields?.[c.key] ?? '—';
-                          return (
-                            <td key={c.key} className="py-1 px-2 whitespace-nowrap font-mono text-slate-800 truncate" title={String(val)}>
-                              {String(val)}
-                            </td>
-                          );
-                        })}
-
-                        {!isClosedOrInvoiced && !isLocked && (
+                          {/* Mobilization / DT Status */}
                           <td className="py-1 px-2 whitespace-nowrap text-center truncate">
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteChecklistRow(item.seq)}
-                              className="text-red-600 hover:text-red-800 font-bold text-[11px] hover:underline cursor-pointer"
-                              title="Delete row and return tool to inventory"
-                            >
-                              Delete
-                            </button>
+                            {assignedDT?.isLocked ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-100 text-purple-900 border border-purple-300" title={`Dispatched on Delivery Ticket ${assignedDT.dtNumber}`}>
+                                Dispatched • {assignedDT.dtNumber}
+                              </span>
+                            ) : assignedDT ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-100 text-blue-900 border border-blue-300" title={`Assigned to draft Delivery Ticket ${assignedDT.dtNumber}`}>
+                                Draft • {assignedDT.dtNumber}
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300" title="Reserved in checklist; pending Delivery Ticket generation">
+                                Pending Dispatch
+                              </span>
+                            )}
                           </td>
-                        )}
-                        {/* Trailing filler cell */}
-                        <td className="p-0 border-0" />
-                      </tr>
-                    ))
+
+                          {/* Custom Column cells for checklist */}
+                          {checklistCustomCols.map((c) => {
+                            const val = (item as any)[c.key] ?? (item as any).customFields?.[c.key] ?? '—';
+                            return (
+                              <td key={c.key} className="py-1 px-2 whitespace-nowrap font-mono text-slate-800 truncate" title={String(val)}>
+                                {String(val)}
+                              </td>
+                            );
+                          })}
+
+                          {!isClosedOrInvoiced && !isLocked && (
+                            <td className="py-1 px-2 whitespace-nowrap text-center truncate">
+                              {assignedDT?.isLocked ? (
+                                <span
+                                  className="text-slate-400 font-bold text-[11px] inline-flex items-center gap-0.5 cursor-not-allowed select-none"
+                                  title={`Locked: Tool already dispatched on Delivery Ticket ${assignedDT.dtNumber}. Cannot delete from checklist.`}
+                                >
+                                  🔒 Locked
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteChecklistRow(item.seq)}
+                                  className="text-red-600 hover:text-red-800 font-bold text-[11px] hover:underline cursor-pointer"
+                                  title="Delete row and return tool to inventory"
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </td>
+                          )}
+                          {/* Trailing filler cell */}
+                          <td className="p-0 border-0" />
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Checklist Notes & Mobilization Preparation Remarks (Matching Job Header & DT design) */}
+            <div className="bg-white border border-[#b8cce0] rounded-md p-3 space-y-2 shadow-2xs mt-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">📝</span>
+                  <label className="text-xs font-bold text-[#1a3055]">
+                    Checklist Notes &amp; Mobilization Remarks (Slings, Spares, Pre-Dispatch Instructions)
+                  </label>
+                </div>
+                <span className="text-[10px] text-slate-500 font-medium">
+                  Automatically transfers into Delivery Ticket Notes upon DT creation
+                </span>
+              </div>
+              <textarea
+                rows={3}
+                value={checklistNotesInput}
+                disabled={isClosedOrInvoiced || isLocked}
+                onChange={(e) => setChecklistNotesInput(e.target.value)}
+                placeholder="Enter checklist preparation remarks, sling certificates, basket numbers, or non-invoiced items to carry forward into the Delivery Ticket..."
+                className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
+              />
+              {!isClosedOrInvoiced && !isLocked && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSaveChecklistNotes}
+                    className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span>💾</span>
+                    <span>Save Checklist Notes</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -3781,7 +3973,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <span>+</span>
                       <span>New DT</span>
                     </button>
-                    {checklistItems.length > 0 && jobDTs.length === 0 && (
+                    {unassignedChecklistItems.length > 0 && (
                       <button
                         type="button"
                         onClick={handleGenerateDTFromChecklist}
@@ -3789,7 +3981,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         title="Transfer reserved checklist tools directly into a new Delivery Ticket"
                       >
                         <span>🚚</span>
-                        <span>Generate DT from Checklist ({checklistItems.length})</span>
+                        <span>Generate DT from Checklist ({unassignedChecklistItems.length})</span>
                       </button>
                     )}
                   </>
@@ -4085,12 +4277,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <textarea
                   rows={4}
                   value={dtNotesInput}
-                  disabled={isLocked || effectiveDT.isLocked}
+                  disabled={isClosedOrInvoiced || isLocked}
                   onChange={(e) => setDtNotesInput(e.target.value)}
                   placeholder="Enter items with no invoicing value to print on the Delivery Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
                   className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
                 />
-                {!isLocked && !effectiveDT.isLocked && (
+                {!isClosedOrInvoiced && !isLocked && (
                   <div className="flex justify-end">
                     <button
                       type="button"

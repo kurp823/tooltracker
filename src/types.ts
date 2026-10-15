@@ -77,6 +77,7 @@ export interface CalloutItem {
   assigned: number;
   serialNos: string[];
   status: 'Pending' | 'Partial' | 'Assigned' | 'Released';
+  dtNumber?: string;
   partNo?: string;
   description?: string;
   supplier?: string;
@@ -106,6 +107,7 @@ export interface Callout {
   projectNo?: string;
   emailRef?: string;
   taskorderNo?: string;
+  notes?: string;
 }
 
 export type JobLifecycleStatus =
