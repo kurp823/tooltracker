@@ -5,6 +5,11 @@ import { DocumentAttachmentModal } from './DocumentAttachmentModal';
 import { formatDateDD_MM_YYYY } from './JobDossierView';
 import { EMDAD_LOGO_BASE64 } from '../constants/branding';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
+import {
+  generateReceivingTicketHtml,
+  openPrintWindow,
+  ReceivingTicketPrintData,
+} from '../services/ticketPrintService';
 
 interface ReceivingTicketsViewProps {
   user?: User | null;
@@ -402,100 +407,37 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
   };
 
   const handlePrintRT = (b: RTBatch) => {
-    const printWindow = window.open('', '_blank', 'width=900,height=700');
-    if (!printWindow) {
-      alert('Please allow popups to print Receiving Tickets.');
-      return;
-    }
-
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8"/>
-<title>Receiving Ticket - ${b.rtNumber}</title>
-<style>
-  body { font-family: Arial, sans-serif; font-size: 11px; padding: 24px; color: #1e293b; }
-  .hdr { display: flex; justify-content: space-between; border-bottom: 2px solid #059669; padding-bottom: 12px; margin-bottom: 16px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
-  .box { border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px; background: #f8fafc; }
-  .lbl { font-size: 9px; font-weight: bold; color: #64748b; text-transform: uppercase; margin-bottom: 2px; }
-  .val { font-size: 12px; font-weight: bold; color: #0f172a; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11px; }
-  th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
-  th { background: #f1f5f9; font-weight: bold; }
-  .sig { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 36px; padding-top: 10px; }
-  .sig-box { border-top: 1px solid #0f172a; padding-top: 6px; font-size: 10px; }
-</style>
-</head>
-<body>
-  <div class="hdr">
-    <div style="display: flex; align-items: center; gap: 14px;">
-      <img src="${EMDAD_LOGO_BASE64}" alt="EMDAD Logo" style="height: 38px; width: auto; object-fit: contain;" />
-      <div>
-        <h1 style="font-size: 18px; margin: 0 0 2px; color: #1a3055;">EMDAD OILFIELD SERVICES LLC</h1>
-        <div style="color: #64748b; font-size: 10px;">Backload Equipment Receiving Manifest</div>
-      </div>
-    </div>
-    <div style="text-align: right;">
-      <div style="font-size: 20px; font-weight: 900; color: #059669; font-family: monospace;">${b.rtNumber}</div>
-      <div style="font-size: 10px; font-weight: bold; color: #64748b;">RECEIVING TICKET (RT)</div>
-    </div>
-  </div>
-
-  <div class="grid">
-    <div class="box"><div class="lbl">Drilling Job Number</div><div class="val">${b.jobId || '—'}</div></div>
-    <div class="box"><div class="lbl">Rig &amp; Well</div><div class="val">${b.rig} / ${b.well}</div></div>
-    <div class="box"><div class="lbl">Master Contract</div><div class="val">${getDisplayContract(b)}</div></div>
-    <div class="box"><div class="lbl">Receiving Date</div><div class="val">${resolveRTDate(b)}</div></div>
-    <div class="box"><div class="lbl">Backload RM (Rental Stop) Date</div><div class="val">${resolveRTBackloadDate(b)}</div></div>
-    <div class="box"><div class="lbl">Received By (Base Officer)</div><div class="val">${b.receivedBy}</div></div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 30px;">#</th>
-        <th>Serial / System ID</th>
-        <th>Size</th>
-        <th>Tool Category</th>
-        <th>Date In</th>
-        <th>Condition &amp; Usage</th>
-        <th>Routed Destination</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${(b.toolLines || [])
-        .map(
-          (t, i) => {
-            const lDate = formatDateDD_MM_YYYY((t as any).dateIn || (t as any).Date_In || (t as any).returnDate || (t as any).DateIn || b.rtDate || b.backloadRmDate || b.loadingNoteDate);
-            return `<tr>
-          <td>${i + 1}</td>
-          <td style="font-family: monospace; font-weight: bold;">${t.serial}</td>
-          <td style="font-family: monospace;">${t.size || '—'}</td>
-          <td>${t.shortDesc || (t as any).toolDescription || 'Downhole Tool'}</td>
-          <td style="font-family: monospace;">${lDate}</td>
-          <td><strong>${t.used ? 'Used' : 'Not Used'}</strong> - ${t.condition || 'Good'}</td>
-          <td>${t.routedTo}</td>
-        </tr>`;
-          }
-        )
-        .join('')}
-    </tbody>
-  </table>
-
-  <div class="sig">
-    <div class="sig-box">Received By (EMDAD Base)<br/><br/><strong>${b.receivedBy}</strong></div>
-    <div class="sig-box">QC Inspection Bay Officer<br/><br/>_______________________</div>
-    <div class="sig-box">Operations Verification<br/><br/>_______________________</div>
-  </div>
-</body>
-</html>`;
-
-    printWindow.document.write(html);
-    printWindow.document.close();
-    setTimeout(() => {
-      printWindow.print();
-    }, 300);
+    const job = jobs.find((j) => j.id === b.jobId);
+    const printData: ReceivingTicketPrintData = {
+      rtNumber: b.rtNumber,
+      client: b.client || job?.client || 'EMDAD / Client',
+      jobNumber: b.jobId || job?.id || '—',
+      vehicleVesselNo: (b as any).vehicleVesselNo || (b as any).vesselNo || 'CREST MERCURY TWO',
+      clientRef: (b as any).clientRef || (job as any)?.clientRef || '—',
+      projectNo: (b as any).projectNo || job?.id || '—',
+      lNoteNo: (b as any).loadingNoteNo || (b as any).lNoteNo || '—',
+      serviceTicketNo: (b as any).serviceTicketNo || b.jobId || job?.id || '—',
+      dateReceived: resolveRTDate(b) || '—',
+      rig: b.rig || job?.rig || '—',
+      well: b.well || job?.well || '—',
+      lNoteDate: (b as any).loadingNoteDate || resolveRTDate(b) || '—',
+      notes: (b as any).notes || undefined,
+      tools: (b.toolLines || []).map((t, idx) => {
+        const invTool = t.serial ? inventoryMap.get(t.serial.trim().toUpperCase()) : undefined;
+        const displayDesc = t.shortDesc || (t as any).toolDescription || invTool?.shortDesc || invTool?.desc || 'Downhole Tool';
+        const displaySize = t.size || invTool?.size || extractSizeFromDescription(displayDesc) || '';
+        const fullDesc = displaySize && !displayDesc.includes(displaySize) ? `${displayDesc} (${displaySize})` : displayDesc;
+        return {
+          itemNo: idx + 1,
+          serialNo: t.serial || '—',
+          description: fullDesc,
+          qty: (t as any).qty || 1,
+          remarks: t.used ? 'Used' : 'Not Used',
+        };
+      }),
+    };
+    const html = generateReceivingTicketHtml(printData);
+    openPrintWindow(html, `Receiving Ticket - ${b.rtNumber}`);
   };
 
   // Currently selected rig group inside create modal

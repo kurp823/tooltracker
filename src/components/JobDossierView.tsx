@@ -22,6 +22,15 @@ import {
 import { EMDAD_LOGO_BASE64, EmdadLogo } from '../constants/branding';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 import {
+  generateDeliveryTicketHtml,
+  generateDispatchChecklistHtml,
+  generateReceivingTicketHtml,
+  openPrintWindow,
+  DeliveryTicketPrintData,
+  DispatchChecklistPrintData,
+  ReceivingTicketPrintData,
+} from '../services/ticketPrintService';
+import {
   useResizableColumns,
   ResizerHandle,
   useCustomColumns,
@@ -1607,218 +1616,145 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     showToast(`Moved ${newRTLines.length} tool(s) to Return Ticket ${updatedRT.rtNumber} with Date In ${formattedReturnDate}.`, 'success');
   };
 
-  // Print Handlers
-  const handlePrintTicket = (type: 'onshore' | 'offshore' | 'report' | 'pob') => {
-    if (activeTab === 'return-tickets' && activeRT) {
-      const printWindow = window.open('', '_blank', 'width=900,height=700');
-      if (!printWindow) {
-        window.print();
-        return;
-      }
-      const isOffshore = type === 'offshore';
-      const rtDateStr = resolveRtDate(activeRT);
-      const lNoteNoStr = resolveRtLoadingNoteNo(activeRT);
-      const lNoteDateStr = resolveRtLoadingNoteDate(activeRT);
-      const carrierStr = resolveRtCarrier(activeRT);
-      const contractStr = jobData.contractNo || cleanContractName(jobData.contract) || '—';
-
-      const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8"/>
-<title>Return Goods Ticket - ${activeRT.rtNumber}</title>
-<style>
-  body { font-family: Arial, sans-serif; font-size: 11px; padding: 24px; color: #1e293b; line-height: 1.4; }
-  .hdr { display: flex; justify-content: space-between; border-bottom: 2px solid #1a3055; padding-bottom: 12px; margin-bottom: 16px; }
-  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
-  .box { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 10px; background: #f8fafc; }
-  .lbl { font-size: 9px; font-weight: bold; color: #64748b; text-transform: uppercase; margin-bottom: 2px; }
-  .val { font-size: 11px; font-weight: bold; color: #0f172a; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10px; }
-  th, td { border: 1px solid #cbd5e1; padding: 5px 7px; text-align: left; }
-  th { background: #e9f0f8; font-weight: bold; color: #1a3055; }
-  .sig { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 32px; padding-top: 10px; }
-  .sig-box { border-top: 1px solid #0f172a; padding-top: 6px; font-size: 10px; }
-</style>
-</head>
-<body>
-  <div class="hdr">
-    <div style="display: flex; align-items: center; gap: 14px;">
-      <img src="${EMDAD_LOGO_BASE64}" alt="EMDAD Logo" style="height: 38px; width: auto; object-fit: contain;" />
-      <div>
-        <h1 style="font-size: 18px; margin: 0 0 2px; color: #1a3055;">EMDAD OILFIELD SERVICES LLC</h1>
-        <div style="color: #64748b; font-size: 10px;">Return Goods Ticket (RGT) &bull; Backload Receiving Manifest (${isOffshore ? 'OFFSHORE' : 'ONSHORE'})</div>
-      </div>
-    </div>
-    <div style="text-align: right;">
-      <div style="font-size: 20px; font-weight: 900; color: #dc2626; font-family: monospace;">${activeRT.rtNumber}</div>
-      <div style="font-size: 10px; font-weight: bold; color: #64748b;">JOB NO: ${jobData.id}</div>
-    </div>
-  </div>
-
-  <div class="grid">
-    <div class="box"><div class="lbl">Customer / Client</div><div class="val">${jobData.client}</div></div>
-    <div class="box"><div class="lbl">Contract / Project</div><div class="val">${contractStr}</div></div>
-    <div class="box"><div class="lbl">Rig / Well</div><div class="val">${jobData.rig} / ${jobData.well}</div></div>
-    <div class="box"><div class="lbl">Date Received</div><div class="val">${rtDateStr}</div></div>
-    <div class="box"><div class="lbl">Shipped Via / Carrier</div><div class="val">${carrierStr}</div></div>
-    <div class="box"><div class="lbl">Loading Note No</div><div class="val">${lNoteNoStr}</div></div>
-    <div class="box"><div class="lbl">Loading Note Date</div><div class="val">${lNoteDateStr}</div></div>
-    <div class="box"><div class="lbl">Received By (Base)</div><div class="val">${activeRT.receivedBy || '—'}</div></div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 30px; text-align: center;">Item</th>
-        <th>Serial / Asset No</th>
-        <th>Description</th>
-        <th style="text-align: center;">RGT No</th>
-        <th style="text-align: center;">Date In</th>
-        <th style="text-align: center;">Condition</th>
-        <th>Destination Bay</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${(activeRT.toolLines || []).map((t, idx) => {
-        const matchedDTLine = jobDTs.flatMap((dt) => dt.toolLines || []).find(
-          (dtl: any) => dtl.serial && t.serial && String(dtl.serial).trim().toUpperCase() === String(t.serial).trim().toUpperCase()
-        );
-        const rawLineDate = getValidDateString(
-          (t as any).dateIn,
-          (t as any).Date_In,
-          (t as any).DateIn,
-          (t as any).returnDate,
-          (t as any).ReturnDate,
-          (t as any).rtDate,
-          (matchedDTLine as any)?.returnDate,
-          (matchedDTLine as any)?.dateIn,
-          (matchedDTLine as any)?.Date_In,
-          activeRT.rtDate,
-          activeRT.backloadRmDate,
-          jobData.demobDate
-        );
-        const lineDateStr = rawLineDate ? formatDateDD_MM_YYYY(rawLineDate) : '—';
-        return `<tr>
-          <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
-          <td style="font-family: monospace; font-weight: bold;">${t.serial || t.assetNo}</td>
-          <td>${t.desc || t.shortDesc || (t as any).toolDescription || 'Downhole Tool'}</td>
-          <td style="text-align: center; font-family: monospace;">${activeRT.rtNumber}</td>
-          <td style="text-align: center; font-family: monospace;">${lineDateStr}</td>
-          <td style="text-align: center; font-weight: bold;">${t.condition || (t.used ? 'USED' : 'NOT USED')}</td>
-          <td>${t.routedTo || (t.used ? 'Inspection Bay' : 'Available Inventory')}</td>
-        </tr>`;
-      }).join('')}
-    </tbody>
-  </table>
-
-  <div class="sig">
-    <div class="sig-box">Field Engineer / Dispatcher<br/><br/>_______________________</div>
-    <div class="sig-box">QC Inspection Bay Officer<br/><br/>_______________________</div>
-    <div class="sig-box">Base Receiving Lead<br/><br/><strong>${activeRT.receivedBy || '—'}</strong></div>
-  </div>
-</body>
-</html>`;
-      printWindow.document.write(html);
-      printWindow.document.close();
-      setTimeout(() => {
-        printWindow.print();
-      }, 300);
+  // Official EMDAD Ticket & Manifest Print Handlers
+  const handlePrintDeliveryTicket = (dt?: DTBatch) => {
+    const targetDT = dt || activeDT;
+    if (!targetDT) {
+      alert('Please select or create a Delivery Ticket first.');
       return;
     }
+    const printData: DeliveryTicketPrintData = {
+      dtNumber: targetDT.dtNumber,
+      client: jobData.client || '—',
+      materialRequest: targetDT.rmRef || 'MR FROM CLIENT',
+      jobNumber: jobData.id || '—',
+      clientRef: (jobData as any).clientRef || '—',
+      radioMsgNo: 'N/A',
+      serviceTicket: jobData.id || '—',
+      ticketNo: targetDT.dtNumber,
+      contractNo: jobData.contractNo || cleanContractName(jobData.contract) || '—',
+      rig: jobData.rig || targetDT.rig || '—',
+      well: jobData.well || targetDT.well || '—',
+      shippedDate: formatDateDD_MM_YYYY(targetDT.dispatchDate || targetDT.rmDate || new Date()),
+      deliveredTo: (targetDT as any).deliveredTo || 'YARD 08',
+      msvName: (targetDT as any).msvName || 'MARSOL SUPREME',
+      vehicleVesselNo: (targetDT as any).vehicleVesselNo || (targetDT as any).vesselNo || '70136 AD/54912',
+      driverName: (targetDT as any).driverName || 'SARWAN/JAGJEETH SINGH',
+      contactNo: (targetDT as any).contactNo || '055 890 7562/0555971632',
+      notes: targetDT.notes,
+      tools: (targetDT.toolLines || []).map((t, idx) => ({
+        itemNo: idx + 1,
+        partNo: t.serial || t.assetNo || '—',
+        serial: t.serial || t.assetNo || '—',
+        description: t.desc || t.shortDesc || (t as any).toolDescription || 'Downhole Tool',
+        qty: t.qty || 1,
+        size: t.size || '—',
+      })),
+    };
+    const html = generateDeliveryTicketHtml(printData);
+    openPrintWindow(html, `Delivery Ticket - ${targetDT.dtNumber}`);
+  };
 
+  const handlePrintDispatchChecklist = (dt?: DTBatch) => {
+    const targetDT = dt || activeDT;
+    let tools: Array<{ lineNo?: number | string; partNo?: string; description: string; qty: number }> = [];
+
+    if (targetDT && targetDT.toolLines && targetDT.toolLines.length > 0) {
+      tools = targetDT.toolLines.map((t, idx) => ({
+        lineNo: idx + 1,
+        partNo: t.serial || t.assetNo || '—',
+        description: t.desc || t.shortDesc || (t as any).toolDescription || 'Downhole Tool',
+        qty: t.qty || 1,
+      }));
+    } else if (activeCallout && activeCallout.items && activeCallout.items.length > 0) {
+      tools = activeCallout.items.flatMap((it, idx) => {
+        const serials = it.serialNos || [];
+        if (serials.length > 0) {
+          return serials.map((s, sIdx) => ({
+            lineNo: `${idx + 1}.${sIdx + 1}`,
+            partNo: s,
+            description: it.toolDescription || 'Downhole Tool',
+            qty: 1,
+          }));
+        }
+        return [{
+          lineNo: idx + 1,
+          partNo: '—',
+          description: it.toolDescription || 'Downhole Tool',
+          qty: it.qtyRequired || 1,
+        }];
+      });
+    }
+
+    const checklistData: DispatchChecklistPrintData = {
+      ticketNo: targetDT?.dtNumber || jobData.id,
+      project: jobData.id,
+      projectDesc: jobData.serviceCategory || jobData.jobDescription || 'RENTAL DRILLING TOOLS',
+      dtNumber: targetDT?.dtNumber || '—',
+      rig: jobData.rig || '—',
+      well: jobData.well || '—',
+      date: formatDateDD_MM_YYYY(targetDT?.dispatchDate || new Date()),
+      client: jobData.client || '—',
+      wellId: (jobData as any).wellId,
+      comments: targetDT?.notes || ((jobData as any).wellId ? `WELL'S ID - ${(jobData as any).wellId}` : undefined),
+      tools: tools.length > 0 ? tools : [{ lineNo: 1, partNo: '—', description: 'No tools listed', qty: 1 }],
+    };
+    const html = generateDispatchChecklistHtml(checklistData);
+    openPrintWindow(html, `Dispatch Checklist - ${checklistData.ticketNo}`);
+  };
+
+  const handlePrintReceivingTicket = (rt?: RTBatch) => {
+    const targetRT = rt || activeRT;
+    if (!targetRT) {
+      alert('Please select or create a Receiving Ticket first.');
+      return;
+    }
+    const printData: ReceivingTicketPrintData = {
+      rtNumber: targetRT.rtNumber,
+      client: jobData.client || '—',
+      jobNumber: jobData.id || '—',
+      vehicleVesselNo: resolveRtCarrier(targetRT) || 'CREST MERCURY TWO',
+      clientRef: (jobData as any).clientRef || '—',
+      projectNo: jobData.id || '—',
+      lNoteNo: resolveRtLoadingNoteNo(targetRT) || '—',
+      serviceTicketNo: jobData.id || '—',
+      dateReceived: resolveRtDate(targetRT) || '—',
+      rig: jobData.rig || targetRT.rig || '—',
+      well: jobData.well || targetRT.well || '—',
+      lNoteDate: resolveRtLoadingNoteDate(targetRT) || resolveRtDate(targetRT) || '—',
+      notes: (targetRT as any).notes || undefined,
+      tools: (targetRT.toolLines || []).map((t, idx) => ({
+        itemNo: idx + 1,
+        serialNo: t.serial || t.assetNo || '—',
+        description: t.desc || t.shortDesc || (t as any).toolDescription || 'Downhole Tool',
+        qty: (t as any).qty || 1,
+        remarks: t.used ? 'Used' : 'Not Used',
+      })),
+    };
+    const html = generateReceivingTicketHtml(printData);
+    openPrintWindow(html, `Receiving Ticket - ${targetRT.rtNumber}`);
+  };
+
+  // Generic print handler for backwards compatibility
+  const handlePrintTicket = (type: 'onshore' | 'offshore' | 'report' | 'pob' | 'delivery' | 'checklist' | 'rt') => {
+    if (type === 'delivery') {
+      handlePrintDeliveryTicket(activeDT);
+      return;
+    }
+    if (type === 'checklist') {
+      handlePrintDispatchChecklist(activeDT);
+      return;
+    }
+    if (type === 'rt') {
+      handlePrintReceivingTicket(activeRT);
+      return;
+    }
+    if (activeTab === 'return-tickets' && activeRT) {
+      handlePrintReceivingTicket(activeRT);
+      return;
+    }
     if (activeTab === 'delivery-tickets' && activeDT) {
-      const printWindow = window.open('', '_blank', 'width=900,height=700');
-      if (!printWindow) {
-        window.print();
-        return;
-      }
-      const isOffshore = type === 'offshore';
-      const dtDateStr = formatDateDD_MM_YYYY(activeDT.dispatchDate);
-      const contractStr = jobData.contractNo || cleanContractName(jobData.contract) || '—';
-
-      const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8"/>
-<title>Rental / Delivery Ticket - ${activeDT.dtNumber}</title>
-<style>
-  body { font-family: Arial, sans-serif; font-size: 11px; padding: 24px; color: #1e293b; line-height: 1.4; }
-  .hdr { display: flex; justify-content: space-between; border-bottom: 2px solid #1a3055; padding-bottom: 12px; margin-bottom: 16px; }
-  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
-  .box { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 10px; background: #f8fafc; }
-  .lbl { font-size: 9px; font-weight: bold; color: #64748b; text-transform: uppercase; margin-bottom: 2px; }
-  .val { font-size: 11px; font-weight: bold; color: #0f172a; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10px; }
-  th, td { border: 1px solid #cbd5e1; padding: 5px 7px; text-align: left; }
-  th { background: #e9f0f8; font-weight: bold; color: #1a3055; }
-  .sig { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 32px; padding-top: 10px; }
-  .sig-box { border-top: 1px solid #0f172a; padding-top: 6px; font-size: 10px; }
-</style>
-</head>
-<body>
-  <div class="hdr">
-    <div style="display: flex; align-items: center; gap: 14px;">
-      <img src="${EMDAD_LOGO_BASE64}" alt="EMDAD Logo" style="height: 38px; width: auto; object-fit: contain;" />
-      <div>
-        <h1 style="font-size: 18px; margin: 0 0 2px; color: #1a3055;">EMDAD OILFIELD SERVICES LLC</h1>
-        <div style="color: #64748b; font-size: 10px;">Rental Ticket / Delivery Manifest (${isOffshore ? 'OFFSHORE' : 'ONSHORE'})</div>
-      </div>
-    </div>
-    <div style="text-align: right;">
-      <div style="font-size: 20px; font-weight: 900; color: #dc2626; font-family: monospace;">${activeDT.dtNumber}</div>
-      <div style="font-size: 10px; font-weight: bold; color: #64748b;">JOB NO: ${jobData.id}</div>
-    </div>
-  </div>
-
-  <div class="grid">
-    <div class="box"><div class="lbl">Customer / Client</div><div class="val">${jobData.client}</div></div>
-    <div class="box"><div class="lbl">Project / Contract</div><div class="val">${contractStr}</div></div>
-    <div class="box"><div class="lbl">Rig / Well</div><div class="val">${jobData.rig} / ${jobData.well}</div></div>
-    <div class="box"><div class="lbl">Date Shipped</div><div class="val">${dtDateStr}</div></div>
-    <div class="box"><div class="lbl">RM Ref / Manifest</div><div class="val">${activeDT.rmRef || 'MR-881'}</div></div>
-    <div class="box"><div class="lbl">Dispatched By</div><div class="val">${activeDT.dispatchedBy || 'Base Dispatcher'}</div></div>
-    <div class="box"><div class="lbl">Recipient</div><div class="val">${activeDT.recipient || jobData.client}</div></div>
-    <div class="box"><div class="lbl">Purpose</div><div class="val">${jobData.serviceCategory || jobData.jobDescription || 'Downhole Rentals'}</div></div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 30px; text-align: center;">Item</th>
-        <th>Serial / Asset No</th>
-        <th>Description</th>
-        <th style="text-align: center; width: 45px;">QTY</th>
-        <th style="text-align: center;">Date Out</th>
-        <th>Category</th>
-        <th>Ownership</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${(activeDT.toolLines || []).map((t, idx) => `<tr>
-        <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
-        <td style="font-family: monospace; font-weight: bold;">${t.serial || t.assetNo}</td>
-        <td>${t.desc || t.shortDesc || (t as any).toolDescription || 'Downhole Tool'}</td>
-        <td style="text-align: center; font-weight: bold;">${t.qty || 1}</td>
-        <td style="text-align: center; font-family: monospace;">${dtDateStr}</td>
-        <td>${t.shortDesc || 'Downhole Tool'}</td>
-        <td>${t.ownership || 'EMDAD'}</td>
-      </tr>`).join('')}
-    </tbody>
-  </table>
-
-  <div class="sig">
-    <div class="sig-box">Dispatched By (EMDAD Base)<br/><br/><strong>${activeDT.dispatchedBy || 'Base Dispatcher'}</strong></div>
-    <div class="sig-box">Transporter / Driver<br/><br/>_______________________</div>
-    <div class="sig-box">Received on Rig (Client Rep)<br/><br/>_______________________</div>
-  </div>
-</body>
-</html>`;
-      printWindow.document.write(html);
-      printWindow.document.close();
-      setTimeout(() => {
-        printWindow.print();
-      }, 300);
+      handlePrintDeliveryTicket(activeDT);
       return;
     }
 
@@ -3396,6 +3332,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
                   <button
                     type="button"
+                    onClick={() => handlePrintDispatchChecklist()}
+                    className="bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs px-2.5 py-1 rounded border border-amber-300 transition cursor-pointer"
+                    title="Print Official Dispatch Checklist (Form DSF-003)"
+                  >
+                    PRINT DISPATCH CHECKLIST
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handlePrintTicket('report')}
                     className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs px-2.5 py-1 rounded transition cursor-pointer"
                   >
@@ -3652,17 +3596,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 )}
                 <button
                   type="button"
-                  onClick={() => handlePrintTicket('onshore')}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer"
+                  onClick={() => handlePrintDeliveryTicket(activeDT)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer shadow-2xs"
+                  title="Print Official Delivery Ticket (Form DSF-001)"
                 >
-                  Print Onshore Ticket
+                  Print Delivery Ticket
                 </button>
                 <button
                   type="button"
-                  onClick={() => handlePrintTicket('offshore')}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer"
+                  onClick={() => handlePrintDispatchChecklist(activeDT)}
+                  className="bg-amber-50 hover:bg-amber-100 text-amber-900 font-semibold text-xs px-2.5 py-1 rounded border border-amber-300 cursor-pointer shadow-2xs"
+                  title="Print Official Dispatch Checklist (Form DSF-003)"
                 >
-                  Print Offshore Ticket
+                  Print Dispatch Checklist
                 </button>
               </div>
             </div>
@@ -3937,17 +3883,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => handlePrintTicket('onshore')}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer"
+                  onClick={() => activeRT && handlePrintReceivingTicket(activeRT)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer shadow-2xs"
+                  title="Print Official Receiving Ticket (Form DSF-001)"
                 >
-                  Onshore ticket
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handlePrintTicket('offshore')}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2.5 py-1 rounded border border-slate-300 cursor-pointer"
-                >
-                  Offshore ticket
+                  Print Receiving Ticket
                 </button>
               </div>
             </div>

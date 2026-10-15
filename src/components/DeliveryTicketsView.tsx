@@ -5,6 +5,14 @@ import { extractSizeFromDescription, extractToolType, normalizeJobKey } from '..
 import { EMDAD_LOGO_BASE64, EmdadLogo } from '../constants/branding';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 import { JobSearchSelect } from './JobSearchSelect';
+import {
+  generateDeliveryTicketHtml,
+  generateDispatchChecklistHtml,
+  openPrintWindow,
+  DeliveryTicketPrintData,
+  DispatchChecklistPrintData,
+} from '../services/ticketPrintService';
+import { formatDateDD_MM_YYYY } from './JobDossierView';
 
 interface DeliveryTicketsViewProps {
   user?: User | null;
@@ -451,112 +459,71 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   };
 
   const handlePrintDT = (b: DTBatch) => {
-    const printWindow = window.open('', '_blank', 'width=900,height=700');
-    if (!printWindow) {
-      alert('Please allow popups to print Delivery Tickets.');
-      return;
-    }
+    const job = jobs.find((j) => j.id === b.jobId);
+    const printData: DeliveryTicketPrintData = {
+      dtNumber: b.dtNumber,
+      client: b.client || job?.client || '—',
+      materialRequest: b.rmRef || 'MR FROM CLIENT',
+      jobNumber: b.jobId || job?.id || '—',
+      clientRef: (b as any).clientRef || (job as any)?.clientRef || '—',
+      radioMsgNo: (b as any).radioMsgNo || 'N/A',
+      serviceTicket: (b as any).serviceTicket || b.jobId || job?.id || '—',
+      ticketNo: b.dtNumber,
+      contractNo: getDisplayContract(b) || job?.contractNo || job?.contract || '—',
+      rig: b.rig || job?.rig || '—',
+      well: b.well || job?.well || '—',
+      shippedDate: b.rmDate || formatDateDD_MM_YYYY(new Date()),
+      deliveredTo: (b as any).deliveredTo || 'YARD 08',
+      msvName: (b as any).msvName || 'MARSOL SUPREME',
+      vehicleVesselNo: (b as any).vehicleVesselNo || (b as any).vesselNo || '70136 AD/54912',
+      driverName: (b as any).driverName || 'SARWAN/JAGJEETH SINGH',
+      contactNo: (b as any).contactNo || '055 890 7562/0555971632',
+      notes: b.notes,
+      tools: (b.toolLines || []).map((t, i) => {
+        const invTool = t.serial ? inventoryMap.get(t.serial.trim().toUpperCase()) : undefined;
+        const displayDesc = t.desc || t.shortDesc || (t as any).toolDescription || invTool?.shortDesc || invTool?.desc || 'Downhole Tool';
+        const displaySize = t.size || invTool?.size || extractSizeFromDescription(displayDesc) || '—';
+        return {
+          itemNo: i + 1,
+          partNo: t.serial || invTool?.serial || '—',
+          serial: t.serial || invTool?.serial || '—',
+          description: displaySize !== '—' && !displayDesc.includes(displaySize) ? `${displayDesc} (${displaySize})` : displayDesc,
+          qty: (t as any).qty || 1,
+          size: displaySize,
+        };
+      }),
+    };
+    const html = generateDeliveryTicketHtml(printData);
+    openPrintWindow(html, `Delivery Ticket - ${b.dtNumber}`);
+  };
 
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8"/>
-<title>Delivery Ticket - ${b.dtNumber}</title>
-<style>
-  body { font-family: Arial, sans-serif; font-size: 11px; padding: 24px; color: #1e293b; }
-  .hdr { display: flex; justify-content: space-between; border-bottom: 2px solid #f59e0b; padding-bottom: 12px; margin-bottom: 16px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
-  .box { border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px; background: #f8fafc; }
-  .lbl { font-size: 9px; font-weight: bold; color: #64748b; text-transform: uppercase; margin-bottom: 2px; }
-  .val { font-size: 12px; font-weight: bold; color: #0f172a; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11px; }
-  th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
-  th { background: #f1f5f9; font-weight: bold; }
-  .sig { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 36px; padding-top: 10px; }
-  .sig-box { border-top: 1px solid #0f172a; padding-top: 6px; font-size: 10px; }
-  .seal-badge { display: inline-block; padding: 4px 8px; background: #fee2e2; border: 1px solid #f87171; color: #991b1b; font-weight: bold; font-size: 10px; border-radius: 4px; }
-</style>
-</head>
-<body>
-  <div class="hdr">
-    <div style="display: flex; align-items: center; gap: 14px;">
-      <img src="${EMDAD_LOGO_BASE64}" alt="EMDAD Logo" style="height: 38px; width: auto; object-fit: contain;" />
-      <div>
-        <h1 style="font-size: 18px; margin: 0 0 2px; color: #1a3055;">EMDAD OILFIELD SERVICES LLC</h1>
-        <div style="color: #64748b; font-size: 10px;">Downhole Tool Rental &amp; Logistics Manifest</div>
-      </div>
-    </div>
-    <div style="text-align: right;">
-      <div style="font-size: 20px; font-weight: 900; color: #d97706; font-family: monospace;">${b.dtNumber}</div>
-      <div style="font-size: 10px; font-weight: bold; color: #64748b;">DELIVERY TICKET (DT)</div>
-      <div class="seal-badge" style="margin-top: 4px;">${b.isLocked !== false ? 'SEALED & DISPATCHED' : 'UNLOCKED / MODIFIED'}</div>
-    </div>
-  </div>
-
-  <div class="grid">
-    <div class="box"><div class="lbl">Drilling Job Number</div><div class="val">${b.jobId}</div></div>
-    <div class="box"><div class="lbl">RM / ATK Reference</div><div class="val">${b.rmRef}</div></div>
-    <div class="box"><div class="lbl">Rig &amp; Well</div><div class="val">${b.rig} / ${b.well}</div></div>
-    <div class="box"><div class="lbl">Master Contract</div><div class="val">${getDisplayContract(b)}</div></div>
-    <div class="box"><div class="lbl">Dispatch Date</div><div class="val">${b.rmDate}</div></div>
-    <div class="box"><div class="lbl">Dispatched By</div><div class="val">${b.dispatchedBy}</div></div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 30px;">#</th>
-        <th>Serial / System ID</th>
-        <th>Size</th>
-        <th>Tool Description</th>
-        <th>Ownership</th>
-        <th style="width: 40px; text-align: center;">Qty</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${(b.toolLines || [])
-        .map(
-          (t, i) => {
-            const invTool = t.serial ? inventoryMap.get(t.serial.trim().toUpperCase()) : undefined;
-            const displayDesc = t.desc || t.shortDesc || (t as any).toolDescription || invTool?.shortDesc || invTool?.desc || 'Downhole Tool';
-            const displaySize = t.size || invTool?.size || extractSizeFromDescription(displayDesc) || '—';
-            const displayOwner = t.ownership || invTool?.ownership || 'EMDAD';
-            return `<tr>
-        <td>${i + 1}</td>
-        <td style="font-family: monospace; font-weight: bold;">${t.serial}</td>
-        <td style="font-family: monospace;">${displaySize}</td>
-        <td>${displayDesc}</td>
-        <td>${displayOwner}</td>
-        <td style="text-align: center;">${(t as any).qty || 1}</td>
-      </tr>`;
-          }
-        )
-        .join('')}
-    </tbody>
-  </table>
-
-  ${
-    b.notes
-      ? `<div style="background: #fffbeb; border: 1px solid #fde68a; padding: 8px; border-radius: 4px; font-size: 11px; margin-bottom: 16px;"><strong>Notes &amp; Audit Trail:</strong><br/>${b.notes.replace(
-          /\n/g,
-          '<br/>'
-        )}</div>`
-      : ''
-  }
-
-  <div class="sig">
-    <div class="sig-box">Prepared By (EMDAD Base)<br/><br/><strong>${b.dispatchedBy}</strong></div>
-    <div class="sig-box">Authorized Transport<br/><br/>_______________________</div>
-    <div class="sig-box">Received at Rig Site<br/><br/><strong>${b.recipient || '_______________________'}</strong></div>
-  </div>
-</body>
-</html>`;
-
-    printWindow.document.write(html);
-    printWindow.document.close();
-    setTimeout(() => {
-      printWindow.print();
-    }, 300);
+  const handlePrintDispatchChecklist = (b: DTBatch) => {
+    const job = jobs.find((j) => j.id === b.jobId);
+    const checklistData: DispatchChecklistPrintData = {
+      ticketNo: b.dtNumber,
+      project: job?.id || b.jobId || '—',
+      projectDesc: job?.jobDescription || job?.serviceCategory || 'RENTAL DRILLING TOOLS',
+      dtNumber: b.dtNumber,
+      rig: b.rig || job?.rig || '—',
+      well: b.well || job?.well || '—',
+      date: b.rmDate || formatDateDD_MM_YYYY(new Date()),
+      client: b.client || job?.client || '—',
+      wellId: (job as any)?.wellId || (b as any)?.wellId,
+      comments: b.notes ? b.notes : (job as any)?.wellId ? `WELL'S ID - ${(job as any).wellId}` : undefined,
+      tools: (b.toolLines || []).map((t, i) => {
+        const invTool = t.serial ? inventoryMap.get(t.serial.trim().toUpperCase()) : undefined;
+        const displayDesc = t.desc || t.shortDesc || (t as any).toolDescription || invTool?.shortDesc || invTool?.desc || 'Downhole Tool';
+        const displaySize = t.size || invTool?.size || extractSizeFromDescription(displayDesc) || '—';
+        return {
+          lineNo: i + 1,
+          partNo: t.serial || invTool?.serial || '—',
+          description: displaySize !== '—' && !displayDesc.includes(displaySize) ? `${displayDesc} (${displaySize})` : displayDesc,
+          qty: (t as any).qty || 1,
+        };
+      }),
+    };
+    const html = generateDispatchChecklistHtml(checklistData);
+    openPrintWindow(html, `Dispatch Checklist - ${b.dtNumber}`);
   };
 
   return (
@@ -803,9 +770,17 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                           type="button"
                           onClick={() => handlePrintDT(b)}
                           className="h-6 px-2 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-medium border border-slate-300 cursor-pointer transition shadow-2xs"
-                          title="Print Delivery Ticket"
+                          title="Print Official Delivery Ticket (Form DSF-001)"
                         >
-                          Print
+                          Print DT
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePrintDispatchChecklist(b)}
+                          className="h-6 px-2 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 text-[11px] font-medium border border-amber-300 cursor-pointer transition shadow-2xs"
+                          title="Print Official Dispatch Checklist (Form DSF-003)"
+                        >
+                          Checklist
                         </button>
                       </td>
                     </tr>
@@ -1703,8 +1678,17 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                   type="button"
                   onClick={() => handlePrintDT(selectedDTDetail)}
                   className="px-3.5 py-1.5 rounded-lg bg-slate-200 text-slate-800 font-bold hover:bg-slate-300 cursor-pointer transition flex items-center gap-1.5 shadow-2xs"
+                  title="Print Official Delivery Ticket (Form DSF-001)"
                 >
                   <span>🖨</span> Print Delivery Ticket
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePrintDispatchChecklist(selectedDTDetail)}
+                  className="px-3.5 py-1.5 rounded-lg bg-amber-100 text-amber-900 font-bold hover:bg-amber-200 border border-amber-300 cursor-pointer transition flex items-center gap-1.5 shadow-2xs"
+                  title="Print Official Dispatch Checklist (Form DSF-003)"
+                >
+                  <span>📋</span> Print Dispatch Checklist
                 </button>
               </div>
 
