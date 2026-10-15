@@ -1187,15 +1187,68 @@ export function normalizeRTBatch(row: any): any {
 
 /** tbl_Callouts + tbl_CalloutItems -> Callout (via getcallouts) */
 function normalizeCalloutItem(row: any): any {
+  const assetNo = String(
+    row.assetNo ||
+    row.AssetNo ||
+    row.partNo ||
+    row.PartNo ||
+    row.PartNum ||
+    row.partNum ||
+    row.Part_No ||
+    row.part_no ||
+    ''
+  ).trim();
+  const desc = String(
+    row.description ||
+    row.Description ||
+    row.desc ||
+    row.Desc ||
+    row.toolDescription ||
+    row.ToolDescription ||
+    row.PartDescription ||
+    row.partDescription ||
+    ''
+  ).trim();
+  const shortDesc = String(
+    row.shortDesc ||
+    row.ShortDesc ||
+    row.cat ||
+    row.Cat ||
+    row.category ||
+    row.Category ||
+    row.toolType ||
+    row.ToolType ||
+    ''
+  ).trim();
+  const supplier = String(
+    row.supplier ||
+    row.Supplier ||
+    row.vendor ||
+    row.Vendor ||
+    row.ownership ||
+    row.Ownership ||
+    'EMDAD'
+  ).trim();
+
   return {
-    itemId: row.ItemID,
+    itemId: row.ItemID || row.itemId,
     seq: Number(row.seq ?? row.Seq ?? 0),
     size: row.size || row.Size || '',
-    shortDesc: row.shortDesc || row.ShortDesc || '',
+    shortDesc: shortDesc,
+    cat: row.cat || row.Cat || shortDesc,
     qty: Number(row.qty ?? row.Qty ?? 0),
     assigned: Number(row.assigned ?? row.Assigned ?? 0),
-    serialNos: Array.isArray(row.serialNos) ? row.serialNos : [],
+    serialNos: Array.isArray(row.serialNos) ? row.serialNos : (row.serial ? [String(row.serial)] : []),
     status: row.status || row.Status || 'Pending',
+    assetNo: assetNo,
+    partNo: assetNo,
+    description: desc,
+    desc: desc,
+    supplier: supplier,
+    comments: String(row.comments || row.Comments || 'ACCEPTED').trim(),
+    insNum: String(row.insNum || row.InsNum || '').trim(),
+    insDate: cleanDateStr(row.insDate || row.InsDate || ''),
+    qtyIn: Number(row.qtyIn ?? row.QtyIn ?? (row.qty ?? row.Qty ?? 1)),
   };
 }
 

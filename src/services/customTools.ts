@@ -3,23 +3,42 @@ import { loadDatasetFromCache, saveDatasetToCache } from './dbCache';
 
 const CUSTOM_TOOLS_KEY = 'emdad_custom_tools';
 
+const DEFAULT_CUSTOM_TOOLS: ToolItem[] = [
+  { id: 'EMD-6372', serial: 'EMD-6372', assetNo: 'SM578-001', size: '5-7/8"', shortDesc: 'STRING MILL', desc: '5-7/8" STRING MILL W/ 3-1/2" IF PIN X BOX', qty: 1, location: 'Emdad Base', status: 'Good', ownership: 'EMDAD', isEmdad: true, supplier: 'EMDAD', addedDate: '2024-01-01' },
+  { id: 'EMD-6373', serial: 'EMD-6373', assetNo: 'DS958-001', size: '9-5/8"', shortDesc: 'DRILLING SCRAPER', desc: '9-5/8" DRILLING CASING SCRAPER W/ 4-1/2" IF PIN X BOX', qty: 1, location: 'Emdad Base', status: 'Good', ownership: 'EMDAD', isEmdad: true, supplier: 'EMDAD', addedDate: '2024-01-01' },
+  { id: 'EMD-6374', serial: 'EMD-6374', assetNo: 'DS700-001', size: '7"', shortDesc: 'DRILLING SCRAPER', desc: '7" DRILLING CASING SCRAPER W/ 3-1/2" IF PIN X BOX', qty: 1, location: 'Emdad Base', status: 'Good', ownership: 'EMDAD', isEmdad: true, supplier: 'EMDAD', addedDate: '2024-01-01' },
+];
+
 /**
  * Safely loads custom / user-added / modified tools from localStorage.
  */
 export function loadCustomTools(): ToolItem[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(CUSTOM_TOOLS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed.filter((t) => t && (t.id || t.serial));
+  let list: ToolItem[] = [];
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(CUSTOM_TOOLS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          list = parsed.filter((t) => t && (t.id || t.serial));
+        }
+      }
+    } catch (err) {
+      console.warn('[CustomTools] Failed to parse custom tools from localStorage:', err);
     }
-    return [];
-  } catch (err) {
-    console.warn('[CustomTools] Failed to parse custom tools from localStorage:', err);
-    return [];
   }
+
+  // Ensure default custom tools are always included
+  const existingKeys = new Set(list.map((t) => String(t.serial || t.id).trim().toUpperCase()));
+  DEFAULT_CUSTOM_TOOLS.forEach((def) => {
+    const k = String(def.serial || def.id).trim().toUpperCase();
+    if (!existingKeys.has(k)) {
+      list.push(def);
+      existingKeys.add(k);
+    }
+  });
+
+  return list;
 }
 
 /**

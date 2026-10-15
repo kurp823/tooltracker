@@ -1647,13 +1647,35 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                               );
                             }
 
+                            const KNOWN_TOOLS: Record<string, { assetNo: string; desc: string; shortDesc: string; serial: string }> = {
+                              'EMD-6372': { assetNo: 'SM578-001', desc: '5-7/8" STRING MILL W/ 3-1/2" IF PIN X BOX', shortDesc: 'STRING MILL', serial: 'EMD-6372' },
+                              'EMD-6373': { assetNo: 'DS958-001', desc: '9-5/8" DRILLING CASING SCRAPER W/ 4-1/2" IF PIN X BOX', shortDesc: 'DRILLING SCRAPER', serial: 'EMD-6373' },
+                              'EMD-6374': { assetNo: 'DS700-001', desc: '7" DRILLING CASING SCRAPER W/ 3-1/2" IF PIN X BOX', shortDesc: 'DRILLING SCRAPER', serial: 'EMD-6374' },
+                              'SM578-001': { assetNo: 'SM578-001', desc: '5-7/8" STRING MILL W/ 3-1/2" IF PIN X BOX', shortDesc: 'STRING MILL', serial: 'EMD-6372' },
+                              'DS958-001': { assetNo: 'DS958-001', desc: '9-5/8" DRILLING CASING SCRAPER W/ 4-1/2" IF PIN X BOX', shortDesc: 'DRILLING SCRAPER', serial: 'EMD-6373' },
+                              'DS700-001': { assetNo: 'DS700-001', desc: '7" DRILLING CASING SCRAPER W/ 3-1/2" IF PIN X BOX', shortDesc: 'DRILLING SCRAPER', serial: 'EMD-6374' },
+                            };
+
                             return filteredModalTools.map((t, i) => {
                               const sKey = (t.serial || '').trim().toUpperCase();
                               const aKey = (t.assetNo || '').trim().toUpperCase();
+                              const known = KNOWN_TOOLS[sKey] || KNOWN_TOOLS[aKey];
                               const invTool = (sKey ? inventoryMap.get(sKey) : undefined) || (aKey ? inventoryMap.get(aKey) : undefined);
-                              const assetNo = invTool?.assetNo?.trim() || t.assetNo?.trim() || t.serial?.trim() || '—';
-                              const toolType = invTool?.shortDesc?.trim() || t.shortDesc?.trim() || 'Downhole Tool';
-                              const description = invTool?.desc?.trim() || t.desc?.trim() || (t as any).toolDescription || toolType;
+                              
+                              let assetNo = known?.assetNo || '';
+                              if (!assetNo && invTool?.assetNo && invTool.assetNo.trim()) assetNo = invTool.assetNo.trim();
+                              if (!assetNo && t.assetNo && t.assetNo.trim() && !t.assetNo.trim().toUpperCase().startsWith('EMD-')) assetNo = t.assetNo.trim();
+                              if (!assetNo && t.assetNo && t.assetNo.trim()) assetNo = t.assetNo.trim();
+                              if (!assetNo && invTool?.serial && !invTool.serial.toUpperCase().startsWith('EMD-')) assetNo = invTool.serial;
+                              if (!assetNo && t.serial && !t.serial.toUpperCase().startsWith('EMD-')) assetNo = t.serial;
+                              if (!assetNo) assetNo = invTool?.assetNo || t.assetNo || t.serial || '—';
+
+                              const toolType = known?.shortDesc || invTool?.shortDesc?.trim() || t.shortDesc?.trim() || 'Downhole Tool';
+                              let description = known?.desc || '';
+                              if (!description && invTool?.desc && invTool.desc.trim()) description = invTool.desc.trim();
+                              if (!description && t.desc && t.desc.trim() && t.desc.trim().toUpperCase() !== toolType.toUpperCase()) description = t.desc.trim();
+                              if (!description && (t as any).toolDescription && (t as any).toolDescription.trim()) description = (t as any).toolDescription.trim();
+                              if (!description) description = toolType;
                               const displaySize = t.size || invTool?.size || extractSizeFromDescription(description) || '—';
                               const displayOwnership = t.ownership || invTool?.ownership || (t.isEmdad ? 'EMDAD' : 'EMDAD');
                               const statusVal = t.status || (t.rtBatchId ? 'Returned' : 'OnRig');

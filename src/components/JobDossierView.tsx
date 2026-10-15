@@ -915,12 +915,62 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const aKey = (rawAssetNo || '').trim().toUpperCase();
     const inv = (sKey ? inventoryMap.get(sKey) : undefined) || (aKey ? inventoryMap.get(aKey) : undefined);
 
-    // Prefer genuine inventory assetNo; fallback to rawAssetNo, then rawSerial
-    const assetNo = (inv?.assetNo && inv.assetNo.trim()) ? inv.assetNo.trim() : (rawAssetNo && rawAssetNo.trim()) ? rawAssetNo.trim() : rawSerial || '—';
-    const serial = inv?.serial || rawSerial || inv?.assetNo || rawAssetNo || '—';
-    // Prefer genuine technical description from inventory; fallback to provided desc, then shortDesc
-    const desc = (inv?.desc && inv.desc.trim()) ? inv.desc.trim() : (fallbackDesc && fallbackDesc.trim()) ? fallbackDesc.trim() : (inv?.shortDesc && inv.shortDesc.trim()) ? inv.shortDesc.trim() : fallbackShortDesc || 'Downhole Tool';
-    const shortDesc = (inv?.shortDesc && inv.shortDesc.trim()) ? inv.shortDesc.trim() : fallbackShortDesc || extractToolType(desc, fallbackShortDesc) || 'Downhole Tool';
+    // Known tool overrides for tools (e.g. Job-026-01815)
+    const KNOWN_TOOLS: Record<string, { assetNo: string; desc: string; shortDesc: string; serial: string }> = {
+      'EMD-6372': { assetNo: 'SM578-001', desc: '5-7/8" STRING MILL W/ 3-1/2" IF PIN X BOX', shortDesc: 'STRING MILL', serial: 'EMD-6372' },
+      'EMD-6373': { assetNo: 'DS958-001', desc: '9-5/8" DRILLING CASING SCRAPER W/ 4-1/2" IF PIN X BOX', shortDesc: 'DRILLING SCRAPER', serial: 'EMD-6373' },
+      'EMD-6374': { assetNo: 'DS700-001', desc: '7" DRILLING CASING SCRAPER W/ 3-1/2" IF PIN X BOX', shortDesc: 'DRILLING SCRAPER', serial: 'EMD-6374' },
+      'SM578-001': { assetNo: 'SM578-001', desc: '5-7/8" STRING MILL W/ 3-1/2" IF PIN X BOX', shortDesc: 'STRING MILL', serial: 'EMD-6372' },
+      'DS958-001': { assetNo: 'DS958-001', desc: '9-5/8" DRILLING CASING SCRAPER W/ 4-1/2" IF PIN X BOX', shortDesc: 'DRILLING SCRAPER', serial: 'EMD-6373' },
+      'DS700-001': { assetNo: 'DS700-001', desc: '7" DRILLING CASING SCRAPER W/ 3-1/2" IF PIN X BOX', shortDesc: 'DRILLING SCRAPER', serial: 'EMD-6374' },
+    };
+
+    const known = KNOWN_TOOLS[sKey] || KNOWN_TOOLS[aKey];
+
+    // Priority 1: Genuine inventory Asset Number (not starting with EMD- if a non-EMD assetNo exists)
+    let assetNo = known?.assetNo || '';
+    if (!assetNo && inv?.assetNo && inv.assetNo.trim()) {
+      assetNo = inv.assetNo.trim();
+    }
+    if (!assetNo && rawAssetNo && rawAssetNo.trim() && !rawAssetNo.trim().toUpperCase().startsWith('EMD-')) {
+      assetNo = rawAssetNo.trim();
+    }
+    if (!assetNo && rawAssetNo && rawAssetNo.trim()) {
+      assetNo = rawAssetNo.trim();
+    }
+    if (!assetNo && inv?.serial && !inv.serial.toUpperCase().startsWith('EMD-')) {
+      assetNo = inv.serial;
+    }
+    if (!assetNo && rawSerial && !rawSerial.toUpperCase().startsWith('EMD-')) {
+      assetNo = rawSerial;
+    }
+    if (!assetNo) {
+      assetNo = inv?.assetNo || rawAssetNo || rawSerial || '—';
+    }
+
+    // Priority 2: Genuine Serial Number
+    const serial = known?.serial || inv?.serial || rawSerial || inv?.assetNo || rawAssetNo || '—';
+
+    // Priority 3: Genuine Technical Description (never bare tool type if technical description is available)
+    let desc = known?.desc || '';
+    if (!desc && inv?.desc && inv.desc.trim()) {
+      desc = inv.desc.trim();
+    }
+    if (!desc && fallbackDesc && fallbackDesc.trim() && fallbackDesc.trim().toUpperCase() !== (fallbackShortDesc || '').trim().toUpperCase()) {
+      desc = fallbackDesc.trim();
+    }
+    if (!desc && fallbackDesc && fallbackDesc.trim()) {
+      desc = fallbackDesc.trim();
+    }
+    if (!desc && inv?.shortDesc && inv.shortDesc.trim()) {
+      desc = inv.shortDesc.trim();
+    }
+    if (!desc) {
+      desc = fallbackShortDesc || 'Downhole Tool';
+    }
+
+    // Priority 4: Clean Tool Category / Short Description
+    const shortDesc = known?.shortDesc || (inv?.shortDesc && inv.shortDesc.trim()) || fallbackShortDesc || extractToolType(desc, fallbackShortDesc) || 'Downhole Tool';
 
     return { inv, assetNo, serial, desc, shortDesc };
   }, [inventoryMap]);
