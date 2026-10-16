@@ -528,6 +528,26 @@ export const App: React.FC = () => {
             jobs: mergedJobs,
           });
 
+          // Also refresh secondary modules (callouts/checklists, contracts, inspections) from Azure SQL
+          fetchSecondaryModules().then((sec) => {
+            if (sec.callouts !== undefined) setCallouts(sec.callouts);
+            if (sec.gatePasses !== undefined) setGatePasses(sec.gatePasses);
+            if (sec.inspections !== undefined) setInspections(sec.inspections);
+            if (sec.maintenance !== undefined) setMaintenance(sec.maintenance);
+            if (sec.contracts !== undefined) {
+              setContracts((prev) => {
+                return sec.contracts!.map((c) => {
+                  const existing = prev.find((p) => p.id === c.id || p.contractRef === c.contractRef || (c.contractNo && p.contractNo === c.contractNo));
+                  const initial = INITIAL_CONTRACTS.find((i) => i.id === c.id || i.contractRef === c.contractRef || (c.contractNo && i.contractNo === c.contractNo));
+                  const rates = (c.rates && c.rates.length > 0)
+                    ? c.rates
+                    : ((existing && existing.rates && existing.rates.length > 0) ? existing.rates : (initial?.rates || []));
+                  return { ...c, rates };
+                });
+              });
+            }
+          });
+
           setDbStatus({
             isConnected: true,
             source: res.source === 'failed' ? 'local-cache' : res.source,
@@ -657,14 +677,10 @@ export const App: React.FC = () => {
       });
     });
 
-    // 1. Periodic background sync every 30 seconds so tools created by other users appear promptly
+    // 1. Periodic background sync every 12 seconds so tools and tickets created by other users sync promptly
     const pollInterval = setInterval(() => {
-      handleFetchLiveSql(true).finally(() => {
-        fetchSecondaryModules().then((res) => {
-          if (res.callouts !== undefined) setCallouts(res.callouts);
-        });
-      });
-    }, 30000);
+      handleFetchLiveSql(true);
+    }, 12000);
 
     // 2. On window focus / tab switch: Immediately refresh to pick up other users' new tools
     const handleWindowFocus = () => {
@@ -672,9 +688,21 @@ export const App: React.FC = () => {
     };
     window.addEventListener('focus', handleWindowFocus);
 
+    // 3. Cross-tab instant synchronization via BroadcastChannel
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel('tooltracker_sync');
+        bc.onmessage = () => {
+          handleFetchLiveSql(true);
+        };
+      }
+    } catch {}
+
     return () => {
       clearInterval(pollInterval);
       window.removeEventListener('focus', handleWindowFocus);
+      if (bc) bc.close();
     };
   }, [currentUser, handleFetchLiveSql]);
 
@@ -823,6 +851,16 @@ export const App: React.FC = () => {
     showToast('Inventory catalog updated.', 'success');
   };
 
+  const broadcastSync = () => {
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('tooltracker_sync');
+        bc.postMessage({ timestamp: Date.now() });
+        bc.close();
+      }
+    } catch {}
+  };
+
   // Callouts Actions
   const handleSaveCallout = (saved: Callout) => {
     setCallouts((prev) => {
@@ -835,6 +873,7 @@ export const App: React.FC = () => {
     saveCalloutApi(saved).then((r) => {
       if (!r.success) showToast(r.message, 'error');
     });
+    broadcastSync();
     showToast(`Callout ${saved.id} saved successfully.`, 'success');
   };
 
@@ -889,6 +928,7 @@ export const App: React.FC = () => {
         )
       );
     }
+    broadcastSync();
     showToast(`Drilling Job ${job.id} saved successfully.`, 'success');
   };
 
@@ -900,13 +940,17 @@ export const App: React.FC = () => {
 
   // DT Batch Actions
   const handleSaveDTBatch = (batch: DTBatch) => {
+    const isActuallyLocked = batch.isLocked === true;
     const finalizedBatch: DTBatch = {
       ...batch,
-      isLocked: true,
-      lockedBy: currentUser?.name || 'Operations',
-      lockedDate: new Date().toISOString(),
+      isLocked: isActuallyLocked,
+      lockedBy: isActuallyLocked ? (batch.lockedBy || currentUser?.name || 'Operations') : undefined,
+      lockedDate: isActuallyLocked ? (batch.lockedDate || new Date().toISOString()) : undefined,
     };
-    setDtBatches((prev) => [finalizedBatch, ...prev]);
+    setDtBatches((prev) => {
+      const filtered = prev.filter((b) => b.id !== finalizedBatch.id && b.dtNumber !== finalizedBatch.dtNumber);
+      return [finalizedBatch, ...filtered];
+    });
     saveDeliveryTicketApi(finalizedBatch).then((r) => {
       if (!r.success) showToast(r.message, 'error');
     });
@@ -946,7 +990,8 @@ export const App: React.FC = () => {
       );
     }
 
-    showToast(`Delivery Ticket ${batch.dtNumber} issued & dispatched to rig.`, 'success');
+    broadcastSync();
+    showToast(`Delivery Ticket ${batch.dtNumber} saved.`, 'success');
   };
 
   const handleUpdateDTBatch = (
@@ -958,6 +1003,7 @@ export const App: React.FC = () => {
     saveDeliveryTicketApi(updatedBatch).then((r) => {
       if (!r.success) showToast(r.message, 'error');
     });
+    broadcastSync();
 
     if (addedTools && addedTools.length > 0) {
       const addedSerials = new Set(addedTools.map((t) => t.serial));

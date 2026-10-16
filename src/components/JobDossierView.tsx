@@ -342,10 +342,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Technical Details sub-tab
   const [techSubTab, setTechSubTab] = useState<'fishing' | 'whipstock' | 'rentals'>('fishing');
 
-  // Helper to normalize job numbers for robust live SQL data matching (e.g. Job-026-01737 <-> 026-01737)
+  // Helper to normalize job numbers for robust live SQL data matching (e.g. Job-026-01737 <-> Job-26-01737)
   const normalizeJobKey = (val?: string | null) => {
     if (!val) return '';
-    return val.trim().toUpperCase().replace(/^JOB[-_]?/i, '');
+    return val
+      .trim()
+      .toUpperCase()
+      .replace(/^(JOB|CAL|DT|RT)[-_]?/i, '')
+      .replace(/^0+/, '')
+      .replace(/-0+/, '-');
   };
 
   // Job Header state with resilient notes persistence across tab switches and live re-fetches
@@ -693,13 +698,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const jobCallouts = useMemo(() => {
     const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
     const normId = normalizeJobKey(jobData.id || jobData.jobNumber);
+    const calIdFromJob = (jobData.calloutId || '').trim().toUpperCase();
+    const normCalFromJob = normalizeJobKey(jobData.calloutId);
 
     return callouts.filter((c) => {
+      const cId = (c.id || (c as any).calloutNumber || '').trim().toUpperCase();
+      const cNormId = normalizeJobKey(c.id || (c as any).calloutNumber);
       const cJob = (c.jobId || (c as any).jobNumber || '').trim().toUpperCase();
       const cNorm = normalizeJobKey(c.jobId || (c as any).jobNumber);
       if (rawId && cJob && cJob === rawId) return true;
       if (normId && cNorm && normId === cNorm) return true;
-      if (jobData.calloutId && (c.id === jobData.calloutId || (c as any).calloutNumber === jobData.calloutId)) return true;
+      if (calIdFromJob && (cId === calIdFromJob || cNormId === normCalFromJob)) return true;
+      if (normId && cNormId && normId === cNormId) return true;
       return false;
     });
   }, [callouts, jobData]);
@@ -894,7 +904,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Active callout object - Guaranteed to link to this jobData.id
   const activeCallout = useMemo(() => {
-    const found = jobCallouts.find((c) => c.id === selectedCalloutId) || jobCallouts[0];
+    const foundWithItems = jobCallouts.find((c) => c.items && c.items.length > 0);
+    const foundById = jobCallouts.find((c) => c.id === selectedCalloutId);
+    const found = (selectedCalloutId && selectedCalloutId !== 'NEW' && foundById) ? foundById : (foundWithItems || jobCallouts[0]);
     if (found) {
       const safeTicket = sanitizeTicketNumber(found.ticketNo) || sanitizeTicketNumber((found as any).calloutNumber) || sanitizeTicketNumber(jobData.clientRef);
       return {
@@ -1943,6 +1955,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       return;
     }
 
+    const confirmed = window.confirm(
+      `Generate Delivery Ticket for ${toolsToMobilize.length} selected tool(s)?\n\n` +
+      `• Job: ${jobData.id} (${jobData.rig} / ${jobData.well})\n` +
+      `• Equipment Count: ${toolsToMobilize.length} tool(s)\n\n` +
+      `This will create an editable Draft Manifest. The ticket will NOT be dispatched or locked until you review and confirm dispatch.`
+    );
+    if (!confirmed) return;
+
     const curYr = new Date().getFullYear().toString().slice(-2);
     const existingSeqs = dtBatches
       .map((b) => {
@@ -1983,7 +2003,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           ownership: ci.supplier || resolved.inv?.ownership || 'EMDAD',
           isEmdad: (ci.supplier || resolved.inv?.ownership || '').toUpperCase().includes('EMDAD'),
           qty: ci.qty || 1,
-          remarks: 'Mobilized',
+          remarks: '',
         };
       }),
     };
@@ -2940,11 +2960,38 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             <span>{isSaving ? 'Saving…' : 'Save Job File'}</span>
           </button>
 
+          {/* Admin Unlock / Re-lock Button */}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!adminUnlocked) {
+                  setIsReopenModalOpen(true);
+                } else {
+                  setAdminUnlocked(false);
+                  showToast('Admin override deactivated. Workspace restored to locked mode.', 'info');
+                }
+              }}
+              className={`text-xs px-2.5 py-1 rounded cursor-pointer transition font-bold flex items-center gap-1 shadow-xs ${
+                adminUnlocked
+                  ? 'bg-amber-400 hover:bg-amber-500 text-slate-950 ring-2 ring-amber-300'
+                  : 'bg-amber-600 hover:bg-amber-700 text-white'
+              }`}
+              title={adminUnlocked ? 'Admin Override is ACTIVE. Click to re-lock.' : 'Admin Override: Unlock Job, Checklist & DT for corrections'}
+            >
+              <span>{adminUnlocked ? '🔓 Admin Unlocked' : '🔓 Admin Unlock'}</span>
+            </button>
+          )}
+
           {/* Refresh Button */}
           {onRefresh && (
             <button
               type="button"
-              onClick={onRefresh}
+              onClick={async () => {
+                showToast('Synchronizing Job File with Azure SQL...', 'info');
+                await onRefresh();
+                showToast('Job File synchronized with Azure SQL.', 'success');
+              }}
               className="text-xs bg-white/10 hover:bg-white/20 text-slate-200 px-2.5 py-1 rounded cursor-pointer transition font-medium flex items-center gap-1"
               title="Refresh live data from server"
             >
@@ -4132,7 +4179,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <tr key={i} className="hover:bg-blue-50/50 h-7 leading-none">
                           {/* Selection Checkbox */}
                           <td className="py-1 px-2 whitespace-nowrap text-center">
-                            {assignedDT?.isLocked ? (
+                            {assignedDT?.isLocked && !adminUnlocked ? (
                               <input
                                 type="checkbox"
                                 checked
@@ -4144,7 +4191,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                               <input
                                 type="checkbox"
                                 checked={selectedChecklistSeqs.includes(item.seq)}
-                                disabled={isClosedOrInvoiced || isLocked}
+                                disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
                                 onChange={() => toggleChecklistItem(item.seq)}
                                 className="cursor-pointer accent-blue-600 rounded"
                                 title="Select tool to include in Delivery Ticket"
@@ -4198,9 +4245,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             );
                           })}
 
-                          {!isClosedOrInvoiced && !isLocked && (
+                          {((!isClosedOrInvoiced || adminUnlocked) && (!isLocked || adminUnlocked)) && (
                             <td className="py-1 px-2 whitespace-nowrap text-center truncate">
-                              {assignedDT?.isLocked ? (
+                              {assignedDT?.isLocked && !adminUnlocked ? (
                                 <span
                                   className="text-slate-400 font-bold text-[11px] inline-flex items-center gap-0.5 cursor-not-allowed select-none"
                                   title={`Locked: Tool already dispatched on Delivery Ticket ${assignedDT.dtNumber}. Cannot delete from checklist.`}
@@ -4284,20 +4331,33 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {effectiveDT.isLocked || isClosedOrInvoiced ? (
-                  <span className="bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs px-3 py-1 rounded flex items-center gap-1 shadow-2xs">
-                    <span>🔒</span>
-                    <span>Dispatched &amp; Locked (Shipped to Rig)</span>
-                  </span>
+                {(effectiveDT.isLocked || isClosedOrInvoiced) && !adminUnlocked ? (
+                  <>
+                    <span className="bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs px-3 py-1 rounded flex items-center gap-1 shadow-2xs">
+                      <span>🔒</span>
+                      <span>Dispatched &amp; Locked (Shipped to Rig)</span>
+                    </span>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setIsReopenModalOpen(true)}
+                        className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs cursor-pointer flex items-center gap-1 transition"
+                        title="Admin Override: Unlock this Delivery Ticket and Checklist for corrections"
+                      >
+                        <span>🔓</span>
+                        <span>Unlock DT (Admin)</span>
+                      </button>
+                    )}
+                  </>
                 ) : (
-                  !isClosedOrInvoiced && !isLocked && (
+                  (!isClosedOrInvoiced || adminUnlocked) && (!isLocked || adminUnlocked) && (
                     <button
                       type="button"
                       onClick={handleConfirmAndLockDT}
                       className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
                     >
                       <span>🚚</span>
-                      <span>Confirm Dispatch &amp; Lock DT (Ship to Rig)</span>
+                      <span>{adminUnlocked ? 'Confirm Corrections & Lock DT' : 'Confirm Dispatch & Lock DT (Ship to Rig)'}</span>
                     </button>
                   )
                 )}
@@ -6201,8 +6261,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             </div>
             <div className="p-4 space-y-3 text-xs">
               <p className="text-slate-700 leading-relaxed">
-                Job <strong>{jobData.id}</strong> has been legally invoiced or closed.
-                Re-opening this job unlocks operational editing.
+                Unlock Job <strong>{jobData.id}</strong>, its Checklist, and Delivery Tickets for operational corrections.
                 <strong className="text-amber-900"> A formal justification is required for the database audit log.</strong>
               </p>
               <div>
@@ -6213,7 +6272,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   rows={4}
                   value={reopenJustification}
                   onChange={(e) => setReopenJustification(e.target.value)}
-                  placeholder="e.g. Correcting backload serial number per client billing dispute audit ref #4412..."
+                  placeholder="e.g. Correcting tool serial numbers on Delivery Ticket DT-26-3429 per rig request ref #1815..."
                   className="w-full border border-slate-300 rounded p-2 text-xs text-slate-800 focus:ring-1 focus:ring-amber-500 outline-none"
                 />
               </div>
@@ -6232,7 +6291,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   type="button"
                   disabled={reopenJustification.trim().length < 10}
                   onClick={() => {
-                    const auditEntry = `\n\n[ADMIN AUDIT OVERRIDE - ${new Date().toLocaleString()} by ${user?.name || 'Admin'}]: Job re-opened for editing. Justification: ${reopenJustification.trim()}`;
+                    const auditEntry = `\n\n[ADMIN AUDIT OVERRIDE - ${new Date().toLocaleString()} by ${user?.name || 'Admin'}]: Job and Delivery Tickets unlocked for editing/corrections. Justification: ${reopenJustification.trim()}`;
                     const updated = {
                       ...jobData,
                       notes: (jobData.notes || '') + auditEntry,
@@ -6242,11 +6301,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     setAdminUnlocked(true);
                     setIsReopenModalOpen(false);
                     setReopenJustification('');
-                    showToast('Job unlocked for administrative editing. Justification logged in audit notes.', 'info');
+                    showToast('Workspace unlocked for administrative editing & corrections.', 'info');
                   }}
                   className="px-4 py-1 rounded bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-900 font-bold shadow-xs cursor-pointer"
                 >
-                  Confirm &amp; Unlock Job
+                  Confirm &amp; Unlock Workspace
                 </button>
               </div>
             </div>
@@ -6376,7 +6435,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           {onRefresh && (
             <button
               type="button"
-              onClick={onRefresh}
+              onClick={async () => {
+                showToast('Synchronizing Job File with Azure SQL...', 'info');
+                await onRefresh();
+                showToast('Job File synchronized with Azure SQL.', 'success');
+              }}
               className="px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
               title="Refresh live data from server"
             >
