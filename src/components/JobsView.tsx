@@ -630,10 +630,16 @@ export const JobsView: React.FC<JobsViewProps> = ({
   };
 
   const handleStageSelectChange = (job: DrillingJob, newStage: JobStageKey) => {
-    // If the job already has a verified legal invoice, it is locked as completed
+    // If the job already has a verified legal invoice, it is locked as completed unless overridden by Admin
     if (isLegalInvoiceNumber(job.legalInvoiceNumber)) {
-      alert(`Job ${job.id} is finalized and closed with verified Legal Invoice ${job.legalInvoiceNumber}. Its status cannot be changed.`);
-      return;
+      if (user?.role !== 'Admin') {
+        alert(`Job ${job.id} is finalized and closed with verified Legal Invoice ${job.legalInvoiceNumber}. Its status cannot be changed.`);
+        return;
+      }
+      const ok = window.confirm(
+        `Job ${job.id} is finalized with Legal Invoice ${job.legalInvoiceNumber}.\n\nAs Admin, do you want to override and change its stage/status?`
+      );
+      if (!ok) return;
     }
 
     if (newStage === '6_completed') {

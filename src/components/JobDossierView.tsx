@@ -407,7 +407,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   const { canEdit: canEditJobs, isReadOnly } = useModulePermission(user, 'jobs');
   const isAdmin = user?.role === 'Admin';
-  const isClosedOrInvoiced = Boolean(
+  const isJobInvoicedOrFinished = Boolean(
     isJobInvoicedOrSubmitted ||
     (jobData.legalInvoiceNumber && jobData.legalInvoiceNumber !== '—' && jobData.legalInvoiceNumber !== '-')
   );
@@ -417,9 +417,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const [isReopenModalOpen, setIsReopenModalOpen] = useState(false);
   const [reopenJustification, setReopenJustification] = useState('');
 
-  // When user has no edit clearance, or when closed or legally invoiced, entire job is locked in VIEW ONLY mode unless Admin unlocks with justification
-  const isJobLocked = isClosedOrInvoiced && !adminUnlocked;
-  const isLocked = !canEditJobs || isJobLocked;
+  // When Admin unlocks with justification, the entire Job Dossier across ALL tabs is completely unlocked for editing & correction
+  const isClosedOrInvoiced = isJobInvoicedOrFinished && !adminUnlocked;
+  const isJobLocked = isClosedOrInvoiced;
+  const isLocked = (!canEditJobs && !isAdmin) || isJobLocked;
 
   // Resizable columns & custom columns for Checklist table
   const checklistCustomCols = useCustomColumns('dossier_checklist');
@@ -2802,7 +2803,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Master Save Job File handler - Unified save across entire Job Dossier:
   // Saves Job Header, Technical Details, Notes, Crew, Daily Logs, AND Utilization matrix to Azure SQL
   const handleExplicitSaveJob = async () => {
-    if (!canEditJobs) {
+    if (!canEditJobs && !isAdmin) {
       showToast('Cannot save: your role has view-only permissions for Drilling Jobs.', 'error');
       return;
     }
@@ -2819,10 +2820,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     setIsSaving(true);
     try {
       // 0. Persist active notes across individual tickets
-      if (effectiveDT && !effectiveDT.isLocked && dtNotesInput !== undefined) {
+      if (effectiveDT && (!effectiveDT.isLocked || adminUnlocked) && dtNotesInput !== undefined) {
         handleSaveDTNotes(true);
       }
-      if (effectiveRT && !effectiveRT.isLocked && rtNotesInput !== undefined) {
+      if (effectiveRT && (!effectiveRT.isLocked || adminUnlocked) && rtNotesInput !== undefined) {
         handleSaveRTNotes(true);
       }
 
@@ -2952,7 +2953,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           <button
             type="button"
             onClick={handleExplicitSaveJob}
-            disabled={isSaving || !canEditJobs || (isClosedOrInvoiced && !adminUnlocked)}
+            disabled={isSaving || (!canEditJobs && !isAdmin) || (isClosedOrInvoiced && !adminUnlocked)}
             className="text-xs bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-500 text-white px-3 py-1 rounded font-bold cursor-pointer transition shadow-xs flex items-center gap-1.5"
             title="Save all changes in this Job File"
           >
@@ -3045,17 +3046,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       <div className="bg-white border-x border-b border-[#9fb6cf] p-4 rounded-b-md shadow-md min-h-[620px] relative">
         {isReadOnly && <ReadOnlyBanner role={user?.role} moduleName="Drilling Job File" />}
         {/* SIMPLIFIED LOCK BANNER */}
-        {isClosedOrInvoiced && (
-          <div className="p-1.5 px-3 mb-3 rounded border bg-amber-50 border-amber-300 text-amber-900 text-xs flex flex-wrap items-center justify-between font-bold shadow-2xs gap-2">
+        {(isJobInvoicedOrFinished || adminUnlocked) && (
+          <div className={`p-1.5 px-3 mb-3 rounded border text-xs flex flex-wrap items-center justify-between font-bold shadow-2xs gap-2 ${
+            adminUnlocked
+              ? 'bg-amber-100 border-amber-400 text-amber-950'
+              : 'bg-rose-50 border-rose-300 text-rose-900'
+          }`}>
             <div className="flex items-center gap-2">
-              <span>🔒</span>
+              <span>{adminUnlocked ? '🔓' : '🔒'}</span>
               <span>
                 {adminUnlocked ? 'Job Temporarily Re-opened by Admin' : 'Locked (Invoiced)'}
                 {jobData.legalInvoiceNumber ? ` — Legal Invoice: ${jobData.legalInvoiceNumber}` : jobData.draftInvoiceNumber ? ` — Draft Invoice: ${jobData.draftInvoiceNumber}` : ''}
               </span>
               {adminUnlocked && (
-                <span className="text-[10px] bg-red-100 text-red-900 border border-red-300 px-2 py-0.5 rounded font-bold">
-                  Admin Audit Override Active
+                <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded font-bold uppercase tracking-wider animate-pulse">
+                  Admin Audit Override Active — All Tabs Unlocked
                 </span>
               )}
             </div>
@@ -3068,16 +3073,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs cursor-pointer flex items-center gap-1 transition"
                   >
                     <span>🔓</span>
-                    <span>Re-open Job for Editing (Admin)</span>
+                    <span>Admin Unlock &amp; Correction (All Tabs)</span>
                   </button>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setAdminUnlocked(false)}
-                    className="bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs cursor-pointer transition flex items-center gap-1"
+                    onClick={() => {
+                      setAdminUnlocked(false);
+                      showToast('Admin override deactivated. Workspace restored to locked mode.', 'info');
+                    }}
+                    className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs cursor-pointer transition flex items-center gap-1"
                   >
                     <span>🔒</span>
-                    <span>Re-lock Job</span>
+                    <span>Re-lock Job Dossier</span>
                   </button>
                 )}
               </div>
@@ -4632,7 +4640,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <textarea
                   rows={4}
                   value={dtNotesInput}
-                  disabled={isClosedOrInvoiced || isLocked || effectiveDT.isLocked}
+                  disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
                   onChange={(e) => {
                     const val = e.target.value;
                     setDtNotesInput(val);
@@ -4643,14 +4651,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     }
                   }}
                   onBlur={() => {
-                    if (!isClosedOrInvoiced && !isLocked && !effectiveDT.isLocked) {
+                    if (!isClosedOrInvoiced && !isLocked && (!effectiveDT.isLocked || adminUnlocked)) {
                       handleSaveDTNotes(true);
                     }
                   }}
                   placeholder="Enter items with no invoicing value to print on the Delivery Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
                   className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
-                {!isClosedOrInvoiced && !isLocked && !effectiveDT.isLocked ? (
+                {!isClosedOrInvoiced && !isLocked && (!effectiveDT.isLocked || adminUnlocked) ? (
                   <div className="flex justify-end">
                     <button
                       type="button"
@@ -4661,7 +4669,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <span>Save Delivery Ticket Notes</span>
                     </button>
                   </div>
-                ) : effectiveDT.isLocked && (
+                ) : (effectiveDT.isLocked && !adminUnlocked) && (
                   <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium italic">
                     <span>🔒</span>
                     <span>Ticket dispatched &amp; locked. Manifest notes are sealed.</span>
@@ -5058,7 +5066,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <textarea
                     rows={4}
                     value={rtNotesInput}
-                    disabled={isClosedOrInvoiced || isLocked || Boolean(effectiveRT.isLocked)}
+                    disabled={isClosedOrInvoiced || isLocked || (Boolean(effectiveRT.isLocked) && !adminUnlocked)}
                     onChange={(e) => {
                       const val = e.target.value;
                       setRtNotesInput(val);
@@ -5069,14 +5077,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       }
                     }}
                     onBlur={() => {
-                      if (!isClosedOrInvoiced && !isLocked && !effectiveRT.isLocked) {
+                      if (!isClosedOrInvoiced && !isLocked && (!effectiveRT.isLocked || adminUnlocked)) {
                         handleSaveRTNotes(true);
                       }
                     }}
                     placeholder="Enter items with no invoicing value received from rig to print on the Receiving Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
                     className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   />
-                  {!isClosedOrInvoiced && !isLocked && !effectiveRT.isLocked ? (
+                  {!isClosedOrInvoiced && !isLocked && (!effectiveRT.isLocked || adminUnlocked) ? (
                     <div className="flex justify-end">
                       <button
                         type="button"
@@ -5087,7 +5095,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <span>Save Receiving Ticket Notes</span>
                       </button>
                     </div>
-                  ) : effectiveRT.isLocked && (
+                  ) : (effectiveRT.isLocked && !adminUnlocked) && (
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium italic">
                       <span>🔒</span>
                       <span>Receiving ticket locked. Manifest notes are sealed.</span>
@@ -6450,7 +6458,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           <button
             type="button"
             onClick={handleExplicitSaveJob}
-            disabled={isSaving || !canEditJobs || (isClosedOrInvoiced && !adminUnlocked)}
+            disabled={isSaving || (!canEditJobs && !isAdmin) || (isClosedOrInvoiced && !adminUnlocked)}
             className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-600 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
           >
             <span>{isSaving ? '⏳' : '💾'}</span>
