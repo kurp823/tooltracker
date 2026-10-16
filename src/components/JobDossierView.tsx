@@ -1513,58 +1513,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     showToast(`Delivery Ticket ${newDT.dtNumber} created for Job ${jobData.id}.`, 'success');
   };
 
-  // Checklist Notes state (matching Job Header & Delivery Ticket style)
-  const [checklistNotesInput, setChecklistNotesInput] = useState(() => {
-    let initNotes = activeCallout?.notes || '';
-    const cId = activeCallout?.id;
-    if (!initNotes && cId && typeof window !== 'undefined') {
-      try {
-        const local = localStorage.getItem(`emdad_callout_notes_${cId}`);
-        if (local) initNotes = local;
-      } catch {}
-    }
-    return initNotes;
-  });
-
-  useEffect(() => {
-    if (activeCallout) {
-      setChecklistNotesInput((prev) => {
-        if (activeCallout.notes) return activeCallout.notes;
-        const cId = activeCallout.id;
-        if (!prev && cId && typeof window !== 'undefined') {
-          try {
-            const local = localStorage.getItem(`emdad_callout_notes_${cId}`);
-            if (local) return local;
-          } catch {}
-        }
-        return prev || '';
-      });
-    } else {
-      setChecklistNotesInput('');
-    }
-  }, [activeCallout?.id, activeCallout?.notes]);
-
-  const handleSaveChecklistNotes = (silent = false) => {
-    if (!activeCallout) return;
-    const trimmed = checklistNotesInput.trim();
-    const updatedCallout: Callout = {
-      ...activeCallout,
-      notes: trimmed,
-    };
-    if (activeCallout.id && typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(`emdad_callout_notes_${activeCallout.id}`, trimmed);
-      } catch {}
-    }
-    if (onSaveCallout) {
-      onSaveCallout(updatedCallout);
-    }
-    if (!silent) {
-      showToast('Checklist notes saved successfully.', 'success');
-    }
-  };
-
-  // Delivery Ticket & Return Ticket Notes states (same style as Job Header)
+  // Delivery Ticket & Return Ticket Notes states (saved per individual shipment)
   const [dtNotesInput, setDtNotesInput] = useState(() => {
     let initNotes = effectiveDT?.notes || '';
     const dtNum = effectiveDT?.dtNumber;
@@ -2046,7 +1995,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       contract: jobData.contractNo || jobData.contract,
       dispatchedBy: user?.name || 'Operations',
       recipient: `${jobData.rig} Toolpusher`,
-      notes: checklistNotesInput.trim(),
+      notes: '',
       isLocked: false,
       toolLines: toolsToMobilize.map((ci, idx) => {
         const resolved = resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.shortDesc || ci.cat);
@@ -2877,10 +2826,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
     setIsSaving(true);
     try {
-      // 0. Persist active notes across all sub-modules
-      if (activeCallout && checklistNotesInput !== undefined) {
-        handleSaveChecklistNotes(true);
-      }
+      // 0. Persist active notes across individual tickets
       if (effectiveDT && !effectiveDT.isLocked && dtNotesInput !== undefined) {
         handleSaveDTNotes(true);
       }
@@ -4281,54 +4227,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   )}
                 </tbody>
               </table>
-            </div>
-
-            {/* Checklist Notes & Mobilization Preparation Remarks (Matching Job Header & DT design) */}
-            <div className="bg-white border border-[#b8cce0] rounded-md p-3 space-y-2 shadow-2xs mt-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm">📝</span>
-                  <label className="text-xs font-bold text-[#1a3055]">
-                    Checklist Notes &amp; Mobilization Remarks (Slings, Spares, Pre-Dispatch Instructions)
-                  </label>
-                </div>
-                <span className="text-[10px] text-slate-500 font-medium">
-                  Automatically transfers into Delivery Ticket Notes upon DT creation
-                </span>
-              </div>
-              <textarea
-                rows={3}
-                value={checklistNotesInput}
-                disabled={isClosedOrInvoiced || isLocked}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setChecklistNotesInput(val);
-                  if (activeCallout?.id && typeof window !== 'undefined') {
-                    try {
-                      localStorage.setItem(`emdad_callout_notes_${activeCallout.id}`, val);
-                    } catch {}
-                  }
-                }}
-                onBlur={() => {
-                  if (!isClosedOrInvoiced && !isLocked) {
-                    handleSaveChecklistNotes(true);
-                  }
-                }}
-                placeholder="Enter checklist preparation remarks, sling certificates, basket numbers, or non-invoiced items to carry forward into the Delivery Ticket..."
-                className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
-              />
-              {!isClosedOrInvoiced && !isLocked && (
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleSaveChecklistNotes}
-                    className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
-                  >
-                    <span>💾</span>
-                    <span>Save Checklist Notes</span>
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         )}
