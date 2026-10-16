@@ -1064,6 +1064,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedToolSize, setSelectedToolSize] = useState<string>('');
+  const [toolSearchQuery, setToolSearchQuery] = useState<string>('');
   const [checkedToolSerials, setCheckedToolSerials] = useState<string[]>([]);
 
   // Unique categories in inventory + custom categories
@@ -1266,11 +1267,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   const modalAvailableTools = useMemo(() => {
     const cleanSz = (s: string) => (s || '').trim().toLowerCase().replace(/["″\s]/g, '');
+    const q = (toolSearchQuery || '').trim().toLowerCase();
     return categoryInventory.filter((t) => {
-      if (!selectedToolSize) return true;
-      return cleanSz(t.size) === cleanSz(selectedToolSize);
+      if (selectedToolSize && cleanSz(t.size) !== cleanSz(selectedToolSize)) return false;
+      if (q) {
+        const matchAsset = (t.assetNo || '').toLowerCase().includes(q);
+        const matchSerial = (t.serial || '').toLowerCase().includes(q);
+        const matchDesc = (t.desc || '').toLowerCase().includes(q);
+        const matchShort = (t.shortDesc || '').toLowerCase().includes(q);
+        if (!matchAsset && !matchSerial && !matchDesc && !matchShort) return false;
+      }
+      return true;
     });
-  }, [categoryInventory, selectedToolSize]);
+  }, [categoryInventory, selectedToolSize, toolSearchQuery]);
 
   // Selected DT for DT Tab
   const [selectedDTNumber, setSelectedDTNumber] = useState<string>(() => {
@@ -1812,6 +1821,31 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       const exactSize = t.size || resolved.inv?.size || '—';
       const exactSupplier = t.supplier || t.ownership || resolved.inv?.supplier || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD');
 
+      // Look up genuine inspection record for this tool
+      const toolInspections = (inspections || []).filter(
+        (ins) =>
+          (ins.serial && exactSerial && ins.serial.trim().toLowerCase() === exactSerial.trim().toLowerCase()) ||
+          (ins.serial && exactAssetNo && ins.serial.trim().toLowerCase() === exactAssetNo.trim().toLowerCase()) ||
+          (ins.serial && t.serial && ins.serial.trim().toLowerCase() === t.serial.trim().toLowerCase()) ||
+          (ins.serial && t.assetNo && ins.serial.trim().toLowerCase() === t.assetNo.trim().toLowerCase())
+      );
+      const latestIns = toolInspections.length > 0
+        ? [...toolInspections].sort(
+            (a, b) =>
+              new Date(b.inspectionDate || b.reportDate || b.receivedDate || '').getTime() -
+              new Date(a.inspectionDate || a.reportDate || a.receivedDate || '').getTime()
+          )[0]
+        : null;
+
+      const rawInsDate = latestIns?.inspectionDate || latestIns?.reportDate || latestIns?.receivedDate;
+      const genuineInsDate = rawInsDate
+        ? formatDateDD_MM_YYYY(rawInsDate)
+        : (t.addedDate ? formatDateDD_MM_YYYY(t.addedDate) : '—');
+      const genuineInsNum = latestIns?.reportNumber || latestIns?.woNumber || latestIns?.id || '—';
+      const genuineCondition = latestIns?.status
+        ? latestIns.status.toUpperCase()
+        : (t.status?.toUpperCase() === 'GOOD' ? 'ACCEPTED' : (t.status?.toUpperCase() || 'ACCEPTED'));
+
       return {
         seq: checklistItems.length + idx + 1,
         size: exactSize,
@@ -1824,17 +1858,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         description: exactDesc,
         supplier: exactSupplier,
         qtyIn: 1,
-        insNum: `GIS-Z-${Math.floor(10000 + Math.random() * 90000)}-2023`,
-        insDate: formatDateDD_MM_YYYY(new Date().toISOString()),
-        comments: 'ACCEPTED',
+        insNum: genuineInsNum,
+        insDate: genuineInsDate,
+        comments: genuineCondition,
         cat: exactShortDesc,
-        condition: 'ACCEPTED',
+        condition: genuineCondition,
       };
     });
 
     const updated = [...checklistItems, ...newItems];
     setChecklistItems(updated);
     setCheckedToolSerials([]);
+    setToolSearchQuery('');
     setIsToolSelectOpen(false);
 
     const calloutToSave = ({
@@ -3846,6 +3881,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         type="button"
                         onClick={() => {
                           setCheckedToolSerials([]);
+                          setToolSearchQuery('');
                           setIsToolSelectOpen(true);
                         }}
                         className="bg-[#107c41] hover:bg-[#0c6233] text-white font-bold text-xs px-3 py-1 rounded-full shadow-xs transition cursor-pointer flex items-center gap-1.5"
@@ -4068,6 +4104,30 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     checklistItems.map((item, i) => {
                       const assignedDT = getAssignedDTForChecklistItem(item);
                       const resolved = resolveToolDetails(item.serialNos?.[0], item.partNo, item.description, item.cat || item.shortDesc);
+
+                      // Look up genuine inspection record if item has none or has dummy GIS-Z-
+                      const itemInspections = (inspections || []).filter(
+                        (ins) =>
+                          (ins.serial && resolved.serial && ins.serial.trim().toLowerCase() === resolved.serial.trim().toLowerCase()) ||
+                          (ins.serial && resolved.assetNo && ins.serial.trim().toLowerCase() === resolved.assetNo.trim().toLowerCase()) ||
+                          (ins.serial && item.partNo && ins.serial.trim().toLowerCase() === item.partNo.trim().toLowerCase()) ||
+                          (ins.serial && item.serialNos?.[0] && ins.serial.trim().toLowerCase() === item.serialNos[0].trim().toLowerCase())
+                      );
+                      const latestItemIns = itemInspections.length > 0
+                        ? [...itemInspections].sort(
+                            (a, b) =>
+                              new Date(b.inspectionDate || b.reportDate || b.receivedDate || '').getTime() -
+                              new Date(a.inspectionDate || a.reportDate || a.receivedDate || '').getTime()
+                          )[0]
+                        : null;
+                      const hasDummyGIS = Boolean(item.insNum && item.insNum.startsWith('GIS-Z-'));
+                      const displayInsNum = latestItemIns?.reportNumber || latestItemIns?.woNumber || latestItemIns?.id || (item.insNum && !hasDummyGIS ? item.insNum : '') || '—';
+                      const rawItemInsDate = latestItemIns?.inspectionDate || latestItemIns?.reportDate || latestItemIns?.receivedDate;
+                      const displayInsDate = rawItemInsDate
+                        ? formatDateDD_MM_YYYY(rawItemInsDate)
+                        : (item.insDate && !item.insDate.includes('undefined') ? item.insDate : '—');
+                      const displayCondition = latestItemIns?.status ? latestItemIns.status.toUpperCase() : (item.comments || 'ACCEPTED');
+
                       return (
                         <tr key={i} className="hover:bg-blue-50/50 h-7 leading-none">
                           {/* Selection Checkbox */}
@@ -4097,9 +4157,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qty || 1}</td>
                           <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700 truncate" title={item.supplier || resolved.inv?.supplier || 'EMDAD'}>{item.supplier || resolved.inv?.supplier || 'EMDAD'}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qtyIn || 1}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700 truncate" title={item.insNum || 'GIS-Z-01480-2023'}>{item.insNum || 'GIS-Z-01480-2023'}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600 truncate" title={item.insDate || '—'}>{item.insDate || '—'}</td>
-                          <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={item.comments || 'ACCEPTED'}>{item.comments || 'ACCEPTED'}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700 truncate" title={displayInsNum}>{displayInsNum}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600 truncate" title={displayInsDate}>{displayInsDate}</td>
+                          <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={displayCondition}>{displayCondition}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={resolved.shortDesc}>{resolved.shortDesc}</td>
 
                           {/* Mobilization / DT Status: Light grey for locked, light slate for pending (no purple, no amber) */}
@@ -5704,6 +5764,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   onClick={() => {
                     setIsToolSelectOpen(false);
                     setCheckedToolSerials([]);
+                    setToolSearchQuery('');
                   }}
                   className="text-white hover:text-amber-300 font-bold text-base cursor-pointer px-1"
                 >
@@ -5817,7 +5878,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <select
                       value={selectedToolSize}
                       onChange={(e) => setSelectedToolSize(e.target.value)}
-                      className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs font-bold text-slate-800 w-36 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500"
+                      className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs font-bold text-slate-800 w-32 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500"
                     >
                       <option value="">All Sizes</option>
                       {availableSizes.map((s) => (
@@ -5825,10 +5886,44 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       ))}
                     </select>
                   </div>
+
+                  {/* Asset No / Tool Search Filter */}
+                  <div className="flex items-center gap-1.5 relative">
+                    <label className="font-extrabold text-slate-800 uppercase tracking-tight text-[11px] flex items-center gap-1">
+                      <span>🔍</span>
+                      <span>ASSET NO :</span>
+                    </label>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        value={toolSearchQuery}
+                        onChange={(e) => setToolSearchQuery(e.target.value)}
+                        placeholder="Search Asset No, Serial..."
+                        className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs font-bold text-slate-800 w-48 sm:w-64 shadow-2xs cursor-text focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                      />
+                      {toolSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setToolSearchQuery('')}
+                          className="absolute right-2 text-slate-400 hover:text-slate-700 text-xs cursor-pointer font-bold"
+                          title="Clear Search"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="text-[11px] text-slate-600 font-medium">
-                  Available in Category: <strong className="text-slate-900">{modalAvailableTools.length}</strong>
+                <div className="flex items-center gap-3 text-[11px] text-slate-600 font-medium">
+                  {toolSearchQuery && (
+                    <span className="bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-200 text-[10px] font-bold">
+                      Filter: &ldquo;{toolSearchQuery}&rdquo;
+                    </span>
+                  )}
+                  <div>
+                    Matching Tools: <strong className="text-slate-900 font-bold">{modalAvailableTools.length}</strong>
+                  </div>
                 </div>
               </div>
 
@@ -5947,7 +6042,23 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     {modalAvailableTools.length === 0 ? (
                       <tr>
                         <td colSpan={10 + toolPickerCustomCols.length} className="p-8 text-center text-slate-500 font-medium">
-                          No available tools found in yard for Category: <strong>{selectedCategory || 'All Categories'}</strong> {selectedToolSize && `(Size: ${selectedToolSize})`}.
+                          <div>
+                            No available tools found in yard for Category: <strong>{selectedCategory || 'All Categories'}</strong> {selectedToolSize && `(Size: ${selectedToolSize})`} {toolSearchQuery && `matching "${toolSearchQuery}"`}.
+                          </div>
+                          {selectedCategory && (
+                            <div className="mt-2.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCategory('');
+                                  setCategorySearchQuery('');
+                                }}
+                                className="text-blue-600 hover:text-blue-800 underline font-semibold text-xs cursor-pointer"
+                              >
+                                Search across All Categories instead
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ) : (
@@ -6047,6 +6158,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     onClick={() => {
                       setIsToolSelectOpen(false);
                       setCheckedToolSerials([]);
+                      setToolSearchQuery('');
                     }}
                     className="px-3.5 py-1 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer text-xs"
                   >
