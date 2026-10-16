@@ -414,6 +414,27 @@ export function extractSizeFromDescription(desc?: string): string {
  * e.g., '33 feet cargo basket (L x 10.26 W x 1.19 H x 1.22)...' -> 'CARGO BASKET'
  */
 export function extractToolType(desc?: string, shortDesc?: string, invShortDesc?: string): string {
+  const descUpper = (desc || '').toUpperCase();
+
+  // If description explicitly identifies the tool family, description ALWAYS takes priority
+  // (e.g. STABILIZER must never become STRING MILL, DRILLING SCRAPER must never become OVERSHOT)
+  if (descUpper.includes('NEAR BIT STABILIZER') || descUpper.includes('NEAR BIT STAB')) return 'NEAR BIT STABILIZER';
+  if (descUpper.includes('STRING STABILIZER') || descUpper.includes('STRING STAB')) return 'STRING STABILIZER';
+  if (descUpper.includes('STABILIZER') || descUpper.includes('STAB W/')) return 'STRING STABILIZER';
+  if (descUpper.includes('CASING SCRAPER') || descUpper.includes('DRILLING SCRAPER') || descUpper.includes('ACTIVATED DRILLING SCRAPER')) return 'CASING SCRAPER';
+  if (descUpper.includes('STRING MILL') || descUpper.includes('WATERMELON MILL')) return 'STRING MILL';
+  if (descUpper.includes('PILOT MILL')) return 'PILOT MILL';
+  if (descUpper.includes('TAPER MILL')) return 'TAPER MILL';
+  if (descUpper.includes('JUNK MILL') || descUpper.includes('BLADED JUNK MILL')) return 'JUNK MILL';
+  if (descUpper.includes('DRILLING JAR') || descUpper.includes('HYD-MECH') || descUpper.includes('HYDRO-MECH')) return 'DRILLING JAR';
+  if (descUpper.includes('FISHING JAR') || descUpper.includes('SUPER FISHING JAR')) return 'FISHING JAR';
+  if (descUpper.includes('JAR ACCELERATOR') || descUpper.includes('INTENSIFIER')) return 'FISHING ACCELERATOR';
+  if (descUpper.includes('ROLLER REAMER')) return 'ROLLER REAMER';
+  if (descUpper.includes('HOLE OPENER')) return 'HOLE OPENER';
+  if (descUpper.includes('OVERSHOT') && !descUpper.includes('EXTENSION') && !descUpper.includes('GUIDE')) return 'OVERSHOT';
+  if (descUpper.includes('CARGO BASKET')) return 'CARGO BASKET';
+  if (descUpper.includes('JUNK BASKET') || descUpper.includes('RCJB')) return 'JUNK BASKET';
+
   // If invShortDesc is a clean, concise category (< 35 chars, no long connection specs)
   if (invShortDesc && invShortDesc !== 'Downhole Tool') {
     const s = invShortDesc.trim();
@@ -2816,23 +2837,120 @@ export async function saveJobApi(job: any): Promise<{ success: boolean; message:
   }
 }
 
+export function toSqlIsoDate(val?: any): string | null {
+  if (!val) return null;
+  const s = String(val).trim();
+  if (!s || s === '—' || s === '-') return null;
+  // If already ISO format YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    return s.slice(0, 10);
+  }
+  // If DD-MM-YYYY or DD/MM/YYYY
+  const dmMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (dmMatch) {
+    const day = dmMatch[1].padStart(2, '0');
+    const month = dmMatch[2].padStart(2, '0');
+    const year = dmMatch[3];
+    return `${year}-${month}-${day}`;
+  }
+  // Try Date parse
+  try {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString().split('T')[0];
+    }
+  } catch {}
+  return null;
+}
+
+function cleanDTBatchForSql(batch: any): any {
+  if (!batch) return batch;
+  const cleaned = { ...batch };
+
+  // Convert all date fields to strict SQL ISO format (YYYY-MM-DD)
+  if (cleaned.deliveryDate) cleaned.deliveryDate = toSqlIsoDate(cleaned.deliveryDate);
+  if (cleaned.dispatchDate) cleaned.dispatchDate = toSqlIsoDate(cleaned.dispatchDate);
+  if (cleaned.rmDate) cleaned.rmDate = toSqlIsoDate(cleaned.rmDate);
+  if (cleaned.emdadSignDate) cleaned.emdadSignDate = toSqlIsoDate(cleaned.emdadSignDate);
+  if (cleaned.clientSignDate) cleaned.clientSignDate = toSqlIsoDate(cleaned.clientSignDate);
+  if (cleaned.lockedDate) cleaned.lockedDate = toSqlIsoDate(cleaned.lockedDate);
+
+  if (!cleaned.deliveryDate) {
+    cleaned.deliveryDate = cleaned.dispatchDate || cleaned.rmDate || new Date().toISOString().split('T')[0];
+  }
+  if (!cleaned.dispatchDate) {
+    cleaned.dispatchDate = cleaned.deliveryDate;
+  }
+  if (!cleaned.rmDate) {
+    cleaned.rmDate = cleaned.deliveryDate;
+  }
+
+  // Ensure toolLines have full metadata and clean technical names
+  if (Array.isArray(cleaned.toolLines)) {
+    cleaned.toolLines = cleaned.toolLines.map((tl: any, idx: number) => {
+      const serial = String(tl.serial || tl.Serial || tl.assetNo || `TOOL-${idx + 1}`).trim();
+      const assetNo = String(tl.assetNo || tl.AssetNo || tl.partNo || serial).trim();
+      const desc = String(tl.desc || tl.Description || tl.description || tl.toolDescription || tl.shortDesc || '').trim();
+      const shortDesc = String(tl.shortDesc || tl.ShortDesc || extractToolType(desc) || 'Downhole Tool').trim();
+      const size = String(tl.size || tl.Size || extractSizeFromDescription(desc) || '—').trim();
+
+      return {
+        ...tl,
+        id: tl.id || idx + 1,
+        itemNo: tl.itemNo || idx + 1,
+        serial,
+        assetNo,
+        desc,
+        description: desc,
+        toolDescription: desc,
+        shortDesc,
+        size,
+        status: tl.status || 'OnRig',
+        ownership: tl.ownership || 'EMDAD',
+        qty: Number(tl.qty || 1),
+      };
+    });
+  }
+
+  return cleaned;
+}
+
+function cleanRTBatchForSql(batch: any): any {
+  if (!batch) return batch;
+  const cleaned = { ...batch };
+  if (cleaned.rtDate) cleaned.rtDate = toSqlIsoDate(cleaned.rtDate);
+  if (cleaned.backloadRmDate) cleaned.backloadRmDate = toSqlIsoDate(cleaned.backloadRmDate);
+  if (cleaned.loadingNoteDate) cleaned.loadingNoteDate = toSqlIsoDate(cleaned.loadingNoteDate);
+  if (cleaned.lNoteDate) cleaned.lNoteDate = toSqlIsoDate(cleaned.lNoteDate);
+  if (cleaned.dateIn) cleaned.dateIn = toSqlIsoDate(cleaned.dateIn);
+  return cleaned;
+}
+
 export async function saveDeliveryTicketApi(dtBatch: any): Promise<{ success: boolean; message: string }> {
   try {
-    // Azure Function requires 'batch' payload key (checking batch.dtNumber)
-    const res = await fetchFromApi('savedeliveryticket', { batch: dtBatch, dtBatch });
-    return { success: res !== null, message: res ? 'Delivery Ticket saved to Azure SQL' : 'Saved locally' };
-  } catch {
-    return { success: true, message: 'Saved locally' };
+    const cleaned = cleanDTBatchForSql(dtBatch);
+    const res = await fetchFromApi('savedeliveryticket', { batch: cleaned, dtBatch: cleaned });
+    if (!res) {
+      return { success: false, message: 'Failed to save Delivery Ticket to Azure SQL' };
+    }
+    return { success: true, message: 'Delivery Ticket saved to Azure SQL' };
+  } catch (err: any) {
+    console.error('Error saving delivery ticket:', err);
+    return { success: false, message: err?.message || 'Error saving Delivery Ticket' };
   }
 }
 
 export async function saveReceivingTicketApi(rtBatch: any): Promise<{ success: boolean; message: string }> {
   try {
-    // Azure Function requires 'batch' payload key (checking batch.rtNumber)
-    const res = await fetchFromApi('savereceivingticket', { batch: rtBatch, rtBatch });
-    return { success: res !== null, message: res ? 'Receiving Ticket saved to Azure SQL' : 'Saved locally' };
-  } catch {
-    return { success: true, message: 'Saved locally' };
+    const cleaned = cleanRTBatchForSql(rtBatch);
+    const res = await fetchFromApi('savereceivingticket', { batch: cleaned, rtBatch: cleaned });
+    if (!res) {
+      return { success: false, message: 'Failed to save Receiving Ticket to Azure SQL' };
+    }
+    return { success: true, message: 'Receiving Ticket saved to Azure SQL' };
+  } catch (err: any) {
+    console.error('Error saving receiving ticket:', err);
+    return { success: false, message: err?.message || 'Error saving Receiving Ticket' };
   }
 }
 

@@ -516,10 +516,32 @@ export const App: React.FC = () => {
             setJobs(mergedJobs);
           }
           if (res.data.dtBatches !== undefined) {
-            setDtBatches(res.data.dtBatches);
+            setDtBatches((prev) => {
+              const liveMap = new Map<string, DTBatch>();
+              (res.data!.dtBatches || []).forEach((b) => {
+                if (b && b.dtNumber) liveMap.set(b.dtNumber.toUpperCase(), b);
+              });
+              const preserved = prev.filter((p) => p && p.dtNumber && !liveMap.has(p.dtNumber.toUpperCase()));
+              const merged = [...(res.data!.dtBatches || []), ...preserved];
+              try {
+                localStorage.setItem('emdad_dt_batches', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
           }
           if (res.data.rtBatches !== undefined) {
-            setRtBatches(res.data.rtBatches);
+            setRtBatches((prev) => {
+              const liveMap = new Map<string, RTBatch>();
+              (res.data!.rtBatches || []).forEach((b) => {
+                if (b && b.rtNumber) liveMap.set(b.rtNumber.toUpperCase(), b);
+              });
+              const preserved = prev.filter((p) => p && p.rtNumber && !liveMap.has(p.rtNumber.toUpperCase()));
+              const merged = [...(res.data!.rtBatches || []), ...preserved];
+              try {
+                localStorage.setItem('emdad_rt_batches', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
           }
           // Persist merged dataset to local IndexedDB cache for instant startup next time
           saveDatasetToCache({
@@ -861,14 +883,14 @@ export const App: React.FC = () => {
     } catch {}
   };
 
-  // Callouts Actions
   const handleSaveCallout = (saved: Callout) => {
     setCallouts((prev) => {
       const exists = prev.some((c) => c.id === saved.id);
-      if (exists) {
-        return prev.map((c) => (c.id === saved.id ? saved : c));
-      }
-      return [saved, ...prev];
+      const updated = exists ? prev.map((c) => (c.id === saved.id ? saved : c)) : [saved, ...prev];
+      try {
+        localStorage.setItem('emdad_callouts', JSON.stringify(updated));
+      } catch {}
+      return updated;
     });
     saveCalloutApi(saved).then((r) => {
       if (!r.success) showToast(r.message, 'error');
@@ -949,7 +971,11 @@ export const App: React.FC = () => {
     };
     setDtBatches((prev) => {
       const filtered = prev.filter((b) => b.id !== finalizedBatch.id && b.dtNumber !== finalizedBatch.dtNumber);
-      return [finalizedBatch, ...filtered];
+      const updated = [finalizedBatch, ...filtered];
+      try {
+        localStorage.setItem('emdad_dt_batches', JSON.stringify(updated));
+      } catch {}
+      return updated;
     });
     saveDeliveryTicketApi(finalizedBatch).then((r) => {
       if (!r.success) showToast(r.message, 'error');
@@ -999,7 +1025,13 @@ export const App: React.FC = () => {
     addedTools?: ToolItem[],
     removedTools?: ToolItem[]
   ) => {
-    setDtBatches((prev) => prev.map((b) => (b.id === updatedBatch.id ? updatedBatch : b)));
+    setDtBatches((prev) => {
+      const updated = prev.map((b) => (b.id === updatedBatch.id ? updatedBatch : b));
+      try {
+        localStorage.setItem('emdad_dt_batches', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     saveDeliveryTicketApi(updatedBatch).then((r) => {
       if (!r.success) showToast(r.message, 'error');
     });
