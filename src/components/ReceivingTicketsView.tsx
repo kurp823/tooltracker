@@ -1397,6 +1397,9 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                   value={rtEditNotes}
                   disabled={isReadOnly}
                   onChange={(e) => setRtEditNotes(e.target.value)}
+                  onBlur={() => {
+                    if (!isReadOnly) handleSaveRTDetailNotes();
+                  }}
                   placeholder="Enter items with no invoicing value received from rig to print on the Receiving Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
                   className="w-full bg-white border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
                 />

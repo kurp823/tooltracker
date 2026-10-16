@@ -1738,6 +1738,9 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                       value={dtEditNotes}
                       disabled={isReadOnly}
                       onChange={(e) => setDtEditNotes(e.target.value)}
+                      onBlur={() => {
+                        if (!isReadOnly) handleSaveDTDetailNotes();
+                      }}
                       placeholder="Enter items with no invoicing value to print on the Delivery Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
                       className="w-full bg-white border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
                     />

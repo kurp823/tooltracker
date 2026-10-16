@@ -1255,6 +1255,7 @@ function normalizeCalloutItem(row: any): any {
 function normalizeCallout(row: any): any {
   const items = Array.isArray(row.items) ? row.items.map(normalizeCalloutItem) : [];
   const id = row.id || row.CalloutID || '';
+  const notes = String(row.notes || row.Notes || row.remarks || row.Remarks || '').trim();
   return {
     id,
     CalloutID: id,
@@ -1268,6 +1269,7 @@ function normalizeCallout(row: any): any {
     createdBy: row.createdBy || row.CreatedBy || '',
     items,
     jobId: row.jobId || null,
+    notes,
   };
 }
 
@@ -2507,7 +2509,23 @@ export async function fetchSecondaryModules(): Promise<{
 
 export async function saveCalloutApi(callout: any): Promise<{ success: boolean; message: string }> {
   try {
-    const res = await fetchFromApi('savecallout', { callout });
+    const cId = String(callout.id || callout.CalloutID || '').trim();
+    const notesVal = String(callout.notes || callout.Notes || callout.remarks || callout.Remarks || '').trim();
+    if (cId && notesVal && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(`emdad_callout_notes_${cId}`, notesVal);
+      } catch {}
+    }
+    const enrichedCallout = {
+      ...callout,
+      id: cId,
+      CalloutID: cId,
+      notes: notesVal,
+      Notes: notesVal,
+      remarks: notesVal,
+      Remarks: notesVal,
+    };
+    const res = await fetchFromApi('savecallout', { callout: enrichedCallout, Callout: enrichedCallout, payload: enrichedCallout });
     return { success: res !== null, message: res ? 'Callout saved to Azure SQL' : 'Saved locally' };
   } catch {
     return { success: true, message: 'Saved locally' };
@@ -2760,14 +2778,38 @@ export async function saveInventoryApi(tool: any): Promise<{ success: boolean; m
 
 export async function saveJobApi(job: any): Promise<{ success: boolean; message: string }> {
   if (!job) return { success: true, message: 'No job provided' };
+  const jId = String(job.id || job.jobNumber || '').trim();
+  const notesVal = String(job.notes || job.Notes || job.remarks || job.Remarks || '').trim();
+
   try {
     saveCustomJob(job);
+    if (jId && notesVal && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(`emdad_job_notes_${jId}`, notesVal);
+      } catch {}
+    }
   } catch (err) {
     console.warn('[saveJobApi] Could not save to custom jobs store:', err);
   }
 
   try {
-    const res = await fetchFromApi('savejob', { job });
+    const enrichedJob = {
+      ...job,
+      id: jId,
+      JobID: jId,
+      JobNumber: jId,
+      notes: notesVal,
+      Notes: notesVal,
+      remarks: notesVal,
+      Remarks: notesVal,
+      TechnicalDetails: job.technicalDetails,
+      Rig: job.rig,
+      Well: job.well,
+      Client: job.client,
+      Contract: job.contract,
+      Status: job.status,
+    };
+    const res = await fetchFromApi('savejob', { job: enrichedJob, Job: enrichedJob, payload: enrichedJob });
     return { success: res !== null, message: res ? 'Job saved to Azure SQL' : 'Saved locally' };
   } catch {
     return { success: true, message: 'Saved locally' };

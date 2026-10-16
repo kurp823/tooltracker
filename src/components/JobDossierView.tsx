@@ -339,12 +339,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Current active top tab
   const [activeTab, setActiveTab] = useState<DossierTabKey>('job-header');
 
-  // Job Header state
-  const [jobData, setJobData] = useState<DrillingJob>(initialJob);
-  useEffect(() => {
-    setJobData(initialJob);
-  }, [initialJob]);
-
   // Technical Details sub-tab
   const [techSubTab, setTechSubTab] = useState<'fishing' | 'whipstock' | 'rentals'>('fishing');
 
@@ -353,6 +347,41 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     if (!val) return '';
     return val.trim().toUpperCase().replace(/^JOB[-_]?/i, '');
   };
+
+  // Job Header state with resilient notes persistence across tab switches and live re-fetches
+  const [jobData, setJobData] = useState<DrillingJob>(() => {
+    const jId = initialJob?.id || (initialJob as any)?.jobNumber || '';
+    let initialNotes = initialJob?.notes || '';
+    if (!initialNotes && jId && typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem(`emdad_job_notes_${jId}`);
+        if (cached) initialNotes = cached;
+      } catch {}
+    }
+    return { ...initialJob, notes: initialNotes };
+  });
+
+  useEffect(() => {
+    setJobData((prev) => {
+      const jId = initialJob?.id || (initialJob as any)?.jobNumber || '';
+      let notesToKeep = initialJob?.notes || '';
+      // If server returned empty notes, preserve user's typed in-memory notes or cached draft
+      if (!notesToKeep) {
+        if (prev && (prev.id === jId || normalizeJobKey(prev.id) === normalizeJobKey(jId)) && prev.notes) {
+          notesToKeep = prev.notes;
+        } else if (jId && typeof window !== 'undefined') {
+          try {
+            const cached = localStorage.getItem(`emdad_job_notes_${jId}`);
+            if (cached) notesToKeep = cached;
+          } catch {}
+        }
+      }
+      return {
+        ...initialJob,
+        notes: notesToKeep,
+      };
+    });
+  }, [initialJob]);
 
   // LOCKED STATE RULE: If legally invoiced, draft invoiced, or submitted to billing, job is strictly read-only!
   // Only Admin can edit (with audited mode banner)
@@ -1485,76 +1514,163 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   };
 
   // Checklist Notes state (matching Job Header & Delivery Ticket style)
-  const [checklistNotesInput, setChecklistNotesInput] = useState('');
+  const [checklistNotesInput, setChecklistNotesInput] = useState(() => {
+    let initNotes = activeCallout?.notes || '';
+    const cId = activeCallout?.id;
+    if (!initNotes && cId && typeof window !== 'undefined') {
+      try {
+        const local = localStorage.getItem(`emdad_callout_notes_${cId}`);
+        if (local) initNotes = local;
+      } catch {}
+    }
+    return initNotes;
+  });
+
   useEffect(() => {
     if (activeCallout) {
-      setChecklistNotesInput(activeCallout.notes || '');
+      setChecklistNotesInput((prev) => {
+        if (activeCallout.notes) return activeCallout.notes;
+        const cId = activeCallout.id;
+        if (!prev && cId && typeof window !== 'undefined') {
+          try {
+            const local = localStorage.getItem(`emdad_callout_notes_${cId}`);
+            if (local) return local;
+          } catch {}
+        }
+        return prev || '';
+      });
     } else {
       setChecklistNotesInput('');
     }
   }, [activeCallout?.id, activeCallout?.notes]);
 
-  const handleSaveChecklistNotes = () => {
+  const handleSaveChecklistNotes = (silent = false) => {
     if (!activeCallout) return;
+    const trimmed = checklistNotesInput.trim();
     const updatedCallout: Callout = {
       ...activeCallout,
-      notes: checklistNotesInput.trim(),
+      notes: trimmed,
     };
+    if (activeCallout.id && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(`emdad_callout_notes_${activeCallout.id}`, trimmed);
+      } catch {}
+    }
     if (onSaveCallout) {
       onSaveCallout(updatedCallout);
     }
-    showToast('Checklist notes saved successfully.', 'success');
+    if (!silent) {
+      showToast('Checklist notes saved successfully.', 'success');
+    }
   };
 
   // Delivery Ticket & Return Ticket Notes states (same style as Job Header)
-  const [dtNotesInput, setDtNotesInput] = useState('');
+  const [dtNotesInput, setDtNotesInput] = useState(() => {
+    let initNotes = effectiveDT?.notes || '';
+    const dtNum = effectiveDT?.dtNumber;
+    if (!initNotes && dtNum && typeof window !== 'undefined') {
+      try {
+        const local = localStorage.getItem(`emdad_dt_notes_${dtNum}`);
+        if (local) initNotes = local;
+      } catch {}
+    }
+    return initNotes;
+  });
+
   useEffect(() => {
     if (effectiveDT) {
-      setDtNotesInput(effectiveDT.notes || '');
+      setDtNotesInput((prev) => {
+        if (effectiveDT.notes) return effectiveDT.notes;
+        const dtNum = effectiveDT.dtNumber;
+        if (!prev && dtNum && typeof window !== 'undefined') {
+          try {
+            const local = localStorage.getItem(`emdad_dt_notes_${dtNum}`);
+            if (local) return local;
+          } catch {}
+        }
+        return prev || '';
+      });
     } else {
       setDtNotesInput('');
     }
   }, [effectiveDT?.id, effectiveDT?.dtNumber, effectiveDT?.notes]);
 
-  const handleSaveDTNotes = () => {
+  const handleSaveDTNotes = (silent = false) => {
     const targetDT = effectiveDT;
     if (!targetDT) return;
+    const trimmed = dtNotesInput.trim();
     const updated: DTBatch = {
       ...targetDT,
-      notes: dtNotesInput.trim(),
+      notes: trimmed,
     };
+    if (targetDT.dtNumber && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(`emdad_dt_notes_${targetDT.dtNumber}`, trimmed);
+      } catch {}
+    }
     if (activeDT && onUpdateDTBatch) {
       onUpdateDTBatch(updated);
     } else {
       onSaveDTBatch(updated);
       setSelectedDTNumber(updated.dtNumber);
     }
-    showToast(`Delivery Ticket ${targetDT.dtNumber} notes saved successfully.`, 'success');
+    if (!silent) {
+      showToast(`Delivery Ticket ${targetDT.dtNumber} notes saved successfully.`, 'success');
+    }
   };
 
-  const [rtNotesInput, setRtNotesInput] = useState('');
+  const [rtNotesInput, setRtNotesInput] = useState(() => {
+    let initNotes = effectiveRT?.notes || '';
+    const rtNum = effectiveRT?.rtNumber;
+    if (!initNotes && rtNum && typeof window !== 'undefined') {
+      try {
+        const local = localStorage.getItem(`emdad_rt_notes_${rtNum}`);
+        if (local) initNotes = local;
+      } catch {}
+    }
+    return initNotes;
+  });
+
   useEffect(() => {
     if (effectiveRT) {
-      setRtNotesInput(effectiveRT.notes || '');
+      setRtNotesInput((prev) => {
+        if (effectiveRT.notes) return effectiveRT.notes;
+        const rtNum = effectiveRT.rtNumber;
+        if (!prev && rtNum && typeof window !== 'undefined') {
+          try {
+            const local = localStorage.getItem(`emdad_rt_notes_${rtNum}`);
+            if (local) return local;
+          } catch {}
+        }
+        return prev || '';
+      });
     } else {
       setRtNotesInput('');
     }
   }, [effectiveRT?.id, effectiveRT?.rtNumber, effectiveRT?.notes]);
 
-  const handleSaveRTNotes = () => {
+  const handleSaveRTNotes = (silent = false) => {
     const targetRT = effectiveRT;
     if (!targetRT) return;
+    const trimmed = rtNotesInput.trim();
     const updated: RTBatch = {
       ...targetRT,
-      notes: rtNotesInput.trim(),
+      notes: trimmed,
     };
+    if (targetRT.rtNumber && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(`emdad_rt_notes_${targetRT.rtNumber}`, trimmed);
+      } catch {}
+    }
     if (activeRT && onUpdateRTBatch) {
       onUpdateRTBatch(updated);
     } else {
       onSaveRTBatch(updated);
       setSelectedRTNumber(updated.rtNumber);
     }
-    showToast(`Receiving Ticket ${targetRT.rtNumber} notes saved successfully.`, 'success');
+    if (!silent) {
+      showToast(`Receiving Ticket ${targetRT.rtNumber} notes saved successfully.`, 'success');
+    }
   };
 
   // Robust field resolvers for Return Tickets
@@ -2761,13 +2877,32 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
     setIsSaving(true);
     try {
+      // 0. Persist active notes across all sub-modules
+      if (activeCallout && checklistNotesInput !== undefined) {
+        handleSaveChecklistNotes(true);
+      }
+      if (effectiveDT && !effectiveDT.isLocked && dtNotesInput !== undefined) {
+        handleSaveDTNotes(true);
+      }
+      if (effectiveRT && !effectiveRT.isLocked && rtNotesInput !== undefined) {
+        handleSaveRTNotes(true);
+      }
+
       const updatedJob: DrillingJob = {
         ...jobData,
+        notes: jobData.notes || '',
         assignedCrew,
         crewMembers: assignedCrew,
         dailyLogs,
         utilizationStatuses: customUtilStatuses,
       };
+
+      if (jId && typeof window !== 'undefined') {
+        try {
+          if (updatedJob.notes) localStorage.setItem(`emdad_job_notes_${jId}`, updatedJob.notes);
+        } catch {}
+      }
+      saveCustomJob(updatedJob);
 
       // 1. Persist local cache of utilization statuses
       try {
@@ -2837,7 +2972,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       setLastSavedTime(timeStr);
       setLastSavedUtilTime(timeStr);
-      showToast(`Job File ${jobData.id} records (including Utilization) saved to Azure SQL!`, 'success');
+      showToast(`Job File ${jobData.id} records (including Notes & Utilization) saved!`, 'success');
     } catch (e: any) {
       showToast(`Failed to save job file: ${e.message || 'Unknown error'}`, 'error');
     } finally {
@@ -3199,7 +3334,23 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 rows={8}
                 value={jobData.notes || ''}
                 disabled={isLocked}
-                onChange={(e) => setJobData({ ...jobData, notes: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const updated = { ...jobData, notes: val };
+                  setJobData(updated);
+                  const jId = jobData.id || (jobData as any).jobNumber;
+                  if (jId && typeof window !== 'undefined') {
+                    try {
+                      localStorage.setItem(`emdad_job_notes_${jId}`, val);
+                    } catch {}
+                  }
+                }}
+                onBlur={() => {
+                  if (!isLocked) {
+                    onSaveJob(jobData);
+                    saveCustomJob(jobData);
+                  }
+                }}
                 placeholder="Enter job notes, instructions, well history, and operational remarks here..."
                 className="w-full bg-white border border-[#9fb6cf] rounded p-3 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
               />
@@ -4149,7 +4300,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 rows={3}
                 value={checklistNotesInput}
                 disabled={isClosedOrInvoiced || isLocked}
-                onChange={(e) => setChecklistNotesInput(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setChecklistNotesInput(val);
+                  if (activeCallout?.id && typeof window !== 'undefined') {
+                    try {
+                      localStorage.setItem(`emdad_callout_notes_${activeCallout.id}`, val);
+                    } catch {}
+                  }
+                }}
+                onBlur={() => {
+                  if (!isClosedOrInvoiced && !isLocked) {
+                    handleSaveChecklistNotes(true);
+                  }
+                }}
                 placeholder="Enter checklist preparation remarks, sling certificates, basket numbers, or non-invoiced items to carry forward into the Delivery Ticket..."
                 className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
               />
@@ -4511,7 +4675,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   rows={4}
                   value={dtNotesInput}
                   disabled={isClosedOrInvoiced || isLocked || effectiveDT.isLocked}
-                  onChange={(e) => setDtNotesInput(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setDtNotesInput(val);
+                    if (effectiveDT?.dtNumber && typeof window !== 'undefined') {
+                      try {
+                        localStorage.setItem(`emdad_dt_notes_${effectiveDT.dtNumber}`, val);
+                      } catch {}
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!isClosedOrInvoiced && !isLocked && !effectiveDT.isLocked) {
+                      handleSaveDTNotes(true);
+                    }
+                  }}
                   placeholder="Enter items with no invoicing value to print on the Delivery Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
                   className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
@@ -4924,7 +5101,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     rows={4}
                     value={rtNotesInput}
                     disabled={isClosedOrInvoiced || isLocked || Boolean(effectiveRT.isLocked)}
-                    onChange={(e) => setRtNotesInput(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setRtNotesInput(val);
+                      if (effectiveRT?.rtNumber && typeof window !== 'undefined') {
+                        try {
+                          localStorage.setItem(`emdad_rt_notes_${effectiveRT.rtNumber}`, val);
+                        } catch {}
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!isClosedOrInvoiced && !isLocked && !effectiveRT.isLocked) {
+                        handleSaveRTNotes(true);
+                      }
+                    }}
                     placeholder="Enter items with no invoicing value received from rig to print on the Receiving Ticket (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)..."
                     className="w-full bg-[#fcfdff] border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   />
