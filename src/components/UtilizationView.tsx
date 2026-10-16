@@ -3111,8 +3111,9 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
       {/* Floating Toast Notification */}
       {toast && (
         <div
-          className={`fixed bottom-12 right-6 z-50 px-4 py-2.5 rounded-lg text-white font-bold text-xs shadow-lg animate-in slide-in-from-bottom-2 ${
-            toast.type === 'ok' ? 'bg-emerald-700' : 'bg-[#1a3055]'
+          style={{ zIndex: 99999 }}
+          className={`fixed bottom-12 right-6 z-[99999] px-4 py-2.5 rounded-lg text-white font-bold text-xs shadow-2xl border border-white/20 animate-in slide-in-from-bottom-2 ${
+            toast.type === 'ok' ? 'bg-emerald-800' : 'bg-[#1a3055]'
           }`}
         >
           {toast.msg}

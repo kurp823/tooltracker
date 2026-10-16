@@ -285,14 +285,25 @@ export const App: React.FC = () => {
   // Toasts
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
 
-  const showToast = useCallback((msg: string, type: 'success' | 'error' | 'info' = 'success') => {
-    const id = Date.now().toString();
-    setToasts((prev) => [...prev, { id, msg, type }]);
-  }, []);
-
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  const showToast = useCallback((msg: string, type: 'success' | 'error' | 'info' = 'success', duration = 3500) => {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    setToasts((prev) => {
+      // De-duplicate: remove older notification with the identical text to prevent duplicate stacking
+      const deduped = prev.filter((t) => t.msg !== msg);
+      // Keep up to 3 notifications visible at any time
+      const trimmed = deduped.slice(-2);
+      return [...trimmed, { id, msg, type }];
+    });
+
+    // Reliable auto-dismiss timer
+    setTimeout(() => {
+      removeToast(id);
+    }, duration);
+  }, [removeToast]);
 
   // Check if Pure SQL / Production mode is active (empty state when no live SQL data exists)
   const isPureSqlMode = typeof window !== 'undefined' && localStorage.getItem('emdad_mode') === 'production';
@@ -1643,9 +1654,6 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#c8d8e8] text-[#1e293b] font-sans flex flex-col antialiased selection:bg-amber-200">
-      {/* Toast Notifications */}
-      <Toast toasts={toasts} onRemove={removeToast} />
-
       {/* Top Header */}
       <Header
         syncStatus={syncStatus}
@@ -2155,6 +2163,9 @@ export const App: React.FC = () => {
           </ErrorBoundary>
         </main>
       </div>
+
+      {/* Toast Notifications (Floating on top of all modals and backdrops) */}
+      <Toast toasts={toasts} onRemove={removeToast} />
     </div>
   );
 };
