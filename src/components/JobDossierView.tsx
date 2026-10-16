@@ -944,62 +944,41 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const aKey = (rawAssetNo || '').trim().toUpperCase();
     const inv = (sKey ? inventoryMap.get(sKey) : undefined) || (aKey ? inventoryMap.get(aKey) : undefined);
 
-    // Known tool overrides for tools (e.g. Job-026-01815)
-    const KNOWN_TOOLS: Record<string, { assetNo: string; desc: string; shortDesc: string; serial: string }> = {
-      'EMD-6372': { assetNo: 'SM578-001', desc: '5-7/8" STRING MILL W/ 3-1/2" IF PIN X BOX', shortDesc: 'STRING MILL', serial: 'EMD-6372' },
-      'EMD-6373': { assetNo: 'DS958-001', desc: '9-5/8" DRILLING CASING SCRAPER W/ 4-1/2" IF PIN X BOX', shortDesc: 'DRILLING SCRAPER', serial: 'EMD-6373' },
-      'EMD-6374': { assetNo: 'DS700-001', desc: '7" DRILLING CASING SCRAPER W/ 3-1/2" IF PIN X BOX', shortDesc: 'DRILLING SCRAPER', serial: 'EMD-6374' },
-      'SM578-001': { assetNo: 'SM578-001', desc: '5-7/8" STRING MILL W/ 3-1/2" IF PIN X BOX', shortDesc: 'STRING MILL', serial: 'EMD-6372' },
-      'DS958-001': { assetNo: 'DS958-001', desc: '9-5/8" DRILLING CASING SCRAPER W/ 4-1/2" IF PIN X BOX', shortDesc: 'DRILLING SCRAPER', serial: 'EMD-6373' },
-      'DS700-001': { assetNo: 'DS700-001', desc: '7" DRILLING CASING SCRAPER W/ 3-1/2" IF PIN X BOX', shortDesc: 'DRILLING SCRAPER', serial: 'EMD-6374' },
-    };
-
-    const known = KNOWN_TOOLS[sKey] || KNOWN_TOOLS[aKey];
-
     // Priority 1: Genuine inventory Asset Number (not starting with EMD- if a non-EMD assetNo exists)
-    let assetNo = known?.assetNo || '';
-    if (!assetNo && inv?.assetNo && inv.assetNo.trim()) {
+    let assetNo = '';
+    if (inv?.assetNo && inv.assetNo.trim()) {
       assetNo = inv.assetNo.trim();
-    }
-    if (!assetNo && rawAssetNo && rawAssetNo.trim() && !rawAssetNo.trim().toUpperCase().startsWith('EMD-')) {
+    } else if (rawAssetNo && rawAssetNo.trim() && !rawAssetNo.trim().toUpperCase().startsWith('EMD-')) {
       assetNo = rawAssetNo.trim();
-    }
-    if (!assetNo && rawAssetNo && rawAssetNo.trim()) {
+    } else if (rawAssetNo && rawAssetNo.trim()) {
       assetNo = rawAssetNo.trim();
-    }
-    if (!assetNo && inv?.serial && !inv.serial.toUpperCase().startsWith('EMD-')) {
+    } else if (inv?.serial && !inv.serial.toUpperCase().startsWith('EMD-')) {
       assetNo = inv.serial;
-    }
-    if (!assetNo && rawSerial && !rawSerial.toUpperCase().startsWith('EMD-')) {
+    } else if (rawSerial && !rawSerial.toUpperCase().startsWith('EMD-')) {
       assetNo = rawSerial;
-    }
-    if (!assetNo) {
+    } else {
       assetNo = inv?.assetNo || rawAssetNo || rawSerial || '—';
     }
 
     // Priority 2: Genuine Serial Number
-    const serial = known?.serial || inv?.serial || rawSerial || inv?.assetNo || rawAssetNo || '—';
+    const serial = inv?.serial || rawSerial || inv?.assetNo || rawAssetNo || '—';
 
     // Priority 3: Genuine Technical Description (never bare tool type if technical description is available)
-    let desc = known?.desc || '';
-    if (!desc && inv?.desc && inv.desc.trim()) {
+    let desc = '';
+    if (inv?.desc && inv.desc.trim()) {
       desc = inv.desc.trim();
-    }
-    if (!desc && fallbackDesc && fallbackDesc.trim() && fallbackDesc.trim().toUpperCase() !== (fallbackShortDesc || '').trim().toUpperCase()) {
+    } else if (fallbackDesc && fallbackDesc.trim() && fallbackDesc.trim().toUpperCase() !== (fallbackShortDesc || '').trim().toUpperCase()) {
       desc = fallbackDesc.trim();
-    }
-    if (!desc && fallbackDesc && fallbackDesc.trim()) {
+    } else if (fallbackDesc && fallbackDesc.trim()) {
       desc = fallbackDesc.trim();
-    }
-    if (!desc && inv?.shortDesc && inv.shortDesc.trim()) {
+    } else if (inv?.shortDesc && inv.shortDesc.trim()) {
       desc = inv.shortDesc.trim();
-    }
-    if (!desc) {
+    } else {
       desc = fallbackShortDesc || 'Downhole Tool';
     }
 
     // Priority 4: Clean Tool Category / Short Description
-    const shortDesc = known?.shortDesc || (inv?.shortDesc && inv.shortDesc.trim()) || fallbackShortDesc || extractToolType(desc, fallbackShortDesc) || 'Downhole Tool';
+    const shortDesc = (inv?.shortDesc && inv.shortDesc.trim()) || fallbackShortDesc || extractToolType(desc, fallbackShortDesc) || 'Downhole Tool';
 
     return { inv, assetNo, serial, desc, shortDesc };
   }, [inventoryMap]);
@@ -1018,37 +997,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         };
       });
     }
-    // Auto-populate from DTs if historical/completed job
-    if (jobDTs.length > 0) {
-      return jobDTs.flatMap((d, dIdx) =>
-        (d.toolLines || []).map((t, tIdx) => {
-          const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
-          return {
-            seq: dIdx * 100 + tIdx + 1,
-            size: t.size || resolved.inv?.size || '—',
-            shortDesc: resolved.shortDesc,
-            qty: t.qty || 1,
-            assigned: t.qty || 1,
-            serialNos: [resolved.serial],
-            status: 'Released' as const,
-            partNo: resolved.assetNo,
-            description: resolved.desc,
-            supplier: t.ownership || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD'),
-            qtyIn: 1,
-            insNum: `GIS-Z-${Math.floor(10000 + (tIdx * 43) % 89999)}-2023`,
-            insDate: formatDateDD_MM_YYYY(d.dispatchDate),
-            comments: 'ACCEPTED',
-            cat: resolved.shortDesc,
-            condition: 'ACCEPTED',
-          };
-        })
-      );
-    }
     return [];
   });
 
   useEffect(() => {
-    if (activeCallout && activeCallout.items && activeCallout.items.length > 0) {
+    if (activeCallout && Array.isArray(activeCallout.items)) {
       setChecklistItems(
         activeCallout.items.map((it) => {
           const resolved = resolveToolDetails(it.serialNos?.[0], it.partNo, it.description, it.shortDesc || it.cat);
@@ -1061,34 +1014,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           };
         })
       );
-    } else if (jobDTs.length > 0 && checklistItems.length === 0) {
-      setChecklistItems(
-        jobDTs.flatMap((d, dIdx) =>
-          (d.toolLines || []).map((t, tIdx) => {
-            const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
-            return {
-              seq: dIdx * 100 + tIdx + 1,
-              size: t.size || resolved.inv?.size || '—',
-              shortDesc: resolved.shortDesc,
-              qty: t.qty || 1,
-              assigned: t.qty || 1,
-              serialNos: [resolved.serial],
-              status: 'Released' as const,
-              partNo: resolved.assetNo,
-              description: resolved.desc,
-              supplier: t.ownership || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD'),
-              qtyIn: 1,
-              insNum: `GIS-Z-${Math.floor(10000 + (tIdx * 43) % 89999)}-2023`,
-              insDate: formatDateDD_MM_YYYY(d.dispatchDate),
-              comments: 'ACCEPTED',
-              cat: resolved.shortDesc,
-              condition: 'ACCEPTED',
-            };
-          })
-        )
-      );
     }
-  }, [activeCallout, jobDTs, resolveToolDetails]);
+  }, [activeCallout, resolveToolDetails]);
 
   // Master Tool Categories & Sizes for Tool Picker
   const [customCategories] = useState<string[]>(() => {
@@ -1872,25 +1799,35 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Insert tools from modal to checklist
   const handleInsertSelectedTools = () => {
     if (isClosedOrInvoiced || isLocked) return;
-    const newlySelectedTools = inventory.filter((t) => checkedToolSerials.includes(t.serial));
+    const newlySelectedTools = inventory.filter((t) => {
+      const key = (t.id ? String(t.id).trim() : '') || (t.serial ? String(t.serial).trim() : '') || (t.assetNo ? String(t.assetNo).trim() : '');
+      return checkedToolSerials.includes(key) || (t.serial && checkedToolSerials.includes(t.serial));
+    });
     const newItems: CalloutItem[] = newlySelectedTools.map((t, idx) => {
       const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+      const exactAssetNo = t.assetNo || resolved.assetNo || t.serial || '—';
+      const exactSerial = t.serial || resolved.serial || t.assetNo || '—';
+      const exactDesc = t.desc || (t as any).toolDescription || resolved.desc || t.shortDesc || 'Downhole Tool';
+      const exactShortDesc = t.shortDesc || resolved.shortDesc || 'Downhole Tool';
+      const exactSize = t.size || resolved.inv?.size || '—';
+      const exactSupplier = t.supplier || t.ownership || resolved.inv?.supplier || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD');
+
       return {
         seq: checklistItems.length + idx + 1,
-        size: t.size || resolved.inv?.size || '—',
-        shortDesc: resolved.shortDesc,
+        size: exactSize,
+        shortDesc: exactShortDesc,
         qty: 1,
         assigned: 1,
-        serialNos: [resolved.serial],
+        serialNos: [exactSerial],
         status: 'Assigned',
-        partNo: resolved.assetNo,
-        description: resolved.desc,
-        supplier: t.supplier || resolved.inv?.supplier || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD'),
+        partNo: exactAssetNo,
+        description: exactDesc,
+        supplier: exactSupplier,
         qtyIn: 1,
         insNum: `GIS-Z-${Math.floor(10000 + Math.random() * 90000)}-2023`,
         insDate: formatDateDD_MM_YYYY(new Date().toISOString()),
         comments: 'ACCEPTED',
-        cat: resolved.shortDesc,
+        cat: exactShortDesc,
         condition: 'ACCEPTED',
       };
     });
@@ -3907,7 +3844,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <>
                       <button
                         type="button"
-                        onClick={() => setIsToolSelectOpen(true)}
+                        onClick={() => {
+                          setCheckedToolSerials([]);
+                          setIsToolSelectOpen(true);
+                        }}
                         className="bg-[#107c41] hover:bg-[#0c6233] text-white font-bold text-xs px-3 py-1 rounded-full shadow-xs transition cursor-pointer flex items-center gap-1.5"
                       >
                         <span>➕</span>
@@ -5747,7 +5687,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsToolSelectOpen(false)}
+                  onClick={() => {
+                    setIsToolSelectOpen(false);
+                    setCheckedToolSerials([]);
+                  }}
                   className="text-white hover:text-amber-300 font-bold text-base cursor-pointer px-1"
                 >
                   &times;
@@ -5895,10 +5838,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       >
                         <input
                           type="checkbox"
-                          checked={modalAvailableTools.length > 0 && modalAvailableTools.every((t) => checkedToolSerials.includes(t.serial))}
+                          checked={modalAvailableTools.length > 0 && modalAvailableTools.every((t) => {
+                            const k = (t.id ? String(t.id).trim() : '') || (t.serial ? String(t.serial).trim() : '') || (t.assetNo ? String(t.assetNo).trim() : '');
+                            return checkedToolSerials.includes(k) || (t.serial && checkedToolSerials.includes(t.serial));
+                          })}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setCheckedToolSerials(modalAvailableTools.map((t) => t.serial));
+                              setCheckedToolSerials(modalAvailableTools.map((t) => (t.id ? String(t.id).trim() : '') || (t.serial ? String(t.serial).trim() : '') || (t.assetNo ? String(t.assetNo).trim() : '')));
                             } else {
                               setCheckedToolSerials([]);
                             }
@@ -5992,7 +5938,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       </tr>
                     ) : (
                       modalAvailableTools.map((tool) => {
-                        const isChecked = checkedToolSerials.includes(tool.serial);
+                        const toolKey = (tool.id ? String(tool.id).trim() : '') || (tool.serial ? String(tool.serial).trim() : '') || (tool.assetNo ? String(tool.assetNo).trim() : '');
+                        const isChecked = checkedToolSerials.includes(toolKey) || (tool.serial && checkedToolSerials.includes(tool.serial));
 
                         // Look up genuine inspection record for this tool
                         const toolInspections = (inspections || []).filter(
@@ -6019,12 +5966,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
                         return (
                           <tr
-                            key={tool.serial}
+                            key={toolKey}
                             onClick={() => {
                               if (isChecked) {
-                                setCheckedToolSerials((prev) => prev.filter((s) => s !== tool.serial));
+                                setCheckedToolSerials((prev) => prev.filter((s) => s !== toolKey && s !== tool.serial));
                               } else {
-                                setCheckedToolSerials((prev) => [...prev, tool.serial]);
+                                setCheckedToolSerials((prev) => [...prev, toolKey]);
                               }
                             }}
                             className={`cursor-pointer transition h-7 leading-none ${
@@ -6037,9 +5984,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                                 checked={isChecked}
                                 onChange={(e) => {
                                   if (e.target.checked) {
-                                    setCheckedToolSerials((prev) => [...prev, tool.serial]);
+                                    setCheckedToolSerials((prev) => [...prev, toolKey]);
                                   } else {
-                                    setCheckedToolSerials((prev) => prev.filter((s) => s !== tool.serial));
+                                    setCheckedToolSerials((prev) => prev.filter((s) => s !== toolKey && s !== tool.serial));
                                   }
                                 }}
                                 className="cursor-pointer w-4 h-4 text-blue-600 rounded"
@@ -6083,7 +6030,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsToolSelectOpen(false)}
+                    onClick={() => {
+                      setIsToolSelectOpen(false);
+                      setCheckedToolSerials([]);
+                    }}
                     className="px-3.5 py-1 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer text-xs"
                   >
                     Cancel
