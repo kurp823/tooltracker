@@ -656,6 +656,26 @@ export const App: React.FC = () => {
         if (res.maintenance !== undefined) setMaintenance(res.maintenance);
       });
     });
+
+    // 1. Periodic background sync every 30 seconds so tools created by other users appear promptly
+    const pollInterval = setInterval(() => {
+      handleFetchLiveSql(true).finally(() => {
+        fetchSecondaryModules().then((res) => {
+          if (res.callouts !== undefined) setCallouts(res.callouts);
+        });
+      });
+    }, 30000);
+
+    // 2. On window focus / tab switch: Immediately refresh to pick up other users' new tools
+    const handleWindowFocus = () => {
+      handleFetchLiveSql(true);
+    };
+    window.addEventListener('focus', handleWindowFocus);
+
+    return () => {
+      clearInterval(pollInterval);
+      window.removeEventListener('focus', handleWindowFocus);
+    };
   }, [currentUser, handleFetchLiveSql]);
 
   // Handler to clear demo data and reflect pure SQL state

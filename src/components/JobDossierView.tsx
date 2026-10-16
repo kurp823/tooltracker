@@ -5677,6 +5677,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <span>itemsselect &bull; Tool Assignment Picker</span>
               </div>
               <div className="flex items-center gap-2">
+                {onRefresh && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onRefresh();
+                      showToast('Refreshing inventory from Azure SQL...', 'info');
+                    }}
+                    className="text-xs text-white/90 hover:text-white bg-blue-700/80 hover:bg-blue-600 px-2.5 py-0.5 rounded cursor-pointer transition flex items-center gap-1 font-semibold"
+                    title="Refresh inventory from Azure SQL immediately to pick up newly added tools"
+                  >
+                    <span>🔄</span>
+                    <span>Sync Live Tools</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setIsToolModalMaximized(!isToolModalMaximized)}
