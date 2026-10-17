@@ -338,6 +338,16 @@ export interface DTBatch {
   dispatchedBy: string;
   recipient?: string;
   notes?: string;
+  deliveredTo?: string;
+  msvName?: string;
+  vesselBoat?: string;
+  transport?: string;
+  vehicleNo?: string;
+  vehicleVesselNo?: string;
+  vesselNo?: string;
+  driverName?: string;
+  contactNo?: string;
+  designation?: string;
   toolLines: DTLine[];
   isLocked?: boolean;
   lockedBy?: string;

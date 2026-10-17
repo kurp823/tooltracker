@@ -479,8 +479,25 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
     }
   };
 
+  const getDTField = (b: DTBatch, field: string): string => {
+    let val = (b as any)[field];
+    if (!val && typeof window !== 'undefined' && b.dtNumber) {
+      try {
+        const savedMeta = JSON.parse(localStorage.getItem(`emdad_dt_meta_${b.dtNumber}`) || '{}');
+        val = savedMeta[field];
+      } catch {}
+    }
+    return val || '';
+  };
+
   const handlePrintDT = (b: DTBatch) => {
     const job = jobs.find((j) => j.id === b.jobId);
+    const deliveredTo = getDTField(b, 'deliveredTo');
+    const msvName = getDTField(b, 'vesselBoat') || getDTField(b, 'msvName');
+    const vehicleVesselNo = getDTField(b, 'vehicleNo') || getDTField(b, 'vehicleVesselNo') || getDTField(b, 'vesselNo');
+    const driverName = getDTField(b, 'driverName');
+    const contactNo = getDTField(b, 'contactNo');
+
     const printData: DeliveryTicketPrintData = {
       dtNumber: b.dtNumber,
       client: b.client || job?.client || '—',
@@ -494,11 +511,11 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
       rig: b.rig || job?.rig || '—',
       well: b.well || job?.well || '—',
       shippedDate: b.rmDate || formatDateDD_MM_YYYY(new Date()),
-      deliveredTo: (b as any).deliveredTo || 'YARD 08',
-      msvName: (b as any).msvName || 'MARSOL SUPREME',
-      vehicleVesselNo: (b as any).vehicleVesselNo || (b as any).vesselNo || '70136 AD/54912',
-      driverName: (b as any).driverName || 'SARWAN/JAGJEETH SINGH',
-      contactNo: (b as any).contactNo || '055 890 7562/0555971632',
+      deliveredTo: deliveredTo || '—',
+      msvName: msvName || '—',
+      vehicleVesselNo: vehicleVesselNo || '—',
+      driverName: driverName || '—',
+      contactNo: contactNo || '—',
       notes: b.notes,
       tools: (b.toolLines || []).map((t, i) => {
         const sKey = (t.serial || '').trim().toUpperCase();

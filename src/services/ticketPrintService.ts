@@ -90,21 +90,28 @@ const COMMON_PRINT_CSS = `
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
   body {
     font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
     font-size: 9pt;
     color: #000;
     line-height: 1.35;
-    margin: 0;
     padding: 10px;
     background: #fff;
   }
   .print-page {
     width: 100%;
     max-width: 210mm;
+    min-height: 272mm;
     margin: 0 auto;
     background: #fff;
     position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
   }
   .header-container {
     display: flex;
@@ -210,11 +217,16 @@ const COMMON_PRINT_CSS = `
   .bold {
     font-weight: bold;
   }
+  .print-bottom-block {
+    margin-top: auto;
+    padding-top: 15px;
+    page-break-inside: avoid;
+    width: 100%;
+  }
   .signature-block {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    margin-top: 25px;
     padding: 0 30px;
     page-break-inside: avoid;
   }
@@ -281,6 +293,9 @@ const COMMON_PRINT_CSS = `
   @media print {
     body {
       padding: 0;
+    }
+    .print-page {
+      min-height: 272mm;
     }
     .no-print {
       display: none !important;
@@ -385,27 +400,27 @@ export function generateDeliveryTicketHtml(data: DeliveryTicketPrintData): strin
         <div class="meta-row">
           <span class="meta-label" style="width: 110px;">Delivered To</span>
           <span class="meta-colon">:</span>
-          <span class="meta-val">${data.deliveredTo || 'YARD 08'}</span>
+          <span class="meta-val">${data.deliveredTo || '—'}</span>
         </div>
         <div class="meta-row">
           <span class="meta-label" style="width: 110px;">MSV Name</span>
           <span class="meta-colon">:</span>
-          <span class="meta-val">${data.msvName || 'MARSOL SUPREME'}</span>
+          <span class="meta-val">${data.msvName || '—'}</span>
         </div>
         <div class="meta-row">
           <span class="meta-label" style="width: 110px;">Vehicle No./Vessel No.</span>
           <span class="meta-colon">:</span>
-          <span class="meta-val">${data.vehicleVesselNo || '70136 AD/54912'}</span>
+          <span class="meta-val">${data.vehicleVesselNo || '—'}</span>
         </div>
         <div class="meta-row">
           <span class="meta-label" style="width: 110px;">Driver Name</span>
           <span class="meta-colon">:</span>
-          <span class="meta-val">${data.driverName || 'SARWAN/JAGJEETH SINGH'}</span>
+          <span class="meta-val">${data.driverName || '—'}</span>
         </div>
         <div class="meta-row">
           <span class="meta-label" style="width: 110px;">Contact No.</span>
           <span class="meta-colon">:</span>
-          <span class="meta-val">${data.contactNo || '055 890 7562/0555971632'}</span>
+          <span class="meta-val">${data.contactNo || '—'}</span>
         </div>
       </div>
     </div>
@@ -437,23 +452,24 @@ export function generateDeliveryTicketHtml(data: DeliveryTicketPrintData): strin
       <strong>Notes :</strong> <span style="white-space: pre-wrap;">${data.notes || ''}</span>
     </div>
 
-    <!-- Signatures -->
-    <div class="signature-block">
-      <div class="sig-col">
-        <div class="sig-title">Authorised Signature</div>
-        <div class="sig-line"></div>
+    <!-- Signatures & Page Footer (Docked to Bottom of Page) -->
+    <div class="print-bottom-block">
+      <div class="signature-block">
+        <div class="sig-col">
+          <div class="sig-title">Authorised Signature</div>
+          <div class="sig-line"></div>
+        </div>
+        <div class="sig-col">
+          <div class="sig-title">Customer Signature &amp; Stamp</div>
+          <div class="sig-line"></div>
+        </div>
       </div>
-      <div class="sig-col">
-        <div class="sig-title">Customer Signature &amp; Stamp</div>
-        <div class="sig-line"></div>
-      </div>
-    </div>
 
-    <!-- Page Footer -->
-    <div class="page-footer">
-      <div>Form No.: DSF-001 Rev.: 02, 01-Jul-2018</div>
-      <div>EMDAD L.L.C</div>
-      <div>1 of 1</div>
+      <div class="page-footer">
+        <div>Form No.: DSF-001 Rev.: 02, 01-Jul-2018</div>
+        <div>EMDAD L.L.C</div>
+        <div>1 of 1</div>
+      </div>
     </div>
   </div>
 </body>
@@ -572,17 +588,24 @@ export function generateDispatchChecklistHtml(data: DispatchChecklistPrintData):
       </div>
     </div>
 
-    <!-- Signatures -->
-    <div style="display: flex; justify-content: space-between; padding: 0 40px; margin-top: 30px; font-size: 9pt; font-weight: bold;">
-      <div>Prepared By</div>
-      <div>Verified By</div>
-    </div>
+    <!-- Signatures & Page Footer (Docked to Bottom of Page) -->
+    <div class="print-bottom-block">
+      <div class="signature-block">
+        <div class="sig-col">
+          <div class="sig-title">Prepared By</div>
+          <div class="sig-line"></div>
+        </div>
+        <div class="sig-col">
+          <div class="sig-title">Verified By</div>
+          <div class="sig-line"></div>
+        </div>
+      </div>
 
-    <!-- Page Footer -->
-    <div class="page-footer">
-      <div>Form No. : DSF-003, Rev.: 02, 01-Jul-2018</div>
-      <div>EMDAD LLC.</div>
-      <div>Page 1 of 1</div>
+      <div class="page-footer">
+        <div>Form No. : DSF-003, Rev.: 02, 01-Jul-2018</div>
+        <div>EMDAD LLC.</div>
+        <div>Page 1 of 1</div>
+      </div>
     </div>
   </div>
 </body>
@@ -633,7 +656,7 @@ export function generateReceivingTicketHtml(data: ReceivingTicketPrintData): str
         <div class="meta-row">
           <span class="meta-label" style="width: 140px;">Vessel No./Vehicle No.</span>
           <span class="meta-colon">:</span>
-          <span class="meta-val">${data.vehicleVesselNo || 'CREST MERCURY TWO'}</span>
+          <span class="meta-val">${data.vehicleVesselNo || '—'}</span>
         </div>
         <div class="meta-row">
           <span class="meta-label" style="width: 140px;">Client Ref</span>
@@ -711,23 +734,24 @@ export function generateReceivingTicketHtml(data: ReceivingTicketPrintData): str
       <strong>Note :</strong> <span style="white-space: pre-wrap;">${data.notes || ''}</span>
     </div>
 
-    <!-- Signatures -->
-    <div class="signature-block">
-      <div class="sig-col">
-        <div class="sig-title">Authorised Signature</div>
-        <div class="sig-line"></div>
+    <!-- Signatures & Page Footer (Docked to Bottom of Page) -->
+    <div class="print-bottom-block">
+      <div class="signature-block">
+        <div class="sig-col">
+          <div class="sig-title">Authorised Signature</div>
+          <div class="sig-line"></div>
+        </div>
+        <div class="sig-col">
+          <div class="sig-title">Customer Signature &amp; Stamp</div>
+          <div class="sig-line"></div>
+        </div>
       </div>
-      <div class="sig-col">
-        <div class="sig-title">Customer Signature &amp; Stamp</div>
-        <div class="sig-line"></div>
-      </div>
-    </div>
 
-    <!-- Page Footer -->
-    <div class="page-footer">
-      <div>Form No.: DSF-001 Rev.: 02, 01-Jul-2018</div>
-      <div>EMDAD L.L.C</div>
-      <div>1 of 1</div>
+      <div class="page-footer">
+        <div>Form No.: DSF-001 Rev.: 02, 01-Jul-2018</div>
+        <div>EMDAD L.L.C</div>
+        <div>1 of 1</div>
+      </div>
     </div>
   </div>
 </body>

@@ -1623,6 +1623,51 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     }
   };
 
+  const getDTField = (dt: DTBatch | null, field: string): string => {
+    if (!dt) return '';
+    let val = (dt as any)[field];
+    if (!val && typeof window !== 'undefined' && dt.dtNumber) {
+      try {
+        const savedMeta = JSON.parse(localStorage.getItem(`emdad_dt_meta_${dt.dtNumber}`) || '{}');
+        val = savedMeta[field];
+      } catch {}
+    }
+    return val || '';
+  };
+
+  const handleUpdateDTField = (field: string, value: string) => {
+    const targetDT = effectiveDT;
+    if (!targetDT) return;
+    const updated: DTBatch = {
+      ...targetDT,
+      [field]: value,
+    };
+    if (field === 'vesselBoat') {
+      (updated as any).msvName = value;
+    } else if (field === 'vehicleNo') {
+      (updated as any).vehicleVesselNo = value;
+      (updated as any).vesselNo = value;
+    }
+    if (targetDT.dtNumber && typeof window !== 'undefined') {
+      try {
+        const savedMeta = JSON.parse(localStorage.getItem(`emdad_dt_meta_${targetDT.dtNumber}`) || '{}');
+        savedMeta[field] = value;
+        if (field === 'vesselBoat') savedMeta.msvName = value;
+        if (field === 'vehicleNo') {
+          savedMeta.vehicleVesselNo = value;
+          savedMeta.vesselNo = value;
+        }
+        localStorage.setItem(`emdad_dt_meta_${targetDT.dtNumber}`, JSON.stringify(savedMeta));
+      } catch {}
+    }
+    if (activeDT && onUpdateDTBatch) {
+      onUpdateDTBatch(updated);
+    } else {
+      onSaveDTBatch(updated);
+      setSelectedDTNumber(updated.dtNumber);
+    }
+  };
+
   const [rtNotesInput, setRtNotesInput] = useState(() => {
     let initNotes = effectiveRT?.notes || '';
     const rtNum = effectiveRT?.rtNumber;
@@ -2418,6 +2463,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       alert('Please select or create a Delivery Ticket first.');
       return;
     }
+    const deliveredTo = getDTField(targetDT, 'deliveredTo');
+    const msvName = getDTField(targetDT, 'vesselBoat') || getDTField(targetDT, 'msvName');
+    const vehicleVesselNo = getDTField(targetDT, 'vehicleNo') || getDTField(targetDT, 'vehicleVesselNo') || getDTField(targetDT, 'vesselNo');
+    const driverName = getDTField(targetDT, 'driverName');
+    const contactNo = getDTField(targetDT, 'contactNo');
+
     const printData: DeliveryTicketPrintData = {
       dtNumber: targetDT.dtNumber,
       client: jobData.client || '—',
@@ -2431,11 +2482,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       rig: jobData.rig || targetDT.rig || '—',
       well: jobData.well || targetDT.well || '—',
       shippedDate: formatDateDD_MM_YYYY(targetDT.dispatchDate || targetDT.rmDate || new Date()),
-      deliveredTo: (targetDT as any).deliveredTo || 'YARD 08',
-      msvName: (targetDT as any).msvName || 'MARSOL SUPREME',
-      vehicleVesselNo: (targetDT as any).vehicleVesselNo || (targetDT as any).vesselNo || '70136 AD/54912',
-      driverName: (targetDT as any).driverName || 'SARWAN/JAGJEETH SINGH',
-      contactNo: (targetDT as any).contactNo || '055 890 7562/0555971632',
+      deliveredTo: deliveredTo || '—',
+      msvName: msvName || '—',
+      vehicleVesselNo: vehicleVesselNo || '—',
+      driverName: driverName || '—',
+      contactNo: contactNo || '—',
       notes: targetDT.notes,
       tools: (targetDT.toolLines || []).map((t, idx) => {
         const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
@@ -4952,8 +5003,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <span className="font-bold text-slate-600">Dispatched By:</span>
                     <input
                       type="text"
-                      defaultValue={effectiveDT.dispatchedBy || 'Operations'}
-                      disabled={isLocked}
+                      value={getDTField(effectiveDT, 'dispatchedBy') || effectiveDT.dispatchedBy || ''}
+                      onChange={(e) => handleUpdateDTField('dispatchedBy', e.target.value)}
+                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
+                      placeholder="e.g. Operations / Name"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                     />
                   </div>
@@ -4961,8 +5014,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <span className="font-bold text-slate-600">Designation:</span>
                     <input
                       type="text"
-                      defaultValue="WORKSHOP COORDINATOR"
-                      disabled={isLocked}
+                      value={getDTField(effectiveDT, 'designation')}
+                      onChange={(e) => handleUpdateDTField('designation', e.target.value)}
+                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
+                      placeholder="e.g. WORKSHOP COORDINATOR"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                     />
                   </div>
@@ -4981,8 +5036,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <span className="font-bold text-slate-600">Delivered To:</span>
                     <input
                       type="text"
-                      defaultValue="ESNAD JETTY"
-                      disabled={isLocked}
+                      value={getDTField(effectiveDT, 'deliveredTo')}
+                      onChange={(e) => handleUpdateDTField('deliveredTo', e.target.value)}
+                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
+                      placeholder="e.g. ESNAD JETTY / YARD 08"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                     />
                   </div>
@@ -4990,8 +5047,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <span className="font-bold text-slate-600">Vessel / Boat:</span>
                     <input
                       type="text"
-                      defaultValue="ZAKHER STAR"
-                      disabled={isLocked}
+                      value={getDTField(effectiveDT, 'vesselBoat') || getDTField(effectiveDT, 'msvName')}
+                      onChange={(e) => handleUpdateDTField('vesselBoat', e.target.value)}
+                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
+                      placeholder="e.g. ZAKHER STAR / MARSOL"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                     />
                   </div>
@@ -4999,8 +5058,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <span className="font-bold text-slate-600">Transport:</span>
                     <input
                       type="text"
-                      defaultValue="EMDAD"
-                      disabled={isLocked}
+                      value={getDTField(effectiveDT, 'transport')}
+                      onChange={(e) => handleUpdateDTField('transport', e.target.value)}
+                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
+                      placeholder="e.g. EMDAD"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                     />
                   </div>
@@ -5015,8 +5076,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <span className="font-bold text-slate-600">Vehicle No:</span>
                     <input
                       type="text"
-                      defaultValue="54912"
-                      disabled={isLocked}
+                      value={getDTField(effectiveDT, 'vehicleNo') || getDTField(effectiveDT, 'vehicleVesselNo')}
+                      onChange={(e) => handleUpdateDTField('vehicleNo', e.target.value)}
+                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
+                      placeholder="e.g. 54912 / 70136 AD"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100 font-mono"
                     />
                   </div>
@@ -5024,8 +5087,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <span className="font-bold text-slate-600">Driver Name:</span>
                     <input
                       type="text"
-                      defaultValue="LUQMAN KHAN"
-                      disabled={isLocked}
+                      value={getDTField(effectiveDT, 'driverName')}
+                      onChange={(e) => handleUpdateDTField('driverName', e.target.value)}
+                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
+                      placeholder="e.g. Driver Full Name"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                     />
                   </div>
@@ -5033,8 +5098,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <span className="font-bold text-slate-600">Contact No:</span>
                     <input
                       type="text"
-                      defaultValue="+971565256707"
-                      disabled={isLocked}
+                      value={getDTField(effectiveDT, 'contactNo')}
+                      onChange={(e) => handleUpdateDTField('contactNo', e.target.value)}
+                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
+                      placeholder="e.g. +971 50..."
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs font-mono disabled:bg-slate-100"
                     />
                   </div>
