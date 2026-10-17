@@ -3512,100 +3512,125 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           </div>
         )}
 
-        {/* Persistent Anchored Job Context Box */}
-        <div className="bg-[#f0f4f9] border border-[#b8cce0] rounded-md p-3 mb-4 shadow-2xs">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-xs">
-            {/* Left Column: Job No, Service Category, Job Description, Rig, Well, Field */}
-            <div className="space-y-1.5">
-              <div className="flex items-center">
-                <label className="w-28 font-bold text-slate-700 text-right pr-3">Job No:</label>
-                <input
-                  type="text"
-                  value={jobData.id || ''}
-                  disabled={isLocked}
-                  onChange={(e) => setJobData({ ...jobData, id: e.target.value, jobNumber: e.target.value })}
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-900 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                />
-              </div>
-
-              {/* Service Category */}
-              <div className="flex items-center">
-                <label className="w-28 font-bold text-slate-700 text-right pr-3">Service Category:</label>
-                <select
-                  value={jobData.serviceCategory || jobData.serviceType || 'DOWN HOLE RENTALS'}
-                  disabled={isLocked}
-                  onChange={(e) =>
-                    setJobData({
-                      ...jobData,
-                      serviceCategory: e.target.value,
-                      serviceType: e.target.value,
-                    })
-                  }
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-64 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                >
-                  <option value="DOWN HOLE RENTALS">DOWN HOLE RENTALS</option>
-                  <option value="FISHING SERVICES">FISHING SERVICES</option>
-                  <option value="WHIPSTOCK SERVICES">WHIPSTOCK SERVICES</option>
-                  <option value="CASING EXIT SERVICES">CASING EXIT SERVICES</option>
-                  <option value="THRU TUBING SERVICES">THRU TUBING SERVICES</option>
-                  <option value="MILLING & WORKOVER">MILLING &amp; WORKOVER</option>
-                  <option value="WELLBORE CLEANOUT">WELLBORE CLEANOUT</option>
-                  <option value="DRILLING TOOLS">DRILLING TOOLS</option>
-                  <option value='"DUAL COMPLETION"'>"DUAL COMPLETION"</option>
-                </select>
-              </div>
-
-              {/* Short Job Description Input */}
-              <div className="flex items-center">
-                <label className="w-28 font-bold text-slate-700 text-right pr-3">Job Description:</label>
-                <input
-                  type="text"
-                  value={jobData.jobDescription || ''}
-                  disabled={isLocked}
-                  onChange={(e) => setJobData({ ...jobData, jobDescription: e.target.value })}
-                  placeholder="e.g. 6-1/8 Hole Section Whipstock Casing Exit"
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-medium text-slate-800 w-64 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                />
-              </div>
-
-              <div className="flex items-center">
-                <label className="w-28 font-bold text-slate-700 text-right pr-3">Rig:</label>
-                <input
-                  type="text"
-                  value={jobData.rig || ''}
-                  disabled={isLocked}
-                  onChange={(e) => setJobData({ ...jobData, rig: e.target.value })}
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                />
-              </div>
-
-              <div className="flex items-center">
-                <label className="w-28 font-bold text-slate-700 text-right pr-3">Well:</label>
-                <input
-                  type="text"
-                  value={jobData.well || ''}
-                  disabled={isLocked}
-                  onChange={(e) => setJobData({ ...jobData, well: e.target.value })}
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                />
-              </div>
-
-              <div className="flex items-center">
-                <label className="w-28 font-bold text-slate-700 text-right pr-3">Field:</label>
-                <input
-                  type="text"
-                  value={jobData.field || 'ASAB'}
-                  disabled={isLocked}
-                  onChange={(e) => setJobData({ ...jobData, field: e.target.value })}
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-medium text-slate-800 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                />
-              </div>
+        {/* Job Context Section: Compact 1-line Summary Ribbon on sub-tabs; Full 10-field Form on 'job-header' tab */}
+        {activeTab !== 'job-header' ? (
+          <div className="bg-[#f0f4f9] border border-[#b8cce0] rounded px-3 py-1.5 mb-2.5 flex items-center justify-between text-xs shadow-2xs shrink-0 flex-wrap gap-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="font-bold text-slate-700">Rig: <span className="text-blue-900 font-mono">{jobData.rig || '—'}</span></span>
+              <span className="text-slate-300">|</span>
+              <span className="font-bold text-slate-700">Well: <span className="text-slate-900 font-mono">{jobData.well || '—'}</span></span>
+              <span className="text-slate-300">|</span>
+              <span className="font-bold text-slate-700">Client: <span className="text-slate-900 font-medium">{jobData.client || '—'}</span></span>
+              <span className="text-slate-300">|</span>
+              <span className="font-bold text-slate-700">Contract: <span className="text-slate-900 font-mono">{cleanContractName(jobData.contract) || jobData.contractNo || '—'}</span></span>
+              <span className="text-slate-300">|</span>
+              <span className="font-bold text-slate-700">Job Value: <span className="text-blue-900 font-mono font-bold bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">{sqlJobValue > 0 ? `${sqlJobValue.toLocaleString()} ${jobData.currency || 'USD'}` : (jobData.poValue ? `${Number(jobData.poValue).toLocaleString()} AED` : '—')}</span></span>
             </div>
+            <div className="flex items-center gap-1.5">
+              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                Dispatched: {totalDispatched}
+              </span>
+              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                Active: {activeOnRig}
+              </span>
+              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                Returned: {totalReturned}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-[#f0f4f9] border border-[#b8cce0] rounded-md p-3 mb-4 shadow-2xs">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-xs">
+              {/* Left Column: Job No, Service Category, Job Description, Rig, Well, Field */}
+              <div className="space-y-1.5">
+                <div className="flex items-center">
+                  <label className="w-28 font-bold text-slate-700 text-right pr-3">Job No:</label>
+                  <input
+                    type="text"
+                    value={jobData.id || ''}
+                    disabled={isLocked}
+                    onChange={(e) => setJobData({ ...jobData, id: e.target.value, jobNumber: e.target.value })}
+                    className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-900 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  />
+                </div>
 
-            {/* Right Column: Client, Contract, Contract No, Save Button */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center flex-1">
+                {/* Service Category */}
+                <div className="flex items-center">
+                  <label className="w-28 font-bold text-slate-700 text-right pr-3">Service Category:</label>
+                  <select
+                    value={jobData.serviceCategory || jobData.serviceType || 'DOWN HOLE RENTALS'}
+                    disabled={isLocked}
+                    onChange={(e) =>
+                      setJobData({
+                        ...jobData,
+                        serviceCategory: e.target.value,
+                        serviceType: e.target.value,
+                      })
+                    }
+                    className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-64 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="DOWN HOLE RENTALS">DOWN HOLE RENTALS</option>
+                    <option value="FISHING SERVICES">FISHING SERVICES</option>
+                    <option value="WHIPSTOCK SERVICES">WHIPSTOCK SERVICES</option>
+                    <option value="CASING EXIT SERVICES">CASING EXIT SERVICES</option>
+                    <option value="THRU TUBING SERVICES">THRU TUBING SERVICES</option>
+                    <option value="MILLING & WORKOVER">MILLING &amp; WORKOVER</option>
+                    <option value="WELLBORE CLEANOUT">WELLBORE CLEANOUT</option>
+                    <option value="DRILLING TOOLS">DRILLING TOOLS</option>
+                    <option value='"DUAL COMPLETION"'>"DUAL COMPLETION"</option>
+                  </select>
+                </div>
+
+                {/* Short Job Description Input */}
+                <div className="flex items-center">
+                  <label className="w-28 font-bold text-slate-700 text-right pr-3">Job Description:</label>
+                  <input
+                    type="text"
+                    value={jobData.jobDescription || ''}
+                    disabled={isLocked}
+                    onChange={(e) => setJobData({ ...jobData, jobDescription: e.target.value })}
+                    placeholder="e.g. 6-1/8 Hole Section Whipstock Casing Exit"
+                    className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-medium text-slate-800 w-64 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="flex items-center">
+                  <label className="w-28 font-bold text-slate-700 text-right pr-3">Rig:</label>
+                  <input
+                    type="text"
+                    value={jobData.rig || ''}
+                    disabled={isLocked}
+                    onChange={(e) => setJobData({ ...jobData, rig: e.target.value })}
+                    className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="flex items-center">
+                  <label className="w-28 font-bold text-slate-700 text-right pr-3">Well:</label>
+                  <input
+                    type="text"
+                    value={jobData.well || ''}
+                    disabled={isLocked}
+                    onChange={(e) => setJobData({ ...jobData, well: e.target.value })}
+                    className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="flex items-center">
+                  <label className="w-28 font-bold text-slate-700 text-right pr-3">Field:</label>
+                  <input
+                    type="text"
+                    value={jobData.field || 'ASAB'}
+                    disabled={isLocked}
+                    onChange={(e) => setJobData({ ...jobData, field: e.target.value })}
+                    className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-medium text-slate-800 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+              </div>
+
+              {/* Right Column: Client, Contract, Contract No, PO Number, PO Value, Job Value */}
+              <div className="space-y-1.5">
+                <div className="flex items-center">
                   <label className="w-28 font-bold text-slate-700 text-right pr-3">Client:</label>
                   <select
                     value={jobData.client || ''}
@@ -3618,104 +3643,94 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     ))}
                   </select>
                 </div>
-                {!isLocked && (
-                  <button
-                    type="button"
-                    onClick={handleSaveJobHeader}
-                    className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-3.5 py-1 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
+
+                <div className="flex items-center">
+                  <label className="w-28 font-bold text-slate-700 text-right pr-3">Contract:</label>
+                  <select
+                    value={cleanContractName(jobData.contract) || ''}
+                    disabled={isLocked}
+                    onChange={(e) => {
+                      const chosen = e.target.value;
+                      const found = contractOptions.find((co) => co.name === chosen);
+                      setJobData({
+                        ...jobData,
+                        contract: chosen,
+                        contractNo: found?.no || jobData.contractNo || '',
+                      });
+                    }}
+                    className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-medium text-slate-800 w-64 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   >
-                    <span>💾</span>
-                    <span>Save Record</span>
-                  </button>
-                )}
-              </div>
+                    {contractOptions.map((co) => (
+                      <option key={co.name} value={co.name}>
+                        {co.name}{co.no && co.no !== co.name ? ` (${co.no})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="flex items-center">
-                <label className="w-28 font-bold text-slate-700 text-right pr-3">Contract:</label>
-                <select
-                  value={cleanContractName(jobData.contract) || ''}
-                  disabled={isLocked}
-                  onChange={(e) => {
-                    const chosen = e.target.value;
-                    const found = contractOptions.find((co) => co.name === chosen);
-                    setJobData({
-                      ...jobData,
-                      contract: chosen,
-                      contractNo: found?.no || jobData.contractNo || '',
-                    });
-                  }}
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-medium text-slate-800 w-64 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                >
-                  {contractOptions.map((co) => (
-                    <option key={co.name} value={co.name}>
-                      {co.name}{co.no && co.no !== co.name ? ` (${co.no})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <div className="flex items-center">
+                  <label className="w-28 font-bold text-slate-700 text-right pr-3">Contract No:</label>
+                  <input
+                    type="text"
+                    value={jobData.contractNo || jobData.contract || '4700023861'}
+                    disabled={isLocked}
+                    onChange={(e) => setJobData({ ...jobData, contractNo: e.target.value })}
+                    className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-64 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  />
+                </div>
 
-              <div className="flex items-center">
-                <label className="w-28 font-bold text-slate-700 text-right pr-3">Contract No:</label>
-                <input
-                  type="text"
-                  value={jobData.contractNo || jobData.contract || '4700023861'}
-                  disabled={isLocked}
-                  onChange={(e) => setJobData({ ...jobData, contractNo: e.target.value })}
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-64 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                />
-              </div>
+                <div className="flex items-center">
+                  <label className="w-28 font-bold text-slate-700 text-right pr-3">PO Number:</label>
+                  <input
+                    type="text"
+                    value={jobData.poNumber || ''}
+                    disabled={isLocked}
+                    onChange={(e) => setJobData({ ...jobData, poNumber: e.target.value })}
+                    placeholder="e.g. PO-4700023861"
+                    className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-64 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  />
+                </div>
 
-              <div className="flex items-center">
-                <label className="w-28 font-bold text-slate-700 text-right pr-3">PO Number:</label>
-                <input
-                  type="text"
-                  value={jobData.poNumber || ''}
-                  disabled={isLocked}
-                  onChange={(e) => setJobData({ ...jobData, poNumber: e.target.value })}
-                  placeholder="e.g. PO-4700023861"
-                  className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-64 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                />
-              </div>
-
-              <div className="flex items-center">
-                <label className="w-28 font-bold text-slate-700 text-right pr-3">PO Value:</label>
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <span className="absolute left-2 top-0.5 text-slate-400 font-bold text-[11px]">AED</span>
-                    <input
-                      type="number"
-                      value={jobData.poValue !== undefined && jobData.poValue !== null ? jobData.poValue : ''}
-                      disabled={isLocked}
-                      onChange={(e) => setJobData({ ...jobData, poValue: parseFloat(e.target.value) || 0 })}
-                      placeholder="0.00"
-                      className="bg-white border border-[#9fb6cf] rounded pl-9 pr-2 py-0.5 text-xs font-mono font-bold text-slate-900 w-32 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                    />
+                <div className="flex items-center">
+                  <label className="w-28 font-bold text-slate-700 text-right pr-3">PO Value:</label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <span className="absolute left-2 top-0.5 text-slate-400 font-bold text-[11px]">AED</span>
+                      <input
+                        type="number"
+                        value={jobData.poValue !== undefined && jobData.poValue !== null ? jobData.poValue : ''}
+                        disabled={isLocked}
+                        onChange={(e) => setJobData({ ...jobData, poValue: parseFloat(e.target.value) || 0 })}
+                        placeholder="0.00"
+                        className="bg-white border border-[#9fb6cf] rounded pl-9 pr-2 py-0.5 text-xs font-mono font-bold text-slate-900 w-32 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                    <span className="font-bold text-slate-700 text-xs">Job Value:</span>
+                    <span className="font-mono font-bold text-blue-900 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-xs shadow-2xs" title="Actual calculated job revenue / invoice amount">
+                      {sqlJobValue > 0 ? `${sqlJobValue.toLocaleString()} ${jobData.currency || 'USD'}` : (jobData.poValue ? `${Number(jobData.poValue).toLocaleString()} AED` : '—')}
+                    </span>
                   </div>
-                  <span className="font-bold text-slate-700 text-xs">Job Value:</span>
-                  <span className="font-mono font-bold text-blue-900 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-xs">
-                    {sqlJobValue > 0 ? `${sqlJobValue.toLocaleString()} ${jobData.currency || 'USD'}` : '—'}
+                </div>
+
+                {/* Status / Fleet indicators */}
+                <div className="flex items-center gap-2 pt-1 pl-28 flex-wrap">
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                    Dispatched Tools: {totalDispatched}
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    Returned: {totalReturned}
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                    Active Tools: {activeOnRig}
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-purple-50 text-purple-900 border border-purple-300">
+                    Crew on Rig: {assignedCrew.filter((c) => c.status.includes('Rig')).length}
                   </span>
                 </div>
               </div>
-
-              {/* Status / Fleet indicators */}
-              <div className="flex items-center gap-2 pt-1 pl-28 flex-wrap">
-                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                  Dispatched Tools: {totalDispatched}
-                </span>
-                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  Returned: {totalReturned}
-                </span>
-                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
-                  Active Tools: {activeOnRig}
-                </span>
-                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-purple-50 text-purple-900 border border-purple-300">
-                  Crew on Rig: {assignedCrew.filter((c) => c.status.includes('Rig')).length}
-                </span>
-              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* TAB 1: JOB HEADER & NOTES */}
         {activeTab === 'job-header' && (
@@ -4381,22 +4396,38 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         <span>Select Tools</span>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={handleGenerateDTFromChecklist}
-                        className="bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
-                        title={
-                          selectedPendingCount > 0
-                            ? `Transfer ${selectedPendingCount} selected pending tool(s) directly into a new Delivery Ticket`
-                            : 'Check the boxes below for the tools you want to generate a Delivery Ticket for'
-                        }
-                      >
-                        <span>🚚</span>
-                        <span>
-                          Generate DT from Checklist
-                          {selectedPendingCount > 0 ? ` (${selectedPendingCount} Selected)` : pendingChecklistItems.length > 0 ? ` (${pendingChecklistItems.length} Pending)` : ''}
-                        </span>
-                      </button>
+                      {(() => {
+                        const isDtDisabled = pendingChecklistItems.length === 0 || ((isClosedOrInvoiced || isLocked) && !adminUnlocked);
+                        return (
+                          <button
+                            type="button"
+                            disabled={isDtDisabled}
+                            onClick={handleGenerateDTFromChecklist}
+                            className={`font-bold text-xs px-3.5 py-1 rounded transition flex items-center gap-1.5 ${
+                              isDtDisabled
+                                ? 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed select-none shadow-none opacity-60'
+                                : 'bg-blue-800 hover:bg-blue-900 text-white shadow-xs cursor-pointer active:scale-95'
+                            }`}
+                            title={
+                              pendingChecklistItems.length === 0
+                                ? 'No pending tools in checklist to dispatch (all tools dispatched on Delivery Tickets). Click "+ Select Tools" to add equipment.'
+                                : selectedPendingCount > 0
+                                ? `Transfer ${selectedPendingCount} selected pending tool(s) directly into a new Delivery Ticket`
+                                : `Transfer all ${pendingChecklistItems.length} pending tool(s) into a new Delivery Ticket`
+                            }
+                          >
+                            <span>🚚</span>
+                            <span>
+                              Generate DT from Checklist
+                              {selectedPendingCount > 0
+                                ? ` (${selectedPendingCount} Selected)`
+                                : pendingChecklistItems.length > 0
+                                ? ` (${pendingChecklistItems.length} Pending)`
+                                : ' (0 Pending)'}
+                            </span>
+                          </button>
+                        );
+                      })()}
                     </>
                   )}
 
@@ -4496,9 +4527,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             </div>
 
             {/* Checklist Table */}
-            <div className="border border-[#b8cce0] rounded overflow-hidden overflow-x-auto">
+            <div className="border border-[#b8cce0] rounded overflow-y-auto overflow-x-auto max-h-[calc(88vh-260px)] min-h-[320px]">
               <table className="min-w-full text-left text-xs border-collapse table-fixed">
-                <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px] select-none">
+                <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px] select-none sticky top-0 z-10 shadow-xs">
                   <tr>
                     <th style={{ width: checklistResizer.widths.select || 40 }} className="p-1.5 text-center relative overflow-hidden truncate">
                       <input
@@ -4938,9 +4969,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </div>
 
               {/* Mobilized Tools Table */}
-              <div className="border border-[#b8cce0] rounded overflow-hidden">
+              <div className="border border-[#b8cce0] rounded overflow-y-auto overflow-x-auto max-h-[calc(88vh-260px)] min-h-[260px]">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
+                  <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px] sticky top-0 z-10 shadow-xs">
                     <tr>
                       <th className="p-1.5 text-center w-12">ItemNo</th>
                       <th className="p-1.5">Asset No</th>
@@ -5423,13 +5454,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             </div>
 
             {/* Upper Table: Tools in active RT */}
-            <div className="border border-[#b8cce0] rounded overflow-hidden">
-              <div className="bg-slate-100 px-3 py-1 border-b border-slate-200 font-bold text-xs text-slate-700 flex justify-between">
+            <div className="border border-[#b8cce0] rounded overflow-y-auto overflow-x-auto max-h-[calc(88vh-320px)] min-h-[220px]">
+              <div className="bg-slate-100 px-3 py-1 border-b border-slate-200 font-bold text-xs text-slate-700 flex justify-between sticky top-0 z-20">
                 <span>Received Tools in Return Ticket</span>
                 <span className="text-emerald-700">Total Returned: {effectiveRT?.toolLines?.length || 0} tools</span>
               </div>
               <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px]">
+                <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px] sticky top-6 z-10 shadow-xs">
                   <tr>
                     <th className="p-1.5 text-center w-12">ItemNo</th>
                     <th className="p-1.5">Asset No</th>
@@ -7163,15 +7194,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               <span>Refresh</span>
             </button>
           )}
-          <button
-            type="button"
-            onClick={handleExplicitSaveJob}
-            disabled={isSaving || (!canEditJobs && !isAdmin) || (isClosedOrInvoiced && !adminUnlocked)}
-            className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-600 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-          >
-            <span>{isSaving ? '⏳' : '💾'}</span>
-            <span>{isSaving ? 'Saving Job…' : 'Save Job File'}</span>
-          </button>
+          <span className="text-[11px] text-slate-300 font-mono bg-white/5 border border-white/10 px-2.5 py-1 rounded flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            <span>All Changes Synced with Azure SQL</span>
+          </span>
         </div>
       </div>
     </div>
