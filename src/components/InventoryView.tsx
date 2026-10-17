@@ -60,7 +60,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   };
 
   const [fleetTab, setFleetTab] = useState<'active' | 'all' | 'sub' | 'released'>('active');
-  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
@@ -128,6 +127,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
   const [editingTool, setEditingTool] = useState<ToolItem | null>(null);
+  const [editSerial, setEditSerial] = useState<string>('');
+  const [editAssetNo, setEditAssetNo] = useState<string>('');
+  const [editShortDesc, setEditShortDesc] = useState<string>('');
+  const [editDesc, setEditDesc] = useState<string>('');
+  const [editSize, setEditSize] = useState<string>('');
+  const [editOwnershipType, setEditOwnershipType] = useState<'emdad' | 'sub'>('emdad');
+  const [editSupplier, setEditSupplier] = useState<string>('');
   const [editStatus, setEditStatus] = useState<ToolItem['status']>('Good');
   const [editLocation, setEditLocation] = useState('Emdad Base');
   const [editAgreementType, setEditAgreementType] = useState<'Daily' | 'BackToBack' | 'MonthlyPool'>('Daily');
@@ -431,8 +437,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     if (!canEdit) return;
     setEditingToolId(t.id);
     setEditingTool(t);
+    setEditSerial(t.serial || '');
+    setEditAssetNo(t.assetNo || '');
+    setEditShortDesc(t.shortDesc || '');
+    setEditDesc(t.desc || '');
+    setEditSize(t.size || '');
+    setEditOwnershipType(t.isEmdad ? 'emdad' : 'sub');
+    setEditSupplier(t.supplier || (t.ownership && t.ownership !== 'EMDAD' ? t.ownership : '') || '');
     setEditStatus(t.status);
-    setEditLocation(t.location);
+    setEditLocation(t.location || 'Emdad Base');
     setEditAgreementType(t.subRentalAgreementType || 'Daily');
     setEditDailyRate(t.subRentalDailyRate ? String(t.subRentalDailyRate) : '');
     setEditMonthlyRate(t.subRentalMonthlyRate ? String(t.subRentalMonthlyRate) : '');
@@ -446,10 +459,20 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     e.preventDefault();
     if (!canEdit || !editingToolId) return;
 
-    const isSub = editingTool && !editingTool.isEmdad;
+    const isSub = editOwnershipType === 'sub';
+    const supplierName = editSupplier.trim() || 'Sub-Contractor';
+
     const updates: Partial<ToolItem> = {
+      serial: editSerial.trim() || editingToolId,
+      assetNo: editAssetNo.trim() || undefined,
+      shortDesc: editShortDesc.trim() || 'DRILLING TOOL',
+      desc: editDesc.trim(),
+      size: editSize.trim(),
+      isEmdad: !isSub,
+      ownership: isSub ? supplierName : 'EMDAD',
+      supplier: isSub ? supplierName : 'EMDAD',
       status: editStatus,
-      location: editLocation,
+      location: editLocation.trim(),
       ...(isSub
         ? {
             subRentalAgreementType: editAgreementType,
@@ -460,7 +483,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             rentalStartDate: editStartDate || null,
             rentalEndDate: editEndDate || null,
           }
-        : {}),
+        : {
+            subRentalAgreementType: undefined,
+            subRentalDailyRate: null,
+            subRentalMonthlyRate: null,
+            supplierPoNumber: undefined,
+            supplierCurrency: undefined,
+            rentalStartDate: null,
+            rentalEndDate: null,
+          }),
     };
 
     if (onUpdateTool) {
@@ -472,6 +503,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         )
       );
     }
+    showToast(`Asset "${updates.serial || editingToolId}" updated successfully!`, 'success');
     setEditingToolId(null);
     setEditingTool(null);
   };
@@ -723,32 +755,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
-            {/* View Mode Switcher */}
-            <div className="inline-flex rounded-lg border border-slate-300 p-0.5 bg-white shadow-2xs">
-              <button
-                type="button"
-                onClick={() => setViewMode('cards')}
-                className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
-                  viewMode === 'cards'
-                    ? 'bg-[#1a3055] text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Cards View
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('table')}
-                className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
-                  viewMode === 'table'
-                    ? 'bg-[#1a3055] text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Table View
-              </button>
-            </div>
-
             <div className="text-xs font-bold text-slate-700">
               Showing {filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}-
               {Math.min(currentPage * pageSize, filtered.length)} of {filtered.length.toLocaleString()} tools
@@ -756,214 +762,118 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </div>
         </div>
 
-        {/* View content: Cards or Table */}
-        {viewMode === 'cards' ? (
-          <div className="p-4 bg-slate-50/60 min-h-[300px]">
-            {pagedList.length === 0 ? (
-              <div className="p-12 text-center text-slate-500 font-medium bg-white rounded-xl border border-slate-200">
-                No tool assets found matching the selected criteria.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
-                {pagedList.map((t) => (
-                  <div
-                    key={t.id}
-                    className="bg-white rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-md p-4 transition flex flex-col justify-between"
-                  >
-                    <div>
-                      {/* Card Top Row: Serial & Status */}
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div>
-                          <span className="font-mono font-bold text-slate-900 text-sm block">
-                            {t.serial}
-                          </span>
-                          <span className="font-mono text-slate-500 text-[11px] block">
-                            {t.assetNo ? `Asset: ${t.assetNo}` : '—'}
-                          </span>
-                        </div>
-                        <div>{renderToolStatusBadge(t.status)}</div>
-                      </div>
-
-                      {/* Tool Category & Size */}
-                      <div className="space-y-1 mb-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-semibold text-slate-900">{t.shortDesc}</span>
-                          <span className="font-mono text-slate-600 font-medium">{t.size || '—'}</span>
-                        </div>
-                        <p className="text-xs text-slate-600 font-normal line-clamp-2 leading-relaxed" title={t.desc}>
-                          {t.desc}
-                        </p>
-                      </div>
-
-                      {/* Sub-Rental Financial Pill (if sub-rented) */}
-                      {!t.isEmdad && (
-                        <div className="mt-2.5 p-2 rounded bg-amber-50/70 border border-amber-200/60 text-[11px] space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold text-amber-950 flex items-center gap-1">
-                              <span>🏷️</span>
-                              <span>{t.subRentalAgreementType || 'Daily'} Sub-Rental</span>
-                            </span>
-                            <span className="font-bold text-rose-700 font-mono">
-                              {t.subRentalDailyRate
-                                ? `${t.supplierCurrency || 'AED'} ${t.subRentalDailyRate.toLocaleString()}/d`
-                                : t.subRentalMonthlyRate
-                                ? `${t.supplierCurrency || 'AED'} ${t.subRentalMonthlyRate.toLocaleString()}/mo`
-                                : 'Rate Pending'}
-                            </span>
-                          </div>
-                          {t.supplierPoNumber && (
-                            <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
-                              <span>PO: {t.supplierPoNumber}</span>
-                              {t.rig && <span className="text-amber-800 font-sans font-medium">On Rig: {t.rig}</span>}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Card Footer: Location, Ownership, Action */}
-                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs mt-2">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
-                          Location
-                        </span>
-                        <span className="font-medium text-slate-700 text-[11px]">{t.location}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[11px] text-slate-500 font-medium mr-1">
-                          {t.ownership}
-                        </span>
-                        {onOpenToolHistory && (
-                          <button
-                            type="button"
-                            onClick={() => onOpenToolHistory(t.serial)}
-                            title="View Tool Movement History"
-                            className="px-2 py-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 text-[11px] font-bold border border-amber-300 cursor-pointer transition flex items-center gap-1 shadow-xs"
-                          >
-                            <span>⏱️</span>
-                            <span>History</span>
-                          </button>
-                        )}
-                        {canEdit && (
-                          <button
-                            type="button"
-                            onClick={() => startEditTool(t)}
-                            className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold border border-slate-300 cursor-pointer transition"
-                          >
-                            Edit
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-50 text-[#1a3055] border-b border-slate-200 font-bold select-none">
-                <tr>
-                  <th style={{ width: inventoryResizer.widths.serial || 120 }} className="px-3 py-2 relative">
-                    <span>Serial #</span>
-                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('serial', e)} />
-                  </th>
-                  <th style={{ width: inventoryResizer.widths.assetNo || 110 }} className="px-3 py-2 relative">
-                    <span>Asset No</span>
-                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('assetNo', e)} />
-                  </th>
-                  <th style={{ width: inventoryResizer.widths.size || 90 }} className="px-3 py-2 relative">
-                    <span>Size</span>
-                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('size', e)} />
-                  </th>
-                  <th style={{ width: inventoryResizer.widths.toolType || 140 }} className="px-3 py-2 relative">
-                    <span>Tool Type</span>
-                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('toolType', e)} />
-                  </th>
-                  <th style={{ width: inventoryResizer.widths.description || 250 }} className="px-3 py-2 relative">
-                    <span>Description</span>
-                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('description', e)} />
-                  </th>
-                  <th style={{ width: inventoryResizer.widths.owner || 110 }} className="px-3 py-2 relative">
-                    <span>Owner</span>
-                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('owner', e)} />
-                  </th>
-                  <th style={{ width: inventoryResizer.widths.location || 110 }} className="px-3 py-2 relative">
-                    <span>Location</span>
-                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('location', e)} />
-                  </th>
-                  <th style={{ width: inventoryResizer.widths.status || 120 }} className="px-3 py-2 relative">
-                    <span>Status</span>
-                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('status', e)} />
-                  </th>
-                  {fleetTab === 'sub' && (
-                    <>
-                      <th style={{ width: inventoryResizer.widths.agreementType || 120 }} className="px-3 py-2 relative bg-amber-50 text-amber-950 font-bold border-l border-amber-200">
-                        <span>Agreement</span>
-                        <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('agreementType', e)} />
-                      </th>
-                      <th style={{ width: inventoryResizer.widths.subRate || 140 }} className="px-3 py-2 relative bg-amber-50 text-amber-950 font-bold border-l border-amber-200">
-                        <span>Supplier Cost Rate</span>
-                        <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('subRate', e)} />
-                      </th>
-                      <th style={{ width: inventoryResizer.widths.supplierPo || 130 }} className="px-3 py-2 relative bg-amber-50 text-amber-950 font-bold border-l border-amber-200">
-                        <span>Supplier PO #</span>
-                        <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('supplierPo', e)} />
-                      </th>
-                    </>
-                  )}
-                  {inventoryCustomCols.map((c) => (
-                    <th
-                      key={c.key}
-                      style={{ width: inventoryResizer.widths[c.key] || c.width || 120 }}
-                      className="px-3 py-2 relative bg-indigo-50/50 text-indigo-950 font-bold border-l border-indigo-200 whitespace-nowrap"
-                      title={`Custom Column: ${c.label}`}
-                    >
-                      <span>{c.label}</span>
-                      <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize(c.key, e)} />
+        {/* Full-width Table View */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="bg-slate-50 text-[#1a3055] border-b border-slate-200 font-bold select-none whitespace-nowrap">
+              <tr>
+                <th style={{ width: inventoryResizer.widths.serial || 120 }} className="px-3 py-2 relative whitespace-nowrap">
+                  <span>Serial #</span>
+                  <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('serial', e)} />
+                </th>
+                <th style={{ width: inventoryResizer.widths.assetNo || 110 }} className="px-3 py-2 relative whitespace-nowrap">
+                  <span>Asset No</span>
+                  <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('assetNo', e)} />
+                </th>
+                <th style={{ width: inventoryResizer.widths.size || 90 }} className="px-3 py-2 relative whitespace-nowrap">
+                  <span>Size</span>
+                  <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('size', e)} />
+                </th>
+                <th style={{ width: inventoryResizer.widths.toolType || 140 }} className="px-3 py-2 relative whitespace-nowrap">
+                  <span>Tool Type</span>
+                  <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('toolType', e)} />
+                </th>
+                <th style={{ width: inventoryResizer.widths.description || 250 }} className="px-3 py-2 relative whitespace-nowrap">
+                  <span>Description</span>
+                  <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('description', e)} />
+                </th>
+                <th style={{ width: inventoryResizer.widths.owner || 110 }} className="px-3 py-2 relative whitespace-nowrap">
+                  <span>Owner</span>
+                  <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('owner', e)} />
+                </th>
+                <th style={{ width: inventoryResizer.widths.location || 110 }} className="px-3 py-2 relative whitespace-nowrap">
+                  <span>Location</span>
+                  <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('location', e)} />
+                </th>
+                <th style={{ width: inventoryResizer.widths.status || 120 }} className="px-3 py-2 relative whitespace-nowrap">
+                  <span>Status</span>
+                  <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('status', e)} />
+                </th>
+                {fleetTab === 'sub' && (
+                  <>
+                    <th style={{ width: inventoryResizer.widths.agreementType || 120 }} className="px-3 py-2 relative bg-amber-50 text-amber-950 font-bold border-l border-amber-200 whitespace-nowrap">
+                      <span>Agreement</span>
+                      <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('agreementType', e)} />
                     </th>
-                  ))}
-                  <th style={{ width: inventoryResizer.widths.action || 110 }} className="px-3 py-2 text-center relative">
-                    <span>Action</span>
-                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('action', e)} />
+                    <th style={{ width: inventoryResizer.widths.subRate || 140 }} className="px-3 py-2 relative bg-amber-50 text-amber-950 font-bold border-l border-amber-200 whitespace-nowrap">
+                      <span>Supplier Cost Rate</span>
+                      <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('subRate', e)} />
+                    </th>
+                    <th style={{ width: inventoryResizer.widths.supplierPo || 130 }} className="px-3 py-2 relative bg-amber-50 text-amber-950 font-bold border-l border-amber-200 whitespace-nowrap">
+                      <span>Supplier PO #</span>
+                      <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('supplierPo', e)} />
+                    </th>
+                  </>
+                )}
+                {inventoryCustomCols.map((c) => (
+                  <th
+                    key={c.key}
+                    style={{ width: inventoryResizer.widths[c.key] || c.width || 120 }}
+                    className="px-3 py-2 relative bg-indigo-50/50 text-indigo-950 font-bold border-l border-indigo-200 whitespace-nowrap"
+                    title={`Custom Column: ${c.label}`}
+                  >
+                    <span>{c.label}</span>
+                    <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize(c.key, e)} />
                   </th>
+                ))}
+                <th style={{ width: inventoryResizer.widths.action || 110 }} className="px-3 py-2 text-center relative whitespace-nowrap">
+                  <span>Action</span>
+                  <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('action', e)} />
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {pagedList.length === 0 ? (
+                <tr>
+                  <td colSpan={9 + (fleetTab === 'sub' ? 3 : 0) + inventoryCustomCols.length} className="p-8 text-center text-slate-500 font-medium">
+                    No tool assets found matching the selected criteria.
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {pagedList.length === 0 ? (
-                  <tr>
-                    <td colSpan={9 + (fleetTab === 'sub' ? 3 : 0) + inventoryCustomCols.length} className="p-8 text-center text-slate-500 font-medium">
-                      No tool assets found matching the selected criteria.
-                    </td>
-                  </tr>
-                ) : (
-                  pagedList.map((t) => (
+              ) : (
+                pagedList.map((t) => {
+                  const isRigInLoc = Boolean(
+                    t.rig &&
+                    t.location &&
+                    (t.location.toLowerCase().includes(t.rig.toLowerCase().replace(/^rig\s*:?\s*/i, '')) ||
+                     t.rig.toLowerCase().includes(t.location.toLowerCase().replace(/^rig\s*:?\s*/i, '')))
+                  );
+
+                  return (
                     <tr key={t.id} className="hover:bg-slate-50 transition">
-                      <td className="px-3 py-2 font-mono font-bold text-slate-900">{t.serial}</td>
-                      <td className="px-3 py-2 font-mono text-slate-500 text-[11px]">{t.assetNo || '—'}</td>
-                      <td className="px-3 py-2 font-mono text-slate-700 font-medium">{t.size}</td>
-                      <td className="px-3 py-2 font-semibold text-slate-900">{t.shortDesc}</td>
-                      <td className="px-3 py-2 text-slate-600 text-xs max-w-xs truncate font-normal" title={t.desc}>
+                      <td className="px-3 py-2 font-mono font-bold text-slate-900 whitespace-nowrap">{t.serial}</td>
+                      <td className="px-3 py-2 font-mono text-slate-500 text-[11px] whitespace-nowrap">{t.assetNo || '—'}</td>
+                      <td className="px-3 py-2 font-mono text-slate-700 font-medium whitespace-nowrap">{t.size || '—'}</td>
+                      <td className="px-3 py-2 font-semibold text-slate-900 whitespace-nowrap">{t.shortDesc}</td>
+                      <td className="px-3 py-2 text-slate-600 text-xs min-w-[200px] max-w-sm truncate font-normal" title={t.desc}>
                         {t.desc}
                       </td>
-                      <td className="px-3 py-2 font-medium text-slate-700">
+                      <td className="px-3 py-2 font-medium text-slate-700 whitespace-nowrap">
                         {t.ownership}
                       </td>
-                      <td className="px-3 py-2 text-slate-700 font-medium">
+                      <td className="px-3 py-2 text-slate-700 font-medium whitespace-nowrap">
                         {t.location}
-                        {t.rig && (
+                        {t.rig && !isRigInLoc && (
                           <span className="block text-[10px] text-amber-800 font-semibold font-mono">
                             Rig: {t.rig}
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 whitespace-nowrap">
                         {renderToolStatusBadge(t.status)}
                       </td>
                       {fleetTab === 'sub' && (
                         <>
-                          <td className="px-3 py-2 border-l border-amber-100">
+                          <td className="px-3 py-2 border-l border-amber-100 whitespace-nowrap">
                             <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${
                               t.subRentalAgreementType === 'BackToBack'
                                 ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
@@ -1021,12 +931,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
         {/* Pagination footer */}
         <div className="px-4 py-3 bg-[#f8fafc] border-t border-[#b8c9db] flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -1442,61 +1352,218 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             if (e.target === e.currentTarget) setEditingToolId(null);
           }}
         >
-          <div className="bg-white rounded shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-4 py-3 bg-[#5b7fa6] text-white flex justify-between items-center">
-              <h3 className="font-bold text-sm">Update Asset: {editingToolId}</h3>
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="px-5 py-3.5 bg-[#1a3055] text-white flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-bold text-sm flex items-center gap-2">
+                  <span>🛠️ Edit Asset:</span>
+                  <span className="font-mono text-amber-300">{editingTool?.serial || editingToolId}</span>
+                </h3>
+                <p className="text-[11px] text-slate-300">
+                  Admin full edit: update identification, ownership, specifications, location, status, and sub-rental terms
+                </p>
+              </div>
               <button
+                type="button"
                 onClick={() => setEditingToolId(null)}
-                className="text-white hover:text-amber-300 font-bold text-lg cursor-pointer"
+                className="text-white hover:text-amber-300 font-bold text-2xl leading-none cursor-pointer"
               >
                 &times;
               </button>
             </div>
 
-            <form onSubmit={handleSaveEdit} className="p-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-bold mb-1">Operational Status</label>
-                <select
-                  value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value as ToolItem['status'])}
-                  className="w-full border rounded px-2.5 py-1.5 font-bold"
-                >
-                  <option value="Good">Good</option>
-                  <option value="Repair">Repair</option>
-                  <option value="Inspection">Inspection</option>
-                  <option value="Redress">Redress</option>
-                  <option value="Removed">Removed</option>
-                </select>
+            <form onSubmit={handleSaveEdit} className="p-5 space-y-4 text-xs overflow-y-auto">
+              {/* Ownership Selector */}
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <label className="block font-bold text-slate-800 text-xs mb-2">
+                  Tool Ownership &amp; Supplier Classification *
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className={`flex items-center gap-2.5 p-2 rounded border cursor-pointer transition ${
+                    editOwnershipType === 'emdad'
+                      ? 'bg-blue-50/80 border-[#1a3055] text-[#1a3055] font-bold shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="editOwnershipType"
+                      value="emdad"
+                      checked={editOwnershipType === 'emdad'}
+                      onChange={() => setEditOwnershipType('emdad')}
+                    />
+                    <div>
+                      <span className="block text-xs">EMDAD Owned Asset</span>
+                      <span className="block text-[10px] text-slate-500 font-normal">Internal company asset</span>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-center gap-2.5 p-2 rounded border cursor-pointer transition ${
+                    editOwnershipType === 'sub'
+                      ? 'bg-amber-50/80 border-amber-600 text-amber-950 font-bold shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="editOwnershipType"
+                      value="sub"
+                      checked={editOwnershipType === 'sub'}
+                      onChange={() => setEditOwnershipType('sub')}
+                    />
+                    <div>
+                      <span className="block text-xs">Sub-Contractor / 3rd Party</span>
+                      <span className="block text-[10px] text-amber-700 font-normal">External vendor rental tool</span>
+                    </div>
+                  </label>
+                </div>
               </div>
 
+              {/* Identification: Serial No & Asset No */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Serial Number *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editSerial}
+                    onChange={(e) => setEditSerial(e.target.value)}
+                    placeholder="e.g. 351, EOE1076, 12345"
+                    className="w-full border rounded px-2.5 py-1.5 font-mono font-bold text-slate-900 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Asset Number / ERP Ref
+                  </label>
+                  <input
+                    type="text"
+                    value={editAssetNo}
+                    onChange={(e) => setEditAssetNo(e.target.value)}
+                    placeholder="e.g. DJ650-003, FS434-01"
+                    className="w-full border rounded px-2.5 py-1.5 font-mono text-slate-800 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Tool Category & Size */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Tool Category / Type *
+                  </label>
+                  <input
+                    type="text"
+                    list="edit-modal-categories"
+                    required
+                    value={editShortDesc}
+                    onChange={(e) => setEditShortDesc(e.target.value.toUpperCase())}
+                    placeholder="e.g. DRILLING JARS"
+                    className="w-full border rounded px-2.5 py-1.5 font-semibold text-slate-800 uppercase bg-white"
+                  />
+                  <datalist id="edit-modal-categories">
+                    {categories.map((c) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Tool Size (OD)
+                  </label>
+                  <input
+                    type="text"
+                    list="edit-modal-sizes"
+                    value={editSize}
+                    onChange={(e) => setEditSize(e.target.value)}
+                    placeholder='e.g. 6-1/2", 8", 9-1/2"'
+                    className="w-full border rounded px-2.5 py-1.5 font-mono text-slate-800 bg-white"
+                  />
+                  <datalist id="edit-modal-sizes">
+                    {standardSizes.map((s) => (
+                      <option key={s} value={s} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+
+              {/* Description */}
               <div>
-                <label className="block font-bold mb-1">Physical Location</label>
-                <input
-                  type="text"
-                  value={editLocation}
-                  onChange={(e) => setEditLocation(e.target.value)}
-                  className="w-full border rounded px-2.5 py-1.5"
+                <label className="block font-bold text-slate-700 mb-1">
+                  Tool Description
+                </label>
+                <textarea
+                  rows={2}
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  placeholder="Full tool description..."
+                  className="w-full border rounded px-2.5 py-1.5 text-slate-800 bg-white leading-relaxed"
                 />
               </div>
 
-              {/* Sub-Rental Agreement & Cost Rates (If Sub-contractor Tool) */}
-              {editingTool && !editingTool.isEmdad && (
-                <div className="p-3 bg-amber-50/80 rounded border border-amber-200/90 space-y-2 text-xs">
-                  <div className="font-bold text-amber-950 flex items-center justify-between text-[11px]">
-                    <span className="flex items-center gap-1">
+              {/* Status and Location */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Operational Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as ToolItem['status'])}
+                    className="w-full border rounded px-2.5 py-1.5 font-bold text-slate-800 bg-white"
+                  >
+                    <option value="Good">Available / Good</option>
+                    <option value="Repair">Under Repair</option>
+                    <option value="Inspection">Inspection</option>
+                    <option value="Redress">Redress</option>
+                    <option value="Removed">De-inventoried / Removed</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Physical Location</label>
+                  <input
+                    type="text"
+                    value={editLocation}
+                    onChange={(e) => setEditLocation(e.target.value)}
+                    placeholder="e.g. Emdad Base, Rig ADNOC DRILLING, Supplier Yard"
+                    className="w-full border rounded px-2.5 py-1.5 text-slate-800 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Sub-Contractor Vendor & Cost Structure */}
+              {editOwnershipType === 'sub' && (
+                <div className="p-3.5 bg-amber-50/80 rounded-lg border border-amber-200/90 space-y-3">
+                  <div className="font-bold text-amber-950 flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5">
                       <span>🏷️</span>
-                      <span>Sub-Rental Cost Structure ({editingTool.ownership || editingTool.supplier})</span>
+                      <span>Sub-Rental Supplier &amp; Cost Agreement</span>
                     </span>
-                    <span className="text-amber-800 font-mono text-[10px]">PO: {editSupplierPo || 'None'}</span>
+                    <span className="text-amber-800 font-mono text-[11px]">
+                      Vendor: {editSupplier.trim() || 'Pending'}
+                    </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-semibold mb-1 text-slate-700">
+                      Supplier / Vendor Name *
+                    </label>
+                    <input
+                      type="text"
+                      required={editOwnershipType === 'sub'}
+                      placeholder="e.g. MOTORMAX, SALTIRE, HUNTING"
+                      value={editSupplier}
+                      onChange={(e) => setEditSupplier(e.target.value)}
+                      className="w-full border rounded px-2.5 py-1.5 font-medium text-xs bg-white"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5">
                     <div>
                       <label className="block font-semibold mb-1 text-slate-700">Agreement Model</label>
                       <select
                         value={editAgreementType}
                         onChange={(e) => setEditAgreementType(e.target.value as any)}
-                        className="w-full border rounded px-2 py-1 bg-white font-medium text-xs"
+                        className="w-full border rounded px-2 py-1.5 bg-white font-medium text-xs"
                       >
                         <option value="Daily">Daily Rental</option>
                         <option value="BackToBack">Back-to-Back Job</option>
@@ -1508,7 +1575,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       <label className="block font-semibold mb-1 text-slate-700">
                         {editAgreementType === 'MonthlyPool' ? 'Monthly Cost Rate' : 'Supplier Daily Rate (Cost)'}
                       </label>
-                      <div className="flex gap-1">
+                      <div className="flex gap-1.5">
                         <input
                           type="number"
                           step="any"
@@ -1524,12 +1591,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                               setEditDailyRate(e.target.value);
                             }
                           }}
-                          className="w-full border rounded px-2 py-1 font-mono font-bold text-rose-700 text-xs"
+                          className="w-full border rounded px-2 py-1.5 font-mono font-bold text-rose-700 text-xs bg-white"
                         />
                         <select
                           value={editCurrency}
                           onChange={(e) => setEditCurrency(e.target.value)}
-                          className="border rounded px-1.5 py-1 bg-white text-[11px] font-bold"
+                          className="border rounded px-2 py-1.5 bg-white text-[11px] font-bold"
                         >
                           <option value="AED">AED</option>
                           <option value="USD">USD</option>
@@ -1539,7 +1606,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2.5">
                     <div>
                       <label className="block font-semibold mb-1 text-slate-700">Supplier PO Number</label>
                       <input
@@ -1547,7 +1614,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         placeholder="e.g. PO-42002198"
                         value={editSupplierPo}
                         onChange={(e) => setEditSupplierPo(e.target.value)}
-                        className="w-full border rounded px-2 py-1 font-mono text-xs"
+                        className="w-full border rounded px-2 py-1.5 font-mono text-xs bg-white"
                       />
                     </div>
                     <div>
@@ -1556,24 +1623,33 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         type="date"
                         value={editStartDate}
                         onChange={(e) => setEditStartDate(e.target.value)}
-                        className="w-full border rounded px-2 py-1 text-xs"
+                        className="w-full border rounded px-2 py-1.5 text-xs bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold mb-1 text-slate-700">Expected Off-Hire</label>
+                      <input
+                        type="date"
+                        value={editEndDate}
+                        onChange={(e) => setEditEndDate(e.target.value)}
+                        className="w-full border rounded px-2 py-1.5 text-xs bg-white"
                       />
                     </div>
                   </div>
                 </div>
               )}
 
-              <div className="pt-3 border-t flex justify-end space-x-2">
+              <div className="pt-3 border-t flex justify-end space-x-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setEditingToolId(null)}
-                  className="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 cursor-pointer"
+                  className="px-3.5 py-1.5 rounded bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold hover:bg-amber-500 shadow-sm cursor-pointer"
+                  className="px-5 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold hover:bg-amber-500 shadow-sm cursor-pointer"
                 >
                   Save Changes
                 </button>
