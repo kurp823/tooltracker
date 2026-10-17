@@ -1704,8 +1704,17 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                               else if (t.desc && t.desc.trim() && t.desc.trim().toUpperCase() !== toolType.toUpperCase()) description = t.desc.trim();
                               else if ((t as any).toolDescription && (t as any).toolDescription.trim()) description = (t as any).toolDescription.trim();
                               else description = toolType;
-                              const displaySize = t.size || invTool?.size || extractSizeFromDescription(description) || '—';
-                              const displayOwnership = t.ownership || invTool?.ownership || (t.isEmdad ? 'EMDAD' : 'EMDAD');
+                              const displayOwnership =
+                                (invTool?.supplier && invTool.supplier.trim().toUpperCase() !== 'EMDAD' ? invTool.supplier.trim() : '') ||
+                                (invTool?.ownership && invTool.ownership.trim().toUpperCase() !== 'EMDAD' ? invTool.ownership.trim() : '') ||
+                                (invTool && invTool.isEmdad === false ? (invTool.ownership || invTool.supplier || 'Sub-Contractor') : '') ||
+                                (t.supplier && t.supplier.trim().toUpperCase() !== 'EMDAD' ? t.supplier.trim() : '') ||
+                                (t.ownership && t.ownership.trim().toUpperCase() !== 'EMDAD' ? t.ownership.trim() : '') ||
+                                invTool?.supplier ||
+                                invTool?.ownership ||
+                                t.supplier ||
+                                t.ownership ||
+                                'EMDAD';
                               const statusVal = t.status || (t.rtBatchId ? 'Returned' : 'OnRig');
                               const isOnRig = statusVal === 'OnRig';
 

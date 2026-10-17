@@ -938,13 +938,35 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     };
   }, [jobCallouts, selectedCalloutId, jobData, automatedChecklistStatus]);
 
-  // Fast multi-key inventory lookup map (by serial, by assetNo, by id, uppercase & trimmed)
+  // Fast multi-key inventory lookup map (by serial, by assetNo, by id, uppercase & trimmed, plus stripped/prefixed variations)
   const inventoryMap = useMemo(() => {
     const map = new Map<string, ToolItem>();
+    const registerKey = (key: string | undefined | null, tool: ToolItem) => {
+      if (!key) return;
+      const clean = key.trim().toUpperCase();
+      if (!clean) return;
+      map.set(clean, tool);
+      // Strip EMD- prefix (e.g. EMD-6384 -> 6384)
+      const stripped = clean.replace(/^EMD-?/i, '');
+      if (stripped && stripped !== clean) {
+        map.set(stripped, tool);
+      }
+      // Add EMD- prefix if not already present (e.g. 6384 -> EMD-6384)
+      if (!clean.startsWith('EMD-')) {
+        map.set(`EMD-${clean}`, tool);
+      }
+      // Strip all non-alphanumeric (e.g. EMD-6384 -> EMD6384)
+      const alphanumeric = clean.replace(/[^A-Z0-9]/g, '');
+      if (alphanumeric && alphanumeric !== clean) {
+        map.set(alphanumeric, tool);
+      }
+    };
+
     (inventory || []).forEach((t) => {
-      if (t.serial) map.set(t.serial.trim().toUpperCase(), t);
-      if (t.assetNo) map.set(t.assetNo.trim().toUpperCase(), t);
-      if (t.id) map.set(String(t.id).trim().toUpperCase(), t);
+      registerKey(t.serial, t);
+      registerKey(t.assetNo, t);
+      registerKey(String(t.id), t);
+      registerKey(t.oemSerial, t);
     });
     return map;
   }, [inventory]);
@@ -953,11 +975,32 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     rawSerial?: string,
     rawAssetNo?: string,
     fallbackDesc?: string,
-    fallbackShortDesc?: string
+    fallbackShortDesc?: string,
+    rawSupplier?: string,
+    rawOwnership?: string
   ) => {
-    const sKey = (rawSerial || '').trim().toUpperCase();
-    const aKey = (rawAssetNo || '').trim().toUpperCase();
-    const inv = (sKey ? inventoryMap.get(sKey) : undefined) || (aKey ? inventoryMap.get(aKey) : undefined);
+    const lookupInv = (key?: string) => {
+      if (!key) return undefined;
+      const k = key.trim().toUpperCase();
+      if (!k) return undefined;
+      return (
+        inventoryMap.get(k) ||
+        inventoryMap.get(k.replace(/^EMD-?/i, '')) ||
+        (!k.startsWith('EMD-') ? inventoryMap.get(`EMD-${k}`) : undefined) ||
+        inventoryMap.get(k.replace(/[^A-Z0-9]/g, ''))
+      );
+    };
+
+    let inv = lookupInv(rawSerial) || lookupInv(rawAssetNo);
+
+    // If still not found, try searching inventory by description match
+    if (!inv && (fallbackDesc || fallbackShortDesc)) {
+      const cleanDesc = (fallbackDesc || fallbackShortDesc || '').trim().toUpperCase();
+      inv = inventory.find((t) => {
+        const td = (t.desc || '').trim().toUpperCase();
+        return td && cleanDesc && (td === cleanDesc || td.includes(cleanDesc) || cleanDesc.includes(td));
+      });
+    }
 
     // Priority 1: Genuine inventory Asset Number (never EMD- if a physical assetNo exists)
     let assetNo = '';
@@ -967,17 +1010,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       assetNo = rawAssetNo.trim();
     } else if (inv?.oemSerial && inv.oemSerial.trim() && !inv.oemSerial.trim().toUpperCase().startsWith('EMD-')) {
       assetNo = inv.oemSerial.trim();
-    } else if (inv?.serial && !inv.serial.toUpperCase().startsWith('EMD-')) {
-      assetNo = inv.serial;
-    } else if (rawSerial && !rawSerial.toUpperCase().startsWith('EMD-')) {
-      assetNo = rawSerial;
+    } else if (inv?.serial && inv.serial.trim() && !inv.serial.trim().toUpperCase().startsWith('EMD-')) {
+      assetNo = inv.serial.trim();
+    } else if (rawSerial && rawSerial.trim() && !rawSerial.trim().toUpperCase().startsWith('EMD-')) {
+      assetNo = rawSerial.trim();
+    } else if (inv && inv.isEmdad === false) {
+      assetNo = (inv.assetNo || inv.serial || inv.oemSerial || rawAssetNo || rawSerial || '').trim();
     } else {
       // Check inventory by description to find real physical asset number
       const descToSearch = (fallbackDesc || inv?.desc || '').trim().toUpperCase();
       if (descToSearch) {
-        const matchByDesc = inventory.find(
-          (t) => t.desc && t.desc.trim().toUpperCase() === descToSearch && t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-')
-        );
+        const matchByDesc = inventory.find((t) => {
+          const td = (t.desc || '').trim().toUpperCase();
+          return (td === descToSearch || (td && descToSearch && (td.includes(descToSearch) || descToSearch.includes(td)))) &&
+            t.assetNo && !t.assetNo.trim().toUpperCase().startsWith('EMD-');
+        });
         if (matchByDesc && matchByDesc.assetNo) {
           assetNo = matchByDesc.assetNo.trim();
         }
@@ -992,14 +1039,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
     // Priority 2: Genuine Serial Number
     let serial = '';
-    if (inv?.serial && !inv.serial.toUpperCase().startsWith('EMD-')) {
-      serial = inv.serial;
-    } else if (rawSerial && !rawSerial.toUpperCase().startsWith('EMD-')) {
-      serial = rawSerial;
-    } else if (assetNo && !assetNo.toUpperCase().startsWith('EMD-')) {
-      serial = assetNo;
+    if (inv?.serial && inv.serial.trim() && !inv.serial.trim().toUpperCase().startsWith('EMD-')) {
+      serial = inv.serial.trim();
+    } else if (rawSerial && rawSerial.trim() && !rawSerial.trim().toUpperCase().startsWith('EMD-')) {
+      serial = rawSerial.trim();
+    } else if (inv?.id && String(inv.id).trim() && !String(inv.id).trim().toUpperCase().startsWith('EMD-')) {
+      serial = String(inv.id).trim();
+    } else if (inv?.serial && inv.serial.trim()) {
+      serial = inv.serial.trim();
+    } else if (rawSerial && rawSerial.trim()) {
+      serial = rawSerial.trim();
     } else {
-      serial = inv?.serial || rawSerial || inv?.assetNo || rawAssetNo || '—';
+      serial = assetNo || '—';
     }
 
     // Priority 3: Genuine Technical Description (never bare tool type if technical description is available)
@@ -1019,8 +1070,24 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     // Priority 4: Clean Tool Category / Short Description
     const shortDesc = (inv?.shortDesc && inv.shortDesc.trim()) || fallbackShortDesc || extractToolType(desc, fallbackShortDesc) || 'Downhole Tool';
 
-    return { inv, assetNo, serial, desc, shortDesc };
-  }, [inventoryMap]);
+    // Priority 5: Third-Party Supplier & Ownership Resolution (live inventory updates ALWAYS reflect immediately!)
+    const supplier = (
+      (inv?.supplier && inv.supplier.trim().toUpperCase() !== 'EMDAD' ? inv.supplier.trim() : '') ||
+      (inv?.ownership && inv.ownership.trim().toUpperCase() !== 'EMDAD' ? inv.ownership.trim() : '') ||
+      (inv && inv.isEmdad === false ? (inv.ownership || inv.supplier || 'Sub-Contractor') : '') ||
+      (rawSupplier && rawSupplier.trim().toUpperCase() !== 'EMDAD' ? rawSupplier.trim() : '') ||
+      (rawOwnership && rawOwnership.trim().toUpperCase() !== 'EMDAD' ? rawOwnership.trim() : '') ||
+      inv?.supplier ||
+      inv?.ownership ||
+      rawSupplier ||
+      rawOwnership ||
+      'EMDAD'
+    );
+
+    const isEmdad = inv ? Boolean(inv.isEmdad) : (!supplier || supplier.trim().toUpperCase() === 'EMDAD');
+
+    return { inv, assetNo, serial, desc, shortDesc, supplier, ownership: supplier, isEmdad };
+  }, [inventoryMap, inventory]);
 
   // Synchronize checklist items with job's Delivery Tickets to eliminate any system ID mix-up
   const resolveChecklistItemWithDT = useCallback((it: CalloutItem, idx: number) => {
@@ -1038,17 +1105,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                              (dtLine?.serial && !dtLine.serial.toUpperCase().startsWith('EMD-') ? dtLine.serial : '') ||
                              it.partNo;
     const candidateDesc = dtLine?.toolDescription || dtLine?.desc || it.description;
+    const candidateSupplier = dtLine?.ownership || dtLine?.supplier || it.supplier;
 
-    const resolved = resolveToolDetails(candidateSerial, candidateAssetNo, candidateDesc, it.shortDesc || it.cat);
+    const resolved = resolveToolDetails(candidateSerial, candidateAssetNo, candidateDesc, it.shortDesc || it.cat, candidateSupplier);
     return {
       ...it,
       dtNumber: it.dtNumber || targetDT?.dtNumber,
       status: (targetDT ? 'Released' : it.status) as any,
       partNo: resolved.assetNo,
-      serialNos: resolved.serial && resolved.serial !== '—' ? [resolved.serial] : it.serialNos,
+      serialNos: [resolved.serial && resolved.serial !== '—' ? resolved.serial : resolved.assetNo],
       description: resolved.desc,
       shortDesc: resolved.shortDesc,
       cat: it.cat || resolved.shortDesc,
+      supplier: resolved.supplier,
+      ownership: resolved.supplier,
+      isEmdad: resolved.isEmdad,
     };
   }, [jobDTs, resolveToolDetails]);
 
@@ -1429,20 +1500,24 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const dispatchDateStr = formatDateDD_MM_YYYY(jobData.mobDate || new Date().toISOString());
 
     const tools: any[] = (checklistItems && checklistItems.length > 0)
-      ? checklistItems.map((ci, idx) => ({
-          id: idx + 1,
-          itemNo: idx + 1,
-          serial: ci.serialNos?.[0] || ci.partNo || `TOOL-${idx + 1}`,
-          assetNo: ci.partNo || ci.serialNos?.[0] || '',
-          shortDesc: ci.cat || ci.shortDesc || 'Downhole Tool',
-          desc: ci.description || ci.shortDesc || '',
-          size: ci.size || '—',
-          status: 'OnRig' as const,
-          ownership: ci.supplier || 'EMDAD',
-          isEmdad: (ci.supplier || '').toUpperCase().includes('EMDAD'),
-          qty: ci.qty || 1,
-          remarks: 'Reserved in Checklist',
-        }))
+      ? checklistItems.map((ci, idx) => {
+          const resolved = resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.cat || ci.shortDesc, ci.supplier);
+          return {
+            id: idx + 1,
+            itemNo: idx + 1,
+            serial: resolved.serial,
+            assetNo: resolved.assetNo,
+            shortDesc: resolved.shortDesc,
+            desc: resolved.desc,
+            size: ci.size || resolved.inv?.size || '—',
+            status: 'OnRig' as const,
+            ownership: resolved.supplier,
+            supplier: resolved.supplier,
+            isEmdad: resolved.isEmdad,
+            qty: ci.qty || 1,
+            remarks: 'Reserved in Checklist',
+          };
+        })
       : [];
 
     return {
@@ -1988,18 +2063,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       return checkedToolSerials.includes(key) || (t.serial && checkedToolSerials.includes(t.serial));
     });
     const newItems: CalloutItem[] = newlySelectedTools.map((t, idx) => {
-      const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
-      const exactAssetNo = (resolved.assetNo && !resolved.assetNo.toUpperCase().startsWith('EMD-') ? resolved.assetNo : '') ||
-                           (t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') ? t.assetNo : '') ||
-                           (t.serial && !t.serial.toUpperCase().startsWith('EMD-') ? t.serial : '') ||
-                           resolved.assetNo || t.assetNo || t.serial || '—';
-      const exactSerial = (resolved.serial && !resolved.serial.toUpperCase().startsWith('EMD-') ? resolved.serial : '') ||
-                          (t.serial && !t.serial.toUpperCase().startsWith('EMD-') ? t.serial : '') ||
-                          exactAssetNo;
-      const exactDesc = t.desc || (t as any).toolDescription || resolved.desc || t.shortDesc || 'Downhole Tool';
-      const exactShortDesc = t.shortDesc || resolved.shortDesc || 'Downhole Tool';
+      const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier, t.ownership);
+      const exactAssetNo = resolved.assetNo;
+      const exactSerial = resolved.serial;
+      const exactDesc = resolved.desc;
+      const exactShortDesc = resolved.shortDesc;
       const exactSize = t.size || resolved.inv?.size || '—';
-      const exactSupplier = t.supplier || t.ownership || resolved.inv?.supplier || (t.isEmdad ? 'EMDAD' : 'RUBICON OILFIELD');
+      const exactSupplier = resolved.supplier;
 
       // Look up genuine inspection record for this tool
       const toolInspections = (inspections || []).filter(
@@ -2037,6 +2107,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         partNo: exactAssetNo,
         description: exactDesc,
         supplier: exactSupplier,
+        ownership: exactSupplier,
+        isEmdad: resolved.isEmdad,
         qtyIn: 1,
         insNum: genuineInsNum,
         insDate: genuineInsDate,
@@ -2164,7 +2236,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         return; // already in this checklist
       }
 
-      const resolved = resolveToolDetails(tl.serial, tl.assetNo, tl.desc, tl.shortDesc);
+      const resolved = resolveToolDetails(tl.serial, tl.assetNo, tl.desc, tl.shortDesc, tl.supplier || tl.ownership);
       newRolloverItems.push({
         seq: checklistItems.length + newRolloverItems.length + 1,
         size: tl.size || resolved.inv?.size || '—',
@@ -2175,7 +2247,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         status: 'Assigned',
         partNo: resolved.assetNo,
         description: resolved.desc,
-        supplier: tl.ownership || resolved.inv?.supplier || 'EMDAD',
+        supplier: resolved.supplier,
+        ownership: resolved.supplier,
+        isEmdad: resolved.isEmdad,
         qtyIn: 1,
         insNum: tl.insNum || '—',
         insDate: tl.insDate || '—',
@@ -2295,7 +2369,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       notes: '',
       isLocked: false,
       toolLines: toolsToMobilize.map((ci, idx) => {
-        const resolved = resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.shortDesc || ci.cat);
+        const resolved = resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.shortDesc || ci.cat, ci.supplier);
         return {
           id: idx + 1,
           itemNo: idx + 1,
@@ -2305,8 +2379,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           desc: resolved.desc,
           size: ci.size || resolved.inv?.size || '—',
           status: 'OnRig',
-          ownership: ci.supplier || resolved.inv?.ownership || 'EMDAD',
-          isEmdad: (ci.supplier || resolved.inv?.ownership || '').toUpperCase().includes('EMDAD'),
+          ownership: resolved.supplier,
+          supplier: resolved.supplier,
+          isEmdad: resolved.isEmdad,
           qty: ci.qty || 1,
           remarks: '',
           allocatedRig: ci.allocatedRig || jobData.rig || '',
@@ -2366,8 +2441,23 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     );
     if (!confirmed) return;
 
+    const updatedToolLines = (targetDT.toolLines || []).map((tl) => {
+      const resolved = resolveToolDetails(tl.serial, tl.assetNo, tl.desc, tl.shortDesc, tl.supplier || (tl as any).ownership);
+      return {
+        ...tl,
+        assetNo: resolved.assetNo,
+        serial: resolved.serial,
+        ownership: resolved.supplier,
+        supplier: resolved.supplier,
+        isEmdad: resolved.isEmdad,
+        desc: resolved.desc,
+        shortDesc: resolved.shortDesc,
+      };
+    });
+
     const updatedBatch: DTBatch = {
       ...targetDT,
+      toolLines: updatedToolLines,
       isLocked: true,
       lockedBy: user?.name || 'Operations',
       lockedDate: new Date().toISOString(),
@@ -2384,6 +2474,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     if (onSaveCallout) {
       onSaveCallout({
         ...activeCallout,
+        items: checklistItems,
         status: 'Delivery Ticket - Dispatched to Rig' as any,
       });
     }
@@ -2442,7 +2533,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const formattedReturnDate = formatDateDD_MM_YYYY(effectiveReturnDate);
 
     const newRTLines = selectedLines.map((t, idx) => {
-      const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+      const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
       return {
         itemNo: (targetRT!.toolLines?.length || 0) + idx + 1,
         serial: resolved.serial || t.serial,
@@ -2509,7 +2600,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       contactNo: contactNo || '—',
       notes: targetDT.notes,
       tools: (targetDT.toolLines || []).map((t, idx) => {
-        const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+        const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
         return {
           itemNo: idx + 1,
           partNo: resolved.assetNo,
@@ -2530,7 +2621,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
     if (targetDT && targetDT.toolLines && targetDT.toolLines.length > 0) {
       tools = targetDT.toolLines.map((t, idx) => {
-        const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+        const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
         return {
           lineNo: idx + 1,
           partNo: resolved.assetNo,
@@ -2543,7 +2634,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         const serials = it.serialNos || [];
         if (serials.length > 0) {
           return serials.map((s, sIdx) => {
-            const resolved = resolveToolDetails(s, it.partNo, it.description, it.shortDesc || it.cat);
+            const resolved = resolveToolDetails(s, it.partNo, it.description, it.shortDesc || it.cat, it.supplier);
             return {
               lineNo: `${idx + 1}.${sIdx + 1}`,
               partNo: resolved.assetNo,
@@ -2552,7 +2643,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             };
           });
         }
-        const resolved = resolveToolDetails(undefined, it.partNo, it.description, it.shortDesc || it.cat);
+        const resolved = resolveToolDetails(undefined, it.partNo, it.description, it.shortDesc || it.cat, it.supplier);
         return [{
           lineNo: idx + 1,
           partNo: resolved.assetNo,
@@ -2993,9 +3084,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         return (tSer && (iSer === tSer || iAsset === tSer)) || (tAss && (iSer === tAss || iAsset === tAss));
       });
 
-      const rawSupplier = ((t as any).supplier || (t as any).ownership || invMatch?.supplier || invMatch?.ownership || (t.isEmdad ? 'EMDAD' : 'MOTORMAX')).trim();
-      const isSubTool = !t.isEmdad && rawSupplier.toUpperCase() !== 'EMDAD';
-      const supplierName = isSubTool ? rawSupplier : 'EMDAD';
+      const isSubTool = invMatch ? !invMatch.isEmdad : (!t.isEmdad && (((t as any).supplier || (t as any).ownership || '').trim().toUpperCase() !== 'EMDAD'));
+      const supplierName = (
+        (invMatch?.supplier && invMatch.supplier.trim().toUpperCase() !== 'EMDAD' ? invMatch.supplier.trim() : '') ||
+        (invMatch?.ownership && invMatch.ownership.trim().toUpperCase() !== 'EMDAD' ? invMatch.ownership.trim() : '') ||
+        (isSubTool ? (invMatch?.supplier || invMatch?.ownership || (t as any).supplier || (t as any).ownership || 'Sub-Contractor') : 'EMDAD')
+      );
 
       // Saved overrides or defaults
       const subSaved = jobSubRentalCosts[toolKey] || {};
@@ -4516,7 +4610,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   ) : (
                     checklistItems.map((item, i) => {
                       const assignedDT = getAssignedDTForChecklistItem(item);
-                      const resolved = resolveToolDetails(item.serialNos?.[0], item.partNo, item.description, item.cat || item.shortDesc);
+                      const resolved = resolveToolDetails(item.serialNos?.[0], item.partNo, item.description, item.cat || item.shortDesc, item.supplier);
 
                       // Look up genuine inspection record if item has none or has dummy GIS-Z-
                       const itemInspections = (inspections || []).filter(
@@ -4580,7 +4674,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           </td>
                           <td className="py-1 px-2 whitespace-nowrap truncate font-medium text-slate-800" title={resolved.desc}>{resolved.desc}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qty || 1}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700 truncate" title={item.supplier || resolved.inv?.supplier || 'EMDAD'}>{item.supplier || resolved.inv?.supplier || 'EMDAD'}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700 truncate" title={resolved.supplier}>{resolved.supplier}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qtyIn || 1}</td>
                           <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700 truncate" title={displayInsNum}>{displayInsNum}</td>
                           <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600 truncate" title={displayInsDate}>{displayInsDate}</td>
@@ -4870,7 +4964,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <tbody className="divide-y divide-slate-200">
                     {effectiveDT.toolLines && effectiveDT.toolLines.length > 0 ? (
                       effectiveDT.toolLines.map((t, idx) => {
-                        const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+                        const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
                         const tSerial = (resolved.serial || t.serial || '').trim().toUpperCase();
                         const tAsset = (resolved.assetNo || t.assetNo || '').trim().toUpperCase();
                         const directRtRef = String((t as any).returnedRtNumber || t.rtBatchId || (t as any).rgtNo || '').trim();
@@ -4931,7 +5025,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-blue-700">{jobData.id}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-emerald-700">{rgtNo || '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{rgtDate ? formatDateDD_MM_YYYY(rgtDate) : '—'}</td>
-                            <td className="py-1 px-2 whitespace-nowrap text-slate-700">{t.ownership || resolved.inv?.ownership || 'EMDAD'}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-slate-700 font-medium">{resolved.supplier}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-slate-600 text-[11px] font-medium">{resolved.shortDesc}</td>
 
                             {/* Rig Allocation & Client DT Cells for Contract 4700024096 */}
@@ -5354,7 +5448,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     </tr>
                   ) : (
                     effectiveRT.toolLines.map((t, idx) => {
-                      const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+                      const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
                       const matchedDTLine = jobDTs.flatMap((dt) => dt.toolLines || []).find(
                         (dtl: any) => dtl.serial && t.serial && String(dtl.serial).trim().toUpperCase() === String(t.serial).trim().toUpperCase()
                       );
@@ -5525,7 +5619,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         </tr>
                       ) : (
                         rgtDTToolsToReturn.map((t, idx) => {
-                          const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
+                          const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
                           const isChecked = rgtCheckedSerials.includes(t.serial);
                           return (
                             <tr key={idx} className={`h-7 leading-none ${isChecked ? 'bg-amber-100/80 font-semibold' : 'hover:bg-slate-50'}`}>
@@ -6692,13 +6786,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                                 className="cursor-pointer w-4 h-4 text-blue-600 rounded"
                               />
                             </td>
-                            <td className="py-1 px-3 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={tool.assetNo || tool.serial}>{tool.assetNo || tool.serial}</td>
+                            <td className="py-1 px-3 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={(tool.assetNo && !tool.assetNo.toUpperCase().startsWith('EMD-') ? tool.assetNo : '') || (tool.serial && !tool.serial.toUpperCase().startsWith('EMD-') ? tool.serial : '') || tool.assetNo || tool.serial}>
+                              {(tool.assetNo && !tool.assetNo.toUpperCase().startsWith('EMD-') ? tool.assetNo : '') || (tool.serial && !tool.serial.toUpperCase().startsWith('EMD-') ? tool.serial : '') || tool.assetNo || tool.serial}
+                            </td>
                             <td className="py-1 px-3 whitespace-nowrap font-medium text-slate-800 truncate" title={tool.desc || tool.shortDesc}>
                               {tool.desc || tool.shortDesc}
                             </td>
                             <td className="py-1 px-2 whitespace-nowrap text-center font-mono text-slate-700 truncate" title={tool.size || '—'}>{tool.size || '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{tool.qty || 1}</td>
-                            <td className="py-1 px-3 whitespace-nowrap text-slate-700 truncate" title={tool.ownership || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')}>{tool.ownership || (tool.isEmdad ? 'EMDAD' : 'Sub-Contractor')}</td>
+                            <td className="py-1 px-3 whitespace-nowrap text-slate-700 truncate" title={(tool.supplier && tool.supplier.toUpperCase() !== 'EMDAD' ? tool.supplier : '') || (tool.ownership && tool.ownership.toUpperCase() !== 'EMDAD' ? tool.ownership : '') || (tool.isEmdad === false ? (tool.ownership || tool.supplier || 'Sub-Contractor') : 'EMDAD')}>
+                              {(tool.supplier && tool.supplier.toUpperCase() !== 'EMDAD' ? tool.supplier : '') || (tool.ownership && tool.ownership.toUpperCase() !== 'EMDAD' ? tool.ownership : '') || (tool.isEmdad === false ? (tool.ownership || tool.supplier || 'Sub-Contractor') : 'EMDAD')}
+                            </td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-700 truncate" title={insDate}>{insDate}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700 font-semibold truncate" title={insNum}>{insNum}</td>
                             <td className={`py-1 px-2 whitespace-nowrap font-bold truncate ${condition === 'ACCEPTED' ? 'text-emerald-700' : 'text-amber-700'}`} title={condition}>{condition}</td>
