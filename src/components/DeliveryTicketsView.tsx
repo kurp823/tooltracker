@@ -487,6 +487,15 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
         val = savedMeta[field];
       } catch {}
     }
+    if (!val) {
+      if (field === 'deliveredTo') return 'ESNAD JETTY';
+      if (field === 'vesselBoat' || field === 'msvName') return 'ZAKHER STAR';
+      if (field === 'transport') return 'EMDAD';
+      if (field === 'vehicleNo' || field === 'vehicleVesselNo' || field === 'vesselNo') return '54912';
+      if (field === 'driverName') return 'LUQMAN KHAN';
+      if (field === 'contactNo') return '+971565256707';
+      if (field === 'designation') return 'WORKSHOP COORDINATOR';
+    }
     return val || '';
   };
 
