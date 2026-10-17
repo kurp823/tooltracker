@@ -320,6 +320,7 @@ export interface DTLine {
   allocatedRig?: string;
   allocatedWell?: string;
   clientDtNo?: string;
+  supplier?: string;
 }
 
 export interface DTBatch {
@@ -328,6 +329,7 @@ export interface DTBatch {
   dtNumber: string;     // DT-YY-NNNNN
   jobId: string;
   jobNumber?: string;
+  client?: string;
   rmDate: string;
   rmRef: string;
   dispatchDate: string;
@@ -391,6 +393,7 @@ export interface RTBatch {
   rtNumber: string;     // RT-YY-NNNNN
   jobId: string;
   jobNumber?: string;
+  client?: string;
   rtDate: string;
   receivingDate?: string;
   emdadSignDate?: string;

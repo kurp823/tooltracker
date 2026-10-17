@@ -11,7 +11,9 @@ import {
   JobCrewMember,
   DailyFieldLog,
   InspectionRecord,
+  JobToolSubRentalCost,
 } from '../types';
+import { saveCustomJob } from '../services/customJobs';
 import { saveJobToolHoleSectionApi, extractToolType, saveDailyFieldLogsApi, fetchDailyFieldLogsApi } from '../services/api';
 import {
   getContractRateOptionsForTool,
@@ -2352,10 +2354,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     if (!targetDT) return;
     const count = targetDT.toolLines?.length || 0;
     const confirmed = window.confirm(
-      `Are you sure you want to confirm dispatch and lock Delivery Ticket ${targetDT.dtNumber}?\n\n` +
-      `• Tools to release: ${count}\n` +
-      `• Destination: Rig ${jobData.rig} / Well ${jobData.well}\n\n` +
-      `This confirms equipment has been released from yard and locks this ticket against modifications.`
+      adminUnlocked
+        ? `Confirm corrections and re-lock Delivery Ticket ${targetDT.dtNumber}?\n\n` +
+          `• Equipment Count: ${count}\n` +
+          `• Destination: Rig ${jobData.rig} / Well ${jobData.well}\n\n` +
+          `This will save all corrected DT fields, lock the Delivery Ticket, and restore the workspace to normal locked mode.`
+        : `Are you sure you want to confirm dispatch and lock Delivery Ticket ${targetDT.dtNumber}?\n\n` +
+          `• Tools to release: ${count}\n` +
+          `• Destination: Rig ${jobData.rig} / Well ${jobData.well}\n\n` +
+          `This confirms equipment has been released from yard and locks this ticket against modifications.`
     );
     if (!confirmed) return;
 
@@ -2381,7 +2388,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       });
     }
 
-    showToast(`Delivery Ticket ${updatedBatch.dtNumber} confirmed dispatched and locked. Tools mobilized to Rig ${jobData.rig}.`, 'success');
+    if (adminUnlocked) {
+      setAdminUnlocked(false);
+    }
+
+    showToast(`Delivery Ticket ${updatedBatch.dtNumber} confirmed and locked in normal position.`, 'success');
   };
 
   // Transfer checked tools from Lower DT to Upper RT
@@ -2982,7 +2993,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         return (tSer && (iSer === tSer || iAsset === tSer)) || (tAss && (iSer === tAss || iAsset === tAss));
       });
 
-      const rawSupplier = (t.supplier || (t as any).ownership || invMatch?.supplier || invMatch?.ownership || (t.isEmdad ? 'EMDAD' : 'MOTORMAX')).trim();
+      const rawSupplier = ((t as any).supplier || (t as any).ownership || invMatch?.supplier || invMatch?.ownership || (t.isEmdad ? 'EMDAD' : 'MOTORMAX')).trim();
       const isSubTool = !t.isEmdad && rawSupplier.toUpperCase() !== 'EMDAD';
       const supplierName = isSubTool ? rawSupplier : 'EMDAD';
 
@@ -3391,6 +3402,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     type="button"
                     onClick={() => {
                       setAdminUnlocked(false);
+                      if (effectiveDT && !effectiveDT.isLocked && onUpdateDTBatch) {
+                        onUpdateDTBatch({ ...effectiveDT, isLocked: true });
+                      }
                       showToast('Admin override deactivated. Workspace restored to locked mode.', 'info');
                     }}
                     className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs cursor-pointer transition flex items-center gap-1"
@@ -5155,7 +5169,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <div className="flex justify-end">
                     <button
                       type="button"
-                      onClick={handleSaveDTNotes}
+                      onClick={() => handleSaveDTNotes()}
                       className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
                     >
                       <span>💾</span>
@@ -5581,7 +5595,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <div className="flex justify-end">
                       <button
                         type="button"
-                        onClick={handleSaveRTNotes}
+                        onClick={() => handleSaveRTNotes()}
                         className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
                       >
                         <span>💾</span>
