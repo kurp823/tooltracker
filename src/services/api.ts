@@ -2908,6 +2908,9 @@ function cleanDTBatchForSql(batch: any): any {
         status: tl.status || 'OnRig',
         ownership: tl.ownership || 'EMDAD',
         qty: Number(tl.qty || 1),
+        allocatedRig: tl.allocatedRig || null,
+        allocatedWell: tl.allocatedWell || null,
+        clientDtNo: tl.clientDtNo || null,
       };
     });
   }

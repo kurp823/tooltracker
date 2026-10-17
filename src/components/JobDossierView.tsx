@@ -1119,6 +1119,76 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return null;
   }, [jobDTs]);
 
+  // Strict check: Is this specifically ADNOC Drilling Shared Rental Pool Contract 4700024096?
+  const isContract4700024096 = useMemo(() => {
+    const cNo = (jobData.contractNo || jobData.contract || '').trim();
+    const cl = (jobData.client || '').trim().toLowerCase();
+    return cNo.includes('4700024096') || (cl.includes('drilling') && cNo.includes('4700024096'));
+  }, [jobData.contractNo, jobData.contract, jobData.client]);
+
+  // Available Rigs list for tool allocation dropdowns (derived from all active jobs + known ADNOC Drilling rigs)
+  const adnocRigOptions = useMemo(() => {
+    const set = new Set<string>();
+    jobs.forEach((j) => {
+      if (j.rig && j.rig.trim() && j.rig !== '—' && !j.rig.includes('Multi')) set.add(j.rig.trim());
+    });
+    // Ensure primary ADNOC Drilling fleet rigs are present
+    ['ND-11', 'ND-12', 'ND-14', 'ND-15', 'ND-16', 'ND-17', 'ND-18', 'ND-19', 'ND-20', 'ND-21',
+     'AD-15', 'AD-16', 'AD-17', 'AD-18', 'AD-19', 'AD-20', 'AD-21', 'AD-22', 'AD-45', 'AD-55',
+     'AD-65', 'AD-75', 'AD-85', 'AD-101', 'AD-102', 'AD-103', 'AD-104', 'AD-105', 'AD-106',
+     'AL YASAT', 'AL DABB\'IYA', 'AL GHALLAN', 'SALAMAH', 'HODAIRIYAT', 'UMM AL ANBAR'].forEach((r) => set.add(r));
+    return Array.from(set).sort();
+  }, [jobs]);
+
+  // Modal State: Rollover unreturned tools from previous month's job
+  const [isRolloverModalOpen, setIsRolloverModalOpen] = useState(false);
+  const [selectedPreviousJobId, setSelectedPreviousJobId] = useState<string>('');
+
+  // Eligible previous jobs under Contract 4700024096
+  const previousPoolJobs = useMemo(() => {
+    if (!isContract4700024096) return [];
+    return jobs.filter((j) => {
+      if (j.id === jobData.id) return false;
+      const c = (j.contractNo || j.contract || '').trim();
+      return c.includes('4700024096') || (j.client || '').toLowerCase().includes('drilling');
+    });
+  }, [isContract4700024096, jobs, jobData.id]);
+
+  // Compute unreturned tools from selected previous job
+  const unreturnedToolsFromPreviousJob = useMemo(() => {
+    if (!selectedPreviousJobId) return [];
+    const prevDTs = dtBatches.filter((b) => (b.jobId || (b as any).jobNumber) === selectedPreviousJobId);
+    const prevRTs = rtBatches.filter((b) => (b.jobId || (b as any).jobNumber) === selectedPreviousJobId);
+
+    const returnedSerials = new Set<string>();
+    prevRTs.forEach((rt) => {
+      rt.toolLines?.forEach((tl) => {
+        if (tl.serial) returnedSerials.add(tl.serial.trim().toUpperCase());
+        if (tl.assetNo) returnedSerials.add(tl.assetNo.trim().toUpperCase());
+      });
+    });
+
+    const unreturned: any[] = [];
+    prevDTs.forEach((dt) => {
+      (dt.toolLines || []).forEach((tl) => {
+        const s = (tl.serial || '').trim().toUpperCase();
+        const a = (tl.assetNo || '').trim().toUpperCase();
+        const isRet = (s && returnedSerials.has(s)) || (a && returnedSerials.has(a)) || tl.status === 'Returned' || Boolean(tl.rtBatchId);
+        if (!isRet) {
+          unreturned.push({
+            ...tl,
+            fromDT: dt.dtNumber,
+            dispatchDate: dt.dispatchDate || dt.rmDate,
+            allocatedRig: tl.allocatedRig || dt.rig || '',
+            allocatedWell: tl.allocatedWell || dt.well || '',
+            clientDtNo: tl.clientDtNo || '',
+          });
+        }
+      });
+    });
+    return unreturned;
+  }, [selectedPreviousJobId, dtBatches, rtBatches]);
+
   // Checklist items that are still pending or not yet locked on a dispatched DT
   const pendingChecklistItems = useMemo(() => {
     return checklistItems.filter((ci) => {
@@ -1876,6 +1946,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         comments: genuineCondition,
         cat: exactShortDesc,
         condition: genuineCondition,
+        allocatedRig: jobData.rig || '',
+        allocatedWell: jobData.well || '',
+        clientDtNo: '',
+        mobDate: formatDateDD_MM_YYYY(new Date().toISOString()),
       };
     });
 
@@ -1905,6 +1979,115 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     }
 
     showToast(`Inserted ${newItems.length} tool(s) into Checklist. Reserved for Job ${jobData.id}.`, 'success');
+  };
+
+  // Update specific fields on a checklist item (allocatedRig, allocatedWell, clientDtNo)
+  const handleUpdateChecklistItemField = (seq: number, field: 'allocatedRig' | 'allocatedWell' | 'clientDtNo', value: string) => {
+    if ((isClosedOrInvoiced || isLocked) && !adminUnlocked) return;
+    const updated = checklistItems.map((ci) => {
+      if (ci.seq === seq) {
+        return { ...ci, [field]: value };
+      }
+      return ci;
+    });
+    setChecklistItems(updated);
+
+    // If item is already on a DT, update that DT batch's toolLine as well
+    const targetItem = checklistItems.find((ci) => ci.seq === seq);
+    if (targetItem && targetItem.dtNumber) {
+      const targetDT = dtBatches.find((b) => b.dtNumber === targetItem.dtNumber);
+      if (targetDT && onUpdateDTBatch) {
+        const itemSerial = (targetItem.serialNos?.[0] || targetItem.partNo || '').trim().toUpperCase();
+        const updatedToolLines = (targetDT.toolLines || []).map((tl) => {
+          const s = (tl.serial || '').trim().toUpperCase();
+          const a = (tl.assetNo || '').trim().toUpperCase();
+          if (s === itemSerial || a === itemSerial) {
+            return { ...tl, [field]: value };
+          }
+          return tl;
+        });
+        onUpdateDTBatch({ ...targetDT, toolLines: updatedToolLines });
+      }
+    }
+
+    const calloutToSave = ({
+      ...activeCallout,
+      jobId: jobData.id,
+      jobNumber: jobData.id,
+      items: updated,
+    } as unknown) as Callout;
+    if (onSaveCallout) onSaveCallout(calloutToSave);
+  };
+
+  // Rollover unreturned tools from previous month's job into current checklist
+  const handleConfirmRolloverFromPreviousJob = () => {
+    if (unreturnedToolsFromPreviousJob.length === 0) {
+      showToast('No unreturned tools found in the selected previous job.', 'info');
+      return;
+    }
+
+    // Check which tools are already in this checklist to prevent duplicates
+    const currentSerials = new Set<string>();
+    checklistItems.forEach((ci) => {
+      const s = (ci.serialNos?.[0] || '').trim().toUpperCase();
+      const a = (ci.partNo || '').trim().toUpperCase();
+      if (s) currentSerials.add(s);
+      if (a) currentSerials.add(a);
+    });
+
+    const newRolloverItems: CalloutItem[] = [];
+    unreturnedToolsFromPreviousJob.forEach((tl) => {
+      const s = (tl.serial || '').trim().toUpperCase();
+      const a = (tl.assetNo || '').trim().toUpperCase();
+      if ((s && currentSerials.has(s)) || (a && currentSerials.has(a))) {
+        return; // already in this checklist
+      }
+
+      const resolved = resolveToolDetails(tl.serial, tl.assetNo, tl.desc, tl.shortDesc);
+      newRolloverItems.push({
+        seq: checklistItems.length + newRolloverItems.length + 1,
+        size: tl.size || resolved.inv?.size || '—',
+        shortDesc: resolved.shortDesc,
+        qty: 1,
+        assigned: 1,
+        serialNos: [resolved.serial],
+        status: 'Assigned',
+        partNo: resolved.assetNo,
+        description: resolved.desc,
+        supplier: tl.ownership || resolved.inv?.supplier || 'EMDAD',
+        qtyIn: 1,
+        insNum: tl.insNum || '—',
+        insDate: tl.insDate || '—',
+        comments: 'ROLLOVER ACTIVE',
+        cat: resolved.shortDesc,
+        condition: 'ACCEPTED',
+        allocatedRig: tl.allocatedRig || '',
+        allocatedWell: tl.allocatedWell || '',
+        clientDtNo: tl.clientDtNo || '',
+        mobDate: formatDateDD_MM_YYYY(tl.dispatchDate || new Date().toISOString()),
+      });
+    });
+
+    if (newRolloverItems.length === 0) {
+      showToast('All unreturned tools from the selected job are already present in this checklist.', 'info');
+      setIsRolloverModalOpen(false);
+      return;
+    }
+
+    const updated = [...checklistItems, ...newRolloverItems];
+    setChecklistItems(updated);
+    setIsRolloverModalOpen(false);
+
+    const calloutToSave = ({
+      ...activeCallout,
+      jobId: jobData.id,
+      jobNumber: jobData.id,
+      items: updated,
+    } as unknown) as Callout;
+
+    if (onSaveCallout) onSaveCallout(calloutToSave);
+
+    showToast(`Successfully rolled over ${newRolloverItems.length} active unreturned tool(s) from ${selectedPreviousJobId}!`, 'success');
   };
 
   // Delete row from checklist
@@ -2005,6 +2188,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           isEmdad: (ci.supplier || resolved.inv?.ownership || '').toUpperCase().includes('EMDAD'),
           qty: ci.qty || 1,
           remarks: '',
+          allocatedRig: ci.allocatedRig || jobData.rig || '',
+          allocatedWell: ci.allocatedWell || jobData.well || '',
+          clientDtNo: ci.clientDtNo || '',
         };
       }),
     };
@@ -3932,6 +4118,23 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <div className="flex items-center gap-1.5">
                   {!isClosedOrInvoiced && !isLocked && (
                     <>
+                      {isContract4700024096 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (previousPoolJobs.length > 0) {
+                              setSelectedPreviousJobId(previousPoolJobs[0].id);
+                            }
+                            setIsRolloverModalOpen(true);
+                          }}
+                          className="bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-xs px-3 py-1 rounded-full shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                          title="Import all active unreturned tools from a previous month's job under Contract 4700024096"
+                        >
+                          <span>📥</span>
+                          <span>Rollover Tools</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => {
@@ -4115,6 +4318,22 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <span>Category</span>
                       <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('cat', e)} onDoubleClick={() => checklistResizer.resetColumn('cat')} />
                     </th>
+
+                    {/* Dedicated Rig Allocation & Client DT Columns for ADNOC Drilling 4700024096 */}
+                    {isContract4700024096 && (
+                      <>
+                        <th style={{ width: 130 }} className="p-1.5 relative bg-amber-50 text-amber-950 font-bold overflow-hidden truncate border-l border-amber-200">
+                          <span title="ADNOC Drilling Rig Allocation">Assigned Rig 📍</span>
+                        </th>
+                        <th style={{ width: 100 }} className="p-1.5 relative bg-amber-50 text-amber-950 font-bold overflow-hidden truncate border-l border-amber-200">
+                          <span title="Target Well Name">Well</span>
+                        </th>
+                        <th style={{ width: 130 }} className="p-1.5 relative bg-amber-50 text-amber-950 font-bold overflow-hidden truncate border-l border-amber-200">
+                          <span title="ADNOC Drilling Confirmed Client DT #">Client DT No 🏷️</span>
+                        </th>
+                      </>
+                    )}
+
                     <th style={{ width: checklistResizer.widths.status || 140 }} className="p-1.5 text-center relative overflow-hidden truncate">
                       <span>Mobilization / DT</span>
                       <ResizerHandle onMouseDown={(e) => checklistResizer.startResize('status', e)} onDoubleClick={() => checklistResizer.resetColumn('status')} />
@@ -4216,6 +4435,45 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600 truncate" title={displayInsDate}>{displayInsDate}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={displayCondition}>{displayCondition}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={resolved.shortDesc}>{resolved.shortDesc}</td>
+
+                          {/* Rig Allocation & Client DT Cells for Contract 4700024096 */}
+                          {isContract4700024096 && (
+                            <>
+                              <td className="py-0.5 px-1 whitespace-nowrap border-l border-amber-100">
+                                <select
+                                  value={item.allocatedRig || jobData.rig || ''}
+                                  onChange={(e) => handleUpdateChecklistItemField(item.seq, 'allocatedRig', e.target.value)}
+                                  disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
+                                  className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-bold text-slate-800 w-28 focus:ring-1 focus:ring-blue-500"
+                                >
+                                  <option value="">Select Rig...</option>
+                                  {adnocRigOptions.map((r) => (
+                                    <option key={r} value={r}>{r}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="py-0.5 px-1 whitespace-nowrap border-l border-amber-100">
+                                <input
+                                  type="text"
+                                  value={item.allocatedWell ?? (item.allocatedRig ? (item.allocatedWell || '') : (jobData.well || ''))}
+                                  placeholder="Well Name"
+                                  onChange={(e) => handleUpdateChecklistItemField(item.seq, 'allocatedWell', e.target.value)}
+                                  disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
+                                  className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-medium text-slate-800 w-20 focus:ring-1 focus:ring-blue-500"
+                                />
+                              </td>
+                              <td className="py-0.5 px-1 whitespace-nowrap border-l border-amber-100">
+                                <input
+                                  type="text"
+                                  value={item.clientDtNo || ''}
+                                  placeholder="Client DT #"
+                                  onChange={(e) => handleUpdateChecklistItemField(item.seq, 'clientDtNo', e.target.value)}
+                                  disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
+                                  className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-mono text-indigo-900 font-bold w-28 focus:ring-1 focus:ring-blue-500 placeholder:font-sans placeholder:font-normal"
+                                />
+                              </td>
+                            </>
+                          )}
 
                           {/* Mobilization / DT Status: Light grey for locked, light slate for pending (no purple, no amber) */}
                           <td className="py-1 px-2 whitespace-nowrap text-center truncate">
@@ -4449,6 +4707,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <th className="p-1.5">Date_In</th>
                       <th className="p-1.5">Supplier</th>
                       <th className="p-1.5">Category</th>
+                      {isContract4700024096 && (
+                        <>
+                          <th className="p-1.5 bg-amber-50 text-amber-950 font-bold border-l border-amber-200">Assigned Rig 📍</th>
+                          <th className="p-1.5 bg-amber-50 text-amber-950 font-bold border-l border-amber-200">Well</th>
+                          <th className="p-1.5 bg-amber-50 text-amber-950 font-bold border-l border-amber-200">Client DT # 🏷️</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -4505,12 +4770,75 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{rgtDate ? formatDateDD_MM_YYYY(rgtDate) : '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-slate-700">{t.ownership || resolved.inv?.ownership || 'EMDAD'}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-slate-600 text-[11px] font-medium">{resolved.shortDesc}</td>
+
+                            {/* Rig Allocation & Client DT Cells for Contract 4700024096 */}
+                            {isContract4700024096 && (
+                              <>
+                                <td className="py-0.5 px-1 whitespace-nowrap border-l border-amber-100">
+                                  <select
+                                    value={t.allocatedRig || effectiveDT.rig || jobData.rig || ''}
+                                    onChange={(e) => {
+                                      const newRig = e.target.value;
+                                      const updatedToolLines = (effectiveDT.toolLines || []).map((tl, i) =>
+                                        i === idx ? { ...tl, allocatedRig: newRig } : tl
+                                      );
+                                      const updatedBatch = { ...effectiveDT, toolLines: updatedToolLines };
+                                      if (onUpdateDTBatch) onUpdateDTBatch(updatedBatch);
+                                      else onSaveDTBatch(updatedBatch);
+                                    }}
+                                    disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
+                                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-bold text-slate-800 w-28 focus:ring-1 focus:ring-blue-500"
+                                  >
+                                    <option value="">Select Rig...</option>
+                                    {adnocRigOptions.map((r) => (
+                                      <option key={r} value={r}>{r}</option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td className="py-0.5 px-1 whitespace-nowrap border-l border-amber-100">
+                                  <input
+                                    type="text"
+                                    value={t.allocatedWell ?? (t.allocatedRig ? (t.allocatedWell || '') : (effectiveDT.well || jobData.well || ''))}
+                                    placeholder="Well Name"
+                                    onChange={(e) => {
+                                      const newWell = e.target.value;
+                                      const updatedToolLines = (effectiveDT.toolLines || []).map((tl, i) =>
+                                        i === idx ? { ...tl, allocatedWell: newWell } : tl
+                                      );
+                                      const updatedBatch = { ...effectiveDT, toolLines: updatedToolLines };
+                                      if (onUpdateDTBatch) onUpdateDTBatch(updatedBatch);
+                                      else onSaveDTBatch(updatedBatch);
+                                    }}
+                                    disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
+                                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-medium text-slate-800 w-20 focus:ring-1 focus:ring-blue-500"
+                                  />
+                                </td>
+                                <td className="py-0.5 px-1 whitespace-nowrap border-l border-amber-100">
+                                  <input
+                                    type="text"
+                                    value={t.clientDtNo || ''}
+                                    placeholder="Client DT #"
+                                    onChange={(e) => {
+                                      const newClientDt = e.target.value;
+                                      const updatedToolLines = (effectiveDT.toolLines || []).map((tl, i) =>
+                                        i === idx ? { ...tl, clientDtNo: newClientDt } : tl
+                                      );
+                                      const updatedBatch = { ...effectiveDT, toolLines: updatedToolLines };
+                                      if (onUpdateDTBatch) onUpdateDTBatch(updatedBatch);
+                                      else onSaveDTBatch(updatedBatch);
+                                    }}
+                                    disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
+                                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-mono text-indigo-900 font-bold w-28 focus:ring-1 focus:ring-blue-500 placeholder:font-sans placeholder:font-normal"
+                                  />
+                                </td>
+                              </>
+                            )}
                           </tr>
                         );
                       })
                     ) : (
                       <tr>
-                        <td colSpan={10} className="p-6 text-center text-slate-500 font-medium bg-slate-50">
+                        <td colSpan={isContract4700024096 ? 13 : 10} className="p-6 text-center text-slate-500 font-medium bg-slate-50">
                           No tools added to Delivery Ticket yet.
                           {!isClosedOrInvoiced && !isLocked && (
                             <span>
@@ -6417,6 +6745,109 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ROLLOVER UNRETURNED TOOLS MODAL (CONTRACT 4700024096 ONLY) */}
+      {isRolloverModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-lg border-2 border-indigo-600 shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="bg-[#1a3055] text-white px-4 py-2.5 flex items-center justify-between font-bold text-sm flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <span>📥</span>
+                <span>Rollover Active Unreturned Tools (Contract 4700024096)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRolloverModalOpen(false)}
+                className="text-white hover:text-amber-300 font-bold text-lg cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3 text-xs overflow-y-auto flex-1">
+              <div className="bg-indigo-50 border border-indigo-200 rounded p-3 text-indigo-950 leading-relaxed">
+                <span className="font-bold">🏷️ Shared Rental Pool Rollover:</span> Select the previous month's job under Contract <strong>4700024096</strong>. The system will detect all equipment still on rig (no Return Ticket stamped) and transfer them directly into current job <strong>{jobData.id}</strong> with their assigned Rig, Well, and original dispatch date.
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Select Previous Month's Job:</label>
+                {previousPoolJobs.length === 0 ? (
+                  <p className="text-slate-500 italic p-2 border border-slate-200 rounded bg-slate-50">
+                    No other jobs found under Contract 4700024096.
+                  </p>
+                ) : (
+                  <select
+                    value={selectedPreviousJobId}
+                    onChange={(e) => setSelectedPreviousJobId(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded p-2 text-xs font-mono font-bold text-[#1a3055] focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="">Select a previous job...</option>
+                    {previousPoolJobs.map((j) => (
+                      <option key={j.id} value={j.id}>
+                        {j.id} — Rig: {j.rig || 'Multi-Rig'} — Well: {j.well || '—'} ({j.status})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {selectedPreviousJobId && (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5 font-bold text-slate-800">
+                    <span>Unreturned Active Tools Found:</span>
+                    <span className="bg-indigo-100 text-indigo-900 px-2 py-0.5 rounded font-mono">
+                      {unreturnedToolsFromPreviousJob.length} Tool(s)
+                    </span>
+                  </div>
+
+                  {unreturnedToolsFromPreviousJob.length === 0 ? (
+                    <p className="p-4 bg-slate-50 border border-slate-200 rounded text-center text-slate-500 italic">
+                      All tools from this job have already been returned to base on Return Tickets.
+                    </p>
+                  ) : (
+                    <div className="border border-slate-200 rounded max-h-56 overflow-y-auto divide-y divide-slate-100">
+                      {unreturnedToolsFromPreviousJob.map((tl, i) => (
+                        <div key={i} className="p-2 flex items-center justify-between text-xs hover:bg-slate-50">
+                          <div>
+                            <span className="font-mono font-bold text-blue-900 mr-2">{tl.assetNo || tl.serial}</span>
+                            <span className="text-slate-700">{tl.desc || tl.shortDesc}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px]">
+                            <span className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-semibold">
+                              Rig: {tl.allocatedRig || '—'}
+                            </span>
+                            <span className="text-slate-500 font-mono">
+                              DT: {tl.fromDT || '—'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-slate-100 px-4 py-3 flex items-center justify-between border-t border-slate-200 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsRolloverModalOpen(false)}
+                className="px-4 py-1.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRolloverFromPreviousJob}
+                disabled={!selectedPreviousJobId || unreturnedToolsFromPreviousJob.length === 0}
+                className="px-5 py-1.5 rounded bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-bold text-xs cursor-pointer shadow-xs flex items-center gap-1.5"
+              >
+                <span>📥 Import Active Tools into Current Checklist</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

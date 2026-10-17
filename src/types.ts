@@ -87,6 +87,10 @@ export interface CalloutItem {
   comments?: string;
   cat?: string;
   condition?: string;
+  allocatedRig?: string;
+  allocatedWell?: string;
+  clientDtNo?: string;
+  mobDate?: string;
 }
 
 export interface Callout {
@@ -313,6 +317,9 @@ export interface DTLine {
   isEmdad: boolean;
   qty?: number;
   remarks?: string;
+  allocatedRig?: string;
+  allocatedWell?: string;
+  clientDtNo?: string;
 }
 
 export interface DTBatch {
@@ -632,6 +639,9 @@ export interface CalculationTicketLine {
   subRunChargeUSD?: number;
   subRedressChargeUSD?: number;
   totalSubCostUSD?: number;
+  allocatedRig?: string;
+  allocatedWell?: string;
+  clientDtNo?: string;
 }
 
 export interface VerificationPackageDoc {

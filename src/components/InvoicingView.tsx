@@ -1415,6 +1415,12 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                     <th className="p-1 border-r border-slate-400 text-center w-6">#</th>
                     <th className="p-1 border-r border-slate-400 text-left">Serial No.</th>
                     <th className="p-1 border-r border-slate-400 text-left">Tool Description</th>
+                    {String(packageData.contractNo || '').includes('4700024096') && (
+                      <>
+                        <th className="p-1 border-r border-slate-400 text-center bg-amber-50">Assigned Rig</th>
+                        <th className="p-1 border-r border-slate-400 text-center bg-amber-50">Client DT #</th>
+                      </>
+                    )}
                     <th className="p-1 border-r border-slate-400 text-center w-6">Qty</th>
                     <th className="p-1 border-r border-slate-400 text-center">Delivery</th>
                     <th className="p-1 border-r border-slate-400 text-center">Return</th>
@@ -1433,6 +1439,12 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                       <td className="p-1 border-r border-slate-400 text-center">{l.itemNo || i + 1}</td>
                       <td className="p-1 border-r border-slate-400 font-mono font-semibold">{l.serialNumber}</td>
                       <td className="p-1 border-r border-slate-400 truncate max-w-xs">{l.toolDescription}</td>
+                      {String(packageData.contractNo || '').includes('4700024096') && (
+                        <>
+                          <td className="p-1 border-r border-slate-400 text-center font-bold text-amber-900 bg-amber-50/50">{l.allocatedRig || '—'}</td>
+                          <td className="p-1 border-r border-slate-400 text-center font-mono text-indigo-900 bg-amber-50/50">{l.clientDtNo || '—'}</td>
+                        </>
+                      )}
                       <td className="p-1 border-r border-slate-400 text-center">{l.qty || 1}</td>
                       <td className="p-1 border-r border-slate-400 text-center font-mono">{l.deliveryDate}</td>
                       <td className="p-1 border-r border-slate-400 text-center font-mono">{l.returnDate}</td>

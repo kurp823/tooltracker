@@ -492,6 +492,9 @@ export function generateInvoicePackageForJob(
           subRunChargeUSD,
           subRedressChargeUSD,
           totalSubCostUSD,
+          allocatedRig: tl.allocatedRig || dt.rig || job.rig || '',
+          allocatedWell: tl.allocatedWell || dt.well || job.well || '',
+          clientDtNo: tl.clientDtNo || '',
         });
       });
     });
