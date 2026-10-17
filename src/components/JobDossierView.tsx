@@ -1020,19 +1020,40 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return { inv, assetNo, serial, desc, shortDesc };
   }, [inventoryMap]);
 
+  // Synchronize checklist items with job's Delivery Tickets to eliminate any system ID mix-up
+  const resolveChecklistItemWithDT = useCallback((it: CalloutItem, idx: number) => {
+    const targetDT = (it.dtNumber ? jobDTs.find(d => d.dtNumber === it.dtNumber) : null) || (jobDTs.length === 1 ? jobDTs[0] : null);
+    const dtLine = targetDT?.toolLines?.[idx] || targetDT?.toolLines?.find(tl => {
+      const s = (tl.serial || tl.assetNo || '').trim().toUpperCase();
+      const is = (it.serialNos?.[0] || it.partNo || '').trim().toUpperCase();
+      return s && is && (s === is || s.includes(is));
+    });
+
+    const candidateSerial = (dtLine?.assetNo && !dtLine.assetNo.toUpperCase().startsWith('EMD-') ? dtLine.assetNo : '') ||
+                            (dtLine?.serial && !dtLine.serial.toUpperCase().startsWith('EMD-') ? dtLine.serial : '') ||
+                            it.serialNos?.[0];
+    const candidateAssetNo = (dtLine?.assetNo && !dtLine.assetNo.toUpperCase().startsWith('EMD-') ? dtLine.assetNo : '') ||
+                             (dtLine?.serial && !dtLine.serial.toUpperCase().startsWith('EMD-') ? dtLine.serial : '') ||
+                             it.partNo;
+    const candidateDesc = dtLine?.toolDescription || dtLine?.desc || it.description;
+
+    const resolved = resolveToolDetails(candidateSerial, candidateAssetNo, candidateDesc, it.shortDesc || it.cat);
+    return {
+      ...it,
+      dtNumber: it.dtNumber || targetDT?.dtNumber,
+      status: (targetDT ? 'Released' : it.status) as any,
+      partNo: resolved.assetNo,
+      serialNos: resolved.serial && resolved.serial !== '—' ? [resolved.serial] : it.serialNos,
+      description: resolved.desc,
+      shortDesc: resolved.shortDesc,
+      cat: it.cat || resolved.shortDesc,
+    };
+  }, [jobDTs, resolveToolDetails]);
+
   // Checklist Items State
   const [checklistItems, setChecklistItems] = useState<CalloutItem[]>(() => {
     if (activeCallout.items && activeCallout.items.length > 0) {
-      return activeCallout.items.map((it) => {
-        const resolved = resolveToolDetails(it.serialNos?.[0], it.partNo, it.description, it.shortDesc || it.cat);
-        return {
-          ...it,
-          partNo: resolved.assetNo,
-          description: resolved.desc,
-          shortDesc: resolved.shortDesc,
-          cat: it.cat || resolved.shortDesc,
-        };
-      });
+      return activeCallout.items.map((it, idx) => resolveChecklistItemWithDT(it, idx));
     }
     return [];
   });
@@ -1040,19 +1061,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   useEffect(() => {
     if (activeCallout && Array.isArray(activeCallout.items)) {
       setChecklistItems(
-        activeCallout.items.map((it) => {
-          const resolved = resolveToolDetails(it.serialNos?.[0], it.partNo, it.description, it.shortDesc || it.cat);
-          return {
-            ...it,
-            partNo: resolved.assetNo,
-            description: resolved.desc,
-            shortDesc: resolved.shortDesc,
-            cat: it.cat || resolved.shortDesc,
-          };
-        })
+        activeCallout.items.map((it, idx) => resolveChecklistItemWithDT(it, idx))
       );
     }
-  }, [activeCallout, resolveToolDetails]);
+  }, [activeCallout, resolveChecklistItemWithDT]);
 
   // Master Tool Categories & Sizes for Tool Picker
   const [customCategories] = useState<string[]>(() => {
