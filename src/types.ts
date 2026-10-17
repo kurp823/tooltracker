@@ -63,6 +63,10 @@ export interface ToolItem {
   subRentalAgreementType?: 'Daily' | 'BackToBack' | 'MonthlyPool';
   subRentalDailyRate?: number | null;     // Supplier daily cost rate (e.g. AED 4,200)
   subRentalMonthlyRate?: number | null;   // Supplier monthly cost (if MonthlyPool)
+  subRentalOperatingRate?: number | null; // Operations day rate (e.g. AED 4,500)
+  subRentalStandbyRate?: number | null;   // Standby day rate (e.g. AED 3,000)
+  subRentalRunCharge?: number | null;     // Run charge / RIH charge
+  subRentalRedressCharge?: number | null; // Redress / refurbishment charge
   supplierPoNumber?: string;              // e.g. PO-4200222381
   supplierCurrency?: string;              // AED / USD
   rentalStartDate?: string | null;        // Delivery/custody start date

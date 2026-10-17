@@ -139,6 +139,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [editAgreementType, setEditAgreementType] = useState<'Daily' | 'BackToBack' | 'MonthlyPool'>('Daily');
   const [editDailyRate, setEditDailyRate] = useState<string>('');
   const [editMonthlyRate, setEditMonthlyRate] = useState<string>('');
+  const [editOperatingRate, setEditOperatingRate] = useState<string>('');
+  const [editStandbyRate, setEditStandbyRate] = useState<string>('');
+  const [editRunCharge, setEditRunCharge] = useState<string>('');
+  const [editRedressCharge, setEditRedressCharge] = useState<string>('');
   const [editSupplierPo, setEditSupplierPo] = useState<string>('');
   const [editCurrency, setEditCurrency] = useState<string>('AED');
   const [editStartDate, setEditStartDate] = useState<string>('');
@@ -158,6 +162,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [newSubAgreementType, setNewSubAgreementType] = useState<'Daily' | 'BackToBack' | 'MonthlyPool'>('Daily');
   const [newSubDailyRate, setNewSubDailyRate] = useState<string>('');
   const [newSubMonthlyRate, setNewSubMonthlyRate] = useState<string>('');
+  const [newSubOperatingRate, setNewSubOperatingRate] = useState<string>('');
+  const [newSubStandbyRate, setNewSubStandbyRate] = useState<string>('');
+  const [newSubRunCharge, setNewSubRunCharge] = useState<string>('');
+  const [newSubRedressCharge, setNewSubRedressCharge] = useState<string>('');
   const [newSupplierPo, setNewSupplierPo] = useState<string>('');
   const [newSupplierCurrency, setNewSupplierCurrency] = useState<string>('AED');
   const [newRentalStartDate, setNewRentalStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -388,8 +396,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         ? {}
         : {
             subRentalAgreementType: newSubAgreementType,
-            subRentalDailyRate: newSubDailyRate ? parseFloat(newSubDailyRate) : null,
+            subRentalDailyRate: newSubDailyRate ? parseFloat(newSubDailyRate) : (newSubOperatingRate ? parseFloat(newSubOperatingRate) : null),
             subRentalMonthlyRate: newSubMonthlyRate ? parseFloat(newSubMonthlyRate) : null,
+            subRentalOperatingRate: newSubOperatingRate ? parseFloat(newSubOperatingRate) : null,
+            subRentalStandbyRate: newSubStandbyRate ? parseFloat(newSubStandbyRate) : null,
+            subRentalRunCharge: newSubRunCharge ? parseFloat(newSubRunCharge) : null,
+            subRentalRedressCharge: newSubRedressCharge ? parseFloat(newSubRedressCharge) : null,
             supplierPoNumber: newSupplierPo.trim() || undefined,
             supplierCurrency: newSupplierCurrency || 'AED',
             rentalStartDate: newRentalStartDate || null,
@@ -429,6 +441,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setNewSupplier('');
     setNewSubDailyRate('');
     setNewSubMonthlyRate('');
+    setNewSubOperatingRate('');
+    setNewSubStandbyRate('');
+    setNewSubRunCharge('');
+    setNewSubRedressCharge('');
     setNewSupplierPo('');
     setNewRentalEndDate('');
   };
@@ -449,6 +465,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setEditAgreementType(t.subRentalAgreementType || 'Daily');
     setEditDailyRate(t.subRentalDailyRate ? String(t.subRentalDailyRate) : '');
     setEditMonthlyRate(t.subRentalMonthlyRate ? String(t.subRentalMonthlyRate) : '');
+    setEditOperatingRate(t.subRentalOperatingRate ? String(t.subRentalOperatingRate) : '');
+    setEditStandbyRate(t.subRentalStandbyRate ? String(t.subRentalStandbyRate) : '');
+    setEditRunCharge(t.subRentalRunCharge ? String(t.subRentalRunCharge) : '');
+    setEditRedressCharge(t.subRentalRedressCharge ? String(t.subRentalRedressCharge) : '');
     setEditSupplierPo(t.supplierPoNumber || '');
     setEditCurrency(t.supplierCurrency || 'AED');
     setEditStartDate(t.rentalStartDate || '');
@@ -476,8 +496,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       ...(isSub
         ? {
             subRentalAgreementType: editAgreementType,
-            subRentalDailyRate: editDailyRate ? parseFloat(editDailyRate) : null,
+            subRentalDailyRate: editDailyRate ? parseFloat(editDailyRate) : (editOperatingRate ? parseFloat(editOperatingRate) : null),
             subRentalMonthlyRate: editMonthlyRate ? parseFloat(editMonthlyRate) : null,
+            subRentalOperatingRate: editOperatingRate ? parseFloat(editOperatingRate) : null,
+            subRentalStandbyRate: editStandbyRate ? parseFloat(editStandbyRate) : null,
+            subRentalRunCharge: editRunCharge ? parseFloat(editRunCharge) : null,
+            subRentalRedressCharge: editRedressCharge ? parseFloat(editRedressCharge) : null,
             supplierPoNumber: editSupplierPo.trim() || undefined,
             supplierCurrency: editCurrency,
             rentalStartDate: editStartDate || null,
@@ -487,6 +511,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             subRentalAgreementType: undefined,
             subRentalDailyRate: null,
             subRentalMonthlyRate: null,
+            subRentalOperatingRate: null,
+            subRentalStandbyRate: null,
+            subRentalRunCharge: null,
+            subRentalRedressCharge: null,
             supplierPoNumber: undefined,
             supplierCurrency: undefined,
             rentalStartDate: null,
@@ -885,11 +913,29 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                             </span>
                           </td>
                           <td className="px-3 py-2 font-mono font-bold text-rose-700 text-xs border-l border-amber-100 whitespace-nowrap">
-                            {t.subRentalDailyRate
-                              ? `${t.supplierCurrency || 'AED'} ${t.subRentalDailyRate.toLocaleString()} /d`
-                              : t.subRentalMonthlyRate
-                              ? `${t.supplierCurrency || 'AED'} ${t.subRentalMonthlyRate.toLocaleString()} /mo`
-                              : <span className="text-slate-400 font-sans font-normal">—</span>}
+                            {t.subRentalOperatingRate || t.subRentalDailyRate ? (
+                              <div className="space-y-0.5">
+                                <div>
+                                  {t.supplierCurrency || 'AED'} {(t.subRentalOperatingRate || t.subRentalDailyRate)?.toLocaleString()} /d
+                                  {t.subRentalOperatingRate && <span className="text-[10px] text-emerald-800 font-sans font-semibold ml-1">(Ops)</span>}
+                                </div>
+                                {t.subRentalStandbyRate && (
+                                  <div className="text-[10px] text-amber-700 font-sans font-medium">
+                                    Stby: {t.supplierCurrency || 'AED'} {t.subRentalStandbyRate.toLocaleString()} /d
+                                  </div>
+                                )}
+                                {(t.subRentalRunCharge || t.subRentalRedressCharge) && (
+                                  <div className="text-[9px] text-slate-500 font-sans font-normal flex gap-1.5">
+                                    {t.subRentalRunCharge && <span>Run: {t.subRentalRunCharge.toLocaleString()}</span>}
+                                    {t.subRentalRedressCharge && <span>Rdr: {t.subRentalRedressCharge.toLocaleString()}</span>}
+                                  </div>
+                                )}
+                              </div>
+                            ) : t.subRentalMonthlyRate ? (
+                              `${t.supplierCurrency || 'AED'} ${t.subRentalMonthlyRate.toLocaleString()} /mo`
+                            ) : (
+                              <span className="text-slate-400 font-sans font-normal">—</span>
+                            )}
                           </td>
                           <td className="px-3 py-2 font-mono text-slate-700 text-xs border-l border-amber-100 whitespace-nowrap">
                             {t.supplierPoNumber || <span className="text-slate-300 font-sans">—</span>}
@@ -1035,56 +1081,18 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   </div>
 
                   {/* Sub-Rental Financial & Agreement Structure */}
-                  <div className="p-3 bg-amber-50/80 rounded border border-amber-200/90 space-y-2.5">
-                  <div className="font-bold text-amber-950 text-[11px] flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <span>💰</span>
-                      <span>Sub-Rental Agreement &amp; Cost Rate (Feeds P&amp;L Accrual)</span>
-                    </span>
-                    <span className="text-[10px] text-amber-800 font-normal">Commercial Cost Structure</span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2.5">
-                    <div>
-                      <label className="block font-semibold mb-1 text-slate-700">Agreement Type</label>
-                      <select
-                        value={newSubAgreementType}
-                        onChange={(e) => setNewSubAgreementType(e.target.value as any)}
-                        className="w-full border rounded px-2 py-1 bg-white font-medium text-xs"
-                      >
-                        <option value="Daily">Daily Rental</option>
-                        <option value="BackToBack">Back-to-Back Job</option>
-                        <option value="MonthlyPool">Monthly Pool Lease</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold mb-1 text-slate-700">
-                        {newSubAgreementType === 'MonthlyPool' ? 'Monthly Cost Rate *' : 'Supplier Daily Rate (Cost) *'}
-                      </label>
-                      <div className="flex gap-1">
-                        <input
-                          type="number"
-                          step="any"
-                          required
-                          placeholder={newSubAgreementType === 'MonthlyPool' ? 'e.g. 45000' : 'e.g. 3850'}
-                          value={newSubAgreementType === 'MonthlyPool' ? newSubMonthlyRate : newSubDailyRate}
-                          onChange={(e) => {
-                            if (newSubAgreementType === 'MonthlyPool') {
-                              setNewSubMonthlyRate(e.target.value);
-                              if (e.target.value) {
-                                setNewSubDailyRate(String(Math.round(parseFloat(e.target.value) / 30)));
-                              }
-                            } else {
-                              setNewSubDailyRate(e.target.value);
-                            }
-                          }}
-                          className="w-full border rounded px-2 py-1 font-mono font-bold text-rose-700 text-xs"
-                        />
+                  <div className="p-3.5 bg-amber-50/80 rounded border border-amber-200/90 space-y-3">
+                    <div className="font-bold text-amber-950 text-xs flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <span>💰</span>
+                        <span>Sub-Rental Agreement &amp; Rates (Standby, Ops, Run, Redress)</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-500 font-semibold">Currency:</span>
                         <select
                           value={newSupplierCurrency}
                           onChange={(e) => setNewSupplierCurrency(e.target.value)}
-                          className="border rounded px-1.5 py-1 bg-white text-[11px] font-bold"
+                          className="border rounded px-1.5 py-0.5 bg-white text-[11px] font-bold"
                         >
                           <option value="AED">AED</option>
                           <option value="USD">USD</option>
@@ -1093,39 +1101,155 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block font-semibold mb-1 text-slate-700">Supplier PO Number</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. PO-42002198"
-                        value={newSupplierPo}
-                        onChange={(e) => setNewSupplierPo(e.target.value)}
-                        className="w-full border rounded px-2 py-1 font-mono text-xs"
-                      />
-                    </div>
-                  </div>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      <div>
+                        <label className="block font-semibold mb-1 text-slate-700">Agreement Type</label>
+                        <select
+                          value={newSubAgreementType}
+                          onChange={(e) => setNewSubAgreementType(e.target.value as any)}
+                          className="w-full border rounded px-2 py-1 bg-white font-medium text-xs"
+                        >
+                          <option value="Daily">Daily Rental</option>
+                          <option value="BackToBack">Back-to-Back Job</option>
+                          <option value="MonthlyPool">Monthly Pool Lease</option>
+                        </select>
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-2.5 pt-1">
-                    <div>
-                      <label className="block font-semibold mb-1 text-slate-700">Delivery / On-Hire Date</label>
-                      <input
-                        type="date"
-                        value={newRentalStartDate}
-                        onChange={(e) => setNewRentalStartDate(e.target.value)}
-                        className="w-full border rounded px-2 py-1 text-xs"
-                      />
+                      <div className="col-span-2">
+                        <label className="block font-semibold mb-1 text-slate-700">Supplier PO Number</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. PO-42002198"
+                          value={newSupplierPo}
+                          onChange={(e) => setNewSupplierPo(e.target.value)}
+                          className="w-full border rounded px-2 py-1 font-mono text-xs bg-white"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block font-semibold mb-1 text-slate-700">Expected Off-Hire / Return Date</label>
-                      <input
-                        type="date"
-                        value={newRentalEndDate}
-                        onChange={(e) => setNewRentalEndDate(e.target.value)}
-                        className="w-full border rounded px-2 py-1 text-xs"
-                      />
+
+                    {/* Rates Grid */}
+                    <div className="bg-white p-2.5 rounded border border-amber-200 space-y-2">
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-slate-600 block">
+                        Commercial Rates Breakdown
+                      </span>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div>
+                          <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
+                            Operating Rate (/d)
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="e.g. 4500"
+                            value={newSubOperatingRate}
+                            onChange={(e) => {
+                              setNewSubOperatingRate(e.target.value);
+                              if (!newSubDailyRate) setNewSubDailyRate(e.target.value);
+                            }}
+                            className="w-full border rounded px-2 py-1 font-mono font-bold text-emerald-700 text-xs bg-emerald-50/20"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
+                            Standby Rate (/d)
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="e.g. 3000"
+                            value={newSubStandbyRate}
+                            onChange={(e) => setNewSubStandbyRate(e.target.value)}
+                            className="w-full border rounded px-2 py-1 font-mono font-bold text-amber-700 text-xs bg-amber-50/20"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
+                            Run Charge (/run)
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="e.g. 1500"
+                            value={newSubRunCharge}
+                            onChange={(e) => setNewSubRunCharge(e.target.value)}
+                            className="w-full border rounded px-2 py-1 font-mono font-bold text-blue-700 text-xs bg-blue-50/20"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
+                            Redress Charge
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="e.g. 2500"
+                            value={newSubRedressCharge}
+                            onChange={(e) => setNewSubRedressCharge(e.target.value)}
+                            className="w-full border rounded px-2 py-1 font-mono font-bold text-purple-700 text-xs bg-purple-50/20"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
+                        <div>
+                          <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
+                            Standard Daily Rate (/d)
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="e.g. 3850"
+                            value={newSubDailyRate}
+                            onChange={(e) => setNewSubDailyRate(e.target.value)}
+                            className="w-full border rounded px-2 py-1 font-mono font-bold text-rose-700 text-xs bg-slate-50/50"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
+                            Monthly Pool Lease Rate
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="e.g. 45000"
+                            value={newSubMonthlyRate}
+                            onChange={(e) => {
+                              setNewSubMonthlyRate(e.target.value);
+                              if (e.target.value && !newSubDailyRate) {
+                                setNewSubDailyRate(String(Math.round(parseFloat(e.target.value) / 30)));
+                              }
+                            }}
+                            className="w-full border rounded px-2 py-1 font-mono font-bold text-rose-700 text-xs bg-slate-50/50"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5 pt-1">
+                      <div>
+                        <label className="block font-semibold mb-1 text-slate-700">Delivery / On-Hire Date</label>
+                        <input
+                          type="date"
+                          value={newRentalStartDate}
+                          onChange={(e) => setNewRentalStartDate(e.target.value)}
+                          className="w-full border rounded px-2 py-1 text-xs bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-1 text-slate-700">Expected Off-Hire / Return Date</label>
+                        <input
+                          type="date"
+                          value={newRentalEndDate}
+                          onChange={(e) => setNewRentalEndDate(e.target.value)}
+                          className="w-full border rounded px-2 py-1 text-xs bg-white"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
               </>
             ) : (
                 <div className="grid grid-cols-2 gap-3">
@@ -1536,28 +1660,27 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <div className="font-bold text-amber-950 flex items-center justify-between text-xs">
                     <span className="flex items-center gap-1.5">
                       <span>🏷️</span>
-                      <span>Sub-Rental Supplier &amp; Cost Agreement</span>
+                      <span>Sub-Rental Agreement &amp; Rates (Standby, Ops, Run, Redress)</span>
                     </span>
                     <span className="text-amber-800 font-mono text-[11px]">
                       Vendor: {editSupplier.trim() || 'Pending'}
                     </span>
                   </div>
 
-                  <div>
-                    <label className="block font-semibold mb-1 text-slate-700">
-                      Supplier / Vendor Name *
-                    </label>
-                    <input
-                      type="text"
-                      required={editOwnershipType === 'sub'}
-                      placeholder="e.g. MOTORMAX, SALTIRE, HUNTING"
-                      value={editSupplier}
-                      onChange={(e) => setEditSupplier(e.target.value)}
-                      className="w-full border rounded px-2.5 py-1.5 font-medium text-xs bg-white"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <div className="col-span-2">
+                      <label className="block font-semibold mb-1 text-slate-700">
+                        Supplier / Vendor Name *
+                      </label>
+                      <input
+                        type="text"
+                        required={editOwnershipType === 'sub'}
+                        placeholder="e.g. MOTORMAX, SALTIRE, HUNTING, CORETRAX"
+                        value={editSupplier}
+                        onChange={(e) => setEditSupplier(e.target.value)}
+                        className="w-full border rounded px-2.5 py-1.5 font-medium text-xs bg-white"
+                      />
+                    </div>
                     <div>
                       <label className="block font-semibold mb-1 text-slate-700">Agreement Model</label>
                       <select
@@ -1570,38 +1693,122 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         <option value="MonthlyPool">Monthly Pool Lease</option>
                       </select>
                     </div>
+                  </div>
 
-                    <div>
-                      <label className="block font-semibold mb-1 text-slate-700">
-                        {editAgreementType === 'MonthlyPool' ? 'Monthly Cost Rate' : 'Supplier Daily Rate (Cost)'}
-                      </label>
-                      <div className="flex gap-1.5">
-                        <input
-                          type="number"
-                          step="any"
-                          placeholder={editAgreementType === 'MonthlyPool' ? 'e.g. 45000' : 'e.g. 3850'}
-                          value={editAgreementType === 'MonthlyPool' ? editMonthlyRate : editDailyRate}
-                          onChange={(e) => {
-                            if (editAgreementType === 'MonthlyPool') {
-                              setEditMonthlyRate(e.target.value);
-                              if (e.target.value) {
-                                setEditDailyRate(String(Math.round(parseFloat(e.target.value) / 30)));
-                              }
-                            } else {
-                              setEditDailyRate(e.target.value);
-                            }
-                          }}
-                          className="w-full border rounded px-2 py-1.5 font-mono font-bold text-rose-700 text-xs bg-white"
-                        />
+                  {/* Commercial Sub-Contract Rates Breakdown */}
+                  <div className="bg-white p-3 rounded border border-amber-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                        <span>💵</span>
+                        <span>Commercial Cost Rates Breakdown</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-500 font-semibold">Currency:</span>
                         <select
                           value={editCurrency}
                           onChange={(e) => setEditCurrency(e.target.value)}
-                          className="border rounded px-2 py-1.5 bg-white text-[11px] font-bold"
+                          className="border rounded px-2 py-0.5 bg-white text-[11px] font-bold"
                         >
                           <option value="AED">AED</option>
                           <option value="USD">USD</option>
                           <option value="EUR">EUR</option>
                         </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
+                          Operating Rate (/d)
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="e.g. 4500"
+                          value={editOperatingRate}
+                          onChange={(e) => {
+                            setEditOperatingRate(e.target.value);
+                            if (!editDailyRate) setEditDailyRate(e.target.value);
+                          }}
+                          className="w-full border rounded px-2 py-1 font-mono font-bold text-emerald-700 text-xs bg-emerald-50/20"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
+                          Standby Rate (/d)
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="e.g. 3000"
+                          value={editStandbyRate}
+                          onChange={(e) => setEditStandbyRate(e.target.value)}
+                          className="w-full border rounded px-2 py-1 font-mono font-bold text-amber-700 text-xs bg-amber-50/20"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
+                          Run Charge (/run)
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="e.g. 1500"
+                          value={editRunCharge}
+                          onChange={(e) => setEditRunCharge(e.target.value)}
+                          className="w-full border rounded px-2 py-1 font-mono font-bold text-blue-700 text-xs bg-blue-50/20"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
+                          Redress Charge
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="e.g. 2500"
+                          value={editRedressCharge}
+                          onChange={(e) => setEditRedressCharge(e.target.value)}
+                          className="w-full border rounded px-2 py-1 font-mono font-bold text-purple-700 text-xs bg-purple-50/20"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
+                      <div>
+                        <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
+                          Standard Daily Rate (/d)
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="e.g. 3850"
+                          value={editDailyRate}
+                          onChange={(e) => setEditDailyRate(e.target.value)}
+                          className="w-full border rounded px-2 py-1 font-mono font-bold text-rose-700 text-xs bg-slate-50/50"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
+                          Monthly Pool Lease Rate
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="e.g. 45000"
+                          value={editMonthlyRate}
+                          onChange={(e) => {
+                            setEditMonthlyRate(e.target.value);
+                            if (e.target.value && !editDailyRate) {
+                              setEditDailyRate(String(Math.round(parseFloat(e.target.value) / 30)));
+                            }
+                          }}
+                          className="w-full border rounded px-2 py-1 font-mono font-bold text-rose-700 text-xs bg-slate-50/50"
+                        />
                       </div>
                     </div>
                   </div>
