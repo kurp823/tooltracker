@@ -1653,12 +1653,24 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                               const invTool = (sKey ? inventoryMap.get(sKey) : undefined) || (aKey ? inventoryMap.get(aKey) : undefined);
                               
                               let assetNo = '';
-                              if (invTool?.assetNo && invTool.assetNo.trim()) assetNo = invTool.assetNo.trim();
+                              if (invTool?.assetNo && invTool.assetNo.trim() && !invTool.assetNo.toUpperCase().startsWith('EMD-')) assetNo = invTool.assetNo.trim();
                               else if (t.assetNo && t.assetNo.trim() && !t.assetNo.trim().toUpperCase().startsWith('EMD-')) assetNo = t.assetNo.trim();
-                              else if (t.assetNo && t.assetNo.trim()) assetNo = t.assetNo.trim();
+                              else if (invTool?.oemSerial && invTool.oemSerial.trim() && !invTool.oemSerial.toUpperCase().startsWith('EMD-')) assetNo = invTool.oemSerial.trim();
                               else if (invTool?.serial && !invTool.serial.toUpperCase().startsWith('EMD-')) assetNo = invTool.serial;
                               else if (t.serial && !t.serial.toUpperCase().startsWith('EMD-')) assetNo = t.serial;
-                              else assetNo = invTool?.assetNo || t.assetNo || t.serial || '—';
+                              else {
+                                const descToMatch = (invTool?.desc || (t as any).toolDescription || t.desc || '').trim().toUpperCase();
+                                if (descToMatch) {
+                                  const m = inventory.find((it) => it.desc && it.desc.trim().toUpperCase() === descToMatch && it.assetNo && !it.assetNo.toUpperCase().startsWith('EMD-'));
+                                  if (m?.assetNo) assetNo = m.assetNo.trim();
+                                }
+                                if (!assetNo) {
+                                  assetNo = (invTool?.assetNo && !invTool.assetNo.toUpperCase().startsWith('EMD-') ? invTool.assetNo : '') ||
+                                            (t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') ? t.assetNo : '') ||
+                                            (t.serial && !t.serial.toUpperCase().startsWith('EMD-') ? t.serial : '') ||
+                                            invTool?.assetNo || t.assetNo || t.serial || '—';
+                                }
+                              }
 
                               const toolType = invTool?.shortDesc?.trim() || t.shortDesc?.trim() || 'Downhole Tool';
                               let description = '';

@@ -957,24 +957,48 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const aKey = (rawAssetNo || '').trim().toUpperCase();
     const inv = (sKey ? inventoryMap.get(sKey) : undefined) || (aKey ? inventoryMap.get(aKey) : undefined);
 
-    // Priority 1: Genuine inventory Asset Number (not starting with EMD- if a non-EMD assetNo exists)
+    // Priority 1: Genuine inventory Asset Number (never EMD- if a physical assetNo exists)
     let assetNo = '';
-    if (inv?.assetNo && inv.assetNo.trim()) {
+    if (inv?.assetNo && inv.assetNo.trim() && !inv.assetNo.trim().toUpperCase().startsWith('EMD-')) {
       assetNo = inv.assetNo.trim();
     } else if (rawAssetNo && rawAssetNo.trim() && !rawAssetNo.trim().toUpperCase().startsWith('EMD-')) {
       assetNo = rawAssetNo.trim();
-    } else if (rawAssetNo && rawAssetNo.trim()) {
-      assetNo = rawAssetNo.trim();
+    } else if (inv?.oemSerial && inv.oemSerial.trim() && !inv.oemSerial.trim().toUpperCase().startsWith('EMD-')) {
+      assetNo = inv.oemSerial.trim();
     } else if (inv?.serial && !inv.serial.toUpperCase().startsWith('EMD-')) {
       assetNo = inv.serial;
     } else if (rawSerial && !rawSerial.toUpperCase().startsWith('EMD-')) {
       assetNo = rawSerial;
     } else {
-      assetNo = inv?.assetNo || rawAssetNo || rawSerial || '—';
+      // Check inventory by description to find real physical asset number
+      const descToSearch = (fallbackDesc || inv?.desc || '').trim().toUpperCase();
+      if (descToSearch) {
+        const matchByDesc = inventory.find(
+          (t) => t.desc && t.desc.trim().toUpperCase() === descToSearch && t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-')
+        );
+        if (matchByDesc && matchByDesc.assetNo) {
+          assetNo = matchByDesc.assetNo.trim();
+        }
+      }
+      if (!assetNo) {
+        assetNo = (inv?.assetNo && !inv.assetNo.toUpperCase().startsWith('EMD-') ? inv.assetNo : '') ||
+                  (rawAssetNo && !rawAssetNo.toUpperCase().startsWith('EMD-') ? rawAssetNo : '') ||
+                  (rawSerial && !rawSerial.toUpperCase().startsWith('EMD-') ? rawSerial : '') ||
+                  inv?.assetNo || rawAssetNo || rawSerial || '—';
+      }
     }
 
     // Priority 2: Genuine Serial Number
-    const serial = inv?.serial || rawSerial || inv?.assetNo || rawAssetNo || '—';
+    let serial = '';
+    if (inv?.serial && !inv.serial.toUpperCase().startsWith('EMD-')) {
+      serial = inv.serial;
+    } else if (rawSerial && !rawSerial.toUpperCase().startsWith('EMD-')) {
+      serial = rawSerial;
+    } else if (assetNo && !assetNo.toUpperCase().startsWith('EMD-')) {
+      serial = assetNo;
+    } else {
+      serial = inv?.serial || rawSerial || inv?.assetNo || rawAssetNo || '—';
+    }
 
     // Priority 3: Genuine Technical Description (never bare tool type if technical description is available)
     let desc = '';
@@ -1897,8 +1921,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     });
     const newItems: CalloutItem[] = newlySelectedTools.map((t, idx) => {
       const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc);
-      const exactAssetNo = t.assetNo || resolved.assetNo || t.serial || '—';
-      const exactSerial = t.serial || resolved.serial || t.assetNo || '—';
+      const exactAssetNo = (resolved.assetNo && !resolved.assetNo.toUpperCase().startsWith('EMD-') ? resolved.assetNo : '') ||
+                           (t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') ? t.assetNo : '') ||
+                           (t.serial && !t.serial.toUpperCase().startsWith('EMD-') ? t.serial : '') ||
+                           resolved.assetNo || t.assetNo || t.serial || '—';
+      const exactSerial = (resolved.serial && !resolved.serial.toUpperCase().startsWith('EMD-') ? resolved.serial : '') ||
+                          (t.serial && !t.serial.toUpperCase().startsWith('EMD-') ? t.serial : '') ||
+                          exactAssetNo;
       const exactDesc = t.desc || (t as any).toolDescription || resolved.desc || t.shortDesc || 'Downhole Tool';
       const exactShortDesc = t.shortDesc || resolved.shortDesc || 'Downhole Tool';
       const exactSize = t.size || resolved.inv?.size || '—';
@@ -1981,11 +2010,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     showToast(`Inserted ${newItems.length} tool(s) into Checklist. Reserved for Job ${jobData.id}.`, 'success');
   };
 
-  // Update specific fields on a checklist item (allocatedRig, allocatedWell, clientDtNo)
-  const handleUpdateChecklistItemField = (seq: number, field: 'allocatedRig' | 'allocatedWell' | 'clientDtNo', value: string) => {
+  // Update specific fields on a checklist item (allocatedRig, allocatedWell, clientDtNo, partNo)
+  const handleUpdateChecklistItemField = (seq: number, field: 'allocatedRig' | 'allocatedWell' | 'clientDtNo' | 'partNo', value: string) => {
     if ((isClosedOrInvoiced || isLocked) && !adminUnlocked) return;
+    const cleanVal = value.trim();
     const updated = checklistItems.map((ci) => {
       if (ci.seq === seq) {
+        if (field === 'partNo') {
+          return { ...ci, partNo: cleanVal, serialNos: [cleanVal] };
+        }
         return { ...ci, [field]: value };
       }
       return ci;
@@ -2002,6 +2035,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           const s = (tl.serial || '').trim().toUpperCase();
           const a = (tl.assetNo || '').trim().toUpperCase();
           if (s === itemSerial || a === itemSerial) {
+            if (field === 'partNo') {
+              return { ...tl, assetNo: cleanVal, serial: cleanVal, AssetNo: cleanVal, Serial: cleanVal };
+            }
             return { ...tl, [field]: value };
           }
           return tl;
@@ -2017,6 +2053,23 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       items: updated,
     } as unknown) as Callout;
     if (onSaveCallout) onSaveCallout(calloutToSave);
+  };
+
+  // Direct Admin / User update of DT line Asset No
+  const handleUpdateDTLineAssetNo = (idx: number, newAssetNo: string) => {
+    if ((isClosedOrInvoiced || isLocked) && !adminUnlocked) return;
+    if (!effectiveDT || !onUpdateDTBatch) return;
+    const cleanAsset = newAssetNo.trim();
+    if (!cleanAsset) return;
+    const updatedLines = (effectiveDT.toolLines || []).map((tl, i) => {
+      if (i === idx) {
+        return { ...tl, assetNo: cleanAsset, serial: cleanAsset, AssetNo: cleanAsset, Serial: cleanAsset };
+      }
+      return tl;
+    });
+    const updatedDT = { ...effectiveDT, toolLines: updatedLines };
+    onUpdateDTBatch(updatedDT);
+    showToast(`Updated tool line ${idx + 1} Asset No to ${cleanAsset}`, 'success');
   };
 
   // Rollover unreturned tools from previous month's job into current checklist
@@ -4426,7 +4479,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             )}
                           </td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600 truncate">{i + 1}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={resolved.assetNo}>{resolved.assetNo}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={resolved.assetNo}>
+                            {adminUnlocked ? (
+                              <input
+                                type="text"
+                                defaultValue={resolved.assetNo}
+                                onBlur={(e) => handleUpdateChecklistItemField(item.seq, 'partNo', e.target.value)}
+                                className="bg-amber-50 border border-amber-300 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-slate-900 w-28 focus:ring-1 focus:ring-blue-500"
+                                title="Admin Edit: Edit Asset No"
+                              />
+                            ) : (
+                              resolved.assetNo
+                            )}
+                          </td>
                           <td className="py-1 px-2 whitespace-nowrap truncate font-medium text-slate-800" title={resolved.desc}>{resolved.desc}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qty || 1}</td>
                           <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700 truncate" title={item.supplier || resolved.inv?.supplier || 'EMDAD'}>{item.supplier || resolved.inv?.supplier || 'EMDAD'}</td>
@@ -4761,7 +4826,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         return (
                           <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
                             <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900" title={resolved.assetNo}>{resolved.assetNo}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900" title={resolved.assetNo}>
+                              {adminUnlocked ? (
+                                <input
+                                  type="text"
+                                  defaultValue={resolved.assetNo}
+                                  onBlur={(e) => handleUpdateDTLineAssetNo(idx, e.target.value)}
+                                  className="bg-amber-50 border border-amber-300 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-slate-900 w-32 focus:ring-1 focus:ring-blue-500"
+                                  title="Admin Edit: Edit Asset No"
+                                />
+                              ) : (
+                                resolved.assetNo
+                              )}
+                            </td>
                             <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={resolved.desc}>{resolved.desc}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{t.qty || 1}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{formatDateDD_MM_YYYY(effectiveDT.dispatchDate)}</td>

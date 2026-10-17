@@ -2888,8 +2888,24 @@ function cleanDTBatchForSql(batch: any): any {
   // Ensure toolLines have full metadata and clean technical names
   if (Array.isArray(cleaned.toolLines)) {
     cleaned.toolLines = cleaned.toolLines.map((tl: any, idx: number) => {
-      const serial = String(tl.serial || tl.Serial || tl.assetNo || `TOOL-${idx + 1}`).trim();
-      const assetNo = String(tl.assetNo || tl.AssetNo || tl.partNo || serial).trim();
+      const rawSerial = String(tl.serial || tl.Serial || '').trim();
+      const rawAssetNo = String(tl.assetNo || tl.AssetNo || tl.partNo || '').trim();
+      let assetNo = rawAssetNo;
+      let serial = rawSerial;
+
+      if (!assetNo || assetNo.toUpperCase().startsWith('EMD-')) {
+        if (rawSerial && !rawSerial.toUpperCase().startsWith('EMD-')) {
+          assetNo = rawSerial;
+        }
+      }
+      if (!serial || serial.toUpperCase().startsWith('EMD-')) {
+        if (assetNo && !assetNo.toUpperCase().startsWith('EMD-')) {
+          serial = assetNo;
+        }
+      }
+      if (!assetNo) assetNo = serial || `TOOL-${idx + 1}`;
+      if (!serial) serial = assetNo;
+
       const desc = String(tl.desc || tl.Description || tl.description || tl.toolDescription || tl.shortDesc || '').trim();
       const shortDesc = String(tl.shortDesc || tl.ShortDesc || extractToolType(desc) || 'Downhole Tool').trim();
       const size = String(tl.size || tl.Size || extractSizeFromDescription(desc) || '—').trim();
@@ -2899,14 +2915,20 @@ function cleanDTBatchForSql(batch: any): any {
         id: tl.id || idx + 1,
         itemNo: tl.itemNo || idx + 1,
         serial,
+        Serial: serial,
         assetNo,
+        AssetNo: assetNo,
         desc,
         description: desc,
         toolDescription: desc,
+        ToolDescription: desc,
         shortDesc,
+        ShortDesc: shortDesc,
         size,
+        Size: size,
         status: tl.status || 'OnRig',
         ownership: tl.ownership || 'EMDAD',
+        Ownership: tl.ownership || 'EMDAD',
         qty: Number(tl.qty || 1),
         allocatedRig: tl.allocatedRig || null,
         allocatedWell: tl.allocatedWell || null,
