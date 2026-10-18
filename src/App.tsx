@@ -40,6 +40,8 @@ import {
   saveReceivingTicketApi,
   saveInventoryApi,
   saveContractRatesApi,
+  flushOfflineOutbox,
+  fetchFromApi,
 } from './services/api';
 import { loadDatasetFromCache, saveDatasetToCache } from './services/dbCache';
 import {
@@ -459,6 +461,16 @@ export const App: React.FC = () => {
     async (isSilent = false) => {
       setSyncStatus('syncing');
       try {
+        // Automatically replay any queued offline changes to Azure SQL before pulling fresh state
+        try {
+          const outboxRes = await flushOfflineOutbox();
+          if (outboxRes.processed > 0 && !isSilent) {
+            showToast('Offline changes synchronized to Azure SQL.', 'success');
+          }
+        } catch (queueErr) {
+          console.warn('[Outbox] Flush before sync notice:', queueErr);
+        }
+
         const res = await fetchAllModulesLive();
         if (res.success && res.data) {
           setInventory(res.data.inventory);
@@ -570,6 +582,15 @@ export const App: React.FC = () => {
     if (initialLoadUserRef.current === currentUser.username) return;
     initialLoadUserRef.current = currentUser.username;
 
+    // Immediately flush any offline outbox items upon user login
+    flushOfflineOutbox()
+      .then((res) => {
+        if (res.processed > 0) {
+          handleFetchLiveSql(true);
+        }
+      })
+      .catch(() => {});
+
     // Run background sync across all modules smoothly without freezing or blocking the user
     handleFetchLiveSql(true);
 
@@ -578,13 +599,44 @@ export const App: React.FC = () => {
       handleFetchLiveSql(true);
     }, 12000);
 
-    // 2. On window focus / tab switch: Immediately refresh to pick up other users' new tools
+    // 2. Periodic outbox queue replay every 30 seconds
+    const outboxInterval = setInterval(() => {
+      flushOfflineOutbox()
+        .then((res) => {
+          if (res.processed > 0) {
+            handleFetchLiveSql(true);
+          }
+        })
+        .catch(() => {});
+    }, 30000);
+
+    // 3. Keep-Warm Pinger: ping Azure Function every 4 minutes to eliminate cold starts (10-30s lag)
+    const keepWarmInterval = setInterval(() => {
+      fetchFromApi('ping', {}).catch(() => {});
+    }, 4 * 60 * 1000);
+
+    // 4. On window focus / tab switch: Immediately refresh to pick up other users' new tools
     const handleWindowFocus = () => {
       handleFetchLiveSql(true);
     };
     window.addEventListener('focus', handleWindowFocus);
 
-    // 3. Cross-tab instant synchronization via BroadcastChannel
+    // 5. On network reconnect ('online' event): replay outbox queue and refresh live data immediately
+    const handleOnline = () => {
+      flushOfflineOutbox()
+        .then((res) => {
+          if (res.processed > 0) {
+            showToast('Offline changes synchronized to Azure SQL.', 'success');
+          }
+          handleFetchLiveSql(true);
+        })
+        .catch(() => {
+          handleFetchLiveSql(true);
+        });
+    };
+    window.addEventListener('online', handleOnline);
+
+    // 6. Cross-tab instant synchronization via BroadcastChannel
     let bc: BroadcastChannel | null = null;
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -597,10 +649,13 @@ export const App: React.FC = () => {
 
     return () => {
       clearInterval(pollInterval);
+      clearInterval(outboxInterval);
+      clearInterval(keepWarmInterval);
       window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('online', handleOnline);
       if (bc) bc.close();
     };
-  }, [currentUser, handleFetchLiveSql]);
+  }, [currentUser, handleFetchLiveSql, showToast]);
 
   // Handler to clear demo data and reflect pure SQL state
   const handleClearDemoData = useCallback((includeInventory = false) => {

@@ -14,6 +14,7 @@ import {
   INITIAL_INSPECTIONS,
   INITIAL_MAINTENANCE,
 } from '../data/initialData';
+import { addToOutbox, flushOutbox, getOutboxCount } from './outboxQueue';
 
 export const normalizeJobKey = (str?: string): string => {
   if (!str) return '';
@@ -2242,6 +2243,87 @@ export async function fetchFromApi<T = any>(
   }
 }
 
+export async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Executes an API action with automatic exponential backoff retry.
+ * Handles Azure Function cold starts (10-30s delay) and transient network drops.
+ * Delays: Attempt 1 -> 1s, Attempt 2 -> 3s, Attempt 3 -> 9s.
+ */
+export async function fetchWithRetry<T = any>(
+  action: string,
+  body: Record<string, any> = {},
+  maxRetries = 3
+): Promise<T | null> {
+  let lastError: any = null;
+
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const res = await fetchFromApi<T>(action, body);
+      if (res !== null) {
+        return res;
+      }
+    } catch (e: any) {
+      lastError = e;
+    }
+
+    if (i < maxRetries - 1) {
+      const delay = 1000 * Math.pow(3, i); // 1s, 3s, 9s
+      console.warn(`[API Retry] Action '${action}' attempt ${i + 1} did not succeed. Retrying in ${delay}ms...`);
+      await sleep(delay);
+    }
+  }
+
+  if (lastError) {
+    console.warn(`[API Retry] Action '${action}' exhausted all ${maxRetries} retries:`, lastError?.message || lastError);
+  }
+  return null;
+}
+
+export { addToOutbox, getOutbox, removeFromOutbox, getOutboxCount } from './outboxQueue';
+export type { OutboxItem } from './outboxQueue';
+
+export async function flushOfflineOutbox(): Promise<{ processed: number; remaining: number; errors: number }> {
+  return flushOutbox((action, payload) => fetchWithRetry(action, payload, 2));
+}
+
+/**
+ * Universal resilient save wrapper:
+ * 1. Tries direct Azure SQL save with 3 auto-retries and exponential backoff (1s, 3s, 9s).
+ * 2. If all retries fail (offline, VPN down, Azure outage), enqueues to persistent IndexedDB Outbox.
+ * 3. Returns a clear status so the UI knows if it saved live or queued for automatic sync.
+ */
+async function executeResilientSave(
+  action: string,
+  payload: any,
+  entityLabel: string
+): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  try {
+    const res = await fetchWithRetry(action, payload, 3);
+    if (res !== null && res !== false) {
+      return { success: true, message: `${entityLabel} saved to Azure SQL` };
+    }
+  } catch (err: any) {
+    console.warn(`[Save] ${entityLabel} direct save attempt failed:`, err?.message || err);
+  }
+
+  try {
+    await addToOutbox(action, payload);
+    return {
+      success: true,
+      queued: true,
+      message: `${entityLabel} saved offline. Queued for automatic sync to Azure SQL.`,
+    };
+  } catch (queueErr: any) {
+    return {
+      success: false,
+      message: `Failed to save ${entityLabel} to Azure SQL or offline queue.`,
+    };
+  }
+}
+
 /**
  * Authenticates against tbl_Users via the Azure Function's `login` action.
  */
@@ -2707,44 +2789,28 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
   };
 }
 
-export async function saveCalloutApi(callout: any): Promise<{ success: boolean; message: string }> {
-  try {
-    const cId = String(callout.id || callout.CalloutID || '').trim();
-    const notesVal = String(callout.notes || callout.Notes || callout.remarks || callout.Remarks || '').trim();
-    if (cId && notesVal && typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(`emdad_callout_notes_${cId}`, notesVal);
-      } catch {}
-    }
-    const enrichedCallout = {
-      ...callout,
-      id: cId,
-      CalloutID: cId,
-      notes: notesVal,
-      Notes: notesVal,
-      remarks: notesVal,
-      Remarks: notesVal,
-    };
-    const res = await fetchFromApi('savecallout', { callout: enrichedCallout, Callout: enrichedCallout, payload: enrichedCallout });
-    if (!res) {
-      return { success: false, message: 'Failed to save Callout to Azure SQL' };
-    }
-    return { success: true, message: 'Callout saved to Azure SQL' };
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to save Callout to Azure SQL' };
+export async function saveCalloutApi(callout: any): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  const cId = String(callout.id || callout.CalloutID || '').trim();
+  const notesVal = String(callout.notes || callout.Notes || callout.remarks || callout.Remarks || '').trim();
+  if (cId && notesVal && typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(`emdad_callout_notes_${cId}`, notesVal);
+    } catch {}
   }
+  const enrichedCallout = {
+    ...callout,
+    id: cId,
+    CalloutID: cId,
+    notes: notesVal,
+    Notes: notesVal,
+    remarks: notesVal,
+    Remarks: notesVal,
+  };
+  return executeResilientSave('savecallout', { callout: enrichedCallout, Callout: enrichedCallout, payload: enrichedCallout }, 'Callout');
 }
 
-export async function saveGatePassApi(gatePass: any): Promise<{ success: boolean; message: string }> {
-  try {
-    const res = await fetchFromApi('savegatepass', { gatepass: gatePass, gatePass });
-    if (!res) {
-      return { success: false, message: 'Failed to save Gate Pass to Azure SQL' };
-    }
-    return { success: true, message: 'Gate pass saved to Azure SQL' };
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to save Gate Pass to Azure SQL' };
-  }
+export async function saveGatePassApi(gatePass: any): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  return executeResilientSave('savegatepass', { gatepass: gatePass, gatePass }, 'Gate pass');
 }
 
 /**
@@ -2820,16 +2886,8 @@ export async function fetchContractRates(contractCode: string): Promise<import('
 export async function saveContractRatesApi(
   contractCode: string,
   rates: import('../types').ContractRateItem[]
-): Promise<{ success: boolean; message: string }> {
-  try {
-    const res = await fetchFromApi('savecontractrates', { code: contractCode, rates });
-    if (!res) {
-      return { success: false, message: 'Failed to save Contract Rates to Azure SQL' };
-    }
-    return { success: true, message: 'Contract rates saved to Azure SQL' };
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to save Contract Rates to Azure SQL' };
-  }
+): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  return executeResilientSave('savecontractrates', { code: contractCode, rates }, 'Contract rates');
 }
 
 export async function saveJobToolHoleSectionApi(
@@ -2840,68 +2898,36 @@ export async function saveJobToolHoleSectionApi(
   opsRate: number,
   standbyRate: number,
   currency: string
-): Promise<{ success: boolean; message: string }> {
-  try {
-    const res = await fetchFromApi('savejobtoolsection', {
-      jobId,
-      toolIdOrSerial,
-      holeSection,
-      contractRef,
-      opsRate,
-      standbyRate,
-      currency,
-    });
-    if (!res) {
-      return { success: false, message: 'Failed to save Tool Hole Section to Azure SQL' };
-    }
-    return { success: true, message: 'Tool hole section saved to Azure SQL' };
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to save Tool Hole Section to Azure SQL' };
-  }
+): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  return executeResilientSave('savejobtoolsection', {
+    jobId,
+    toolIdOrSerial,
+    holeSection,
+    contractRef,
+    opsRate,
+    standbyRate,
+    currency,
+  }, 'Tool hole section');
 }
 
-export async function saveContractApi(contract: any): Promise<{ success: boolean; message: string }> {
-  try {
-    // Sanitize dates for SQL: pbgExpiryDate if "OPEN ENDED" must be sent as null to avoid SQL date parse error
-    const sanitized = { ...contract };
-    if (sanitized.pbgExpiryDate && String(sanitized.pbgExpiryDate).toUpperCase().includes('OPEN')) {
-      sanitized.pbgExpiryDate = null;
-      if (!sanitized.notes || !sanitized.notes.includes('OPEN ENDED')) {
-        sanitized.notes = (sanitized.notes ? sanitized.notes + ' ' : '') + '(PBG Expiry: OPEN ENDED)';
-      }
+export async function saveContractApi(contract: any): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  // Sanitize dates for SQL: pbgExpiryDate if "OPEN ENDED" must be sent as null to avoid SQL date parse error
+  const sanitized = { ...contract };
+  if (sanitized.pbgExpiryDate && String(sanitized.pbgExpiryDate).toUpperCase().includes('OPEN')) {
+    sanitized.pbgExpiryDate = null;
+    if (!sanitized.notes || !sanitized.notes.includes('OPEN ENDED')) {
+      sanitized.notes = (sanitized.notes ? sanitized.notes + ' ' : '') + '(PBG Expiry: OPEN ENDED)';
     }
-    const res = await fetchFromApi('savecontract', { contract: sanitized });
-    if (!res) {
-      return { success: false, message: 'Failed to save Contract to Azure SQL' };
-    }
-    return { success: true, message: 'Contract saved to Azure SQL' };
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to save Contract to Azure SQL' };
   }
+  return executeResilientSave('savecontract', { contract: sanitized }, 'Contract');
 }
 
-export async function saveInspectionApi(inspection: any): Promise<{ success: boolean; message: string }> {
-  try {
-    const res = await fetchFromApi('saveinspection', { inspection });
-    if (!res) {
-      return { success: false, message: 'Failed to save Inspection to Azure SQL' };
-    }
-    return { success: true, message: 'Inspection saved to Azure SQL' };
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to save Inspection to Azure SQL' };
-  }
+export async function saveInspectionApi(inspection: any): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  return executeResilientSave('saveinspection', { inspection }, 'Inspection');
 }
 
-export async function saveMaintenanceApi(maintenance: any): Promise<{ success: boolean; message: string }> {
-  try {
-    const res = await fetchFromApi('savemaintenance', { maintenance });
-    if (!res) {
-      return { success: false, message: 'Failed to save Maintenance to Azure SQL' };
-    }
-    return { success: true, message: 'Maintenance saved to Azure SQL' };
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to save Maintenance to Azure SQL' };
-  }
+export async function saveMaintenanceApi(maintenance: any): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  return executeResilientSave('savemaintenance', { maintenance }, 'Maintenance');
 }
 
 export async function saveInventoryApi(tool: any): Promise<{ success: boolean; message: string }> {
@@ -2991,28 +3017,10 @@ export async function saveInventoryApi(tool: any): Promise<{ success: boolean; m
     console.warn('[saveInventoryApi] Could not save to custom tools store:', err);
   }
 
-  try {
-    // Try multiple action aliases supported across Azure Function versions and Data API
-    let res = await fetchFromApi('savetool', { tool: enrichedTool, item: enrichedTool });
-    if (!res) {
-      res = await fetchFromApi('updatetool', { tool: enrichedTool, item: enrichedTool });
-    }
-    if (!res) {
-      res = await fetchFromApi('addtool', { tool: enrichedTool, item: enrichedTool });
-    }
-    if (!res) {
-      res = await fetchFromApi('saveinventory', { tool: enrichedTool, item: enrichedTool, payload: enrichedTool });
-    }
-    if (!res) {
-      return { success: false, message: 'Failed to save Tool to Azure SQL' };
-    }
-    return { success: true, message: 'Tool saved to Azure SQL' };
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to save Tool to Azure SQL' };
-  }
+  return executeResilientSave('savetool', { tool: enrichedTool, item: enrichedTool, payload: enrichedTool }, 'Tool');
 }
 
-export async function saveJobApi(job: any): Promise<{ success: boolean; message: string }> {
+export async function saveJobApi(job: any): Promise<{ success: boolean; queued?: boolean; message: string }> {
   if (!job) return { success: true, message: 'No job provided' };
   const jId = String(job.id || job.jobNumber || '').trim();
   const notesVal = String(job.notes || job.Notes || job.remarks || job.Remarks || '').trim();
@@ -3028,31 +3036,24 @@ export async function saveJobApi(job: any): Promise<{ success: boolean; message:
     console.warn('[saveJobApi] Could not save to custom jobs store:', err);
   }
 
-  try {
-    const enrichedJob = {
-      ...job,
-      id: jId,
-      JobID: jId,
-      JobNumber: jId,
-      notes: notesVal,
-      Notes: notesVal,
-      remarks: notesVal,
-      Remarks: notesVal,
-      TechnicalDetails: job.technicalDetails,
-      Rig: job.rig,
-      Well: job.well,
-      Client: job.client,
-      Contract: job.contract,
-      Status: job.status,
-    };
-    const res = await fetchFromApi('savejob', { job: enrichedJob, Job: enrichedJob, payload: enrichedJob });
-    if (!res) {
-      return { success: false, message: 'Failed to save Job to Azure SQL' };
-    }
-    return { success: true, message: 'Job saved to Azure SQL' };
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to save Job to Azure SQL' };
-  }
+  const enrichedJob = {
+    ...job,
+    id: jId,
+    JobID: jId,
+    JobNumber: jId,
+    notes: notesVal,
+    Notes: notesVal,
+    remarks: notesVal,
+    Remarks: notesVal,
+    TechnicalDetails: job.technicalDetails,
+    Rig: job.rig,
+    Well: job.well,
+    Client: job.client,
+    Contract: job.contract,
+    Status: job.status,
+  };
+
+  return executeResilientSave('savejob', { job: enrichedJob, Job: enrichedJob, payload: enrichedJob }, 'Job');
 }
 
 export function toSqlIsoDate(val?: any): string | null {
@@ -3169,32 +3170,14 @@ function cleanRTBatchForSql(batch: any): any {
   return cleaned;
 }
 
-export async function saveDeliveryTicketApi(dtBatch: any): Promise<{ success: boolean; message: string }> {
-  try {
-    const cleaned = cleanDTBatchForSql(dtBatch);
-    const res = await fetchFromApi('savedeliveryticket', { batch: cleaned, dtBatch: cleaned });
-    if (!res) {
-      return { success: false, message: 'Failed to save Delivery Ticket to Azure SQL' };
-    }
-    return { success: true, message: 'Delivery Ticket saved to Azure SQL' };
-  } catch (err: any) {
-    console.error('Error saving delivery ticket:', err);
-    return { success: false, message: err?.message || 'Error saving Delivery Ticket' };
-  }
+export async function saveDeliveryTicketApi(dtBatch: any): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  const cleaned = cleanDTBatchForSql(dtBatch);
+  return executeResilientSave('savedeliveryticket', { batch: cleaned, dtBatch: cleaned, payload: cleaned }, 'Delivery Ticket');
 }
 
-export async function saveReceivingTicketApi(rtBatch: any): Promise<{ success: boolean; message: string }> {
-  try {
-    const cleaned = cleanRTBatchForSql(rtBatch);
-    const res = await fetchFromApi('savereceivingticket', { batch: cleaned, rtBatch: cleaned });
-    if (!res) {
-      return { success: false, message: 'Failed to save Receiving Ticket to Azure SQL' };
-    }
-    return { success: true, message: 'Receiving Ticket saved to Azure SQL' };
-  } catch (err: any) {
-    console.error('Error saving receiving ticket:', err);
-    return { success: false, message: err?.message || 'Error saving Receiving Ticket' };
-  }
+export async function saveReceivingTicketApi(rtBatch: any): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  const cleaned = cleanRTBatchForSql(rtBatch);
+  return executeResilientSave('savereceivingticket', { batch: cleaned, rtBatch: cleaned, payload: cleaned }, 'Receiving Ticket');
 }
 
 export async function saveDailyFieldLogsApi(logs: Array<{
@@ -3204,41 +3187,8 @@ export async function saveDailyFieldLogsApi(logs: Array<{
   date: string;
   status: '1' | 'S' | string;
   rate?: number;
-}>): Promise<{ success: boolean; message: string }> {
-  const endpoint = getApiEndpoint();
-  if (endpoint.includes('/data-api/rest') || endpoint.endsWith('/rest')) {
-    try {
-      const restBase = endpoint.replace(/\/+$/, '');
-      const promises = logs.map((l) =>
-        fetch(`${restBase}/tbl_DailyFieldLogs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            JobID: l.jobId,
-            DTNumber: l.dtNumber || null,
-            ToolSerial: l.toolSerial,
-            LogDate: l.date,
-            StatusType: l.status,
-            RateCharged: l.rate != null ? Number(l.rate) : null,
-          }),
-        }).catch(() => null)
-      );
-      await Promise.allSettled(promises);
-      return { success: true, message: 'Daily logs saved to Azure SQL' };
-    } catch {
-      // fallback
-    }
-  }
-
-  try {
-    const res = await fetchFromApi('savedailyfieldlogs', { logs });
-    if (!res) {
-      return { success: false, message: 'Failed to save Daily Logs to Azure SQL' };
-    }
-    return { success: true, message: 'Daily logs saved to Azure SQL' };
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed to save Daily Logs to Azure SQL' };
-  }
+}>): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  return executeResilientSave('savedailyfieldlogs', { logs, payload: logs }, 'Daily Logs');
 }
 
 export async function fetchDailyFieldLogsApi(jobId?: string): Promise<any[]> {
@@ -3307,19 +3257,8 @@ export function downloadStandaloneHtml(data?: Record<string, any>) {
 /**
  * Persists Custom Column Definitions to Azure SQL / Backend API
  */
-export async function saveCustomColumnsApi(customColumns: any[]): Promise<{ success: boolean; message: string }> {
-  try {
-    const res = await fetchFromApi('savecustomcolumns', { columns: customColumns });
-    if (!res) {
-      return { success: false, message: 'Failed to save Custom Columns to Azure SQL' };
-    }
-    return {
-      success: true,
-      message: 'Custom columns saved to Azure SQL live database',
-    };
-  } catch (e: any) {
-    return { success: false, message: e?.message || 'Failed to save Custom Columns to Azure SQL' };
-  }
+export async function saveCustomColumnsApi(customColumns: any[]): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  return executeResilientSave('savecustomcolumns', { columns: customColumns, payload: customColumns }, 'Custom columns');
 }
 
 /**
