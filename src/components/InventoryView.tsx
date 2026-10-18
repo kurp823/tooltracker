@@ -11,6 +11,8 @@ import { SearchableDropdown } from './SearchableDropdown';
 interface InventoryViewProps {
   user?: User | null;
   inventory: ToolItem[];
+  categories?: string[];
+  sizes?: string[];
   onSaveInventory?: (updated: ToolItem[]) => void;
   onAddTool?: (tool: ToolItem) => void;
   onUpdateTool?: (id: string, updates: Partial<ToolItem>) => void;
@@ -25,6 +27,8 @@ interface InventoryViewProps {
 export const InventoryView: React.FC<InventoryViewProps> = ({
   user,
   inventory,
+  categories: propCategories,
+  sizes: propSizes,
   onSaveInventory,
   onAddTool,
   onUpdateTool,
@@ -199,11 +203,30 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [isAddingNewSize, setIsAddingNewSize] = useState(false);
   const [newSizeInput, setNewSizeInput] = useState('');
 
+  // Safe helper for tool owner
+  const getToolOwner = useCallback((t: ToolItem): string => {
+    const own = typeof t?.ownership === 'string' ? t.ownership.trim() : (t?.ownership ? String(t.ownership).trim() : '');
+    const sup = typeof t?.supplier === 'string' ? t.supplier.trim() : (t?.supplier ? String(t.supplier).trim() : '');
+    return own || sup || (t?.isEmdad ? 'EMDAD' : 'Sub-contractor');
+  }, []);
+
   // Custom categories & sizes stored locally
   const [customCategories, setCustomCategories] = useState<string[]>(() => {
     try {
+      if (Array.isArray(propCategories) && propCategories.length > 0) {
+        return propCategories
+          .map((item: any) => (typeof item === 'string' ? item : item?.categoryName || item?.name || String(item || '')))
+          .filter(Boolean);
+      }
       const saved = localStorage.getItem('emdad_custom_categories');
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item: any) => (typeof item === 'string' ? item : item?.categoryName || item?.name || String(item || '')))
+          .filter(Boolean);
+      }
+      return [];
     } catch {
       return [];
     }
@@ -211,21 +234,52 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const [customSizes, setCustomSizes] = useState<string[]>(() => {
     try {
+      if (Array.isArray(propSizes) && propSizes.length > 0) {
+        return propSizes
+          .map((item: any) => (typeof item === 'string' ? item : item?.sizeString || item?.name || item?.size || String(item || '')))
+          .filter(Boolean);
+      }
       const saved = localStorage.getItem('emdad_custom_sizes');
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item: any) => (typeof item === 'string' ? item : item?.sizeString || item?.name || item?.size || String(item || '')))
+          .filter(Boolean);
+      }
+      return [];
     } catch {
       return [];
     }
   });
 
+  // Sync if propCategories or propSizes changes
+  useEffect(() => {
+    if (Array.isArray(propCategories) && propCategories.length > 0) {
+      setCustomCategories(
+        propCategories.map((item: any) => (typeof item === 'string' ? item : item?.categoryName || item?.name || String(item || ''))).filter(Boolean)
+      );
+    }
+  }, [propCategories]);
+
+  useEffect(() => {
+    if (Array.isArray(propSizes) && propSizes.length > 0) {
+      setCustomSizes(
+        propSizes.map((item: any) => (typeof item === 'string' ? item : item?.sizeString || item?.name || item?.size || String(item || ''))).filter(Boolean)
+      );
+    }
+  }, [propSizes]);
+
   // Compute categories from inventory + custom additions
   const categories = useMemo(() => {
     const set = new Set<string>();
     inventory.forEach((t) => {
-      if (t.shortDesc) set.add(t.shortDesc.trim());
+      const cat = typeof t?.shortDesc === 'string' ? t.shortDesc.trim() : (t?.shortDesc ? String(t.shortDesc).trim() : '');
+      if (cat) set.add(cat);
     });
     customCategories.forEach((c) => {
-      if (c && c.trim()) set.add(c.trim());
+      const cat = typeof c === 'string' ? c.trim() : (c ? String((c as any).categoryName || (c as any).name || c).trim() : '');
+      if (cat) set.add(cat);
     });
     return Array.from(set).sort();
   }, [inventory, customCategories]);
@@ -234,7 +288,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const categoryDropdownOptions = useMemo(() => {
     const counts: Record<string, number> = {};
     inventory.forEach((t) => {
-      const cat = (t.shortDesc || '').trim();
+      const cat = typeof t?.shortDesc === 'string' ? t.shortDesc.trim() : (t?.shortDesc ? String(t.shortDesc).trim() : '');
       if (cat) counts[cat] = (counts[cat] || 0) + 1;
     });
     return categories.map((c) => ({
@@ -248,16 +302,18 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const standardSizes = useMemo(() => {
     const list = new Set(TOOL_SIZES);
     inventory.forEach((t) => {
-      if (t.size) list.add(t.size.trim());
+      const sz = typeof t?.size === 'string' ? t.size.trim() : (t?.size ? String(t.size).trim() : '');
+      if (sz) list.add(sz);
     });
     customSizes.forEach((s) => {
-      if (s && s.trim()) list.add(s.trim());
+      const sz = typeof s === 'string' ? s.trim() : (s ? String((s as any).sizeString || (s as any).name || (s as any).size || s).trim() : '');
+      if (sz) list.add(sz);
     });
     return Array.from(list);
   }, [inventory, customSizes]);
 
   const handleSaveNewCategory = () => {
-    const val = newCatInput.trim().toUpperCase();
+    const val = (newCatInput || '').trim().toUpperCase();
     if (!val) return;
     if (!customCategories.includes(val)) {
       const updated = [...customCategories, val];
@@ -273,7 +329,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   };
 
   const handleSaveNewSize = () => {
-    let val = newSizeInput.trim();
+    let val = (newSizeInput || '').trim();
     if (!val) return;
     if (!val.includes('"') && !val.toLowerCase().includes('mm')) {
       val = `${val}"`;
@@ -296,11 +352,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     return Array.from(
       new Set(
         inventory
-          .map((t) => t.ownership?.trim() || t.supplier?.trim() || (t.isEmdad ? 'EMDAD' : 'Sub-contractor'))
+          .map((t) => getToolOwner(t))
           .filter(Boolean)
       )
     ).sort();
-  }, [inventory]);
+  }, [inventory, getToolOwner]);
 
   // Compute next EMDAD ID
   const nextEmdadId = useMemo(() => {
@@ -363,17 +419,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       if (selectedStatus !== 'ALL' && t.status !== selectedStatus) return false;
       if (selectedCategory !== 'ALL' && t.shortDesc !== selectedCategory) return false;
       if (selectedOwner !== 'ALL') {
-        const toolOwner = t.ownership?.trim() || t.supplier?.trim() || (t.isEmdad ? 'EMDAD' : 'Sub-contractor');
+        const toolOwner = getToolOwner(t);
         if (toolOwner !== selectedOwner) return false;
       }
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        const fullTxt = `${t.id} ${t.assetNo} ${t.size} ${t.shortDesc} ${t.desc} ${t.ownership} ${t.location}`.toLowerCase();
+      if (search && typeof search === 'string' && search.trim()) {
+        const q = search.toLowerCase().trim();
+        const fullTxt = `${t.id || ''} ${t.assetNo || ''} ${t.size || ''} ${t.shortDesc || ''} ${t.desc || ''} ${t.ownership || ''} ${t.location || ''}`.toLowerCase();
         if (!fullTxt.includes(q)) return false;
       }
       return true;
     });
-  }, [inventory, fleetTab, selectedStatus, selectedCategory, selectedOwner, search]);
+  }, [inventory, fleetTab, selectedStatus, selectedCategory, selectedOwner, search, getToolOwner]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(Math.max(1, page), totalPages);
@@ -805,7 +861,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               <option value="ALL">All Owners ({owners.length})</option>
               {owners.map((o) => (
                 <option key={o} value={o}>
-                  {o} ({inventory.filter((t) => (t.ownership?.trim() || t.supplier?.trim() || (t.isEmdad ? 'EMDAD' : 'Sub-contractor')) === o).length})
+                  {o} ({inventory.filter((t) => getToolOwner(t) === o).length})
                 </option>
               ))}
             </select>

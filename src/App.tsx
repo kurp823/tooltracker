@@ -1842,6 +1842,8 @@ export const App: React.FC = () => {
             <InventoryView
               user={currentUser}
               inventory={inventory}
+              categories={customCategories}
+              sizes={customSizes}
               onSaveInventory={handleSaveInventory}
               onAddTool={handleAddTool}
               onUpdateTool={handleUpdateTool}

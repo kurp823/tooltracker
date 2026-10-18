@@ -1208,7 +1208,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     if (s) {
       try {
         const parsed = JSON.parse(s);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((item: any) => (typeof item === 'string' ? item : item?.categoryName || item?.name || String(item || ''))).filter(Boolean);
+        }
       } catch {}
     }
     return [
@@ -1236,7 +1238,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     if (s) {
       try {
         const parsed = JSON.parse(s);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((item: any) => (typeof item === 'string' ? item : item?.sizeString || item?.name || item?.size || String(item || ''))).filter(Boolean);
+        }
       } catch {}
     }
     return ['3-1/2"', '4-3/4"', '5-3/4"', '6"', '6-1/2"', '6-3/4"', '8"', '8-1/8"', '8-1/2"', '9-1/2"', '11-3/4"', '12-1/4"', '17-1/2"', '26"'];
