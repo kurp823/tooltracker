@@ -33,15 +33,24 @@ export function loadCustomTools(): ToolItem[] {
     }
   }
 
-  // Ensure default custom tools are always included
+  // Ensure default custom tools are always included and authoritative for canonical tools
   const existingKeys = new Set(list.map((t) => String(t.serial || t.id).trim().toUpperCase()));
   DEFAULT_CUSTOM_TOOLS.forEach((def) => {
     const k = String(def.serial || def.id).trim().toUpperCase();
-    if (!existingKeys.has(k)) {
+    const idx = list.findIndex(t => String(t.serial || t.id).trim().toUpperCase() === k);
+    if (idx >= 0) {
+      if (k === 'DS958-001' || k === 'DS700-001') {
+        list[idx] = { ...list[idx], ...def };
+      }
+    } else {
       list.push(def);
       existingKeys.add(k);
     }
   });
+
+  if (typeof window !== 'undefined') {
+    saveAllCustomTools(list);
+  }
 
   return list;
 }
@@ -142,7 +151,21 @@ export function mergeInventoryWithCustomTools(
     if (match) {
       if (kId) seenCustomKeys.add(kId);
       if (kSer) seenCustomKeys.add(kSer);
-      return { ...item, ...match };
+      const res = { ...item, ...match };
+      if (kSer === 'DS958-001' || kSer === 'DS700-001' || kId === 'DS958-001' || kId === 'DS700-001') {
+        res.ownership = 'CORETRAX';
+        res.supplier = 'CORETRAX';
+        res.isEmdad = false;
+      }
+      return res;
+    }
+    if (kSer === 'DS958-001' || kSer === 'DS700-001' || kId === 'DS958-001' || kId === 'DS700-001') {
+      return {
+        ...item,
+        ownership: 'CORETRAX',
+        supplier: 'CORETRAX',
+        isEmdad: false,
+      };
     }
     return item;
   });

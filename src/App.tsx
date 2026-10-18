@@ -28,6 +28,7 @@ import {
   syncWithAzureSql,
   fetchLiveDatabaseData,
   fetchSecondaryModules,
+  fetchAllModulesLive,
   DbConnectionStatus,
   saveCalloutApi,
   saveGatePassApi,
@@ -117,6 +118,27 @@ const safeSetLocalStorage = (key: string, value: unknown) => {
     console.warn(`Skipped saving '${key}' to local cache (likely over the browser storage quota):`, e);
   }
 };
+
+// Proactively purge legacy domain localStorage keys so that stale browser data on any device
+// cannot override canonical Azure SQL data or cause cross-device desynchronization.
+if (typeof window !== 'undefined') {
+  try {
+    const legacyKeys = [
+      'emdad_inventory',
+      'emdad_jobs',
+      'emdad_dt_batches',
+      'emdad_rt_batches',
+      'emdad_callouts',
+      'emdad_gate_passes',
+      'emdad_inspections',
+      'emdad_maintenance',
+      'emdad_contracts',
+    ];
+    legacyKeys.forEach((k) => localStorage.removeItem(k));
+  } catch (err) {
+    console.warn('[Storage] Failed to purge legacy keys:', err);
+  }
+}
 
 export const App: React.FC = () => {
   // Auth state - Require explicit login when opening website link
@@ -316,96 +338,37 @@ export const App: React.FC = () => {
   const isPureSqlMode = typeof window !== 'undefined' && localStorage.getItem('emdad_mode') === 'production';
 
   // Primary Domain State
-  //
-  // NOTE (2026-09-08): inventory/jobs/dtBatches/rtBatches are backed by live
-  // Azure SQL and re-fetched fresh via handleFetchLiveSql() on every app
-  // load (see the "Initial load check on startup" effect below). We still
-  // read any old cached copy here as a harmless first-paint placeholder,
-  // but we no longer WRITE these four back to localStorage (see the
-  // persistence effects further down) — at real production volume that
-  // write reliably exceeds the browser's storage quota and was crashing
-  // the app. The live fetch overwrites whatever placeholder is used here
-  // within moments of mount.
+  // Directly initialized from canonical definitions and master catalogs
+  // (All domain collections are synchronized live from Azure SQL and cached in IndexedDB)
   const [inventory, setInventory] = useState<ToolItem[]>(() => {
-    const custom = loadCustomTools();
-    const s = localStorage.getItem('emdad_inventory');
-    let base = isPureSqlMode ? [] : INITIAL_INVENTORY;
-    if (s) {
-      try {
-        base = JSON.parse(s);
-      } catch {}
-    }
-    return mergeInventoryWithCustomTools(base, custom);
+    return mergeInventoryWithCustomTools(isPureSqlMode ? [] : INITIAL_INVENTORY, loadCustomTools());
   });
 
   const [callouts, setCallouts] = useState<Callout[]>(() => {
-    const s = localStorage.getItem('emdad_callouts');
-    if (s) return JSON.parse(s);
     return isPureSqlMode ? [] : INITIAL_CALLOUTS;
   });
 
   const [jobs, setJobs] = useState<DrillingJob[]>(() => {
-    const custom = loadCustomJobs();
-    const s = localStorage.getItem('emdad_jobs');
-    let base = MASTER_JOBS;
-    if (s) {
-      try {
-        const parsed = JSON.parse(s);
-        if (Array.isArray(parsed) && parsed.length > 0) base = parsed;
-      } catch {}
-    }
-    return mergeJobsWithCustomJobs(base, custom);
+    return mergeJobsWithCustomJobs(MASTER_JOBS, loadCustomJobs());
   });
 
   const [dtBatches, setDtBatches] = useState<DTBatch[]>(() => {
-    const s = localStorage.getItem('emdad_dt_batches');
-    if (s) {
-      try {
-        const parsed = JSON.parse(s);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((b: any) => {
-            const id = String(b?.id || '').toUpperCase();
-            const num = String(b?.dtNumber || '').toUpperCase();
-            return !id.startsWith('DT-AUTO') && !id.startsWith('DT-CLS') && !num.startsWith('DT-CLS') && !num.startsWith('DT-AUTO');
-          });
-        }
-      } catch {}
-    }
     return isPureSqlMode ? [] : INITIAL_DT_BATCHES;
   });
 
   const [rtBatches, setRtBatches] = useState<RTBatch[]>(() => {
-    const s = localStorage.getItem('emdad_rt_batches');
-    if (s) {
-      try {
-        const parsed = JSON.parse(s);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((b: any) => {
-            const id = String(b?.id || '').toUpperCase();
-            const num = String(b?.rtNumber || '').toUpperCase();
-            return !id.startsWith('RT-AUTO') && !id.startsWith('RT-CLS') && !num.startsWith('RT-CLS') && !num.startsWith('RT-AUTO');
-          });
-        }
-      } catch {}
-    }
     return isPureSqlMode ? [] : INITIAL_RT_BATCHES;
   });
 
   const [inspections, setInspections] = useState<InspectionRecord[]>(() => {
-    const s = localStorage.getItem('emdad_inspections');
-    if (s) return JSON.parse(s);
     return isPureSqlMode ? [] : INITIAL_INSPECTIONS;
   });
 
   const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>(() => {
-    const s = localStorage.getItem('emdad_maintenance');
-    if (s) return JSON.parse(s);
     return isPureSqlMode ? [] : INITIAL_MAINTENANCE;
   });
 
   const [gatePasses, setGatePasses] = useState<GatePass[]>(() => {
-    const s = localStorage.getItem('emdad_gate_passes');
-    if (s) return JSON.parse(s);
     return isPureSqlMode ? [] : INITIAL_GATE_PASSES;
   });
 
@@ -496,77 +459,25 @@ export const App: React.FC = () => {
     async (isSilent = false) => {
       setSyncStatus('syncing');
       try {
-        const res = await fetchLiveDatabaseData();
+        const res = await fetchAllModulesLive();
         if (res.success && res.data) {
-          const custom = loadCustomTools();
-          const customJobs = loadCustomJobs();
-          let mergedInv = inventory;
-          if (res.data.inventory !== undefined) {
-            mergedInv = mergeInventoryWithCustomTools(res.data.inventory, custom);
-            setInventory(mergedInv);
-          } else if (custom.length > 0) {
-            mergedInv = mergeInventoryWithCustomTools(inventory, custom);
-            setInventory(mergedInv);
-          }
-          let mergedJobs: DrillingJob[];
-          if (res.data.jobs !== undefined && res.data.jobs.length > 0) {
-            mergedJobs = mergeJobsWithCustomJobs(res.data.jobs, customJobs);
-            setJobs(mergedJobs);
-          } else {
-            mergedJobs = mergeJobsWithCustomJobs(jobs.length > 0 ? jobs : MASTER_JOBS, customJobs);
-            setJobs(mergedJobs);
-          }
-          if (res.data.dtBatches !== undefined) {
-            setDtBatches((prev) => {
-              const liveMap = new Map<string, DTBatch>();
-              (res.data!.dtBatches || []).forEach((b) => {
-                if (b && b.dtNumber) liveMap.set(b.dtNumber.toUpperCase(), b);
-              });
-              const preserved = prev.filter((p) => p && p.dtNumber && !liveMap.has(p.dtNumber.toUpperCase()));
-              const merged = [...(res.data!.dtBatches || []), ...preserved];
-              try {
-                localStorage.setItem('emdad_dt_batches', JSON.stringify(merged));
-              } catch {}
-              return merged;
-            });
-          }
-          if (res.data.rtBatches !== undefined) {
-            setRtBatches((prev) => {
-              const liveMap = new Map<string, RTBatch>();
-              (res.data!.rtBatches || []).forEach((b) => {
-                if (b && b.rtNumber) liveMap.set(b.rtNumber.toUpperCase(), b);
-              });
-              const preserved = prev.filter((p) => p && p.rtNumber && !liveMap.has(p.rtNumber.toUpperCase()));
-              const merged = [...(res.data!.rtBatches || []), ...preserved];
-              try {
-                localStorage.setItem('emdad_rt_batches', JSON.stringify(merged));
-              } catch {}
-              return merged;
-            });
-          }
+          setInventory(res.data.inventory);
+          setJobs(res.data.jobs);
+          setDtBatches(res.data.dtBatches);
+          setRtBatches(res.data.rtBatches);
+          setContracts(res.data.contracts);
+          setCallouts(res.data.callouts);
+          setGatePasses(res.data.gatePasses);
+          setInspections(res.data.inspections);
+          setMaintenance(res.data.maintenance);
+
           // Persist merged dataset to local IndexedDB cache for instant startup next time
           saveDatasetToCache({
-            ...res.data,
-            inventory: mergedInv,
-            jobs: mergedJobs,
-            contracts,
-          });
-
-          // Also refresh secondary modules (callouts/checklists, contracts, inspections) from Azure SQL
-          fetchSecondaryModules().then((sec) => {
-            if (sec.callouts !== undefined) setCallouts(sec.callouts);
-            if (sec.gatePasses !== undefined) setGatePasses(sec.gatePasses);
-            if (sec.inspections !== undefined) setInspections(sec.inspections);
-            if (sec.maintenance !== undefined) setMaintenance(sec.maintenance);
-            if (sec.contracts !== undefined) {
-              const mergedContracts = mergeContractsWithCustom(sec.contracts);
-              setContracts(mergedContracts);
-              saveDatasetToCache({
-                inventory: mergedInv,
-                jobs: mergedJobs,
-                contracts: mergedContracts,
-              });
-            }
+            inventory: res.data.inventory,
+            jobs: res.data.jobs,
+            dtBatches: res.data.dtBatches,
+            rtBatches: res.data.rtBatches,
+            contracts: res.data.contracts,
           });
 
           setDbStatus({
@@ -574,34 +485,19 @@ export const App: React.FC = () => {
             source: res.source === 'failed' ? 'local-cache' : res.source,
             lastChecked: new Date().toLocaleTimeString(),
             message: res.message,
-            counts: {
-              inventory: mergedInv.length,
-              jobs: mergedJobs.length,
-              dtBatches: res.data.dtBatches?.length ?? 0,
-              rtBatches: res.data.rtBatches?.length ?? 0,
-            },
+            counts: res.counts,
           });
           setSyncStatus('saved');
           if (!isSilent) {
             showToast(`Azure SQL: ${res.message}`, 'success');
           }
         } else {
-          const custom = loadCustomTools();
-          const customJobs = loadCustomJobs();
-          setInventory((prev) => mergeInventoryWithCustomTools(prev, custom));
-          setJobs((prev) => mergeJobsWithCustomJobs(prev, customJobs));
           setDbStatus((prev) => ({
             ...prev,
             isConnected: false,
             source: 'local-cache',
             lastChecked: new Date().toLocaleTimeString(),
             message: res.message,
-            counts: {
-              inventory: inventory.length,
-              jobs: jobs.length,
-              dtBatches: dtBatches.length,
-              rtBatches: rtBatches.length,
-            },
           }));
           setSyncStatus('saved');
           if (!isSilent) {
@@ -615,7 +511,7 @@ export const App: React.FC = () => {
         }
       }
     },
-    [showToast, inventory, jobs, dtBatches.length, rtBatches.length]
+    [showToast]
   );
 
   // Fast Instant Startup: Load cached dataset from IndexedDB in < 50ms
@@ -674,30 +570,8 @@ export const App: React.FC = () => {
     if (initialLoadUserRef.current === currentUser.username) return;
     initialLoadUserRef.current = currentUser.username;
 
-    // Run background sync smoothly without freezing or blocking the user
-    handleFetchLiveSql(true).finally(() => {
-      fetchSecondaryModules().then((res) => {
-        if (res.callouts !== undefined) setCallouts(res.callouts);
-        if (res.gatePasses !== undefined) setGatePasses(res.gatePasses);
-        if (res.contracts !== undefined) {
-          setContracts((prev) => {
-            return res.contracts!.map((c) => {
-              const existing = prev.find((p) => p.id === c.id || p.contractRef === c.contractRef || (c.contractNo && p.contractNo === c.contractNo));
-              const initial = INITIAL_CONTRACTS.find((i) => i.id === c.id || i.contractRef === c.contractRef || (c.contractNo && i.contractNo === c.contractNo));
-              const rates = (c.rates && c.rates.length > 0)
-                ? c.rates
-                : ((existing && existing.rates && existing.rates.length > 0) ? existing.rates : (initial?.rates || []));
-              return {
-                ...c,
-                rates,
-              };
-            });
-          });
-        }
-        if (res.inspections !== undefined) setInspections(res.inspections);
-        if (res.maintenance !== undefined) setMaintenance(res.maintenance);
-      });
-    });
+    // Run background sync across all modules smoothly without freezing or blocking the user
+    handleFetchLiveSql(true);
 
     // 1. Periodic background sync every 12 seconds so tools and tickets created by other users sync promptly
     const pollInterval = setInterval(() => {
@@ -886,11 +760,7 @@ export const App: React.FC = () => {
   const handleSaveCallout = (saved: Callout) => {
     setCallouts((prev) => {
       const exists = prev.some((c) => c.id === saved.id);
-      const updated = exists ? prev.map((c) => (c.id === saved.id ? saved : c)) : [saved, ...prev];
-      try {
-        localStorage.setItem('emdad_callouts', JSON.stringify(updated));
-      } catch {}
-      return updated;
+      return exists ? prev.map((c) => (c.id === saved.id ? saved : c)) : [saved, ...prev];
     });
     saveCalloutApi(saved).then((r) => {
       if (!r.success) showToast(r.message, 'error');
@@ -971,11 +841,7 @@ export const App: React.FC = () => {
     };
     setDtBatches((prev) => {
       const filtered = prev.filter((b) => b.id !== finalizedBatch.id && b.dtNumber !== finalizedBatch.dtNumber);
-      const updated = [finalizedBatch, ...filtered];
-      try {
-        localStorage.setItem('emdad_dt_batches', JSON.stringify(updated));
-      } catch {}
-      return updated;
+      return [finalizedBatch, ...filtered];
     });
     saveDeliveryTicketApi(finalizedBatch).then((r) => {
       if (!r.success) showToast(r.message, 'error');
@@ -1026,11 +892,7 @@ export const App: React.FC = () => {
     removedTools?: ToolItem[]
   ) => {
     setDtBatches((prev) => {
-      const updated = prev.map((b) => (b.id === updatedBatch.id ? updatedBatch : b));
-      try {
-        localStorage.setItem('emdad_dt_batches', JSON.stringify(updated));
-      } catch {}
-      return updated;
+      return prev.map((b) => (b.id === updatedBatch.id ? updatedBatch : b));
     });
     saveDeliveryTicketApi(updatedBatch).then((r) => {
       if (!r.success) showToast(r.message, 'error');

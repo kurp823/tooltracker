@@ -107,6 +107,25 @@ export async function loadDatasetFromCache(): Promise<CachedDataset | null> {
               return !id.startsWith('RT-AUTO') && !id.startsWith('RT-CLS') && !num.startsWith('RT-CLS') && !num.startsWith('RT-AUTO');
             });
           }
+          if (Array.isArray(result.inventory)) {
+            result.inventory = result.inventory
+              .filter((t: any) => {
+                const k = String(t?.serial || t?.id || '').trim().toUpperCase();
+                return k !== 'EMD-6373' && k !== 'EMD-6374';
+              })
+              .map((t: any) => {
+                const k = String(t?.serial || t?.id || '').trim().toUpperCase();
+                if (k === 'DS958-001' || k === 'DS700-001') {
+                  return {
+                    ...t,
+                    ownership: 'CORETRAX',
+                    supplier: 'CORETRAX',
+                    isEmdad: false,
+                  };
+                }
+                return t;
+              });
+          }
         }
         resolve(result);
       };

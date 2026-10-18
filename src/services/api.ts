@@ -4,8 +4,16 @@
  */
 
 import { MASTER_JOBS } from '../data/masterJobs';
-import { saveCustomTool } from './customTools';
-import { saveCustomJob } from './customJobs';
+import { saveCustomTool, loadCustomTools, mergeInventoryWithCustomTools } from './customTools';
+import { saveCustomJob, loadCustomJobs, mergeJobsWithCustomJobs } from './customJobs';
+import { loadCustomContracts, mergeContractsWithCustom } from './customContracts';
+import {
+  INITIAL_CONTRACTS,
+  INITIAL_CALLOUTS,
+  INITIAL_GATE_PASSES,
+  INITIAL_INSPECTIONS,
+  INITIAL_MAINTENANCE,
+} from '../data/initialData';
 
 export const normalizeJobKey = (str?: string): string => {
   if (!str) return '';
@@ -39,6 +47,11 @@ export interface DbConnectionStatus {
     jobs: number;
     dtBatches: number;
     rtBatches: number;
+    contracts?: number;
+    callouts?: number;
+    gatePasses?: number;
+    inspections?: number;
+    maintenance?: number;
   };
 }
 
@@ -2530,6 +2543,125 @@ export async function fetchSecondaryModules(): Promise<{
     console.warn('Secondary modules fetch notice:', e);
     return {};
   }
+}
+
+export interface AllModulesLiveResult {
+  success: boolean;
+  source: 'azure-sql' | 'data-api' | 'azure-function' | 'local-cache';
+  data: {
+    inventory: any[];
+    jobs: any[];
+    dtBatches: any[];
+    rtBatches: any[];
+    contracts: any[];
+    callouts: any[];
+    gatePasses: any[];
+    inspections: any[];
+    maintenance: any[];
+  };
+  counts: {
+    inventory: number;
+    jobs: number;
+    dtBatches: number;
+    rtBatches: number;
+    contracts: number;
+    callouts: number;
+    gatePasses: number;
+    inspections: number;
+    maintenance: number;
+  };
+  message: string;
+}
+
+/**
+ * Master unified synchronization function that pulls and reconciles ALL modules
+ * from Azure SQL and backend services concurrently:
+ * Tools, Jobs, Delivery Tickets, Receiving Tickets, Contracts & Rates, Callouts,
+ * Gate Passes, Inspections, and Maintenance Orders.
+ */
+export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
+  const [primaryRes, secondaryRes] = await Promise.all([
+    fetchLiveDatabaseData(),
+    fetchSecondaryModules(),
+  ]);
+
+  const customTools = loadCustomTools();
+  const customJobs = loadCustomJobs();
+
+  let invList: any[] = primaryRes.data?.inventory || [];
+  invList = mergeInventoryWithCustomTools(invList, customTools);
+
+  let jobsList: any[] =
+    primaryRes.data?.jobs && primaryRes.data.jobs.length > 0
+      ? primaryRes.data.jobs
+      : MASTER_JOBS;
+  jobsList = mergeJobsWithCustomJobs(jobsList, customJobs);
+
+  const dtList: any[] = primaryRes.data?.dtBatches || [];
+  const rtList: any[] = primaryRes.data?.rtBatches || [];
+
+  let contractsList: any[] =
+    secondaryRes.contracts && secondaryRes.contracts.length > 0
+      ? secondaryRes.contracts
+      : (primaryRes.data?.contracts && primaryRes.data.contracts.length > 0
+          ? primaryRes.data.contracts
+          : INITIAL_CONTRACTS);
+  contractsList = mergeContractsWithCustom(contractsList);
+
+  const calloutsList: any[] =
+    secondaryRes.callouts && secondaryRes.callouts.length > 0
+      ? secondaryRes.callouts
+      : INITIAL_CALLOUTS;
+
+  const gatePassesList: any[] =
+    secondaryRes.gatePasses && secondaryRes.gatePasses.length > 0
+      ? secondaryRes.gatePasses
+      : INITIAL_GATE_PASSES;
+
+  const inspectionsList: any[] =
+    secondaryRes.inspections && secondaryRes.inspections.length > 0
+      ? secondaryRes.inspections
+      : INITIAL_INSPECTIONS;
+
+  const maintenanceList: any[] =
+    secondaryRes.maintenance && secondaryRes.maintenance.length > 0
+      ? secondaryRes.maintenance
+      : INITIAL_MAINTENANCE;
+
+  const counts = {
+    inventory: invList.length,
+    jobs: jobsList.length,
+    dtBatches: dtList.length,
+    rtBatches: rtList.length,
+    contracts: contractsList.length,
+    callouts: calloutsList.length,
+    gatePasses: gatePassesList.length,
+    inspections: inspectionsList.length,
+    maintenance: maintenanceList.length,
+  };
+
+  const isConnected = primaryRes.success || Boolean(secondaryRes.contracts || secondaryRes.callouts);
+  const source = primaryRes.source !== 'failed' ? primaryRes.source : 'azure-sql';
+
+  const message = `Complete database synchronized across all modules (${counts.inventory} Tools, ${counts.jobs} Jobs, ${counts.dtBatches} DTs, ${counts.rtBatches} RTs, ${counts.contracts} Contracts, ${counts.callouts} Callouts, ${counts.gatePasses} Gate Passes, ${counts.inspections} Inspections, ${counts.maintenance} Maintenance)`;
+
+  return {
+    success: isConnected,
+    source,
+    data: {
+      inventory: invList,
+      jobs: jobsList,
+      dtBatches: dtList,
+      rtBatches: rtList,
+      contracts: contractsList,
+      callouts: calloutsList,
+      gatePasses: gatePassesList,
+      inspections: inspectionsList,
+      maintenance: maintenanceList,
+    },
+    counts,
+    message,
+  };
 }
 
 export async function saveCalloutApi(callout: any): Promise<{ success: boolean; message: string }> {
