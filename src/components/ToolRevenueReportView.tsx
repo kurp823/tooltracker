@@ -29,6 +29,7 @@ import {
   Briefcase,
   UserCheck,
 } from 'lucide-react';
+import { SearchableDropdown } from './SearchableDropdown';
 
 interface ToolRevenueReportViewProps {
   user?: User | null;
@@ -219,6 +220,19 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
     });
     return Array.from(set).sort();
   }, [allPhysicalTools]);
+
+  const toolCategoryDropdownOptions = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allPhysicalTools.forEach((t) => {
+      const cat = t.category || '';
+      if (cat) counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return categoryOptions.map((c) => ({
+      value: c,
+      label: c,
+      count: counts[c] || 0,
+    }));
+  }, [categoryOptions, allPhysicalTools]);
 
   const sizeOptions = useMemo(() => {
     return rawData.sizes.map((s) => s.size).filter(Boolean).sort();
@@ -779,21 +793,19 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
 
           {/* Category Filter (Physical Tools only) */}
           {!isPersonnelTab && (
-            <select
+            <SearchableDropdown
               value={selectedCategory}
-              onChange={(e) => {
-                setSelectedCategory(e.target.value);
+              onChange={(val) => {
+                setSelectedCategory(val);
                 setCurrentPage(1);
               }}
-              className="bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:ring-2 focus:ring-blue-500 max-w-[200px]"
-            >
-              <option value="ALL">All Categories ({categoryOptions.length})</option>
-              {categoryOptions.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+              options={toolCategoryDropdownOptions}
+              allLabel="All Categories"
+              totalCount={allPhysicalTools.length}
+              searchPlaceholder="Search categories..."
+              dropdownWidth="w-80"
+              title="Filter by Equipment Category"
+            />
           )}
 
           {/* Size Filter (Physical Tools only) */}

@@ -477,12 +477,12 @@ export const SubContractorRentalView: React.FC<SubContractorRentalViewProps> = (
           <div>
             <div className="flex items-center space-x-2">
               <span className="bg-blue-600 text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded">
-                Cost Capture • GAP E
+                Sub-Contractor Fleet
               </span>
-              <h1 className="text-xl font-bold tracking-tight">Sub-Contractor Tool Rentals (Lease Rental-Equipment)</h1>
+              <h1 className="text-xl font-bold tracking-tight">Sub-Contractor Equipment Rentals</h1>
             </div>
             <p className="text-xs text-slate-300 mt-1">
-              Third-party rental ledger (Motormax, Epis, Coretrax, Weatherford). Tracks 2-stage accruals, supplier invoice true-up, and auto-rolls into Sub-Division P&amp;L.
+              Third-party rental ledger, supplier agreements, and Sub-Division cost allocation.
             </p>
           </div>
           <div className="flex items-center space-x-2">

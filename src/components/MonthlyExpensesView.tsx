@@ -230,12 +230,12 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
           <div>
             <div className="flex items-center space-x-2">
               <span className="bg-emerald-600 text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded">
-                Finance Allocation • GAP A
+                Finance Allocation
               </span>
               <h1 className="text-xl font-bold tracking-tight">Monthly Expense Grid &amp; Sub-Division P&amp;L</h1>
             </div>
             <p className="text-xs text-slate-300 mt-1">
-              Direct and indirect cost allocation across <strong>Fishing</strong>, <strong>Whipstock</strong>, and <strong>Rentals</strong>. Jan–Sep '26 is frozen; Oct '26+ is live.
+              Direct and indirect operational cost allocation across <strong>Fishing</strong>, <strong>Whipstock</strong>, and <strong>Rentals</strong> sub-divisions.
             </p>
           </div>
 

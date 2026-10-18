@@ -5,7 +5,6 @@ import {
   saveConsumablesList,
   getConsumableIssuances,
   issueConsumableItem,
-  recordConsumableReceipt,
   generateSivPrintHtml,
   getConsumableCategories,
   addConsumableCategory,
@@ -77,7 +76,6 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
 
   // Modals
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
-  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [isAddSkuModalOpen, setIsAddSkuModalOpen] = useState(false);
 
   // Issuance Form State
@@ -91,14 +89,6 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
   const [requestedBy, setRequestedBy] = useState('');
   const [issuedBy, setIssuedBy] = useState(user?.name || 'Hamdan Storekeeper');
   const [remarks, setRemarks] = useState('');
-
-  // Receipt Form State
-  const [receiptPo, setReceiptPo] = useState('');
-  const [receiptPartNo, setReceiptPartNo] = useState('');
-  const [receiptDesc, setReceiptDesc] = useState('');
-  const [receiptQty, setReceiptQty] = useState<number>(5);
-  const [receiptCost, setReceiptCost] = useState<number>(1000);
-  const [receiptSupplier, setReceiptSupplier] = useState('');
 
   // New SKU State
   const [newPartNo, setNewPartNo] = useState('');
@@ -204,31 +194,6 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
     }
   };
 
-  // Handle Receipt Submit
-  const handleReceiptSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!receiptPartNo.trim() || receiptQty <= 0) {
-      if (showToast) showToast('Please enter a valid part number and quantity.', 'error');
-      return;
-    }
-
-    recordConsumableReceipt({
-      poNumber: receiptPo.trim() || `PO-${Date.now().toString().slice(-6)}`,
-      partNo: receiptPartNo.trim().toUpperCase(),
-      description: receiptDesc.trim() || 'Consumable Item',
-      qtyReceived: Number(receiptQty),
-      unitCostAED: Number(receiptCost),
-      totalCostAED: Number((receiptQty * receiptCost).toFixed(2)),
-      supplier: receiptSupplier.trim() || 'Approved Supplier',
-      receivedDate: new Date().toISOString().substring(0, 10),
-      receivedBy: user?.name || 'Storekeeper',
-    });
-
-    setIsReceiptModalOpen(false);
-    refreshData();
-    if (showToast) showToast(`Received ${receiptQty} units of ${receiptPartNo} into store.`, 'success');
-  };
-
   // Handle Add New SKU
   const handleAddSkuSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -298,12 +263,12 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
           <div>
             <div className="flex items-center space-x-2">
               <span className="bg-amber-600 text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded">
-                Store &amp; Inventory • GAP C
+                Consumables Store
               </span>
               <h1 className="text-xl font-bold tracking-tight">Consumables Store &amp; Material Issuance</h1>
             </div>
             <p className="text-xs text-slate-300 mt-1">
-              Workshop consumables, redress kits, thread dope, and paint. Dual routing: Workshop overhead vs Direct tool redress. Negative stock prohibited.
+              Workshop consumables stock catalog, current inventory levels, and Store Issue Vouchers (SIV).
             </p>
           </div>
 
@@ -316,11 +281,12 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
               <span>Export Stock</span>
             </button>
             <button
-              onClick={() => setIsReceiptModalOpen(true)}
+              onClick={() => setIsAddSkuModalOpen(true)}
               className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 rounded text-xs font-bold flex items-center space-x-1 shadow transition cursor-pointer"
+              title="Add a new consumable part number to the catalog"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Goods Receipt (GR)</span>
+              <span>+ Add New SKU</span>
             </button>
             <button
               onClick={() => {
@@ -788,108 +754,7 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
         </div>
       )}
 
-      {/* Modal: Goods Receipt */}
-      {isReceiptModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
-            <div className="bg-emerald-800 text-white px-4 py-3 flex items-center justify-between">
-              <h2 className="font-bold text-sm">Goods Receipt — Consumables Store Inward</h2>
-              <button
-                onClick={() => setIsReceiptModalOpen(false)}
-                className="text-slate-300 hover:text-white cursor-pointer font-bold text-lg"
-              >
-                ✕
-              </button>
-            </div>
 
-            <form onSubmit={handleReceiptSubmit} className="p-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">PO Reference</label>
-                <input
-                  type="text"
-                  value={receiptPo}
-                  onChange={(e) => setReceiptPo(e.target.value)}
-                  placeholder="e.g. PO-2026-081"
-                  className="w-full border rounded px-2.5 py-1.5 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Part Number *</label>
-                <input
-                  type="text"
-                  value={receiptPartNo}
-                  onChange={(e) => setReceiptPartNo(e.target.value)}
-                  placeholder="e.g. RK-JAR-675"
-                  required
-                  className="w-full border rounded px-2.5 py-1.5 font-mono font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Item Description</label>
-                <input
-                  type="text"
-                  value={receiptDesc}
-                  onChange={(e) => setReceiptDesc(e.target.value)}
-                  placeholder="e.g. Redress Seal Kit"
-                  className="w-full border rounded px-2.5 py-1.5"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Qty Received *</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={receiptQty}
-                    onChange={(e) => setReceiptQty(parseInt(e.target.value, 10) || 1)}
-                    required
-                    className="w-full border rounded px-2.5 py-1.5 font-mono font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Unit Cost (AED)</label>
-                  <input
-                    type="number"
-                    value={receiptCost}
-                    onChange={(e) => setReceiptCost(parseFloat(e.target.value) || 0)}
-                    className="w-full border rounded px-2.5 py-1.5 font-mono font-bold"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Supplier Name</label>
-                <input
-                  type="text"
-                  value={receiptSupplier}
-                  onChange={(e) => setReceiptSupplier(e.target.value)}
-                  placeholder="e.g. Downhole Seal Tech UAE"
-                  className="w-full border rounded px-2.5 py-1.5"
-                />
-              </div>
-
-              <div className="pt-3 border-t flex justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setIsReceiptModalOpen(false)}
-                  className="px-3 py-1.5 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 rounded bg-emerald-700 text-white font-bold hover:bg-emerald-600 shadow cursor-pointer"
-                >
-                  Receive Goods
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Modal: Add New SKU */}
       {isAddSkuModalOpen && (

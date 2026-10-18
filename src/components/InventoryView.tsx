@@ -6,6 +6,7 @@ import { useResizableColumns, ResizerHandle, useCustomColumns } from '../service
 import { DropdownListKey, getDropdownOptions } from '../services/dropdownService';
 import { AdminDropdownModal } from './AdminDropdownModal';
 import { Settings as SettingsIcon } from 'lucide-react';
+import { SearchableDropdown } from './SearchableDropdown';
 
 interface InventoryViewProps {
   user?: User | null;
@@ -228,6 +229,20 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     });
     return Array.from(set).sort();
   }, [inventory, customCategories]);
+
+  // Compute category dropdown options with tool counts
+  const categoryDropdownOptions = useMemo(() => {
+    const counts: Record<string, number> = {};
+    inventory.forEach((t) => {
+      const cat = (t.shortDesc || '').trim();
+      if (cat) counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return categories.map((c) => ({
+      value: c,
+      label: c,
+      count: counts[c] || 0,
+    }));
+  }, [categories, inventory]);
 
   // Compute tool sizes from API standards + inventory + custom additions
   const standardSizes = useMemo(() => {
@@ -739,21 +754,19 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               placeholder="Search serial #, asset name, description, size..."
               className="bg-white border border-[#b8c9db] rounded px-3 py-1 text-xs w-72 outline-none font-medium focus:ring-1 focus:ring-amber-400"
             />
-            <select
+            <SearchableDropdown
               value={selectedCategory}
-              onChange={(e) => {
-                setSelectedCategory(e.target.value);
+              onChange={(val) => {
+                setSelectedCategory(val);
                 setPage(1);
               }}
-              className="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-medium outline-none"
-            >
-              <option value="ALL">All Categories ({inventory.length})</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+              options={categoryDropdownOptions}
+              allLabel="All Categories"
+              totalCount={inventory.length}
+              searchPlaceholder="Search 100+ categories..."
+              dropdownWidth="w-80"
+              title="Filter by Equipment Category"
+            />
             <div className="flex items-center gap-1">
               <select
                 value={selectedStatus}
