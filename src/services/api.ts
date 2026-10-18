@@ -1672,17 +1672,21 @@ async function fetchAllTablePages(
     try {
       let allRows: any[] = [];
       let nextUrl: string | null = `${baseEndpoint}/${tbl}?$top=5000`;
-      let pages = 0;
+      const fetchHeaders = {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      };
 
       while (nextUrl && pages < maxPages) {
         pages++;
-        let r = await fetch(nextUrl);
+        let r = await fetch(nextUrl, { headers: fetchHeaders });
         if (!r.ok && r.status === 400 && pages === 1) {
           nextUrl = `${baseEndpoint}/${tbl}?$top=1000`;
-          r = await fetch(nextUrl);
+          r = await fetch(nextUrl, { headers: fetchHeaders });
           if (!r.ok && r.status === 400) {
             nextUrl = `${baseEndpoint}/${tbl}?$top=500`;
-            r = await fetch(nextUrl);
+            r = await fetch(nextUrl, { headers: fetchHeaders });
           }
         }
         if (!r.ok) break;
@@ -1838,7 +1842,7 @@ export async function fetchLiveDatabaseData(): Promise<{
   // Strategy 1: If endpoint is /data-api/rest (Azure Static Web Apps Linked Database)
   if (endpoint.includes('/data-api/rest') || endpoint.endsWith('/rest')) {
     try {
-      const [invRows, jobRows, dtRows, dtLineRows, rtRows, rtLineRows] = await Promise.all([
+      const [invRes, jobRes, dtRes, dtLineRes, rtRes, rtLineRes] = await Promise.allSettled([
         fetchAllTablePages(endpoint, ['tbl_Inventory', 'Inventory', 'tblInventory', 'ToolInventory', 'tools', 'tbl_Tools', 'Tools']),
         fetchAllTablePages(endpoint, ['tbl_Jobs', 'Jobs', 'tblJobs', 'DrillingJobs', 'tbl_DrillingJobs', 'tbl_JobHeader', 'JobHeader', 'tbl_JobRegister', 'JobRegister']),
         fetchAllTablePages(endpoint, ['tbl_DeliveryTickets', 'DeliveryTickets', 'tbl_DTBatches', 'DTBatches', 'tbl_DT', 'DT', 'tbl_DeliveryTicket', 'DeliveryTicket', 'tbl_DT_Header', 'DTHeader']),
@@ -1846,6 +1850,13 @@ export async function fetchLiveDatabaseData(): Promise<{
         fetchAllTablePages(endpoint, ['tbl_ReceivingTickets', 'ReceivingTickets', 'tbl_RTBatches', 'RTBatches', 'tbl_RT', 'RT', 'tbl_ReceivingTicket', 'ReceivingTicket', 'tbl_RT_Header', 'RTHeader']),
         fetchAllTablePages(endpoint, ['tbl_RTLines', 'RTLines', 'tbl_ReceivingTicketLines', 'ReceivingTicketLines', 'tbl_RTBatchLines', 'RTBatchLines', 'tbl_RT_Lines', 'tblRTLines', 'tbl_ReceivingTickets_Lines', 'ReceivingTickets_Lines']),
       ]);
+
+      const invRows = invRes.status === 'fulfilled' && Array.isArray(invRes.value) ? invRes.value : [];
+      const jobRows = jobRes.status === 'fulfilled' && Array.isArray(jobRes.value) ? jobRes.value : [];
+      const dtRows = dtRes.status === 'fulfilled' && Array.isArray(dtRes.value) ? dtRes.value : [];
+      const dtLineRows = dtLineRes.status === 'fulfilled' && Array.isArray(dtLineRes.value) ? dtLineRes.value : [];
+      const rtRows = rtRes.status === 'fulfilled' && Array.isArray(rtRes.value) ? rtRes.value : [];
+      const rtLineRows = rtLineRes.status === 'fulfilled' && Array.isArray(rtLineRes.value) ? rtLineRes.value : [];
 
       let hasAnySuccess = false;
       let inventory: any[] | undefined = undefined;
@@ -1922,7 +1933,12 @@ export async function fetchLiveDatabaseData(): Promise<{
   // Strategy 2: Azure Function / Custom REST API
   try {
     const apiKey = getApiKey();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    };
     if (apiKey) {
       headers['x-functions-key'] = apiKey;
     }
@@ -1937,13 +1953,14 @@ export async function fetchLiveDatabaseData(): Promise<{
           u.searchParams.set('action', actionName);
         }
         u.searchParams.set('env', 'live');
+        u.searchParams.set('_t', String(Date.now()));
         if (apiKey && !u.searchParams.has('code')) {
           u.searchParams.set('code', apiKey);
         }
         return base.startsWith('http') ? u.toString() : `${u.pathname}${u.search}`;
       } catch {
         const sep = base.includes('?') ? '&' : '?';
-        return `${base}${sep}action=${actionName}&env=live${apiKey ? `&code=${encodeURIComponent(apiKey)}` : ''}`;
+        return `${base}${sep}action=${actionName}&env=live&_t=${Date.now()}${apiKey ? `&code=${encodeURIComponent(apiKey)}` : ''}`;
       }
     }
 
@@ -2179,7 +2196,12 @@ export async function fetchFromApi<T = any>(
 ): Promise<T | null> {
   const endpoint = getApiEndpoint();
   const apiKey = getApiKey();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  };
   if (apiKey) {
     headers['x-functions-key'] = apiKey;
   }
@@ -2191,12 +2213,13 @@ export async function fetchFromApi<T = any>(
     const urlObj = new URL(fullBase);
     urlObj.searchParams.set('action', action);
     urlObj.searchParams.set('env', 'live');
+    urlObj.searchParams.set('_t', String(Date.now()));
     if (apiKey && !urlObj.searchParams.has('code')) {
       urlObj.searchParams.set('code', apiKey);
     }
     url = endpoint.startsWith('http') ? urlObj.toString() : `${urlObj.pathname}${urlObj.search}`;
   } catch {
-    url = `${endpoint}?action=${action}&env=live${apiKey ? `&code=${encodeURIComponent(apiKey)}` : ''}`;
+    url = `${endpoint}?action=${action}&env=live&_t=${Date.now()}${apiKey ? `&code=${encodeURIComponent(apiKey)}` : ''}`;
   }
 
   try {
@@ -2403,19 +2426,25 @@ export async function fetchSecondaryModules(): Promise<{
 }> {
   const endpoint = getApiEndpoint();
 
+  let callouts: any[] | undefined = undefined;
+  let gatePasses: any[] | undefined = undefined;
+  let contracts: any[] | undefined = undefined;
+  let inspections: any[] | undefined = undefined;
+  let maintenance: any[] | undefined = undefined;
+
   // Strategy 1: If endpoint is Azure Data API Builder
   if (endpoint.includes('/data-api/rest') || endpoint.endsWith('/rest')) {
     try {
       const [
-        calloutsRaw,
-        calloutItemsRaw,
-        gatePassesRaw,
-        gatePassLinesRaw,
-        contractsRaw,
-        contractRatesRaw,
-        inspectionsRaw,
-        maintenanceRaw,
-      ] = await Promise.all([
+        calloutsRes,
+        calloutItemsRes,
+        gatePassesRes,
+        gatePassLinesRes,
+        contractsRes,
+        contractRatesRes,
+        inspectionsRes,
+        maintenanceRes,
+      ] = await Promise.allSettled([
         fetchAllTablePages(endpoint, ['tbl_Callouts', 'Callouts', 'tblCallouts']),
         fetchAllTablePages(endpoint, ['tbl_CalloutItems', 'CalloutItems', 'tbl_CalloutLines', 'CalloutLines']),
         fetchAllTablePages(endpoint, ['tbl_GatePasses', 'GatePasses', 'tbl_GatePass', 'GatePass']),
@@ -2426,11 +2455,14 @@ export async function fetchSecondaryModules(): Promise<{
         fetchAllTablePages(endpoint, ['tbl_MaintenanceOrders', 'MaintenanceOrders', 'tbl_Maintenance', 'Maintenance']),
       ]);
 
-      let callouts: any[] | undefined = undefined;
-      let gatePasses: any[] | undefined = undefined;
-      let contracts: any[] | undefined = undefined;
-      let inspections: any[] | undefined = undefined;
-      let maintenance: any[] | undefined = undefined;
+      const calloutsRaw = calloutsRes.status === 'fulfilled' && Array.isArray(calloutsRes.value) ? calloutsRes.value : [];
+      const calloutItemsRaw = calloutItemsRes.status === 'fulfilled' && Array.isArray(calloutItemsRes.value) ? calloutItemsRes.value : [];
+      const gatePassesRaw = gatePassesRes.status === 'fulfilled' && Array.isArray(gatePassesRes.value) ? gatePassesRes.value : [];
+      const gatePassLinesRaw = gatePassLinesRes.status === 'fulfilled' && Array.isArray(gatePassLinesRes.value) ? gatePassLinesRes.value : [];
+      const contractsRaw = contractsRes.status === 'fulfilled' && Array.isArray(contractsRes.value) ? contractsRes.value : [];
+      const contractRatesRaw = contractRatesRes.status === 'fulfilled' && Array.isArray(contractRatesRes.value) ? contractRatesRes.value : [];
+      const inspectionsRaw = inspectionsRes.status === 'fulfilled' && Array.isArray(inspectionsRes.value) ? inspectionsRes.value : [];
+      const maintenanceRaw = maintenanceRes.status === 'fulfilled' && Array.isArray(maintenanceRes.value) ? maintenanceRes.value : [];
 
       if (calloutsRaw.length > 0) {
         const itemsByCallout = new Map<string, any[]>();
@@ -2509,40 +2541,43 @@ export async function fetchSecondaryModules(): Promise<{
       if (maintenanceRaw.length > 0) {
         maintenance = maintenanceRaw.map(normalizeMaintenance);
       }
-
-      if (callouts || gatePasses || contracts || inspections || maintenance) {
-        return { callouts, gatePasses, contracts, inspections, maintenance };
-      }
     } catch (err) {
       console.warn('Data API secondary modules notice:', err);
     }
   }
 
-  // Strategy 2: Azure Function fallback
+  // Strategy 2: Azure Function fallback (fills in any module not loaded by Strategy 1)
   try {
-    const [calloutsRaw, gatePassesRaw, contractsRaw, inspectionsRaw, maintenanceRaw] = await Promise.all([
-      fetchFromApi<any[]>('getcallouts'),
-      fetchFromApi<any[]>('getgatepasses'),
-      fetchFromApi<any[]>('getcontracts'),
-      fetchFromApi<any[]>('getinspections'),
-      fetchFromApi<any[]>('getmaintenance'),
+    const [calloutsRes, gatePassesRes, contractsRes, inspectionsRes, maintenanceRes] = await Promise.allSettled([
+      callouts ? Promise.resolve(null) : fetchFromApi<any[]>('getcallouts'),
+      gatePasses ? Promise.resolve(null) : fetchFromApi<any[]>('getgatepasses'),
+      contracts ? Promise.resolve(null) : fetchFromApi<any[]>('getcontracts'),
+      inspections ? Promise.resolve(null) : fetchFromApi<any[]>('getinspections'),
+      maintenance ? Promise.resolve(null) : fetchFromApi<any[]>('getmaintenance'),
     ]);
 
-    return {
-      callouts: Array.isArray(calloutsRaw) ? calloutsRaw.map(normalizeCallout) : undefined,
-      gatePasses: Array.isArray(gatePassesRaw) ? gatePassesRaw.map(normalizeGatePass) : undefined,
-      contracts: Array.isArray(contractsRaw)
-        ? contractsRaw
-            .filter((r: any) => r && r.status !== 'Archived' && r.Status !== 'Archived')
-            .map(normalizeContract)
-        : undefined,
-      inspections: Array.isArray(inspectionsRaw) ? inspectionsRaw.map(normalizeInspection) : undefined,
-      maintenance: Array.isArray(maintenanceRaw) ? maintenanceRaw.map(normalizeMaintenance) : undefined,
-    };
+    if (!callouts && calloutsRes.status === 'fulfilled' && Array.isArray(calloutsRes.value)) {
+      callouts = calloutsRes.value.map(normalizeCallout);
+    }
+    if (!gatePasses && gatePassesRes.status === 'fulfilled' && Array.isArray(gatePassesRes.value)) {
+      gatePasses = gatePassesRes.value.map(normalizeGatePass);
+    }
+    if (!contracts && contractsRes.status === 'fulfilled' && Array.isArray(contractsRes.value)) {
+      contracts = contractsRes.value
+        .filter((r: any) => r && r.status !== 'Archived' && r.Status !== 'Archived')
+        .map(normalizeContract);
+    }
+    if (!inspections && inspectionsRes.status === 'fulfilled' && Array.isArray(inspectionsRes.value)) {
+      inspections = inspectionsRes.value.map(normalizeInspection);
+    }
+    if (!maintenance && maintenanceRes.status === 'fulfilled' && Array.isArray(maintenanceRes.value)) {
+      maintenance = maintenanceRes.value.map(normalizeMaintenance);
+    }
   } catch (e) {
     console.warn('Secondary modules fetch notice:', e);
-    return {};
   }
+
+  return { callouts, gatePasses, contracts, inspections, maintenance };
 }
 
 export interface AllModulesLiveResult {
@@ -2580,10 +2615,18 @@ export interface AllModulesLiveResult {
  * Gate Passes, Inspections, and Maintenance Orders.
  */
 export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
-  const [primaryRes, secondaryRes] = await Promise.all([
+  const [primarySettled, secondarySettled] = await Promise.allSettled([
     fetchLiveDatabaseData(),
     fetchSecondaryModules(),
   ]);
+
+  const primaryRes = primarySettled.status === 'fulfilled' ? primarySettled.value : {
+    success: false,
+    source: 'failed' as const,
+    data: { inventory: [], jobs: [], dtBatches: [], rtBatches: [] },
+    message: 'Primary database connection notice',
+  };
+  const secondaryRes = secondarySettled.status === 'fulfilled' ? secondarySettled.value : {};
 
   const customTools = loadCustomTools();
   const customJobs = loadCustomJobs();
@@ -2683,18 +2726,24 @@ export async function saveCalloutApi(callout: any): Promise<{ success: boolean; 
       Remarks: notesVal,
     };
     const res = await fetchFromApi('savecallout', { callout: enrichedCallout, Callout: enrichedCallout, payload: enrichedCallout });
-    return { success: res !== null, message: res ? 'Callout saved to Azure SQL' : 'Saved locally' };
-  } catch {
-    return { success: true, message: 'Saved locally' };
+    if (!res) {
+      return { success: false, message: 'Failed to save Callout to Azure SQL' };
+    }
+    return { success: true, message: 'Callout saved to Azure SQL' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to save Callout to Azure SQL' };
   }
 }
 
 export async function saveGatePassApi(gatePass: any): Promise<{ success: boolean; message: string }> {
   try {
     const res = await fetchFromApi('savegatepass', { gatepass: gatePass, gatePass });
-    return { success: res !== null, message: res ? 'Gate pass saved to Azure SQL' : 'Saved locally' };
-  } catch {
-    return { success: true, message: 'Saved locally' };
+    if (!res) {
+      return { success: false, message: 'Failed to save Gate Pass to Azure SQL' };
+    }
+    return { success: true, message: 'Gate pass saved to Azure SQL' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to save Gate Pass to Azure SQL' };
   }
 }
 
@@ -2774,9 +2823,12 @@ export async function saveContractRatesApi(
 ): Promise<{ success: boolean; message: string }> {
   try {
     const res = await fetchFromApi('savecontractrates', { code: contractCode, rates });
-    return { success: res !== null, message: res ? 'Contract rates saved to Azure SQL' : 'Saved locally' };
-  } catch {
-    return { success: true, message: 'Saved locally' };
+    if (!res) {
+      return { success: false, message: 'Failed to save Contract Rates to Azure SQL' };
+    }
+    return { success: true, message: 'Contract rates saved to Azure SQL' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to save Contract Rates to Azure SQL' };
   }
 }
 
@@ -2799,9 +2851,12 @@ export async function saveJobToolHoleSectionApi(
       standbyRate,
       currency,
     });
-    return { success: res !== null, message: res ? 'Tool hole section saved to Azure SQL' : 'Saved locally' };
-  } catch {
-    return { success: true, message: 'Saved locally' };
+    if (!res) {
+      return { success: false, message: 'Failed to save Tool Hole Section to Azure SQL' };
+    }
+    return { success: true, message: 'Tool hole section saved to Azure SQL' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to save Tool Hole Section to Azure SQL' };
   }
 }
 
@@ -2816,27 +2871,36 @@ export async function saveContractApi(contract: any): Promise<{ success: boolean
       }
     }
     const res = await fetchFromApi('savecontract', { contract: sanitized });
-    return { success: res !== null, message: res ? 'Contract saved to Azure SQL' : 'Saved locally' };
-  } catch {
-    return { success: true, message: 'Saved locally' };
+    if (!res) {
+      return { success: false, message: 'Failed to save Contract to Azure SQL' };
+    }
+    return { success: true, message: 'Contract saved to Azure SQL' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to save Contract to Azure SQL' };
   }
 }
 
 export async function saveInspectionApi(inspection: any): Promise<{ success: boolean; message: string }> {
   try {
     const res = await fetchFromApi('saveinspection', { inspection });
-    return { success: res !== null, message: res ? 'Inspection saved to Azure SQL' : 'Saved locally' };
-  } catch {
-    return { success: true, message: 'Saved locally' };
+    if (!res) {
+      return { success: false, message: 'Failed to save Inspection to Azure SQL' };
+    }
+    return { success: true, message: 'Inspection saved to Azure SQL' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to save Inspection to Azure SQL' };
   }
 }
 
 export async function saveMaintenanceApi(maintenance: any): Promise<{ success: boolean; message: string }> {
   try {
     const res = await fetchFromApi('savemaintenance', { maintenance });
-    return { success: res !== null, message: res ? 'Maintenance saved to Azure SQL' : 'Saved locally' };
-  } catch {
-    return { success: true, message: 'Saved locally' };
+    if (!res) {
+      return { success: false, message: 'Failed to save Maintenance to Azure SQL' };
+    }
+    return { success: true, message: 'Maintenance saved to Azure SQL' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to save Maintenance to Azure SQL' };
   }
 }
 
@@ -2939,9 +3003,12 @@ export async function saveInventoryApi(tool: any): Promise<{ success: boolean; m
     if (!res) {
       res = await fetchFromApi('saveinventory', { tool: enrichedTool, item: enrichedTool, payload: enrichedTool });
     }
-    return { success: res !== null, message: res ? 'Tool saved to Azure SQL' : 'Saved locally' };
-  } catch {
-    return { success: true, message: 'Saved locally' };
+    if (!res) {
+      return { success: false, message: 'Failed to save Tool to Azure SQL' };
+    }
+    return { success: true, message: 'Tool saved to Azure SQL' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to save Tool to Azure SQL' };
   }
 }
 
@@ -2979,9 +3046,12 @@ export async function saveJobApi(job: any): Promise<{ success: boolean; message:
       Status: job.status,
     };
     const res = await fetchFromApi('savejob', { job: enrichedJob, Job: enrichedJob, payload: enrichedJob });
-    return { success: res !== null, message: res ? 'Job saved to Azure SQL' : 'Saved locally' };
-  } catch {
-    return { success: true, message: 'Saved locally' };
+    if (!res) {
+      return { success: false, message: 'Failed to save Job to Azure SQL' };
+    }
+    return { success: true, message: 'Job saved to Azure SQL' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to save Job to Azure SQL' };
   }
 }
 
@@ -3162,9 +3232,12 @@ export async function saveDailyFieldLogsApi(logs: Array<{
 
   try {
     const res = await fetchFromApi('savedailyfieldlogs', { logs });
-    return { success: res !== null, message: res ? 'Daily logs saved to Azure SQL' : 'Saved locally' };
-  } catch {
-    return { success: true, message: 'Saved locally' };
+    if (!res) {
+      return { success: false, message: 'Failed to save Daily Logs to Azure SQL' };
+    }
+    return { success: true, message: 'Daily logs saved to Azure SQL' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to save Daily Logs to Azure SQL' };
   }
 }
 
@@ -3237,12 +3310,15 @@ export function downloadStandaloneHtml(data?: Record<string, any>) {
 export async function saveCustomColumnsApi(customColumns: any[]): Promise<{ success: boolean; message: string }> {
   try {
     const res = await fetchFromApi('savecustomcolumns', { columns: customColumns });
+    if (!res) {
+      return { success: false, message: 'Failed to save Custom Columns to Azure SQL' };
+    }
     return {
-      success: res !== null,
-      message: res ? 'Custom columns saved to Azure SQL live database' : 'Custom columns saved to local storage',
+      success: true,
+      message: 'Custom columns saved to Azure SQL live database',
     };
   } catch (e: any) {
-    return { success: true, message: 'Saved locally' };
+    return { success: false, message: e?.message || 'Failed to save Custom Columns to Azure SQL' };
   }
 }
 

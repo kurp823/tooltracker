@@ -690,7 +690,7 @@ export const App: React.FC = () => {
       return updated;
     });
     saveInventoryApi(newTool).then((r) => {
-      if (!r.success) console.warn('Could not save tool to SQL:', r.message);
+      if (!r.success) showToast(r.message, 'error');
     });
     showToast(`Asset ${newTool.id || newTool.serial} registered and saved.`, 'success');
   };
@@ -703,7 +703,9 @@ export const App: React.FC = () => {
         if (k === targetId) {
           const merged = { ...t, ...updates };
           saveCustomTool(merged);
-          saveInventoryApi(merged);
+          saveInventoryApi(merged).then((r) => {
+            if (!r.success) showToast(r.message, 'error');
+          });
           return merged;
         }
         return t;
@@ -739,7 +741,7 @@ export const App: React.FC = () => {
       changedTools.forEach((tool) => {
         saveCustomTool(tool);
         saveInventoryApi(tool).then((r) => {
-          if (!r.success) console.warn('Could not save tool to SQL:', r.message);
+          if (!r.success) showToast(r.message, 'error');
         });
       });
     }
