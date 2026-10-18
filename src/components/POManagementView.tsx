@@ -14,6 +14,7 @@ import {
   createPurchaseOrder,
   deletePurchaseOrder,
   loadGoodsReceiptNotes,
+  saveAllGoodsReceiptNotes,
   postGoodsReceiptNote,
   getSupplierBalanceReport,
   parseBulkPOCSV,
@@ -48,6 +49,8 @@ interface POManagementViewProps {
   user?: User | null;
   onNavigate?: (module: string, param?: string) => void;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  categories?: string[];
+  sizes?: string[];
 }
 
 type ActiveTab = 'po-register' | 'grn-inward' | 'supplier-report' | 'grn-history';
@@ -56,9 +59,11 @@ export const POManagementView: React.FC<POManagementViewProps> = ({
   user,
   onNavigate,
   showToast,
+  categories,
+  sizes,
 }) => {
   const isAdmin = user?.role === 'Admin';
-  const [activeTab, setActiveTab] = useState<ActiveTab>('po-register');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('grn-inward');
 
   // Master Data
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -91,6 +96,84 @@ export const POManagementView: React.FC<POManagementViewProps> = ({
     return list.length > 0 ? list : ['EMDAD', 'Motormax Drilling Technologies', 'Epis Oilfield Services', 'Coretrax', 'Weatherford'];
   }, []);
   const contractOptions = Object.keys(CONTRACT_SUB_DIVISIONS);
+
+  // Link Tool Categories from database tables (customCategories / tbl_ToolCategories)
+  const availableCategories = useMemo(() => {
+    const list = [...(categories || [])];
+    if (list.length === 0) {
+      try {
+        const s = localStorage.getItem('emdad_custom_categories');
+        if (s) {
+          const parsed = JSON.parse(s);
+          if (Array.isArray(parsed) && parsed.length > 0) list.push(...parsed);
+        }
+      } catch {}
+    }
+    const defaults = [
+      'GAUGE RING',
+      'BIT SUB',
+      'CARGO BASKET',
+      'CROSSOVER SUB',
+      'CUTLIP GUIDE',
+      'DRILL PIPE',
+      'DRILLING JAR',
+      'FISHING JAR',
+      'GUNDRILL REAMER',
+      'HOLE OPENER',
+      'HYD DRILLING JAR',
+      'MOTOR',
+      'OVERSHOT',
+      'REDRESS KIT',
+      'ROLLER REAMER',
+      'SAFETY VALVE',
+      'STABILIZER',
+      'WHIPSTOCK',
+      'DOWNHOLE TOOLS',
+      'CONSUMABLES / SPARES',
+    ];
+    defaults.forEach((d) => {
+      if (!list.includes(d)) list.push(d);
+    });
+    return Array.from(new Set(list));
+  }, [categories]);
+
+  // Link Tool Sizes from database tables (customSizes / tbl_ToolSizes)
+  const availableSizes = useMemo(() => {
+    const list = [...(sizes || [])];
+    if (list.length === 0) {
+      try {
+        const s = localStorage.getItem('emdad_custom_sizes');
+        if (s) {
+          const parsed = JSON.parse(s);
+          if (Array.isArray(parsed) && parsed.length > 0) list.push(...parsed);
+        }
+      } catch {}
+    }
+    const defaults = [
+      '3-1/2"',
+      '4-3/4"',
+      '5-3/4"',
+      '5-7/8"',
+      '6"',
+      '6-1/2"',
+      '6-3/4"',
+      '8"',
+      '8-1/8"',
+      '8-1/2"',
+      '8-3/8"',
+      '8-5/16"',
+      '9-1/2"',
+      '11-3/4"',
+      '12-1/4"',
+      '14-3/4"',
+      '17-1/2"',
+      '26"',
+    ];
+    defaults.forEach((d) => {
+      if (!list.includes(d)) list.push(d);
+    });
+    return Array.from(new Set(list));
+  }, [sizes]);
 
   // =========================================================================
   // TAB 1: PO CREATION & REGISTER STATE
@@ -241,40 +324,44 @@ export const POManagementView: React.FC<POManagementViewProps> = ({
   // =========================================================================
   // TAB 2: MULTI-LINE GOODS RECEIPT NOTE (GRN) STATE ("Newreceipts")
   // =========================================================================
+  const [currentGrnIndex, setCurrentGrnIndex] = useState<number>(0);
+  const [selectedGrnRowIdx, setSelectedGrnRowIdx] = useState<number>(0);
+  const [searchGrtVal, setSearchGrtVal] = useState<string>('DN2023-0075');
+  const [isUpdateMode, setIsUpdateMode] = useState<boolean>(true);
+
   const [grnHeader, setGrnHeader] = useState({
-    ticketNo: `${Math.floor(200 + Math.random() * 800)}`,
-    supplier: supplierOptions[0] || 'EMDAD',
-    supplierDt: `DN-${Math.floor(10000 + Math.random() * 90000)}`,
-    poNumber: '',
-    dateRecd: new Date().toISOString().slice(0, 10),
-    mfgReceivedBy: user?.name || 'STORE INSPECTOR',
+    ticketNo: '230',
+    supplier: 'EMDAD',
+    supplierDt: 'DN-66057',
+    poNumber: '32175',
+    dateRecd: '2023-08-15',
+    mfgReceivedBy: 'NOOR ISLAM',
     currency: 'AED' as 'AED' | 'USD',
   });
 
-  const [grnRows, setGrnRows] = useState<GRNLineItem[]>([
-    {
-      lineId: `GRNL-${Date.now()}-1`,
-      partNo: 'RG-6-01',
-      description: '6" NO GO RING GAUGE',
-      category: 'GAUGE RING',
-      size: '6"',
-      toolsno: 'RG-6-01',
-      contractRef: '4700024608',
-      subDivision: 'FISHING',
-      qtyReceived: 1,
-      unitPrice: 12000,
-      bookValue: 12000,
-      currency: 'AED',
-      belongsTo: 'EMDAD',
-      reqInsp: false,
-      insDate: '',
-      classification: 'ASSET',
-      usefulLifeMonths: 60,
-      salvageValue: 0,
-      monthlyDepreciation: 200,
-      comments: '',
-    },
-  ]);
+  const [grnRows, setGrnRows] = useState<GRNLineItem[]>(() => {
+    const list = loadGoodsReceiptNotes();
+    if (list.length > 0) return list[0].lines;
+    return [];
+  });
+
+  // Sync with grnList when it loads or currentGrnIndex changes
+  useEffect(() => {
+    if (grnList.length > 0) {
+      const current = grnList[currentGrnIndex] || grnList[0];
+      setGrnHeader({
+        ticketNo: current.ticketNo,
+        supplier: current.supplier,
+        supplierDt: current.supplierDt,
+        poNumber: current.poNumber,
+        dateRecd: current.dateRecd,
+        mfgReceivedBy: current.mfgReceivedBy || 'NOOR ISLAM',
+        currency: current.currency,
+      });
+      setGrnRows(current.lines || []);
+      setSearchGrtVal(current.supplierDt || current.ticketNo);
+    }
+  }, [grnList, currentGrnIndex]);
 
   // Load lines from selected PO into GRN
   const handleSelectPOForGRN = (poNum: string) => {
@@ -301,12 +388,12 @@ export const POManagementView: React.FC<POManagementViewProps> = ({
           poLineId: l.lineId,
           partNo: l.partNo,
           description: l.description,
-          category: l.category,
-          size: l.size || '',
+          category: l.category || availableCategories[0] || 'GAUGE RING',
+          size: l.size || availableSizes[0] || '6"',
           toolsno: `${l.partNo || 'TL'}-${idx + 1}`,
           contractRef: l.contractRef || found.contractRef || '4700024608',
           subDivision: subDiv,
-          qtyReceived: l.balanceQty, // Default to remaining balance
+          qtyReceived: l.balanceQty,
           unitPrice: l.unitPrice,
           bookValue: bookVal,
           currency: found.currency,
@@ -321,7 +408,28 @@ export const POManagementView: React.FC<POManagementViewProps> = ({
         };
       });
 
-    setGrnRows(rows);
+    setGrnRows(rows.length > 0 ? rows : [
+      {
+        lineId: `GRNL-${Date.now()}-1`,
+        partNo: '',
+        description: '',
+        category: availableCategories[0] || 'GAUGE RING',
+        size: availableSizes[0] || '6"',
+        toolsno: '',
+        contractRef: found.contractRef || '4700024608',
+        subDivision: resolveContractSubDivision(found.contractRef) || 'FISHING',
+        qtyReceived: 1,
+        unitPrice: 0,
+        bookValue: 0,
+        currency: found.currency,
+        belongsTo: 'EMDAD',
+        reqInsp: false,
+        insDate: '',
+        classification: 'INVENTORY',
+        comments: '',
+      }
+    ]);
+    setSelectedGrnRowIdx(0);
     showToast?.(`Loaded ${rows.length} pending lines from PO ${found.poNumber}`, 'info');
   };
 
@@ -332,8 +440,8 @@ export const POManagementView: React.FC<POManagementViewProps> = ({
         lineId: `GRNL-${Date.now()}-${grnRows.length + 1}`,
         partNo: '',
         description: '',
-        category: 'GAUGE RING',
-        size: '',
+        category: availableCategories[0] || 'GAUGE RING',
+        size: availableSizes[0] || '6"',
         toolsno: '',
         contractRef: '4700024608',
         subDivision: 'FISHING',
@@ -343,15 +451,20 @@ export const POManagementView: React.FC<POManagementViewProps> = ({
         currency: grnHeader.currency,
         belongsTo: 'EMDAD',
         reqInsp: false,
+        insDate: '',
         classification: 'INVENTORY',
         comments: '',
       },
     ]);
+    setSelectedGrnRowIdx(grnRows.length);
   };
 
   const handleRemoveGrnRow = (idx: number) => {
     if (grnRows.length <= 1) return;
     setGrnRows(grnRows.filter((_, i) => i !== idx));
+    if (selectedGrnRowIdx >= grnRows.length - 1) {
+      setSelectedGrnRowIdx(Math.max(0, grnRows.length - 2));
+    }
   };
 
   const handleGrnRowChange = (index: number, field: string, val: any) => {
@@ -382,41 +495,183 @@ export const POManagementView: React.FC<POManagementViewProps> = ({
     });
   };
 
-  const handlePostGRN = () => {
+  const handleSearchGRT = () => {
+    const q = searchGrtVal.trim().toUpperCase();
+    const found = grnList.find(
+      (g) =>
+        (g.supplierDt || '').toUpperCase() === q ||
+        (g.ticketNo || '').toUpperCase() === q ||
+        (g.grnId || '').toUpperCase() === q
+    );
+    if (found) {
+      const idx = grnList.findIndex((g) => g.grnId === found.grnId);
+      if (idx >= 0) setCurrentGrnIndex(idx);
+      setGrnHeader({
+        ticketNo: found.ticketNo,
+        supplier: found.supplier,
+        supplierDt: found.supplierDt,
+        poNumber: found.poNumber,
+        dateRecd: found.dateRecd,
+        mfgReceivedBy: found.mfgReceivedBy || '',
+        currency: found.currency,
+      });
+      setGrnRows(found.lines || []);
+      setSelectedGrnRowIdx(0);
+      showToast?.(`Loaded Goods Receipt ${found.supplierDt || found.ticketNo}`, 'success');
+    } else {
+      showToast?.(`No Goods Receipt found matching "${searchGrtVal}".`, 'error');
+    }
+  };
+
+  const handlePrevGRN = () => {
+    if (grnList.length === 0) return;
+    const nextIdx = currentGrnIndex > 0 ? currentGrnIndex - 1 : grnList.length - 1;
+    setCurrentGrnIndex(nextIdx);
+    const target = grnList[nextIdx];
+    setGrnHeader({
+      ticketNo: target.ticketNo,
+      supplier: target.supplier,
+      supplierDt: target.supplierDt,
+      poNumber: target.poNumber,
+      dateRecd: target.dateRecd,
+      mfgReceivedBy: target.mfgReceivedBy || '',
+      currency: target.currency,
+    });
+    setGrnRows(target.lines || []);
+    setSearchGrtVal(target.supplierDt || target.ticketNo);
+    setSelectedGrnRowIdx(0);
+  };
+
+  const handleNextGRN = () => {
+    if (grnList.length === 0) return;
+    const nextIdx = currentGrnIndex < grnList.length - 1 ? currentGrnIndex + 1 : 0;
+    setCurrentGrnIndex(nextIdx);
+    const target = grnList[nextIdx];
+    setGrnHeader({
+      ticketNo: target.ticketNo,
+      supplier: target.supplier,
+      supplierDt: target.supplierDt,
+      poNumber: target.poNumber,
+      dateRecd: target.dateRecd,
+      mfgReceivedBy: target.mfgReceivedBy || '',
+      currency: target.currency,
+    });
+    setGrnRows(target.lines || []);
+    setSearchGrtVal(target.supplierDt || target.ticketNo);
+    setSelectedGrnRowIdx(0);
+  };
+
+  const handleLastGRN = () => {
+    if (grnList.length === 0) return;
+    const nextIdx = grnList.length - 1;
+    setCurrentGrnIndex(nextIdx);
+    const target = grnList[nextIdx];
+    setGrnHeader({
+      ticketNo: target.ticketNo,
+      supplier: target.supplier,
+      supplierDt: target.supplierDt,
+      poNumber: target.poNumber,
+      dateRecd: target.dateRecd,
+      mfgReceivedBy: target.mfgReceivedBy || '',
+      currency: target.currency,
+    });
+    setGrnRows(target.lines || []);
+    setSearchGrtVal(target.supplierDt || target.ticketNo);
+    setSelectedGrnRowIdx(0);
+  };
+
+  const handleNewRecord = () => {
+    const newTicket = String(Math.floor(200 + Math.random() * 800));
+    setGrnHeader({
+      ticketNo: newTicket,
+      supplier: supplierOptions[0] || 'EMDAD',
+      supplierDt: `DN-${Math.floor(10000 + Math.random() * 90000)}`,
+      poNumber: '',
+      dateRecd: new Date().toISOString().slice(0, 10),
+      mfgReceivedBy: user?.name || 'NOOR ISLAM',
+      currency: 'AED',
+    });
+    setGrnRows([
+      {
+        lineId: `GRNL-${Date.now()}-1`,
+        partNo: '',
+        description: '',
+        category: availableCategories[0] || 'GAUGE RING',
+        size: availableSizes[0] || '6"',
+        toolsno: '',
+        contractRef: '4700024608',
+        subDivision: 'FISHING',
+        qtyReceived: 1,
+        unitPrice: 0,
+        bookValue: 0,
+        currency: 'AED',
+        belongsTo: 'EMDAD',
+        reqInsp: false,
+        insDate: '',
+        classification: 'INVENTORY',
+        comments: '',
+      },
+    ]);
+    setSelectedGrnRowIdx(0);
+    showToast?.('Initialized new receipt record.', 'info');
+  };
+
+  const handleSaveOrUpdateGRN = () => {
     if (!isAdmin) {
-      showToast?.('Only Admin users have permission to post Goods Receipts.', 'error');
+      showToast?.('Only Admin users have permission to update or save Goods Receipts.', 'error');
       return;
     }
     if (!grnHeader.ticketNo.trim() || !grnHeader.supplierDt.trim()) {
-      showToast?.('Ticket No and Supplier Delivery Ticket / Note are required.', 'error');
+      showToast?.('Ticket No and Supplier DT are required.', 'error');
       return;
     }
-    if (grnRows.some((r) => !r.description.trim() || r.qtyReceived <= 0)) {
+    if (grnRows.length === 0 || grnRows.some((r) => !r.description.trim() || (r.qtyReceived || 0) <= 0)) {
       showToast?.('All rows must have a description and received quantity > 0.', 'error');
       return;
     }
 
-    const res = postGoodsReceiptNote({
-      ticketNo: grnHeader.ticketNo,
-      poNumber: grnHeader.poNumber || 'DIRECT-GRN',
-      supplier: grnHeader.supplier,
-      supplierDt: grnHeader.supplierDt,
-      dateRecd: grnHeader.dateRecd,
-      mfgReceivedBy: grnHeader.mfgReceivedBy,
-      currency: grnHeader.currency,
-      totalItemsReceived: grnRows.reduce((s, r) => s + r.qtyReceived, 0),
-      totalInwardValue: grnRows.reduce((s, r) => s + r.qtyReceived * r.bookValue, 0),
-      qcStatus: grnRows.some((r) => r.reqInsp) ? 'PENDING_INSPECTION' : 'ACCEPTED',
-      comments: `Posted by ${user?.name || 'Admin'}`,
-      lines: grnRows,
-    });
+    const totalQty = grnRows.reduce((s, r) => s + (Number(r.qtyReceived) || 0), 0);
+    const totalVal = grnRows.reduce((s, r) => s + (Number(r.bookValue || (r.qtyReceived * (r.unitPrice || 0))) || 0), 0);
 
-    if (res.success) {
-      showToast?.(res.message, 'success');
-      refreshData();
-      setActiveTab('grn-history');
+    const existingIdx = grnList.findIndex(
+      (g) => g.ticketNo === grnHeader.ticketNo || g.supplierDt === grnHeader.supplierDt
+    );
+
+    if (existingIdx >= 0) {
+      const updatedList = [...grnList];
+      updatedList[existingIdx] = {
+        ...updatedList[existingIdx],
+        ticketNo: grnHeader.ticketNo,
+        supplierDt: grnHeader.supplierDt,
+        dateRecd: grnHeader.dateRecd,
+        supplier: grnHeader.supplier,
+        poNumber: grnHeader.poNumber,
+        mfgReceivedBy: grnHeader.mfgReceivedBy,
+        currency: grnHeader.currency,
+        totalItemsReceived: totalQty,
+        totalInwardValue: totalVal,
+        lines: grnRows,
+      };
+      saveAllGoodsReceiptNotes(updatedList);
+      setGrnList(updatedList);
+      showToast?.(`Receipt Ticket #${grnHeader.ticketNo} updated successfully!`, 'success');
     } else {
-      showToast?.(res.message, 'error');
+      const res = postGoodsReceiptNote({
+        ticketNo: grnHeader.ticketNo,
+        supplierDt: grnHeader.supplierDt,
+        poNumber: grnHeader.poNumber || 'DIRECT-GRN',
+        supplier: grnHeader.supplier,
+        dateRecd: grnHeader.dateRecd,
+        mfgReceivedBy: grnHeader.mfgReceivedBy,
+        currency: grnHeader.currency,
+        lines: grnRows,
+      });
+      if (res.success) {
+        showToast?.(`Receipt Ticket #${grnHeader.ticketNo} created and registered in database!`, 'success');
+        refreshData();
+      } else {
+        showToast?.(res.message, 'error');
+      }
     }
   };
 
@@ -669,20 +924,19 @@ export const POManagementView: React.FC<POManagementViewProps> = ({
       {/* TAB 2: GOODS RECEIPT NOTE (GRN) MULTI-LINE INWARD ("Newreceipts") */}
       {/* ========================================================================= */}
       {activeTab === 'grn-inward' && (
-        <div className="bg-white rounded-b-xl rounded-tr-xl p-6 shadow-sm border border-slate-200 space-y-6">
-          {/* Header Panel (Replicating exact layout of "Newreceipts" screenshot) */}
-          <div className="bg-slate-50 border border-slate-300 rounded-xl p-5 shadow-inner">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
-              <h2 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2">
-                <span className="w-2.5 h-6 bg-indigo-600 rounded-full inline-block"></span>
-                Newreceipts Inward Voucher
+        <div className="bg-white rounded-b-xl rounded-tr-xl p-4 shadow-sm border border-slate-200 space-y-4">
+          {/* Top Form Header Container - Replicating Newreceipts in media_1792340689574_7db12f71.png */}
+          <div className="bg-[#d9e2ec] border border-[#94a3b8] rounded-md p-3 shadow-inner">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xl font-bold text-slate-800 tracking-tight">
+                Newreceipts
               </h2>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-500 uppercase">PO Reference:</span>
+                <span className="text-xs font-bold text-slate-600 uppercase">Select PO:</span>
                 <select
                   value={grnHeader.poNumber}
                   onChange={(e) => handleSelectPOForGRN(e.target.value)}
-                  className="px-3 py-1.5 border border-indigo-300 rounded-lg text-sm bg-white font-mono font-bold text-indigo-900 shadow-sm"
+                  className="px-2 py-0.5 border border-slate-400 rounded bg-white text-xs font-mono font-bold text-indigo-950 shadow-sm"
                 >
                   <option value="">-- Direct Goods Receipt (No PO) --</option>
                   {purchaseOrders
@@ -696,354 +950,463 @@ export const POManagementView: React.FC<POManagementViewProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-xs font-semibold text-slate-600">
-              <div>
-                <label className="block text-slate-500 mb-1">Ticket No</label>
-                <input
-                  type="text"
-                  value={grnHeader.ticketNo}
-                  disabled={!isAdmin}
-                  onChange={(e) => setGrnHeader({ ...grnHeader, ticketNo: e.target.value })}
-                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-mono font-bold text-slate-900 bg-white"
-                />
+            <div className="flex flex-wrap items-start justify-between gap-3 text-xs">
+              {/* Left Column Fields */}
+              <div className="space-y-1.5 min-w-[210px]">
+                <div className="flex items-center gap-2">
+                  <label className="w-20 font-semibold text-slate-700">Ticket No</label>
+                  <input
+                    type="text"
+                    value={grnHeader.ticketNo}
+                    disabled={!isAdmin}
+                    onChange={(e) => setGrnHeader({ ...grnHeader, ticketNo: e.target.value })}
+                    className="w-24 px-2 py-0.5 border border-slate-400 bg-white font-mono font-bold text-slate-900 shadow-sm"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="w-20 font-semibold text-slate-700">Supplier DT</label>
+                  <input
+                    type="text"
+                    value={grnHeader.supplierDt}
+                    disabled={!isAdmin}
+                    onChange={(e) => setGrnHeader({ ...grnHeader, supplierDt: e.target.value })}
+                    placeholder="DN-66057"
+                    className="w-24 px-2 py-0.5 border border-slate-400 bg-white font-mono text-slate-900 shadow-sm"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="w-20 font-semibold text-slate-700">Date Recd</label>
+                  <input
+                    type="text"
+                    value={grnHeader.dateRecd}
+                    disabled={!isAdmin}
+                    onChange={(e) => setGrnHeader({ ...grnHeader, dateRecd: e.target.value })}
+                    placeholder="8/15/2023"
+                    className="w-24 px-2 py-0.5 border border-slate-400 bg-white text-slate-900 shadow-sm font-medium"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-slate-500 mb-1">Supplier DT / DN</label>
-                <input
-                  type="text"
-                  value={grnHeader.supplierDt}
-                  disabled={!isAdmin}
-                  onChange={(e) => setGrnHeader({ ...grnHeader, supplierDt: e.target.value })}
-                  placeholder="DN-66057"
-                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-mono text-slate-900 bg-white"
-                />
+              {/* Middle Column Fields */}
+              <div className="space-y-1.5 min-w-[280px]">
+                <div className="flex items-center gap-2">
+                  <label className="w-16 font-semibold text-slate-700">Supplier</label>
+                  <select
+                    value={grnHeader.supplier}
+                    disabled={!isAdmin}
+                    onChange={(e) => setGrnHeader({ ...grnHeader, supplier: e.target.value })}
+                    className="w-52 px-2 py-0.5 border border-slate-400 bg-white text-slate-900 shadow-sm font-medium"
+                  >
+                    {supplierOptions.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="w-16 font-semibold text-slate-700">PO Num</label>
+                  <input
+                    type="text"
+                    value={grnHeader.poNumber}
+                    disabled={!isAdmin}
+                    onChange={(e) => setGrnHeader({ ...grnHeader, poNumber: e.target.value })}
+                    placeholder="32175"
+                    className="w-28 px-2 py-0.5 border border-slate-400 bg-white font-mono font-bold text-slate-900 shadow-sm"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="w-16 font-semibold text-slate-700">Mfg</label>
+                  <input
+                    type="text"
+                    value={grnHeader.mfgReceivedBy}
+                    disabled={!isAdmin}
+                    onChange={(e) => setGrnHeader({ ...grnHeader, mfgReceivedBy: e.target.value })}
+                    placeholder="NOOR ISLAM"
+                    className="w-48 px-2 py-0.5 border border-slate-400 bg-white text-slate-900 shadow-sm font-medium"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-slate-500 mb-1">Date Recd</label>
-                <input
-                  type="date"
-                  value={grnHeader.dateRecd}
-                  disabled={!isAdmin}
-                  onChange={(e) => setGrnHeader({ ...grnHeader, dateRecd: e.target.value })}
-                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-slate-900 bg-white font-medium"
-                />
+              {/* Controls & Search */}
+              <div className="space-y-2 min-w-[260px]">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="chkUpdateRecord"
+                    checked={isUpdateMode}
+                    onChange={(e) => setIsUpdateMode(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded-none border border-slate-400 bg-white cursor-pointer"
+                  />
+                  <button
+                    onClick={handleSaveOrUpdateGRN}
+                    className="px-3 py-1 bg-[#8fa4c4] hover:bg-[#7b93b5] text-slate-950 font-semibold text-xs rounded border border-[#6b82a3] shadow-sm cursor-pointer transition-colors"
+                  >
+                    Update Record
+                  </button>
+                  <button
+                    onClick={handleNewRecord}
+                    className="px-3 py-1 bg-[#8fa4c4] hover:bg-[#7b93b5] text-slate-950 font-semibold text-xs rounded border border-[#6b82a3] shadow-sm cursor-pointer transition-colors"
+                  >
+                    New Record
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5 pt-1">
+                  <span className="font-bold text-slate-800 whitespace-nowrap">Search GRT :</span>
+                  <input
+                    type="text"
+                    value={searchGrtVal}
+                    onChange={(e) => setSearchGrtVal(e.target.value)}
+                    placeholder="DN2023-0075"
+                    className="w-28 px-2 py-0.5 border border-slate-400 bg-white font-mono text-slate-900 shadow-sm"
+                  />
+                  <button
+                    onClick={handleSearchGRT}
+                    className="px-3 py-0.5 bg-[#558b2f] hover:bg-[#436d24] text-white font-bold text-xs rounded border border-[#33691e] shadow-sm cursor-pointer transition-colors"
+                  >
+                    Search
+                  </button>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-slate-500 mb-1">Supplier</label>
-                <select
-                  value={grnHeader.supplier}
-                  disabled={!isAdmin}
-                  onChange={(e) => setGrnHeader({ ...grnHeader, supplier: e.target.value })}
-                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-slate-900 bg-white font-medium"
+              {/* Right Stack Navigation: Prev, Next, Last */}
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={handlePrevGRN}
+                  className="w-20 py-0.5 px-2 bg-[#8fa4c4] hover:bg-[#7b93b5] text-slate-950 font-semibold text-xs rounded border border-[#6b82a3] shadow-sm text-center cursor-pointer transition-colors"
                 >
-                  {supplierOptions.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-500 mb-1">Mfg / Inspector</label>
-                <input
-                  type="text"
-                  value={grnHeader.mfgReceivedBy}
-                  disabled={!isAdmin}
-                  onChange={(e) => setGrnHeader({ ...grnHeader, mfgReceivedBy: e.target.value })}
-                  placeholder="NOOR ISLAM"
-                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-slate-900 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-500 mb-1">PO Currency</label>
-                <select
-                  value={grnHeader.currency}
-                  disabled={!isAdmin}
-                  onChange={(e) => setGrnHeader({ ...grnHeader, currency: e.target.value as 'AED' | 'USD' })}
-                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-bold text-slate-900 bg-white"
+                  Prev
+                </button>
+                <button
+                  onClick={handleNextGRN}
+                  className="w-20 py-0.5 px-2 bg-[#8fa4c4] hover:bg-[#7b93b5] text-slate-950 font-semibold text-xs rounded border border-[#6b82a3] shadow-sm text-center cursor-pointer transition-colors"
                 >
-                  <option value="AED">AED (UAE Dirham)</option>
-                  <option value="USD">USD (US Dollar)</option>
-                </select>
+                  Next
+                </button>
+                <button
+                  onClick={handleLastGRN}
+                  className="w-20 py-0.5 px-2 bg-[#8fa4c4] hover:bg-[#7b93b5] text-slate-950 font-semibold text-xs rounded border border-[#6b82a3] shadow-sm text-center cursor-pointer transition-colors"
+                >
+                  Last
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Grid matching exact user's screenshot layout */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                Inward Items Grid ({grnRows.length} lines)
-              </div>
-              {isAdmin && (
-                <button
-                  onClick={handleAddGrnRow}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  + Add Line Item
-                </button>
-              )}
-            </div>
+          {/* High-Density Spreadsheet Grid - Exact Replica of Access / Excel view */}
+          <div className="overflow-x-auto border border-slate-400 bg-white shadow-sm">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-[#546377] text-white font-bold border-b border-slate-400 select-none">
+                <tr className="divide-x divide-[#697a91]">
+                  <th className="w-6 p-1 text-center bg-[#475569]"></th>
+                  <th className="p-1 px-2 whitespace-nowrap">cat ▾</th>
+                  <th className="p-1 px-2 whitespace-nowrap">Size ▾</th>
+                  <th className="p-1 px-2 whitespace-nowrap">toolsno ▾</th>
+                  <th className="p-1 px-2 whitespace-nowrap min-w-[220px]">description ▾</th>
+                  <th className="p-1 px-2 whitespace-nowrap text-center">qtyin ▾</th>
+                  <th className="p-1 px-2 whitespace-nowrap">Belongs to ▾</th>
+                  <th className="p-1 px-2 whitespace-nowrap text-right">BOOKVALVE ▾</th>
+                  <th className="p-1 px-2 whitespace-nowrap text-center">Req_insp ▾</th>
+                  <th className="p-1 px-2 whitespace-nowrap">Asset / Inventory ▾</th>
+                  <th className="p-1 px-2 whitespace-nowrap">ins_date ▾</th>
+                  <th className="p-1 px-2 whitespace-nowrap">comments ▾</th>
+                  {isAdmin && <th className="p-1 text-center w-6"></th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-300 font-sans text-xs">
+                {grnRows.map((row, idx) => {
+                  const isSelected = selectedGrnRowIdx === idx;
+                  const rowBg = isSelected ? 'bg-[#bae6fd]' : 'bg-white hover:bg-slate-50';
 
-            <div className="overflow-x-auto border border-slate-300 rounded-xl shadow-sm">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-200/80 text-slate-800 font-bold border-b border-slate-300">
-                  <tr>
-                    <th className="p-2 whitespace-nowrap">Contract #</th>
-                    <th className="p-2 whitespace-nowrap">Sub-Division</th>
-                    <th className="p-2 whitespace-nowrap">cat</th>
-                    <th className="p-2 whitespace-nowrap">Size</th>
-                    <th className="p-2 whitespace-nowrap">toolsno</th>
-                    <th className="p-2 whitespace-nowrap">description</th>
-                    <th className="p-2 whitespace-nowrap text-center">qtyin</th>
-                    <th className="p-2 whitespace-nowrap">Belongs to</th>
-                    <th className="p-2 whitespace-nowrap text-right">BOOKVALUE ({grnHeader.currency})</th>
-                    <th className="p-2 whitespace-nowrap text-center">Req_insp</th>
-                    <th className="p-2 whitespace-nowrap">Classification</th>
-                    <th className="p-2 whitespace-nowrap">ins_date</th>
-                    <th className="p-2 whitespace-nowrap">comments</th>
-                    {isAdmin && <th className="p-2 text-center"></th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 bg-white">
-                  {grnRows.map((row, idx) => (
-                    <tr key={row.lineId} className="hover:bg-indigo-50/30 transition-colors">
-                      {/* Contract Dropdown */}
-                      <td className="p-1.5">
+                  return (
+                    <tr
+                      key={row.lineId || idx}
+                      onClick={() => setSelectedGrnRowIdx(idx)}
+                      className={`${rowBg} divide-x divide-slate-300 transition-colors cursor-pointer`}
+                    >
+                      {/* Row Selector Indicator (Black pointer ► on selected row) */}
+                      <td className="w-6 p-0 text-center font-bold text-slate-900 bg-slate-100/70 select-none">
+                        {isSelected ? '►' : ''}
+                      </td>
+
+                      {/* cat (Linked to database categories) */}
+                      <td className="p-0">
                         <select
-                          value={row.contractRef || ''}
-                          disabled={!isAdmin}
-                          onChange={(e) => handleGrnRowChange(idx, 'contractRef', e.target.value)}
-                          className="px-2 py-1 border border-slate-300 rounded text-xs font-mono font-bold bg-white"
-                        >
-                          {contractOptions.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
-                            </option>
-                          ))}
-                          <option value="GENERAL / BASE">GENERAL BASE</option>
-                        </select>
-                      </td>
-
-                      {/* Auto-derived Sub-Division */}
-                      <td className="p-1.5">
-                        <span className="font-bold text-slate-800 uppercase px-2 py-1 bg-slate-100 rounded border border-slate-200">
-                          {row.subDivision}
-                        </span>
-                      </td>
-
-                      {/* Category */}
-                      <td className="p-1.5">
-                        <input
-                          type="text"
                           value={row.category}
                           disabled={!isAdmin}
                           onChange={(e) => handleGrnRowChange(idx, 'category', e.target.value)}
-                          placeholder="GAUGE RING"
-                          className="w-24 px-2 py-1 border border-slate-300 rounded font-semibold text-slate-800"
-                        />
+                          className="w-full bg-transparent border-0 px-2 py-1 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                        >
+                          {availableCategories.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
                       </td>
 
-                      {/* Size */}
-                      <td className="p-1.5">
-                        <input
-                          type="text"
+                      {/* Size (Linked to database sizes) */}
+                      <td className="p-0">
+                        <select
                           value={row.size || ''}
                           disabled={!isAdmin}
                           onChange={(e) => handleGrnRowChange(idx, 'size', e.target.value)}
-                          placeholder="6&quot;"
-                          className="w-16 px-2 py-1 border border-slate-300 rounded font-mono"
-                        />
+                          className="w-full bg-transparent border-0 px-2 py-1 text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                        >
+                          <option value="">--</option>
+                          {availableSizes.map((sz) => (
+                            <option key={sz} value={sz}>
+                              {sz}
+                            </option>
+                          ))}
+                        </select>
                       </td>
 
-                      {/* toolsno (Serial #) */}
-                      <td className="p-1.5">
+                      {/* toolsno (Tool Serial Number) */}
+                      <td className="p-0">
                         <input
                           type="text"
                           value={row.toolsno || ''}
                           disabled={!isAdmin}
                           onChange={(e) => handleGrnRowChange(idx, 'toolsno', e.target.value)}
                           placeholder="RG-6-01"
-                          className="w-24 px-2 py-1 border border-slate-300 rounded font-mono font-bold text-indigo-900 bg-indigo-50/30"
+                          className="w-full bg-transparent border-0 px-2 py-1 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
                         />
                       </td>
 
-                      {/* Description */}
-                      <td className="p-1.5">
+                      {/* description */}
+                      <td className="p-0">
                         <input
                           type="text"
                           value={row.description}
                           disabled={!isAdmin}
                           onChange={(e) => handleGrnRowChange(idx, 'description', e.target.value)}
                           placeholder="6&quot; NO GO RING GAUGE"
-                          className="w-48 px-2 py-1 border border-slate-300 rounded font-medium text-slate-800"
+                          className="w-full bg-transparent border-0 px-2 py-1 text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
                         />
                       </td>
 
-                      {/* qtyin */}
-                      <td className="p-1.5 text-center">
+                      {/* qtyin (Numeric received) */}
+                      <td className="p-0 text-center">
                         <input
                           type="number"
-                          min="1"
+                          min="0"
                           value={row.qtyReceived}
                           disabled={!isAdmin}
                           onChange={(e) => handleGrnRowChange(idx, 'qtyReceived', parseInt(e.target.value) || 0)}
-                          className="w-12 px-2 py-1 border border-slate-300 rounded text-center font-bold"
+                          className="w-12 bg-transparent border-0 px-1 py-1 text-center text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600 mx-auto"
                         />
                       </td>
 
                       {/* Belongs to (Ownership) */}
-                      <td className="p-1.5">
+                      <td className="p-0">
                         <input
                           type="text"
-                          value={row.belongsTo}
+                          value={row.belongsTo || 'EMDAD'}
                           disabled={!isAdmin}
                           onChange={(e) => handleGrnRowChange(idx, 'belongsTo', e.target.value)}
-                          placeholder="EMDAD"
-                          className="w-20 px-2 py-1 border border-slate-300 rounded font-semibold"
+                          className="w-full bg-transparent border-0 px-2 py-1 text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
                         />
                       </td>
 
-                      {/* BOOKVALUE */}
-                      <td className="p-1.5 text-right">
+                      {/* BOOKVALVE */}
+                      <td className="p-0 text-right">
                         <input
-                          type="number"
-                          value={row.bookValue}
+                          type="text"
+                          value={`${grnHeader.currency}${Number(row.bookValue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                           disabled={!isAdmin}
-                          onChange={(e) => handleGrnRowChange(idx, 'bookValue', parseFloat(e.target.value) || 0)}
-                          className="w-24 px-2 py-1 border border-slate-300 rounded text-right font-mono font-bold"
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value.replace(/[^0-9.]/g, '')) || 0;
+                            handleGrnRowChange(idx, 'bookValue', val);
+                          }}
+                          className="w-full bg-transparent border-0 px-2 py-1 text-right text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
                         />
                       </td>
 
-                      {/* Req_insp Checkbox */}
-                      <td className="p-1.5 text-center">
-                        <input
-                          type="checkbox"
-                          checked={row.reqInsp}
-                          disabled={!isAdmin}
-                          onChange={(e) => handleGrnRowChange(idx, 'reqInsp', e.target.checked)}
-                          className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
-                        />
+                      {/* Req_insp (Centered Checkbox) */}
+                      <td className="p-0 text-center">
+                        <div className="flex items-center justify-center py-1">
+                          <input
+                            type="checkbox"
+                            checked={!!row.reqInsp}
+                            disabled={!isAdmin}
+                            onChange={(e) => handleGrnRowChange(idx, 'reqInsp', e.target.checked)}
+                            className="w-3.5 h-3.5 text-blue-600 rounded-none border border-slate-400 cursor-pointer"
+                          />
+                        </div>
                       </td>
 
-                      {/* Classification Dropdown */}
-                      <td className="p-1.5">
+                      {/* Asset / Inventory (3-Way Classification) */}
+                      <td className="p-0">
                         <select
                           value={row.classification}
                           disabled={!isAdmin}
                           onChange={(e) => handleGrnRowChange(idx, 'classification', e.target.value as ProcurementClassification)}
-                          className={`px-2 py-1 border rounded font-bold text-xs ${
-                            row.classification === 'ASSET'
-                              ? 'bg-amber-100 text-amber-900 border-amber-300'
-                              : row.classification === 'INVENTORY'
-                              ? 'bg-blue-100 text-blue-900 border-blue-300'
-                              : 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                          }`}
+                          className="w-full bg-transparent border-0 px-2 py-1 text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
                         >
-                          <option value="ASSET">ASSET (Depreciated)</option>
-                          <option value="INVENTORY">INVENTORY (Fleet)</option>
-                          <option value="CONSUMABLE">CONSUMABLE (Store)</option>
+                          <option value="ASSET">ASSET</option>
+                          <option value="INVENTORY">INVENTORY</option>
+                          <option value="CONSUMABLE">CONSUMABLE</option>
                         </select>
                       </td>
 
                       {/* ins_date */}
-                      <td className="p-1.5">
+                      <td className="p-0">
                         <input
-                          type="date"
+                          type="text"
                           value={row.insDate || ''}
                           disabled={!isAdmin}
                           onChange={(e) => handleGrnRowChange(idx, 'insDate', e.target.value)}
-                          className="w-28 px-1.5 py-1 border border-slate-300 rounded text-xs"
+                          placeholder="YYYY-MM-DD"
+                          className="w-full bg-transparent border-0 px-2 py-1 text-xs font-mono text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
                         />
                       </td>
 
                       {/* comments */}
-                      <td className="p-1.5">
+                      <td className="p-0">
                         <input
                           type="text"
                           value={row.comments || ''}
                           disabled={!isAdmin}
                           onChange={(e) => handleGrnRowChange(idx, 'comments', e.target.value)}
-                          placeholder="Heat #, Bay..."
-                          className="w-28 px-2 py-1 border border-slate-300 rounded"
+                          className="w-full bg-transparent border-0 px-2 py-1 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
                         />
                       </td>
 
                       {isAdmin && (
-                        <td className="p-1.5 text-center">
+                        <td className="p-1 text-center w-6 bg-white">
                           <button
-                            onClick={() => handleRemoveGrnRow(idx)}
-                            className="p-1 text-rose-500 hover:text-rose-700 cursor-pointer"
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              handleRemoveGrnRow(idx);
+                            }}
+                            className="text-slate-400 hover:text-rose-600 text-xs font-bold cursor-pointer"
+                            title="Delete Row"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            ✕
                           </button>
                         </td>
                       )}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  );
+                })}
+
+                {/* Bottom Entry / Summary Row with '*' */}
+                <tr className="bg-white divide-x divide-slate-300 font-bold border-t-2 border-slate-400">
+                  <td className="w-6 p-1 text-center text-slate-900 bg-slate-100 select-none font-mono">
+                    *
+                  </td>
+                  <td className="p-1 px-2 text-slate-400 font-normal italic">
+                    {isAdmin ? '+ Click + to add row' : ''}
+                  </td>
+                  <td className="p-1"></td>
+                  <td className="p-1"></td>
+                  <td className="p-1"></td>
+                  <td className="p-1 text-center font-mono text-xs text-slate-950 font-black">
+                    {grnRows.reduce((s, r) => s + (Number(r.qtyReceived) || 0), 0)}
+                  </td>
+                  <td className="p-1"></td>
+                  <td className="p-1 px-2 text-right font-mono text-xs text-slate-950 font-black">
+                    {grnHeader.currency}
+                    {grnRows
+                      .reduce((s, r) => s + (Number(r.bookValue) || 0), 0)
+                      .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td className="p-1 text-center">
+                    <input
+                      type="checkbox"
+                      disabled
+                      className="w-3.5 h-3.5 rounded-none border border-slate-300"
+                    />
+                  </td>
+                  <td className="p-1"></td>
+                  <td className="p-1"></td>
+                  <td className="p-1"></td>
+                  {isAdmin && (
+                    <td className="p-1 text-center">
+                      <button
+                        onClick={handleAddGrnRow}
+                        className="text-emerald-700 hover:text-emerald-900 font-black text-sm cursor-pointer"
+                        title="Add New Row"
+                      >
+                        +
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Bottom Record Navigation Bar & Summary Actions */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-slate-200">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+              <button
+                onClick={handleAddGrnRow}
+                disabled={!isAdmin}
+                className="flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded border border-slate-300 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Line Item
+              </button>
+
+              <span className="text-slate-400">|</span>
+
+              <span className="font-mono">
+                Record: {grnList.length > 0 ? `${currentGrnIndex + 1} of ${grnList.length}` : '1 of 1'}
+              </span>
             </div>
 
-            {/* Depreciation Summary for ASSET lines */}
-            {grnRows.some((r) => r.classification === 'ASSET') && (
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
-                <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
-                  <AlertCircle className="w-4 h-4 text-amber-600" />
-                  Asset Capitalization & Depreciation Allocation
-                </div>
-                <p className="text-xs text-amber-800">
-                  The items classified as <span className="font-bold">ASSET</span> will be added to the Fixed Asset register.
-                  Monthly straight-line depreciation will be automatically posted into that contract's linked Sub-Division column
-                  under <span className="font-bold">GL Cost Code 51105 Dep P&M</span> on the Sub-Division Monthly Expense Grid.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                  {grnRows
-                    .filter((r) => r.classification === 'ASSET')
-                    .map((asset, i) => (
-                      <div key={i} className="p-2.5 bg-white border border-amber-200 rounded-lg text-xs">
-                        <div className="font-bold text-slate-800 truncate">{asset.description || 'Asset'}</div>
-                        <div className="text-slate-500">Sub-Division: <span className="font-bold text-slate-800">{asset.subDivision}</span></div>
-                        <div className="text-slate-500">Book Value: <span className="font-mono font-bold text-slate-900">{grnHeader.currency} {asset.bookValue.toLocaleString()}</span></div>
-                        <div className="text-emerald-700 font-bold">
-                          Depreciation: {grnHeader.currency} {asset.monthlyDepreciation || 0}/mo (over {asset.usefulLifeMonths || 60} mos)
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
-
-            {/* Post Action */}
-            <div className="flex items-center justify-between pt-4 border-t border-slate-200">
-              <div className="text-sm font-semibold text-slate-600">
+            <div className="flex items-center gap-3">
+              <div className="text-xs font-semibold text-slate-600">
                 Total Inward Value:{' '}
-                <span className="font-mono font-bold text-indigo-900 text-base">
-                  {grnHeader.currency} {grnRows.reduce((s, r) => s + r.qtyReceived * r.bookValue, 0).toLocaleString()}
+                <span className="font-mono font-bold text-indigo-900 text-sm">
+                  {grnHeader.currency}{' '}
+                  {grnRows.reduce((s, r) => s + (Number(r.bookValue) || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
 
-              {isAdmin ? (
+              {isAdmin && (
                 <button
-                  onClick={handlePostGRN}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-900/20 cursor-pointer"
+                  onClick={handleSaveOrUpdateGRN}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg shadow-sm cursor-pointer transition-colors"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
-                  ✅ Confirm & Post Goods Receipt (GRN)
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Save / Post Receipt
                 </button>
-              ) : (
-                <span className="text-xs text-slate-400 font-semibold italic">
-                  Read-only view (Admin credentials required to post receipts).
-                </span>
               )}
             </div>
           </div>
+
+          {/* Depreciation Summary for ASSET lines */}
+          {grnRows.some((r) => r.classification === 'ASSET') && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2 text-xs">
+              <div className="flex items-center gap-2 text-amber-900 font-bold">
+                <AlertCircle className="w-4 h-4 text-amber-600" />
+                Fixed Asset Capitalization & Straight-Line Depreciation
+              </div>
+              <p className="text-amber-800">
+                Lines marked as <span className="font-bold">ASSET</span> are capitalized at book value.
+                Depreciation is charged straight-line over 60 months against the associated sub-division under <span className="font-bold">GL Cost Code 51105 Dep P&M</span>.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                {grnRows
+                  .filter((r) => r.classification === 'ASSET')
+                  .slice(0, 6)
+                  .map((asset, i) => (
+                    <div key={i} className="p-2 bg-white border border-amber-200 rounded text-xs">
+                      <div className="font-bold text-slate-800 truncate">{asset.description || 'Asset'}</div>
+                      <div className="text-slate-500">SN: <span className="font-mono font-bold text-slate-800">{asset.toolsno}</span></div>
+                      <div className="text-slate-500">Book Value: <span className="font-mono font-bold text-slate-900">{grnHeader.currency} {Number(asset.bookValue || 0).toLocaleString()}</span></div>
+                      <div className="text-emerald-700 font-semibold">
+                        Monthly Dep: {grnHeader.currency} {asset.monthlyDepreciation || Number(((asset.bookValue || 0) / 60).toFixed(2))}/mo
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1307,112 +1670,215 @@ export const POManagementView: React.FC<POManagementViewProps> = ({
               </div>
             </div>
 
-            {/* Line Items Grid */}
+            {/* Line Items Grid - Access/Excel Grid Styling */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
                   Line Items ({poLines.length})
                 </span>
                 <button
                   type="button"
                   onClick={handleAddPoLine}
-                  className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded cursor-pointer"
+                  className="flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded border border-slate-300 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Add Line
+                  + Add Line Item
                 </button>
               </div>
 
-              <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-60 overflow-y-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0">
-                    <tr>
-                      <th className="p-2">Part #</th>
-                      <th className="p-2">Description</th>
-                      <th className="p-2">Contract</th>
-                      <th className="p-2 text-center">Qty</th>
-                      <th className="p-2 text-right">Unit Price</th>
-                      <th className="p-2 text-right">Total</th>
-                      <th className="p-2">Type</th>
-                      <th className="p-2 text-center"></th>
+              <div className="overflow-x-auto border border-slate-400 rounded-sm shadow-sm max-h-72 overflow-y-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-[#546377] text-white font-bold sticky top-0 border-b border-slate-400 select-none">
+                    <tr className="divide-x divide-[#697a91]">
+                      <th className="w-6 p-1 text-center bg-[#475569]">#</th>
+                      <th className="p-1 px-2 whitespace-nowrap">cat ▾</th>
+                      <th className="p-1 px-2 whitespace-nowrap">Size ▾</th>
+                      <th className="p-1 px-2 whitespace-nowrap">Part # / toolsno ▾</th>
+                      <th className="p-1 px-2 whitespace-nowrap min-w-[180px]">description ▾</th>
+                      <th className="p-1 px-2 whitespace-nowrap">Contract # ▾</th>
+                      <th className="p-1 px-2 whitespace-nowrap text-center">qty ▾</th>
+                      <th className="p-1 px-2 whitespace-nowrap text-right">Unit Price ▾</th>
+                      <th className="p-1 px-2 whitespace-nowrap text-right">Total ({newPoHeader.currency}) ▾</th>
+                      <th className="p-1 px-2 whitespace-nowrap">Belongs to ▾</th>
+                      <th className="p-1 px-2 whitespace-nowrap">Classification ▾</th>
+                      <th className="p-1 text-center w-6"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-300 font-sans text-xs bg-white">
                     {poLines.map((line, idx) => (
-                      <tr key={idx}>
-                        <td className="p-1.5">
+                      <tr key={idx} className="hover:bg-slate-50 divide-x divide-slate-300">
+                        {/* Row # */}
+                        <td className="w-6 p-0 text-center font-bold text-slate-600 bg-slate-100/70 select-none">
+                          {idx + 1}
+                        </td>
+
+                        {/* Category Dropdown from DB */}
+                        <td className="p-0">
+                          <select
+                            value={line.category}
+                            onChange={(e) => handlePoLineChange(idx, 'category', e.target.value)}
+                            className="w-full bg-transparent border-0 px-2 py-1 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                          >
+                            {availableCategories.map((cat) => (
+                              <option key={cat} value={cat}>
+                                {cat}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+
+                        {/* Size Dropdown from DB */}
+                        <td className="p-0">
+                          <select
+                            value={line.size || ''}
+                            onChange={(e) => handlePoLineChange(idx, 'size', e.target.value)}
+                            className="w-full bg-transparent border-0 px-2 py-1 text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                          >
+                            <option value="">--</option>
+                            {availableSizes.map((sz) => (
+                              <option key={sz} value={sz}>
+                                {sz}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+
+                        {/* Part # / toolsno */}
+                        <td className="p-0">
                           <input
                             type="text"
                             value={line.partNo}
                             onChange={(e) => handlePoLineChange(idx, 'partNo', e.target.value)}
                             placeholder="Part #"
-                            className="w-24 px-2 py-1 border border-slate-300 rounded text-xs font-mono"
+                            className="w-full bg-transparent border-0 px-2 py-1 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
                           />
                         </td>
-                        <td className="p-1.5">
+
+                        {/* Description */}
+                        <td className="p-0">
                           <input
                             type="text"
                             value={line.description}
                             onChange={(e) => handlePoLineChange(idx, 'description', e.target.value)}
-                            placeholder="Full description"
-                            className="w-48 px-2 py-1 border border-slate-300 rounded text-xs font-medium"
+                            placeholder="Item description"
+                            className="w-full bg-transparent border-0 px-2 py-1 text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
                           />
                         </td>
-                        <td className="p-1.5">
+
+                        {/* Contract Ref */}
+                        <td className="p-0">
                           <select
                             value={line.contractRef || newPoHeader.contractRef}
                             onChange={(e) => handlePoLineChange(idx, 'contractRef', e.target.value)}
-                            className="w-28 px-1.5 py-1 border border-slate-300 rounded text-xs font-mono"
+                            className="w-full bg-transparent border-0 px-2 py-1 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
                           >
                             {contractOptions.map((c) => (
                               <option key={c} value={c}>
-                                {c}
+                                {c} ({CONTRACT_SUB_DIVISIONS[c]})
                               </option>
                             ))}
+                            <option value="GENERAL / BASE">GENERAL BASE</option>
                           </select>
                         </td>
-                        <td className="p-1.5 text-center">
+
+                        {/* Qty */}
+                        <td className="p-0 text-center">
                           <input
                             type="number"
                             min="1"
                             value={line.orderedQty}
                             onChange={(e) => handlePoLineChange(idx, 'orderedQty', parseFloat(e.target.value) || 0)}
-                            className="w-14 px-1.5 py-1 border border-slate-300 rounded text-center font-bold text-xs"
+                            className="w-12 bg-transparent border-0 px-1 py-1 text-center font-bold text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600 mx-auto"
                           />
                         </td>
-                        <td className="p-1.5 text-right">
+
+                        {/* Unit Price */}
+                        <td className="p-0 text-right">
                           <input
                             type="number"
                             value={line.unitPrice}
                             onChange={(e) => handlePoLineChange(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
-                            className="w-20 px-1.5 py-1 border border-slate-300 rounded text-right font-mono text-xs font-bold"
+                            className="w-20 bg-transparent border-0 px-2 py-1 text-right font-mono font-bold text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
                           />
                         </td>
-                        <td className="p-1.5 text-right font-mono font-bold text-slate-800">
-                          {newPoHeader.currency} {((line.orderedQty || 0) * (line.unitPrice || 0)).toLocaleString()}
+
+                        {/* Total */}
+                        <td className="p-0 px-2 text-right font-mono font-bold text-xs text-slate-900 bg-slate-50/50">
+                          {((line.orderedQty || 0) * (line.unitPrice || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td className="p-1.5">
+
+                        {/* Belongs to */}
+                        <td className="p-0">
+                          <input
+                            type="text"
+                            value={line.belongsTo || 'EMDAD'}
+                            onChange={(e) => handlePoLineChange(idx, 'belongsTo', e.target.value)}
+                            className="w-full bg-transparent border-0 px-2 py-1 text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                          />
+                        </td>
+
+                        {/* 3-Way Classification */}
+                        <td className="p-0">
                           <select
                             value={line.classification}
                             onChange={(e) => handlePoLineChange(idx, 'classification', e.target.value)}
-                            className="px-1.5 py-1 border border-slate-300 rounded text-xs font-semibold"
+                            className="w-full bg-transparent border-0 px-2 py-1 text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
                           >
                             <option value="ASSET">ASSET</option>
                             <option value="INVENTORY">INVENTORY</option>
                             <option value="CONSUMABLE">CONSUMABLE</option>
                           </select>
                         </td>
-                        <td className="p-1.5 text-center">
+
+                        {/* Remove Row */}
+                        <td className="p-1 text-center w-6 bg-white">
                           <button
                             type="button"
                             onClick={() => handleRemovePoLine(idx)}
-                            className="text-rose-500 hover:text-rose-700"
+                            className="text-slate-400 hover:text-rose-600 text-xs font-bold cursor-pointer"
+                            title="Remove Line"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            ✕
                           </button>
                         </td>
                       </tr>
                     ))}
+
+                    {/* Bottom Summary / * Row */}
+                    <tr className="bg-white divide-x divide-slate-300 font-bold border-t-2 border-slate-400">
+                      <td className="w-6 p-1 text-center text-slate-900 bg-slate-100 select-none font-mono">
+                        *
+                      </td>
+                      <td className="p-1 px-2 text-slate-400 font-normal italic">
+                        + Add item
+                      </td>
+                      <td className="p-1"></td>
+                      <td className="p-1"></td>
+                      <td className="p-1"></td>
+                      <td className="p-1"></td>
+                      <td className="p-1 text-center font-mono text-xs text-slate-950 font-black">
+                        {poLines.reduce((s, l) => s + (Number(l.orderedQty) || 0), 0)}
+                      </td>
+                      <td className="p-1"></td>
+                      <td className="p-1 px-2 text-right font-mono text-xs text-slate-950 font-black">
+                        {newPoHeader.currency}{' '}
+                        {poLines
+                          .reduce((s, l) => s + (l.orderedQty || 0) * (l.unitPrice || 0), 0)
+                          .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-1"></td>
+                      <td className="p-1"></td>
+                      <td className="p-1 text-center">
+                        <button
+                          type="button"
+                          onClick={handleAddPoLine}
+                          className="text-emerald-700 hover:text-emerald-900 font-black text-sm cursor-pointer"
+                          title="Add New Row"
+                        >
+                          +
+                        </button>
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
               </div>

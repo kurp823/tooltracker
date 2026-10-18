@@ -1568,11 +1568,14 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
         }));
       }
       case 'tool_categories': {
-        let cats = customCategories;
+        let cats: any[] = customCategories;
         if (!cats || cats.length === 0) {
           try {
             const s = localStorage.getItem('emdad_custom_categories');
-            if (s) cats = JSON.parse(s);
+            if (s) {
+              const parsed = JSON.parse(s);
+              if (Array.isArray(parsed)) cats = parsed;
+            }
           } catch {}
         }
         if (!cats || cats.length === 0) {
@@ -1583,31 +1586,41 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
             'STABILIZER', 'WHIPSTOCK',
           ];
         }
-        return cats.map((catName) => ({
-          categoryName: catName,
-          division: catName.includes('WHIPSTOCK') ? 'WHIPSTOCK' : catName.includes('JAR') ? 'FISHING' : 'RENTALS',
-          description: `Downhole ${catName} equipment`,
-          active: true,
-        }));
+        return cats.map((item) => {
+          const catName = typeof item === 'string' ? item : (item?.categoryName || item?.name || String(item || ''));
+          const upper = String(catName).toUpperCase();
+          const division = item?.division || (upper.includes('WHIPSTOCK') ? 'WHIPSTOCK' : upper.includes('JAR') ? 'FISHING' : 'RENTALS');
+          const description = item?.description || `Downhole ${catName} equipment`;
+          return {
+            categoryName: catName,
+            division,
+            description,
+            active: item?.active !== undefined ? item.active : true,
+          };
+        });
       }
       case 'tool_sizes': {
-        let szList = customSizes;
+        let szList: any[] = customSizes;
         if (!szList || szList.length === 0) {
           try {
             const s = localStorage.getItem('emdad_custom_sizes');
-            if (s) szList = JSON.parse(s);
+            if (s) {
+              const parsed = JSON.parse(s);
+              if (Array.isArray(parsed)) szList = parsed;
+            }
           } catch {}
         }
         if (!szList || szList.length === 0) {
           szList = ['3-1/2"', '4-3/4"', '5-3/4"', '6"', '6-1/2"', '6-3/4"', '8"', '8-1/8"', '8-1/2"', '9-1/2"', '11-3/4"', '12-1/4"', '17-1/2"', '26"'];
         }
-        return szList.map((sz) => {
-          const num = parseFloat(sz.replace(/[^0-9.]/g, '')) || 0;
+        return szList.map((item) => {
+          const sz = typeof item === 'string' ? item : (item?.sizeString || item?.name || item?.size || String(item || ''));
+          const num = typeof item?.odInches === 'number' ? item.odInches : (parseFloat(String(sz).replace(/[^0-9.]/g, '')) || 0);
           return {
             sizeString: sz,
-            category: 'ALL',
+            category: item?.category || 'ALL',
             odInches: num,
-            active: true,
+            active: item?.active !== undefined ? item.active : true,
           };
         });
       }
@@ -2817,12 +2830,12 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
         Object.values(records).forEach((rec) => saveMonthExpenseRecord(rec));
         window.dispatchEvent(new Event('monthly_expenses_updated'));
       } else if (selectedEntityKey === 'tool_categories') {
-        const cats = Array.from(new Set(updatedStateList.map((c) => c.categoryName || c.name || c.category).filter(Boolean))).sort() as string[];
+        const cats = Array.from(new Set(updatedStateList.map((c) => (typeof c === 'string' ? c : c?.categoryName || c?.name || c?.category)).filter(Boolean))).sort() as string[];
         localStorage.setItem('emdad_custom_categories', JSON.stringify(cats));
         if (onUpdateCustomCategories) onUpdateCustomCategories(cats);
         window.dispatchEvent(new Event('categories_updated'));
       } else if (selectedEntityKey === 'tool_sizes') {
-        const szs = Array.from(new Set(updatedStateList.map((s) => s.sizeString || s.name || s.size).filter(Boolean))) as string[];
+        const szs = Array.from(new Set(updatedStateList.map((s) => (typeof s === 'string' ? s : s?.sizeString || s?.name || s?.size)).filter(Boolean))) as string[];
         localStorage.setItem('emdad_custom_sizes', JSON.stringify(szs));
         if (onUpdateCustomSizes) onUpdateCustomSizes(szs);
         window.dispatchEvent(new Event('sizes_updated'));

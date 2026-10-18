@@ -403,14 +403,18 @@ export const App: React.FC = () => {
       const s = localStorage.getItem('emdad_custom_categories');
       if (s) {
         const parsed = JSON.parse(s);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed
+            .map((it: any) => (typeof it === 'string' ? it : (it?.categoryName || it?.name || it?.category || String(it || ''))))
+            .filter((x: string) => x && typeof x === 'string');
+        }
       }
     } catch {}
     return [
       'BIT SUB', 'CARGO BASKET', 'CROSSOVER SUB', 'CUTLIP GUIDE', 'DRILL PIPE',
-      'DRILLING JAR', 'FISHING JAR', 'GUNDRILL REAMER', 'HOLE OPENER',
-      'HYD DRILLING JAR', 'MOTOR', 'OVERSHOT', 'ROLLER REAMER', 'SAFETY VALVE',
-      'STABILIZER', 'WHIPSTOCK',
+      'DRILLING JAR', 'FISHING JAR', 'GAUGE RING', 'GUNDRILL REAMER', 'HOLE OPENER',
+      'HYD DRILLING JAR', 'MOTOR', 'OVERSHOT', 'REDRESS KIT', 'ROLLER REAMER',
+      'SAFETY VALVE', 'STABILIZER', 'WHIPSTOCK', 'DOWNHOLE TOOLS', 'CONSUMABLES / SPARES',
     ];
   });
 
@@ -419,10 +423,18 @@ export const App: React.FC = () => {
       const s = localStorage.getItem('emdad_custom_sizes');
       if (s) {
         const parsed = JSON.parse(s);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed
+            .map((it: any) => (typeof it === 'string' ? it : (it?.sizeString || it?.size || it?.name || String(it || ''))))
+            .filter((x: string) => x && typeof x === 'string');
+        }
       }
     } catch {}
-    return ['3-1/2"', '4-3/4"', '5-3/4"', '6"', '6-1/2"', '6-3/4"', '8"', '8-1/8"', '8-1/2"', '9-1/2"', '11-3/4"', '12-1/4"', '17-1/2"', '26"'];
+    return [
+      '3-1/2"', '4-3/4"', '5-3/4"', '5-7/8"', '6"', '6-1/2"', '6-3/4"',
+      '8"', '8-1/8"', '8-1/2"', '8-3/8"', '8-5/16"', '9-1/2"', '11-3/4"',
+      '12-1/4"', '14-3/4"', '17-1/2"', '26"',
+    ];
   });
 
   const handleUpdateCustomCategories = (cats: string[]) => {
@@ -2181,6 +2193,8 @@ export const App: React.FC = () => {
                 user={currentUser}
                 showToast={showToast}
                 onNavigate={(mod) => setActiveView(mod as ViewKey)}
+                categories={customCategories}
+                sizes={customSizes}
               />
             </React.Suspense>
           )}
@@ -2305,15 +2319,25 @@ export const App: React.FC = () => {
                   case 'tool_categories':
                     setCustomCategories((prev) => {
                       const updated = updater(prev);
-                      handleUpdateCustomCategories(updated);
-                      return updated;
+                      const stringList: string[] = Array.isArray(updated)
+                        ? updated
+                            .map((it: any) => (typeof it === 'string' ? it : (it?.categoryName || it?.name || it?.category || String(it || ''))))
+                            .filter((x: string) => x && typeof x === 'string')
+                        : [];
+                      handleUpdateCustomCategories(stringList);
+                      return stringList;
                     });
                     break;
                   case 'tool_sizes':
                     setCustomSizes((prev) => {
                       const updated = updater(prev);
-                      handleUpdateCustomSizes(updated);
-                      return updated;
+                      const stringList: string[] = Array.isArray(updated)
+                        ? updated
+                            .map((it: any) => (typeof it === 'string' ? it : (it?.sizeString || it?.size || it?.name || String(it || ''))))
+                            .filter((x: string) => x && typeof x === 'string')
+                        : [];
+                      handleUpdateCustomSizes(stringList);
+                      return stringList;
                     });
                     break;
                 }

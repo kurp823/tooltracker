@@ -17,18 +17,276 @@ const GRNS_STORAGE_KEY = 'emdad_goods_receipts';
 /**
  * Loads all purchase orders from localStorage.
  */
+const INITIAL_GOODS_RECEIPTS: GoodsReceiptNote[] = [
+  {
+    grnId: 'GRN-2023-0075',
+    ticketNo: '230',
+    supplierDt: 'DN-66057',
+    dateRecd: '2023-08-15',
+    supplier: 'EMDAD',
+    poNumber: '32175',
+    mfgReceivedBy: 'NOOR ISLAM',
+    currency: 'AED',
+    totalItemsReceived: 10,
+    totalInwardValue: 45100,
+    createdAt: '2023-08-15T08:30:00Z',
+    lines: [
+      {
+        lineId: 'GRNL-230-01',
+        partNo: 'RG-6-01',
+        description: '6" NO GO RING GAUGE',
+        category: 'GAUGE RING',
+        size: '6"',
+        toolsno: 'RG-6-01',
+        contractRef: '4700024608',
+        subDivision: 'FISHING',
+        qtyReceived: 1,
+        unitPrice: 12000,
+        bookValue: 12000,
+        currency: 'AED',
+        belongsTo: 'EMDAD',
+        reqInsp: false,
+        insDate: '',
+        classification: 'ASSET',
+        usefulLifeMonths: 60,
+        monthlyDepreciation: 200,
+        comments: '',
+      },
+      {
+        lineId: 'GRNL-230-02',
+        partNo: 'RG-6-02',
+        description: '6" NO GO RING GAUGE',
+        category: 'GAUGE RING',
+        size: '6"',
+        toolsno: 'RG-6-02',
+        contractRef: '4700024608',
+        subDivision: 'FISHING',
+        qtyReceived: 1,
+        unitPrice: 12000,
+        bookValue: 12000,
+        currency: 'AED',
+        belongsTo: 'EMDAD',
+        reqInsp: false,
+        insDate: '',
+        classification: 'ASSET',
+        usefulLifeMonths: 60,
+        monthlyDepreciation: 200,
+        comments: '',
+      },
+      {
+        lineId: 'GRNL-230-03',
+        partNo: 'RG-578-01',
+        description: '5-7/8" NO GO RING GAUGE',
+        category: 'GAUGE RING',
+        size: '5-7/8"',
+        toolsno: 'RG-578-01',
+        contractRef: '4700024608',
+        subDivision: 'FISHING',
+        qtyReceived: 1,
+        unitPrice: 5000,
+        bookValue: 5000,
+        currency: 'AED',
+        belongsTo: 'EMDAD',
+        reqInsp: false,
+        insDate: '',
+        classification: 'ASSET',
+        usefulLifeMonths: 60,
+        monthlyDepreciation: 83.33,
+        comments: '',
+      },
+      {
+        lineId: 'GRNL-230-04',
+        partNo: 'RG-578-02',
+        description: '5-7/8" NO GO RING GAUGE',
+        category: 'GAUGE RING',
+        size: '5-7/8"',
+        toolsno: 'RG-578-02',
+        contractRef: '4700024608',
+        subDivision: 'FISHING',
+        qtyReceived: 1,
+        unitPrice: 5000,
+        bookValue: 5000,
+        currency: 'AED',
+        belongsTo: 'EMDAD',
+        reqInsp: false,
+        insDate: '',
+        classification: 'ASSET',
+        usefulLifeMonths: 60,
+        monthlyDepreciation: 83.33,
+        comments: '',
+      },
+      {
+        lineId: 'GRNL-230-05',
+        partNo: 'RG-812-01',
+        description: '8-1/2" NO GO RING GAUGE',
+        category: 'GAUGE RING',
+        size: '8-1/2"',
+        toolsno: 'RG-812-01',
+        contractRef: '4700024608',
+        subDivision: 'FISHING',
+        qtyReceived: 1,
+        unitPrice: 200,
+        bookValue: 200,
+        currency: 'AED',
+        belongsTo: 'EMDAD',
+        reqInsp: false,
+        insDate: '',
+        classification: 'INVENTORY',
+        comments: '',
+      },
+      {
+        lineId: 'GRNL-230-06',
+        partNo: 'RG-838-01',
+        description: '8-3/8" NO GO RING GAUGE',
+        category: 'GAUGE RING',
+        size: '8-3/8"',
+        toolsno: 'RG-838-01',
+        contractRef: '4700024608',
+        subDivision: 'FISHING',
+        qtyReceived: 1,
+        unitPrice: 200,
+        bookValue: 200,
+        currency: 'AED',
+        belongsTo: 'EMDAD',
+        reqInsp: false,
+        insDate: '',
+        classification: 'INVENTORY',
+        comments: '',
+      },
+      {
+        lineId: 'GRNL-230-07',
+        partNo: 'RG-838-02',
+        description: '8-3/8" NO GO RING GAUGE',
+        category: 'GAUGE RING',
+        size: '8-3/8"',
+        toolsno: 'RG-838-02',
+        contractRef: '4700024608',
+        subDivision: 'FISHING',
+        qtyReceived: 1,
+        unitPrice: 200,
+        bookValue: 200,
+        currency: 'AED',
+        belongsTo: 'EMDAD',
+        reqInsp: false,
+        insDate: '',
+        classification: 'INVENTORY',
+        comments: '',
+      },
+      {
+        lineId: 'GRNL-230-08',
+        partNo: 'RG-8516-01',
+        description: '8-5/16" NO GO RING GAUGE',
+        category: 'GAUGE RING',
+        size: '8-5/16"',
+        toolsno: 'RG-8516-01',
+        contractRef: '4700024608',
+        subDivision: 'FISHING',
+        qtyReceived: 1,
+        unitPrice: 200,
+        bookValue: 200,
+        currency: 'AED',
+        belongsTo: 'EMDAD',
+        reqInsp: false,
+        insDate: '',
+        classification: 'INVENTORY',
+        comments: '',
+      },
+      {
+        lineId: 'GRNL-230-09',
+        partNo: 'RG-8516-02',
+        description: '8-5/16" NO GO RING GAUGE',
+        category: 'GAUGE RING',
+        size: '8-5/16"',
+        toolsno: 'RG-8516-02',
+        contractRef: '4700024608',
+        subDivision: 'FISHING',
+        qtyReceived: 1,
+        unitPrice: 200,
+        bookValue: 200,
+        currency: 'AED',
+        belongsTo: 'EMDAD',
+        reqInsp: false,
+        insDate: '',
+        classification: 'INVENTORY',
+        comments: '',
+      },
+      {
+        lineId: 'GRNL-230-10',
+        partNo: 'RG-1434-01',
+        description: '14-3/4" NO GO RING GAUGE',
+        category: 'GAUGE RING',
+        size: '14-3/4"',
+        toolsno: 'RG-1434-01',
+        contractRef: '4700024608',
+        subDivision: 'FISHING',
+        qtyReceived: 1,
+        unitPrice: 7500,
+        bookValue: 7500,
+        currency: 'AED',
+        belongsTo: 'EMDAD',
+        reqInsp: false,
+        insDate: '',
+        classification: 'ASSET',
+        usefulLifeMonths: 60,
+        monthlyDepreciation: 125,
+        comments: '',
+      },
+    ],
+  },
+];
+
+const INITIAL_PURCHASE_ORDERS: PurchaseOrder[] = [
+  {
+    poId: 'PO-32175',
+    poNumber: '32175',
+    supplier: 'EMDAD',
+    orderDate: '2023-08-01',
+    expectedDeliveryDate: '2023-08-15',
+    currency: 'AED',
+    contractRef: '4700024608',
+    subDivision: 'FISHING',
+    notes: 'Downhole Ring Gauges Procurement for ADNOC Fishing Contract 4700024608',
+    totalAmount: 45100,
+    inwardedAmount: 45100,
+    balanceAmount: 0,
+    status: 'FULFILLED',
+    createdBy: 'NOOR ISLAM',
+    createdAt: '2023-08-01T09:00:00Z',
+    lines: INITIAL_GOODS_RECEIPTS[0].lines.map((l, idx) => ({
+      lineId: `POL-32175-${idx + 1}`,
+      itemNo: idx + 1,
+      partNo: l.partNo,
+      description: l.description,
+      category: l.category,
+      size: l.size,
+      contractRef: l.contractRef,
+      subDivision: l.subDivision,
+      orderedQty: l.qtyReceived,
+      receivedQty: l.qtyReceived,
+      balanceQty: 0,
+      unitPrice: l.unitPrice,
+      totalPrice: l.qtyReceived * l.unitPrice,
+      classification: l.classification,
+      belongsTo: l.belongsTo,
+    })),
+  },
+];
+
+/**
+ * Loads all purchase orders from localStorage.
+ */
 export function loadPurchaseOrders(): PurchaseOrder[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') return INITIAL_PURCHASE_ORDERS;
   try {
     const raw = localStorage.getItem(POS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch (e) {
     console.warn('[POManagementService] Failed to load POs:', e);
   }
-  return [];
+  return INITIAL_PURCHASE_ORDERS;
 }
 
 /**
@@ -48,17 +306,17 @@ export function saveAllPurchaseOrders(pos: PurchaseOrder[]): void {
  * Loads all Goods Receipt Notes (GRNs) from localStorage.
  */
 export function loadGoodsReceiptNotes(): GoodsReceiptNote[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') return INITIAL_GOODS_RECEIPTS;
   try {
     const raw = localStorage.getItem(GRNS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch (e) {
     console.warn('[POManagementService] Failed to load GRNs:', e);
   }
-  return [];
+  return INITIAL_GOODS_RECEIPTS;
 }
 
 /**
