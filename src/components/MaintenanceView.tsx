@@ -1,6 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { MaintenanceRecord, ToolItem, User } from '../types';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
+import {
+  getConsumablesList,
+  issueConsumableItem,
+  generateSivPrintHtml,
+} from '../services/consumablesService';
+import { SearchableConsumableSelect } from './SearchableConsumableSelect';
+import { openPrintWindow } from '../services/ticketPrintService';
 
 interface MaintenanceViewProps {
   user?: User | null;
@@ -56,6 +63,71 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   const [dispatchModalRecord, setDispatchModalRecord] = useState<MaintenanceRecord | null>(null);
   const [receiveModalRecord, setReceiveModalRecord] = useState<MaintenanceRecord | null>(null);
   const [completeModalRecord, setCompleteModalRecord] = useState<MaintenanceRecord | null>(null);
+  const [redressModalRecord, setRedressModalRecord] = useState<MaintenanceRecord | null>(null);
+  const [redressPartNo, setRedressPartNo] = useState('');
+  const [redressQty, setRedressQty] = useState<number>(1);
+  const [redressRemarks, setRedressRemarks] = useState('');
+  const consumablesList = useMemo(() => getConsumablesList(), [redressModalRecord]);
+
+  const openRedressModal = (m: MaintenanceRecord) => {
+    setRedressModalRecord(m);
+    setRedressQty(1);
+    setRedressRemarks(`Maintenance redress for ${m.shortDesc || m.serial}`);
+    const items = getConsumablesList();
+    const matching = items.find((i) => i.category === 'Redress Kit');
+    setRedressPartNo(matching ? matching.partNo : items[0]?.partNo || '');
+  };
+
+  const handleIssueRedressSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!redressModalRecord || !redressPartNo) return;
+    const items = getConsumablesList();
+    const item = items.find((i) => i.partNo === redressPartNo);
+    if (!item) return;
+
+    if (item.currentStock < redressQty) {
+      alert(`Insufficient stock! Available: ${item.currentStock} ${item.unit}. Negative inventory is not permitted.`);
+      return;
+    }
+
+    const linkedJobId = (redressModalRecord as any).jobId || (redressModalRecord as any).jobNumber || 'Workshop Base';
+    const result = issueConsumableItem({
+      issueDate: new Date().toISOString().split('T')[0],
+      partNo: item.partNo,
+      description: item.description,
+      qtyIssued: Number(redressQty),
+      unitCostAED: item.unitCostAED,
+      destinationType: 'TOOL_REDRESS',
+      toolSerialNo: redressModalRecord.serial,
+      jobId: linkedJobId,
+      subDivision: 'RENTALS',
+      requestedBy: user?.name || redressModalRecord.assignedTo || 'Technician',
+      issuedBy: user?.name || 'Storekeeper',
+      remarks: redressRemarks,
+    });
+
+    if (result.success) {
+      const addedPart = `${item.partNo} (x${redressQty})`;
+      const updatedParts = redressModalRecord.partsReplaced
+        ? `${redressModalRecord.partsReplaced}, ${addedPart}`
+        : addedPart;
+      const totalCost = Number((item.unitCostAED * redressQty).toFixed(2));
+      const updatedCost = (redressModalRecord.actualCost || redressModalRecord.cost || 0) + totalCost;
+
+      const updatedRecord: MaintenanceRecord = {
+        ...redressModalRecord,
+        partsReplaced: updatedParts,
+        actualCost: updatedCost,
+        cost: updatedCost,
+      };
+
+      onSaveMaintenance(updatedRecord);
+      setRedressModalRecord(null);
+      alert(`Issued Redress Kit ${item.partNo} (SIV: ${result.sivNumber}). Material cost AED ${totalCost.toLocaleString()} posted to Tool Order.`);
+    } else {
+      alert(result.message);
+    }
+  };
 
   // New Mnt Form
   const [selectedToolId, setSelectedToolId] = useState('');
@@ -539,6 +611,15 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                                 </button>
                               )}
 
+                              {/* Issue Redress Kit / Consumables */}
+                              <button
+                                onClick={() => openRedressModal(m)}
+                                className="px-2 py-1 rounded bg-teal-600 hover:bg-teal-700 text-white font-bold text-[10px] shadow-xs cursor-pointer flex items-center gap-1"
+                                title="Issue Redress Kit & Consumables directly to this Tool WO"
+                              >
+                                <span>🧴</span> Redress Kit
+                              </button>
+
                               {/* Complete WO */}
                               <button
                                 onClick={() => openCompleteModal(m)}
@@ -1016,6 +1097,117 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                   className="px-4 py-1.5 rounded bg-emerald-700 text-white font-bold hover:bg-emerald-800 shadow-xs cursor-pointer"
                 >
                   Finalize &amp; Close WO
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Issue Redress Kit / Consumables to Maintenance Order */}
+      {redressModalRecord && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-xl w-full border border-slate-300 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-teal-800 text-white px-4 py-3 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-sm flex items-center gap-2">
+                  <span>🧴</span> Issue Redress Kit &amp; Workshop Consumables
+                </h3>
+                <div className="text-[11px] text-teal-200 font-mono">
+                  WO: {redressModalRecord.woNumber} | Tool Serial: {redressModalRecord.serial} ({redressModalRecord.shortDesc})
+                </div>
+              </div>
+              <button
+                onClick={() => setRedressModalRecord(null)}
+                className="text-teal-200 hover:text-white font-bold text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleIssueRedressSubmit} className="p-4 space-y-4">
+              <div className="p-3 bg-teal-50 border border-teal-200 rounded text-xs text-teal-900 leading-relaxed">
+                <strong>Direct Tool Allocation:</strong> Issuing this redress kit will deduct the item from warehouse stock (generating an SIV), add the part to this Work Order’s replaced parts, and post the material cost directly to this tool’s maintenance ledger.
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Select Redress Kit / Consumable SKU <span className="text-red-500">*</span>
+                </label>
+                <SearchableConsumableSelect
+                  items={consumablesList}
+                  value={redressPartNo}
+                  onChange={(val) => setRedressPartNo(val)}
+                  placeholder="Search redress kit, seal kit, o-ring, spare by part# or description..."
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Quantity to Issue <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={redressQty}
+                    onChange={(e) => setRedressQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none font-bold text-sm"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Est. Unit Cost (AED)
+                  </label>
+                  <div className="w-full border border-slate-200 bg-slate-50 rounded px-2.5 py-1.5 font-mono text-sm text-slate-700 font-semibold">
+                    {(() => {
+                      const item = consumablesList.find((i) => i.partNo === redressPartNo);
+                      return item ? `AED ${item.unitCostAED.toLocaleString()} / ${item.unit}` : '—';
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {(() => {
+                const item = consumablesList.find((i) => i.partNo === redressPartNo);
+                const total = item ? item.unitCostAED * redressQty : 0;
+                return (
+                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded flex justify-between items-center text-xs">
+                    <span className="text-slate-600 font-medium">Total Redress Material Cost:</span>
+                    <span className="text-sm font-bold font-mono text-teal-800">
+                      AED {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                );
+              })()}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Technician Remarks / Serial Notes
+                </label>
+                <textarea
+                  value={redressRemarks}
+                  onChange={(e) => setRedressRemarks(e.target.value)}
+                  rows={2}
+                  placeholder="e.g. Standard redress after 120 rotating hours on Rig ND-19..."
+                  className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none text-xs"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-slate-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRedressModalRecord(null)}
+                  className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 cursor-pointer text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded bg-teal-700 text-white font-bold hover:bg-teal-800 shadow-xs cursor-pointer text-xs flex items-center gap-1.5"
+                >
+                  <span>🧴</span> Confirm &amp; Issue to Tool
                 </button>
               </div>
             </form>

@@ -3,6 +3,45 @@ import { ConsumableItem, ConsumableReceipt, ConsumableIssuance, SubDivision } fr
 const SKUS_KEY = 'emdad_consumable_skus';
 const RECEIPTS_KEY = 'emdad_consumable_receipts';
 const ISSUANCES_KEY = 'emdad_consumable_issuances';
+const CATEGORIES_KEY = 'emdad_consumable_categories';
+
+export const DEFAULT_CONSUMABLE_CATEGORIES: string[] = [
+  'Redress Kit',
+  'Paint & Coatings',
+  'Spare Parts',
+  'Lubricants & Oils',
+  'HSE & Safety',
+  'Seals & O-Rings',
+];
+
+export function getConsumableCategories(): string[] {
+  try {
+    const raw = localStorage.getItem(CATEGORIES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {}
+  return DEFAULT_CONSUMABLE_CATEGORIES;
+}
+
+export function saveConsumableCategories(categories: string[]): void {
+  try {
+    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+    window.dispatchEvent(new Event('consumables_updated'));
+  } catch (e) {}
+}
+
+export function addConsumableCategory(cat: string): string[] {
+  const trimmed = cat.trim();
+  if (!trimmed) return getConsumableCategories();
+  const current = getConsumableCategories();
+  if (!current.includes(trimmed)) {
+    current.push(trimmed);
+    saveConsumableCategories(current);
+  }
+  return current;
+}
 
 export const INITIAL_CONSUMABLES: ConsumableItem[] = [
   {

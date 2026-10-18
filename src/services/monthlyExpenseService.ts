@@ -3,105 +3,147 @@ import { calculateSubContractorTotals } from './subContractorRentalService';
 
 const STORAGE_KEY = 'emdad_monthly_expenses';
 
-// Standard Cost Codes based on user's Financial Structure
+// Standard Cost Codes based on user's exact Financial Structure Master Sheet
 export const STANDARD_COST_CODES: Omit<MonthlyExpenseRow, 'fishing' | 'whipstock' | 'rentals' | 'total'>[] = [
   {
-    code: 'CC-101',
-    name: 'Direct Salary & Allowances',
+    code: 'CC-01',
+    name: 'Cost of Materials',
+    category: 'DIRECT',
+    sourceType: 'CONSUMABLES_AUTO',
+  },
+  {
+    code: 'CC-02',
+    name: 'Cost of Service',
     category: 'DIRECT',
     sourceType: 'MANUAL_ADMIN',
   },
   {
-    code: 'CC-102',
-    name: 'Leave & EOSB Provision',
+    code: 'CC-03',
+    name: 'Direct - Salary and allowances',
     category: 'DIRECT',
     sourceType: 'MANUAL_ADMIN',
   },
   {
-    code: 'CC-103',
-    name: 'Lease Rental-Equipment',
+    code: 'CC-04',
+    name: 'Direct - OverTime',
     category: 'DIRECT',
-    sourceType: 'SUB_RENTAL_AUTO',
-  },
-  {
-    code: 'CC-104',
-    name: 'Lease Rental-HV',
-    category: 'OVERHEAD',
     sourceType: 'MANUAL_ADMIN',
   },
   {
-    code: 'CC-105',
-    name: 'Lease Rental-LPV',
-    category: 'OVERHEAD',
+    code: 'CC-05',
+    name: 'Rig Bonus',
+    category: 'DIRECT',
     sourceType: 'MANUAL_ADMIN',
   },
   {
-    code: 'CC-106',
+    code: 'CC-06',
     name: 'Repair And Maintenance',
     category: 'OVERHEAD',
     sourceType: 'MANUAL_ADMIN',
   },
   {
-    code: 'CC-107',
+    code: 'CC-07',
     name: 'R&M - Prior Period Accrual True-Up',
     category: 'OVERHEAD',
     sourceType: 'TRUE_UP',
   },
   {
-    code: 'CC-108',
-    name: 'Consumables & Store Materials',
-    category: 'DIRECT',
-    sourceType: 'CONSUMABLES_AUTO',
-  },
-  {
-    code: 'CC-109',
-    name: 'Inspection & Testing Charges',
+    code: 'CC-08',
+    name: 'Lease Rental-LPV',
     category: 'OVERHEAD',
     sourceType: 'MANUAL_ADMIN',
   },
   {
-    code: 'CC-110',
-    name: 'Machining & Redress Charges',
+    code: 'CC-09',
+    name: 'Lease Rental-HV',
     category: 'OVERHEAD',
     sourceType: 'MANUAL_ADMIN',
   },
   {
-    code: 'CC-111',
-    name: 'Freight & Transportation',
+    code: 'CC-10',
+    name: 'Lease Rental-Eqiupment',
+    category: 'DIRECT',
+    sourceType: 'SUB_RENTAL_AUTO',
+  },
+  {
+    code: 'CC-11',
+    name: 'HSE Expances',
+    category: 'OVERHEAD',
+    sourceType: 'MANUAL_ADMIN',
+  },
+  {
+    code: 'CC-12',
+    name: 'Freight & Courier Exp',
     category: 'DIRECT',
     sourceType: 'MANUAL_ADMIN',
   },
   {
-    code: 'CC-112',
-    name: 'Depreciation - Plant & Machinery (P&M)',
+    code: 'CC-13',
+    name: 'Machining/Calibration',
+    category: 'OVERHEAD',
+    sourceType: 'MANUAL_ADMIN',
+  },
+  {
+    code: 'CC-14',
+    name: 'Inspection/Testing',
+    category: 'OVERHEAD',
+    sourceType: 'MANUAL_ADMIN',
+  },
+  {
+    code: 'CC-15',
+    name: 'Dep P&M',
     category: 'DEPRECIATION',
     sourceType: 'DEPRECIATION_AUTO',
     sector: 'P&M',
     usefulLifeMonths: 60,
   },
   {
-    code: 'CC-113',
-    name: 'Depreciation - Operational Vehicles',
+    code: 'CC-16',
+    name: 'Dep Vehicles',
     category: 'DEPRECIATION',
     sourceType: 'DEPRECIATION_AUTO',
     sector: 'Vehicles',
     usefulLifeMonths: 48,
   },
   {
-    code: 'CC-114',
-    name: 'Depreciation - Computers & Printers',
+    code: 'CC-17',
+    name: 'Dep Comp & Printers',
     category: 'DEPRECIATION',
     sourceType: 'DEPRECIATION_AUTO',
     sector: 'Comp & Printers',
     usefulLifeMonths: 36,
   },
   {
-    code: 'CC-115',
-    name: 'Depreciation - IP Rights & Software',
+    code: 'CC-18',
+    name: 'Dep Intellectual Property Rights',
     category: 'DEPRECIATION',
     sourceType: 'DEPRECIATION_AUTO',
     sector: 'IP Rights',
     usefulLifeMonths: 60,
+  },
+  {
+    code: 'CC-19',
+    name: 'Office/Wareshouse/Accomodation Space Rental',
+    category: 'OVERHEAD',
+    sourceType: 'MANUAL_ADMIN',
+  },
+  {
+    code: 'CC-20',
+    name: 'Communication Expenses',
+    category: 'OVERHEAD',
+    sourceType: 'MANUAL_ADMIN',
+  },
+  {
+    code: 'CC-21',
+    name: 'Vehicle Petrol',
+    category: 'OVERHEAD',
+    sourceType: 'MANUAL_ADMIN',
+  },
+  {
+    code: 'CC-22',
+    name: 'Office Exp',
+    category: 'OVERHEAD',
+    sourceType: 'MANUAL_ADMIN',
   },
 ];
 
@@ -118,142 +160,67 @@ export const FROZEN_SEP_2026: MonthlyExpenseRecord = {
   totalWhipstock: 2541915,
   totalRentals: 11186716,
   grandTotal: 26712811,
-  rows: [
-    {
-      code: 'CC-101',
-      name: 'Direct Salary & Allowances',
-      category: 'DIRECT',
-      sourceType: 'MANUAL_ADMIN',
-      fishing: 4399504,
-      whipstock: 0,
-      rentals: 180000,
-      total: 4579504,
+  rows: STANDARD_COST_CODES.map((base) => {
+    let fishing = 0;
+    let whipstock = 0;
+    let rentals = 0;
+
+    if (base.code === 'CC-03') { // Direct - Salary and allowances
+      fishing = 4399504;
+      whipstock = 0;
+      rentals = 180000;
+    } else if (base.code === 'CC-04') { // Direct - OverTime
+      fishing = 366625;
+      whipstock = 0;
+      rentals = 15000;
+    } else if (base.code === 'CC-10') { // Lease Rental-Eqiupment
+      fishing = 5651723;
+      whipstock = 2285915;
+      rentals = 7955172;
+    } else if (base.code === 'CC-09') { // Lease Rental-HV
+      fishing = 145000;
+      whipstock = 25000;
+      rentals = 85000;
+    } else if (base.code === 'CC-08') { // Lease Rental-LPV
+      fishing = 65000;
+      whipstock = 12000;
+      rentals = 42000;
+    } else if (base.code === 'CC-06') { // Repair And Maintenance
+      fishing = 342019;
+      whipstock = 45000;
+      rentals = 187592;
+    } else if (base.code === 'CC-01') { // Cost of Materials
+      fishing = 85000;
+      whipstock = 14000;
+      rentals = 62000;
+    } else if (base.code === 'CC-14') { // Inspection/Testing
+      fishing = 78000;
+      whipstock = 0;
+      rentals = 52000;
+    } else if (base.code === 'CC-13') { // Machining/Calibration
+      fishing = 52000;
+      whipstock = 7445;
+      rentals = 18000;
+    } else if (base.code === 'CC-12') { // Freight & Courier Exp
+      fishing = 15000;
+      whipstock = 0;
+      rentals = 8000;
+    } else if (base.code === 'CC-15') { // Dep P&M
+      fishing = 1784309;
+      whipstock = 152555;
+      rentals = 2571952;
+    }
+
+    const total = fishing + whipstock + rentals;
+    return {
+      ...base,
+      fishing,
+      whipstock,
+      rentals,
+      total,
       isLocked: true,
-    },
-    {
-      code: 'CC-102',
-      name: 'Leave & EOSB Provision',
-      category: 'DIRECT',
-      sourceType: 'MANUAL_ADMIN',
-      fishing: 366625,
-      whipstock: 0,
-      rentals: 15000,
-      total: 381625,
-      isLocked: true,
-    },
-    {
-      code: 'CC-103',
-      name: 'Lease Rental-Equipment',
-      category: 'DIRECT',
-      sourceType: 'SUB_RENTAL_AUTO',
-      fishing: 5651723,
-      whipstock: 2285915,
-      rentals: 7955172,
-      total: 15892810,
-      isLocked: true,
-    },
-    {
-      code: 'CC-104',
-      name: 'Lease Rental-HV',
-      category: 'OVERHEAD',
-      sourceType: 'MANUAL_ADMIN',
-      fishing: 145000,
-      whipstock: 25000,
-      rentals: 85000,
-      total: 255000,
-      isLocked: true,
-    },
-    {
-      code: 'CC-105',
-      name: 'Lease Rental-LPV',
-      category: 'OVERHEAD',
-      sourceType: 'MANUAL_ADMIN',
-      fishing: 65000,
-      whipstock: 12000,
-      rentals: 42000,
-      total: 119000,
-      isLocked: true,
-    },
-    {
-      code: 'CC-106',
-      name: 'Repair And Maintenance',
-      category: 'OVERHEAD',
-      sourceType: 'MANUAL_ADMIN',
-      fishing: 342019,
-      whipstock: 45000,
-      rentals: 187592,
-      total: 574611,
-      isLocked: true,
-    },
-    {
-      code: 'CC-107',
-      name: 'R&M - Prior Period Accrual True-Up',
-      category: 'OVERHEAD',
-      sourceType: 'TRUE_UP',
-      fishing: 0,
-      whipstock: 0,
-      rentals: 0,
-      total: 0,
-      isLocked: true,
-    },
-    {
-      code: 'CC-108',
-      name: 'Consumables & Store Materials',
-      category: 'DIRECT',
-      sourceType: 'CONSUMABLES_AUTO',
-      fishing: 85000,
-      whipstock: 14000,
-      rentals: 62000,
-      total: 161000,
-      isLocked: true,
-    },
-    {
-      code: 'CC-109',
-      name: 'Inspection & Testing Charges',
-      category: 'OVERHEAD',
-      sourceType: 'MANUAL_ADMIN',
-      fishing: 78000,
-      whipstock: 0,
-      rentals: 52000,
-      total: 130000,
-      isLocked: true,
-    },
-    {
-      code: 'CC-110',
-      name: 'Machining & Redress Charges',
-      category: 'OVERHEAD',
-      sourceType: 'MANUAL_ADMIN',
-      fishing: 52000,
-      whipstock: 7445,
-      rentals: 18000,
-      total: 77445,
-      isLocked: true,
-    },
-    {
-      code: 'CC-111',
-      name: 'Freight & Transportation',
-      category: 'DIRECT',
-      sourceType: 'MANUAL_ADMIN',
-      fishing: 15000,
-      whipstock: 0,
-      rentals: 8000,
-      total: 23000,
-      isLocked: true,
-    },
-    {
-      code: 'CC-112',
-      name: 'Depreciation - Plant & Machinery (P&M)',
-      category: 'DEPRECIATION',
-      sourceType: 'DEPRECIATION_AUTO',
-      sector: 'P&M',
-      usefulLifeMonths: 60,
-      fishing: 1784309,
-      whipstock: 152555,
-      rentals: 2571952,
-      total: 4508816,
-      isLocked: true,
-    },
-  ],
+    };
+  }),
 };
 
 // Default October 2026 (Live Draft)
@@ -268,18 +235,16 @@ export const DEFAULT_OCT_2026: MonthlyExpenseRecord = {
   totalRentals: 0,
   grandTotal: 0,
   rows: STANDARD_COST_CODES.map((base) => {
-    // If it's Lease Rental Equipment, pull from October SubContractor Rentals automatically
     let fishing = 0;
     let whipstock = 0;
     let rentals = 0;
 
-    if (base.code === 'CC-103') {
+    if (base.code === 'CC-10') { // Lease Rental-Eqiupment
       const octTotals = calculateSubContractorTotals('2026-10');
       fishing = octTotals.divisionSplit.FISHING;
       whipstock = octTotals.divisionSplit.WHIPSTOCK;
       rentals = octTotals.divisionSplit.RENTALS;
-    } else if (base.code === 'CC-107') {
-      // Prior period true-up: check any variance from late invoices arriving in October
+    } else if (base.code === 'CC-07') { // Prior period true-up
       rentals = 2500; // Motormax Sep job invoiced in Oct with +2,500 variance
     }
 
@@ -329,6 +294,13 @@ export function saveMonthlyExpenseRecords(records: Record<string, MonthlyExpense
   }
 }
 
+export function safeNum(val: unknown): number {
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  if (!val) return 0;
+  const p = parseFloat(String(val).replace(/,/g, ''));
+  return isNaN(p) ? 0 : p;
+}
+
 export function saveMonthExpenseRecord(record: MonthlyExpenseRecord): void {
   if (record.isFrozen) {
     console.warn(`Period ${record.periodKey} is frozen and cannot be modified.`);
@@ -336,18 +308,24 @@ export function saveMonthExpenseRecord(record: MonthlyExpenseRecord): void {
   }
   const records = getMonthlyExpenseRecords();
   
-  // Auto-calculate row totals and grand totals
+  // Auto-calculate row totals and grand totals safely
   let totalFishing = 0;
   let totalWhipstock = 0;
   let totalRentals = 0;
 
   const calculatedRows = record.rows.map((row) => {
-    const total = Number(((row.fishing || 0) + (row.whipstock || 0) + (row.rentals || 0)).toFixed(2));
-    totalFishing += row.fishing || 0;
-    totalWhipstock += row.whipstock || 0;
-    totalRentals += row.rentals || 0;
+    const f = safeNum(row.fishing);
+    const w = safeNum(row.whipstock);
+    const r = safeNum(row.rentals);
+    const total = Number((f + w + r).toFixed(2));
+    totalFishing += f;
+    totalWhipstock += w;
+    totalRentals += r;
     return {
       ...row,
+      fishing: f,
+      whipstock: w,
+      rentals: r,
       total,
     };
   });

@@ -2118,6 +2118,7 @@ export const App: React.FC = () => {
               <SubContractorRentalView
                 user={currentUser}
                 jobs={jobs}
+                inventory={inventory}
                 showToast={showToast}
                 onRefresh={() => handleFetchLiveSql(false)}
                 onNavigateToJob={(jId) => {

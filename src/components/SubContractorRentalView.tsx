@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { SubContractorRental, SubDivision, DrillingJob, User } from '../types';
+import { SubContractorRental, SubDivision, DrillingJob, ToolItem, User } from '../types';
 import {
   getSubContractorRentals,
   upsertSubContractorRental,
@@ -30,6 +30,7 @@ import * as XLSX from 'xlsx';
 interface SubContractorRentalViewProps {
   user?: User | null;
   jobs?: DrillingJob[];
+  inventory?: ToolItem[];
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
   onRefresh?: () => void;
   onNavigateToJob?: (jobId: string) => void;
@@ -38,6 +39,7 @@ interface SubContractorRentalViewProps {
 export const SubContractorRentalView: React.FC<SubContractorRentalViewProps> = ({
   user,
   jobs = [],
+  inventory = [],
   showToast,
   onRefresh,
   onNavigateToJob,
@@ -262,6 +264,144 @@ export const SubContractorRentalView: React.FC<SubContractorRentalViewProps> = (
     };
   }, [filteredRentals]);
 
+  // 1-Click Sync/Import third-party tools assigned to active jobs
+  const handleSyncFromJobTools = () => {
+    let importedCount = 0;
+    const currentList = getSubContractorRentals();
+
+    // 1. Scan tools in inventory that are third-party / leased
+    const leasedTools = (inventory || []).filter(
+      (t) =>
+        !t.isEmdad ||
+        (t.ownership && t.ownership.toUpperCase() !== 'EMDAD') ||
+        (t.supplier && t.supplier.trim() !== '')
+    );
+
+    leasedTools.forEach((tool) => {
+      // Find active job if tool is assigned
+      const linkedJob = jobs.find(
+        (j) =>
+          tool.currentJobId &&
+          (j.id.trim().toUpperCase() === tool.currentJobId.trim().toUpperCase() ||
+           j.jobNumber?.trim().toUpperCase() === tool.currentJobId.trim().toUpperCase())
+      );
+
+      // Check if already in rentals
+      const exists = currentList.some(
+        (r) =>
+          r.serialNo?.trim().toUpperCase() === tool.serial?.trim().toUpperCase() &&
+          r.jobId?.trim().toUpperCase() === (tool.currentJobId || linkedJob?.id || 'ACTIVE-RENTAL').trim().toUpperCase()
+      );
+
+      if (!exists) {
+        const supplier = tool.supplier || tool.ownership || 'Third-Party Supplier';
+        const jobDivision = linkedJob?.subDivision || resolveContractSubDivision(linkedJob?.contract || tool.contract || '') || 'RENTALS';
+        const rate = tool.subRentalDailyRate || tool.subRentalOperatingRate || 2500;
+        const sbRate = tool.subRentalStandbyRate || 1000;
+        const opDays = 15;
+        const sbDays = 2;
+        const total = (opDays * rate) + (sbDays * sbRate);
+
+        const newRec: SubContractorRental = {
+          id: `SRA-SYNC-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase(),
+          jobId: tool.currentJobId || linkedJob?.id || 'ACTIVE-RENTAL',
+          supplierName: supplier,
+          rentalAgreementNo: `SRA-AUTO-${tool.serial}`,
+          toolDesc: tool.shortDesc || tool.desc || 'Downhole Rented Tool',
+          serialNo: tool.serial,
+          rentalType: tool.subRentalAgreementType || 'Daily',
+          rateAmount: rate,
+          standbyRate: sbRate,
+          startDate: tool.rentalStartDate || linkedJob?.mobDate || '2026-10-01',
+          endDate: tool.rentalEndDate || linkedJob?.demobDate || '',
+          operatingDays: opDays,
+          standbyDays: sbDays,
+          accrualMonth: '2026-10',
+          totalAccrued: total,
+          poReference: tool.supplierPoNumber || '',
+          division: jobDivision,
+          clientCode: linkedJob?.client || 'ADNOC Onshore',
+          rig: linkedJob?.rig || tool.rig || '',
+          well: linkedJob?.well || tool.well || '',
+          contractRef: linkedJob?.contract || tool.contract || '',
+          status: 'ACCRUED',
+          notes: `Auto-imported from Job Tools inventory (Owner: ${tool.ownership || 'N/A'})`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        upsertSubContractorRental(newRec);
+        importedCount++;
+      }
+    });
+
+    // Also check jobs with subRentalCosts map
+    jobs.forEach((job) => {
+      if (job.subRentalCosts) {
+        Object.entries(job.subRentalCosts).forEach(([toolKey, costObj]) => {
+          const exists = currentList.some(
+            (r) =>
+              r.serialNo?.trim().toUpperCase() === toolKey.trim().toUpperCase() &&
+              r.jobId?.trim().toUpperCase() === job.id.trim().toUpperCase()
+          );
+
+          if (!exists) {
+            const opDays = costObj.subOpsDays || 10;
+            const sbDays = costObj.subSbDays || 2;
+            const rate = 2500;
+            const sbRate = 1000;
+            const total = (opDays * rate) + (sbDays * sbRate);
+
+            const newRec: SubContractorRental = {
+              id: `SRA-JOB-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase(),
+              jobId: job.id,
+              supplierName: costObj.supplier || 'Sub-Contractor',
+              rentalAgreementNo: `SRA-JOB-${toolKey}`,
+              toolDesc: `Job Sub-Rented Tool (${toolKey})`,
+              serialNo: toolKey,
+              rentalType: 'Daily',
+              rateAmount: rate,
+              standbyRate: sbRate,
+              startDate: job.mobDate || '2026-10-01',
+              endDate: job.demobDate || '',
+              operatingDays: opDays,
+              standbyDays: sbDays,
+              accrualMonth: '2026-10',
+              totalAccrued: total,
+              division: job.subDivision || resolveContractSubDivision(job.contract || '') || 'RENTALS',
+              clientCode: job.client || 'ADNOC Onshore',
+              rig: job.rig || '',
+              well: job.well || '',
+              contractRef: job.contract || '',
+              status: 'ACCRUED',
+              notes: `Auto-imported from Job ${job.id} sub-rental tracking`,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+
+            upsertSubContractorRental(newRec);
+            importedCount++;
+          }
+        });
+      }
+    });
+
+    if (importedCount > 0) {
+      refreshList();
+      if (showToast) {
+        showToast(`Successfully imported ${importedCount} third-party rented tools from Jobs!`, 'success');
+      } else {
+        alert(`Successfully imported ${importedCount} third-party rented tools from Jobs!`);
+      }
+    } else {
+      if (showToast) {
+        showToast('All third-party tools from active jobs are already tracked in the ledger.', 'info');
+      } else {
+        alert('All third-party tools from active jobs are already tracked in the ledger.');
+      }
+    }
+  };
+
   // Export to Excel
   const handleExportExcel = () => {
     const rows = filteredRentals.map((r) => ({
@@ -327,6 +467,14 @@ export const SubContractorRentalView: React.FC<SubContractorRentalViewProps> = (
             </p>
           </div>
           <div className="flex items-center space-x-2">
+            <button
+              onClick={handleSyncFromJobTools}
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 border border-emerald-400 rounded text-xs font-bold flex items-center space-x-1.5 shadow-sm transition cursor-pointer text-white"
+              title="Auto-scan and import 3rd party rented tools currently assigned to Drilling Jobs"
+            >
+              <span>⚡</span>
+              <span>Sync from Job Tools</span>
+            </button>
             <button
               onClick={handleExportExcel}
               className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded text-xs font-semibold flex items-center space-x-1 transition cursor-pointer"

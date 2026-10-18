@@ -5,6 +5,7 @@ import {
   saveMonthExpenseRecord,
   cloneFromPreviousMonth,
   FROZEN_SEP_2026,
+  safeNum,
 } from '../services/monthlyExpenseService';
 import { calculateSubContractorTotals } from './../services/subContractorRentalService';
 import {
@@ -82,14 +83,22 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
     setEditedRows((prev) => {
       return prev.map((row) => {
         if (row.code === code) {
-          const updated = { ...row, [field]: value };
           if (field === 'fishing' || field === 'whipstock' || field === 'rentals') {
-            const f = field === 'fishing' ? (parseFloat(value) || 0) : (row.fishing || 0);
-            const w = field === 'whipstock' ? (parseFloat(value) || 0) : (row.whipstock || 0);
-            const r = field === 'rentals' ? (parseFloat(value) || 0) : (row.rentals || 0);
-            updated.total = Number((f + w + r).toFixed(2));
+            const numVal = safeNum(value);
+            const f = field === 'fishing' ? numVal : safeNum(row.fishing);
+            const w = field === 'whipstock' ? numVal : safeNum(row.whipstock);
+            const r = field === 'rentals' ? numVal : safeNum(row.rentals);
+            const total = Number((f + w + r).toFixed(2));
+            return {
+              ...row,
+              [field]: numVal,
+              total,
+            };
           }
-          return updated;
+          if (field === 'usefulLifeMonths') {
+            return { ...row, usefulLifeMonths: parseInt(value, 10) || 0 };
+          }
+          return { ...row, [field]: value };
         }
         return row;
       });
@@ -103,16 +112,16 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
     const totals = calculateSubContractorTotals(selectedPeriod);
     setEditedRows((prev) => {
       return prev.map((row) => {
-        if (row.code === 'CC-103') {
-          const fishing = totals.divisionSplit.FISHING;
-          const whipstock = totals.divisionSplit.WHIPSTOCK;
-          const rentals = totals.divisionSplit.RENTALS;
+        if (row.code === 'CC-10' || row.name === 'Lease Rental-Eqiupment' || row.name === 'Lease Rental-Equipment') {
+          const fishing = safeNum(totals.divisionSplit.FISHING);
+          const whipstock = safeNum(totals.divisionSplit.WHIPSTOCK);
+          const rentals = safeNum(totals.divisionSplit.RENTALS);
           return {
             ...row,
             fishing,
             whipstock,
             rentals,
-            total: fishing + whipstock + rentals,
+            total: Number((fishing + whipstock + rentals).toFixed(2)),
           };
         }
         return row;
@@ -152,15 +161,16 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
     let whipstock = 0;
     let rentals = 0;
     editedRows.forEach((r) => {
-      fishing += r.fishing || 0;
-      whipstock += r.whipstock || 0;
-      rentals += r.rentals || 0;
+      fishing += safeNum(r.fishing);
+      whipstock += safeNum(r.whipstock);
+      rentals += safeNum(r.rentals);
     });
+    const grandTotal = Number((fishing + whipstock + rentals).toFixed(2));
     return {
       fishing: Number(fishing.toFixed(2)),
       whipstock: Number(whipstock.toFixed(2)),
       rentals: Number(rentals.toFixed(2)),
-      grandTotal: Number((fishing + whipstock + rentals).toFixed(2)),
+      grandTotal,
     };
   }, [editedRows]);
 
@@ -298,7 +308,7 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
             AED {summaryTotals.fishing.toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </div>
           <div className="text-[11px] text-slate-500 mt-0.5">
-            Share: {summaryTotals.grandTotal > 0 ? ((summaryTotals.fishing / summaryTotals.grandTotal) * 100).toFixed(1) : 0}% of monthly cost
+            Share: {summaryTotals.grandTotal > 0 ? ((summaryTotals.fishing / summaryTotals.grandTotal) * 100).toFixed(1) : '0.0'}% of monthly cost
           </div>
         </div>
 
@@ -308,7 +318,7 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
             AED {summaryTotals.whipstock.toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </div>
           <div className="text-[11px] text-slate-500 mt-0.5">
-            Share: {summaryTotals.grandTotal > 0 ? ((summaryTotals.whipstock / summaryTotals.grandTotal) * 100).toFixed(1) : 0}% of monthly cost
+            Share: {summaryTotals.grandTotal > 0 ? ((summaryTotals.whipstock / summaryTotals.grandTotal) * 100).toFixed(1) : '0.0'}% of monthly cost
           </div>
         </div>
 
@@ -318,7 +328,7 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
             AED {summaryTotals.rentals.toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </div>
           <div className="text-[11px] text-slate-500 mt-0.5">
-            Share: {summaryTotals.grandTotal > 0 ? ((summaryTotals.rentals / summaryTotals.grandTotal) * 100).toFixed(1) : 0}% of monthly cost
+            Share: {summaryTotals.grandTotal > 0 ? ((summaryTotals.rentals / summaryTotals.grandTotal) * 100).toFixed(1) : '0.0'}% of monthly cost
           </div>
         </div>
       </div>
@@ -380,7 +390,7 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
                           Dedicated variance true-up line for late supplier invoices (keeps frozen periods untouched).
                         </div>
                       )}
-                      {r.code === 'CC-103' && (
+                      {(r.code === 'CC-10' || r.name.includes('Lease Rental-Eq')) && (
                         <div className="text-[10px] text-blue-700 font-medium mt-0.5">
                           Linked to Sub-Contractor Tool Rentals (42% of total costs).
                         </div>
@@ -397,12 +407,12 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
                     <td className="p-1.5 border-r border-slate-200 text-right bg-rose-50/20">
                       {isFrozen ? (
                         <span className="font-mono font-bold text-slate-800">
-                          {r.fishing ? r.fishing.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'}
+                          {safeNum(r.fishing) > 0 ? safeNum(r.fishing).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'}
                         </span>
                       ) : (
                         <input
                           type="number"
-                          value={r.fishing || ''}
+                          value={r.fishing !== undefined && r.fishing !== null ? r.fishing : ''}
                           onChange={(e) => handleCellChange(r.code, 'fishing', e.target.value)}
                           placeholder="0.00"
                           className="w-full text-right font-mono font-bold px-2 py-1 border border-slate-300 rounded text-slate-900 bg-white focus:ring-1 focus:ring-rose-500"
@@ -414,12 +424,12 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
                     <td className="p-1.5 border-r border-slate-200 text-right bg-purple-50/20">
                       {isFrozen ? (
                         <span className="font-mono font-bold text-slate-800">
-                          {r.whipstock ? r.whipstock.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'}
+                          {safeNum(r.whipstock) > 0 ? safeNum(r.whipstock).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'}
                         </span>
                       ) : (
                         <input
                           type="number"
-                          value={r.whipstock || ''}
+                          value={r.whipstock !== undefined && r.whipstock !== null ? r.whipstock : ''}
                           onChange={(e) => handleCellChange(r.code, 'whipstock', e.target.value)}
                           placeholder="0.00"
                           className="w-full text-right font-mono font-bold px-2 py-1 border border-slate-300 rounded text-slate-900 bg-white focus:ring-1 focus:ring-purple-500"
@@ -431,12 +441,12 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
                     <td className="p-1.5 border-r border-slate-200 text-right bg-blue-50/20">
                       {isFrozen ? (
                         <span className="font-mono font-bold text-slate-800">
-                          {r.rentals ? r.rentals.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'}
+                          {safeNum(r.rentals) > 0 ? safeNum(r.rentals).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'}
                         </span>
                       ) : (
                         <input
                           type="number"
-                          value={r.rentals || ''}
+                          value={r.rentals !== undefined && r.rentals !== null ? r.rentals : ''}
                           onChange={(e) => handleCellChange(r.code, 'rentals', e.target.value)}
                           placeholder="0.00"
                           className="w-full text-right font-mono font-bold px-2 py-1 border border-slate-300 rounded text-slate-900 bg-white focus:ring-1 focus:ring-blue-500"
@@ -446,7 +456,7 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
 
                     {/* Row Total (Auto-calculated) */}
                     <td className="p-2.5 border-r border-slate-200 text-right font-mono font-extrabold text-slate-900 bg-slate-50">
-                      AED {(r.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      AED {safeNum(r.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </td>
 
                     {/* Depreciation Sector & Useful Life (Manual Input) */}

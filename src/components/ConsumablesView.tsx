@@ -7,7 +7,10 @@ import {
   issueConsumableItem,
   recordConsumableReceipt,
   generateSivPrintHtml,
+  getConsumableCategories,
+  addConsumableCategory,
 } from '../services/consumablesService';
+import { SearchableConsumableSelect } from './SearchableConsumableSelect';
 import { openPrintWindow } from '../services/ticketPrintService';
 import {
   Search,
@@ -46,6 +49,9 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
   const [activeTab, setActiveTab] = useState<'stock' | 'issuance' | 'receipt'>('stock');
   const [stockItems, setStockItems] = useState<ConsumableItem[]>(getConsumablesList());
   const [issuances, setIssuances] = useState<ConsumableIssuance[]>(getConsumableIssuances());
+  const [categories, setCategories] = useState<string[]>(getConsumableCategories());
+  const [isAddingNewCat, setIsAddingNewCat] = useState(false);
+  const [newCatInput, setNewCatInput] = useState('');
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
 
@@ -389,11 +395,9 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
                 className="border border-slate-300 rounded px-2 py-1.5 bg-white font-medium text-slate-800 cursor-pointer"
               >
                 <option value="ALL">All Categories</option>
-                <option value="Redress Kit">Redress Kits</option>
-                <option value="Paint & Coatings">Paint &amp; Coatings</option>
-                <option value="Spare Parts">Spare Parts</option>
-                <option value="Lubricants & Oils">Lubricants &amp; Oils</option>
-                <option value="HSE & Safety">HSE &amp; Safety</option>
+                {categories.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
             </div>
 
@@ -591,17 +595,11 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
               {/* SKU Selection */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Select Consumable SKU *</label>
-                <select
-                  value={issuePartNo}
-                  onChange={(e) => setIssuePartNo(e.target.value)}
-                  className="w-full border rounded px-2.5 py-1.5 font-bold text-slate-800 bg-white"
-                >
-                  {stockItems.map((s) => (
-                    <option key={s.id} value={s.partNo}>
-                      {s.partNo} — {s.description} (Stock: {s.currentStock} {s.unit})
-                    </option>
-                  ))}
-                </select>
+                <SearchableConsumableSelect
+                  items={stockItems}
+                  selectedPartNo={issuePartNo}
+                  onSelect={(item) => setIssuePartNo(item.partNo)}
+                />
               </div>
 
               {/* Quantity */}
@@ -877,19 +875,53 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Category</label>
-                  <select
-                    value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
-                    className="w-full border rounded px-2 py-1 bg-white font-medium"
-                  >
-                    <option value="Redress Kit">Redress Kit</option>
-                    <option value="Paint & Coatings">Paint &amp; Coatings</option>
-                    <option value="Spare Parts">Spare Parts</option>
-                    <option value="Lubricants & Oils">Lubricants &amp; Oils</option>
-                    <option value="HSE & Safety">HSE &amp; Safety</option>
-                    <option value="Seals & O-Rings">Seals &amp; O-Rings</option>
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">Category *</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingNewCat(!isAddingNewCat)}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-bold cursor-pointer"
+                    >
+                      {isAddingNewCat ? '← Select Existing' : '+ Add New'}
+                    </button>
+                  </div>
+
+                  {isAddingNewCat ? (
+                    <div className="flex items-center space-x-1">
+                      <input
+                        type="text"
+                        value={newCatInput}
+                        onChange={(e) => setNewCatInput(e.target.value)}
+                        placeholder="Type new category..."
+                        className="w-full border rounded px-2 py-1 font-bold text-slate-800 bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newCatInput.trim()) {
+                            const updated = addConsumableCategory(newCatInput);
+                            setCategories(updated);
+                            setNewCategory(newCatInput.trim());
+                            setIsAddingNewCat(false);
+                            setNewCatInput('');
+                          }
+                        }}
+                        className="px-2 py-1 bg-blue-600 text-white rounded font-bold text-[10px] cursor-pointer"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value)}
+                      className="w-full border rounded px-2 py-1 bg-white font-medium"
+                    >
+                      {categories.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
 
