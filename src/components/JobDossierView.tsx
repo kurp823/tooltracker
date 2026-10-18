@@ -12,8 +12,10 @@ import {
   DailyFieldLog,
   InspectionRecord,
   JobToolSubRentalCost,
+  SubDivision,
 } from '../types';
 import { saveCustomJob } from '../services/customJobs';
+import { resolveContractSubDivision } from '../services/customContracts';
 import { saveJobToolHoleSectionApi, extractToolType, saveDailyFieldLogsApi, fetchDailyFieldLogsApi } from '../services/api';
 import {
   getContractRateOptionsForTool,
@@ -3652,10 +3654,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     onChange={(e) => {
                       const chosen = e.target.value;
                       const found = contractOptions.find((co) => co.name === chosen);
+                      const resolvedDiv = resolveContractSubDivision(found?.no || chosen);
                       setJobData({
                         ...jobData,
                         contract: chosen,
                         contractNo: found?.no || jobData.contractNo || '',
+                        subDivision: resolvedDiv || jobData.subDivision || 'RENTALS',
                       });
                     }}
                     className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-medium text-slate-800 w-64 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
@@ -3674,9 +3678,31 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     type="text"
                     value={jobData.contractNo || jobData.contract || '4700023861'}
                     disabled={isLocked}
-                    onChange={(e) => setJobData({ ...jobData, contractNo: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const resolvedDiv = resolveContractSubDivision(val);
+                      setJobData({
+                        ...jobData,
+                        contractNo: val,
+                        subDivision: resolvedDiv || jobData.subDivision,
+                      });
+                    }}
                     className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-64 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   />
+                </div>
+
+                <div className="flex items-center">
+                  <label className="w-28 font-bold text-slate-700 text-right pr-3">Sub-Division:</label>
+                  <select
+                    value={jobData.subDivision || resolveContractSubDivision(jobData.contractNo || jobData.contract) || 'RENTALS'}
+                    disabled={isLocked}
+                    onChange={(e) => setJobData({ ...jobData, subDivision: e.target.value as SubDivision })}
+                    className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-blue-900 w-64 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="FISHING">FISHING</option>
+                    <option value="WHIPSTOCK">WHIPSTOCK</option>
+                    <option value="RENTALS">RENTALS (Downhole Tool Rentals)</option>
+                  </select>
                 </div>
 
                 <div className="flex items-center">
@@ -4940,6 +4966,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <div>
                     <span className="font-bold text-slate-600">Project No:</span>{' '}
                     <span className="font-mono">{jobData.contractNo || cleanContractName(jobData.contract) || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">Sub-Division:</span>{' '}
+                    <span className="font-bold px-1.5 py-0.5 rounded text-[10px] bg-blue-100 text-blue-800 border border-blue-200">
+                      {jobData.subDivision || resolveContractSubDivision(jobData.contractNo || jobData.contract) || 'RENTALS'}
+                    </span>
                   </div>
                   <div>
                     <span className="font-bold text-slate-600">Purpose:</span>{' '}

@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { ContractRecord, DrillingJob, User, NavModule } from '../types';
+import { ContractRecord, DrillingJob, User, NavModule, SubDivision } from '../types';
 import { ContractRatesModal } from './ContractRatesModal';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 import { useResizableColumns, ResizerHandle, useCustomColumns } from '../services/customColumnService';
+import { resolveContractSubDivision } from '../services/customContracts';
 import * as XLSX from 'xlsx';
 import { 
   FileSpreadsheet, 
@@ -65,6 +66,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
     id: 50,
     client: 160,
     contractRef: 140,
+    subDivision: 110,
     shortDesc: 220,
     currency: 65,
     validity: 150,
@@ -80,6 +82,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
   // Form states for New Contract
   const [contractNo, setContractNo] = useState('');
   const [contractRef, setContractRef] = useState('');
+  const [subDivision, setSubDivision] = useState<SubDivision>('RENTALS');
   const [shortDesc, setShortDesc] = useState('');
   const [name, setName] = useState('');
   const [client, setClient] = useState('ADNOC ONSHORE');
@@ -214,6 +217,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
     setEditingContract(null);
     setContractNo('');
     setContractRef('');
+    setSubDivision('RENTALS');
     setShortDesc('');
     setName('');
     setClient('ADNOC ONSHORE');
@@ -237,6 +241,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
     setEditingContract(c);
     setContractNo(c.contractNo || c.contractRef || '');
     setContractRef(c.contractRef || c.contractNo || '');
+    setSubDivision(c.subDivision || resolveContractSubDivision(c.contractRef || c.contractNo) || 'RENTALS');
     setShortDesc(c.shortDesc || c.name || '');
     setName(c.name || c.shortDesc || '');
     setClient(c.client || 'ADNOC ONSHORE');
@@ -272,6 +277,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
         ...editingContract,
         contractNo: contractNo.trim(),
         contractRef: (contractRef || contractNo).trim(),
+        subDivision: subDivision,
         name: name.trim(),
         shortDesc: (shortDesc || name).trim(),
         client: client.trim(),
@@ -297,6 +303,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
         id: String(contracts.length + 1),
         contractNo: contractNo.trim(),
         contractRef: (contractRef || contractNo).trim(),
+        subDivision: subDivision,
         name: name.trim(),
         shortDesc: (shortDesc || name).trim(),
         client: client.trim(),
@@ -552,6 +559,10 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                     <span>Contract Ref / SAP</span>
                     <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('contractRef', e)} />
                   </th>
+                  <th style={{ width: contractsResizer.widths.subDivision || 110 }} className="py-2.5 px-3 text-center relative">
+                    <span>Sub-Division</span>
+                    <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('subDivision', e)} />
+                  </th>
                   <th style={{ width: contractsResizer.widths.shortDesc || 200 }} className="py-2.5 px-3 relative">
                     <span>Short Description</span>
                     <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('shortDesc', e)} />
@@ -608,7 +619,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
               <tbody className="divide-y divide-slate-200">
                 {filteredContracts.length === 0 ? (
                   <tr>
-                    <td colSpan={13 + contractsCustomCols.length} className="py-8 text-center text-slate-500">
+                    <td colSpan={14 + contractsCustomCols.length} className="py-8 text-center text-slate-500">
                       No contracts matching current filter criteria.
                     </td>
                   </tr>
@@ -633,6 +644,33 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                           {c.poNumber && (
                             <div className="text-[10px] text-slate-500 font-normal">{c.poNumber}</div>
                           )}
+                        </td>
+                        <td className="py-2.5 px-3 text-center align-middle whitespace-nowrap">
+                          {(() => {
+                            const sDiv = c.subDivision || resolveContractSubDivision(c.contractRef || c.contractNo);
+                            if (sDiv === 'FISHING') {
+                              return (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-50 text-sky-800 border border-sky-300">
+                                  FISHING
+                                </span>
+                              );
+                            }
+                            if (sDiv === 'WHIPSTOCK') {
+                              return (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
+                                  WHIPSTOCK
+                                </span>
+                              );
+                            }
+                            if (sDiv === 'RENTALS') {
+                              return (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
+                                  RENTALS
+                                </span>
+                              );
+                            }
+                            return <span className="text-slate-400 text-[10px]">—</span>;
+                          })()}
                         </td>
                         <td className="py-2.5 px-3 text-left align-middle">
                           <div className="font-semibold text-slate-900">{c.shortDesc || c.name}</div>
@@ -797,6 +835,16 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                         <span className="px-2 py-0.5 bg-slate-100 text-[#1a3055] border border-slate-200 text-[10px] font-semibold rounded">
                           {c.client}
                         </span>
+                        {(() => {
+                          const sDiv = c.subDivision || resolveContractSubDivision(c.contractRef || c.contractNo);
+                          if (!sDiv) return null;
+                          const color = sDiv === 'FISHING' ? 'text-sky-800 bg-sky-50 border-sky-300' : sDiv === 'WHIPSTOCK' ? 'text-amber-800 bg-amber-50 border-amber-300' : 'text-emerald-800 bg-emerald-50 border-emerald-300';
+                          return (
+                            <span className={`px-2 py-0.5 text-[10px] font-bold rounded border ${color}`}>
+                              {sDiv}
+                            </span>
+                          );
+                        })()}
                         <span className="text-xs font-mono font-semibold text-slate-400">ID #{c.id}</span>
                       </div>
                       <h3 className="text-sm font-bold text-[#1a3055] mt-1">{c.shortDesc || c.name}</h3>
@@ -976,7 +1024,21 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold mb-1 text-slate-800">
+                    Sub-Division <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={subDivision}
+                    onChange={(e) => setSubDivision(e.target.value as SubDivision)}
+                    className="w-full border rounded px-2.5 py-1.5 font-bold bg-amber-50/50 border-amber-300 text-slate-800"
+                  >
+                    <option value="FISHING">FISHING</option>
+                    <option value="WHIPSTOCK">WHIPSTOCK</option>
+                    <option value="RENTALS">RENTALS</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block font-bold mb-1">Short Description *</label>
                   <input

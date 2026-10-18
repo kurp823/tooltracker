@@ -33,12 +33,17 @@ export type NavModule =
   | 'invoicing'          // Invoicing Screen (Audit, Verification Ledger, Draft & Final Legal Invoices)
   | 'billing-package'    // Invoice & Billing Package Generator (Calculation Ticket + Draft Invoice)
   | 'tool-revenue-report' // Tool Fleet Revenue & Utilization Analytics Report
+  | 'subcontractor-rentals' // Sub-Contractor Tool Rentals (Lease Rental-Equipment)
+  | 'monthly-expenses'   // Monthly Expense Grid & Sub-Division P&L
+  | 'consumables'        // Consumables Store & Store Issuance Vouchers
   | 'contract-dash'      // Contracts Analytics Dashboard (Ceiling vs Legally Invoiced Revenue)
   | 'contracts'          // Master Contracts Register
   | 'data-management'   // Data Management Tool (DMT)
   | 'settings';          // System & Azure SQL
 
 export type ViewKey = NavModule;
+
+export type SubDivision = 'FISHING' | 'WHIPSTOCK' | 'RENTALS';
 
 export interface ToolItem {
   id: string;          // SystemID (e.g. EMD-1125, 351)
@@ -223,6 +228,7 @@ export interface DrillingJob {
   cost?: string | number;
   jobDescription?: string;
   serviceCategory?: string;
+  subDivision?: SubDivision;
   field?: string;
   contractNo?: string;
   technicalDetails?: {
@@ -566,6 +572,7 @@ export interface ContractRecord {
   id: string;
   contractNo?: string;
   contractRef?: string;
+  subDivision?: SubDivision;
   name?: string;
   shortDesc?: string;
   client: string;
@@ -751,5 +758,115 @@ export interface DraftInvoicePackageData {
     usdIban: string;
     swift: string;
   };
+}
+
+export interface SubContractorRental {
+  rentalId: string;
+  jobId: string;
+  supplierName: string; // Motormax, Epis, Coretrax, Weatherford, etc.
+  rentalAgreementNo: string;
+  toolDesc: string;
+  serialNo: string;
+  rentalType: 'Daily' | 'Monthly' | 'Lumpsum';
+  rateAmount: number;     // Operating rate
+  standbyRate: number;    // Standby rate
+  startDate: string;      // YYYY-MM-DD
+  endDate?: string;       // YYYY-MM-DD or empty if ongoing
+  operatingDays: number;
+  standbyDays: number;
+  totalAccrued: number;   // (operDays * rate) + (standbyDays * standbyRate)
+  poReference: string;
+  invoiceRef?: string;
+  invoiceDate?: string;
+  invoiceAmount?: number;
+  variance?: number;      // invoiceAmount - totalAccrued
+  division: SubDivision;  // Auto-linked from Job
+  clientCode: string;     // Auto-linked from Job
+  rig?: string;           // Auto-linked from Job
+  well?: string;          // Auto-linked from Job
+  contractRef?: string;   // Auto-linked from Job
+  accrualMonth: string;   // YYYY-MM (e.g. 2026-09)
+  invoiceMonth?: string;  // YYYY-MM (e.g. 2026-11)
+  isPriorPeriodTrueUp?: boolean;
+  status: 'ACCRUED' | 'INVOICE_RECEIVED' | 'PAID' | 'DISPUTED';
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MonthlyExpenseRow {
+  code: string;
+  name: string;
+  category: 'DIRECT' | 'OVERHEAD' | 'DEPRECIATION' | 'ADMIN';
+  fishing: number;
+  whipstock: number;
+  rentals: number;
+  total: number;
+  sourceType: 'MANUAL_ADMIN' | 'SUB_RENTAL_AUTO' | 'CONSUMABLES_AUTO' | 'DEPRECIATION_AUTO' | 'TRUE_UP';
+  sector?: 'P&M' | 'Vehicles' | 'Comp & Printers' | 'IP Rights' | 'None';
+  usefulLifeMonths?: number;
+  isLocked?: boolean;
+}
+
+export interface MonthlyExpenseRecord {
+  periodKey: string; // e.g. "2026-09", "2026-10"
+  monthName: string;
+  year: number;
+  isFrozen: boolean; // Jan-Sep 2026 = true
+  status: 'DRAFT' | 'REVIEWED' | 'APPROVED' | 'LOCKED';
+  lockedBy?: string;
+  lockedAt?: string;
+  rows: MonthlyExpenseRow[];
+  totalFishing: number;
+  totalWhipstock: number;
+  totalRentals: number;
+  grandTotal: number;
+}
+
+export interface ConsumableItem {
+  id: string;
+  partNo: string;
+  description: string;
+  category: 'Redress Kit' | 'Paint & Coatings' | 'Spare Parts' | 'Lubricants & Oils' | 'HSE & Safety' | 'Seals & O-Rings';
+  unit: string; // 'EA', 'KIT', 'LTR', 'CAN', 'SET'
+  currentStock: number;
+  unitCostAED: number;
+  reorderLevel: number;
+  binLocation: string;
+  supplier?: string;
+  lastRestockedDate?: string;
+}
+
+export interface ConsumableReceipt {
+  receiptId: string;
+  poNumber: string;
+  partNo: string;
+  description: string;
+  qtyReceived: number;
+  unitCostAED: number;
+  totalCostAED: number;
+  supplier: string;
+  receivedDate: string;
+  receivedBy: string;
+  notes?: string;
+}
+
+export interface ConsumableIssuance {
+  issuanceId: string;
+  issueDate: string;
+  partNo: string;
+  description: string;
+  qtyIssued: number;
+  unitCostAED: number;
+  totalCostAED: number;
+  destinationType: 'WORKSHOP_BASE' | 'TOOL_REDRESS';
+  workshopArea?: string; // e.g. "Main Workshop Bay 1"
+  toolSerialNo?: string; // Linked tool
+  jobId?: string;        // Linked job
+  subDivision: SubDivision;
+  requestedBy: string;
+  issuedBy: string;
+  sivNumber: string; // Store Issuance Voucher #
+  remarks?: string;
 }
 

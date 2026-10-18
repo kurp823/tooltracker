@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ContractRecord, DrillingJob, NavModule, User } from '../types';
 import { resolveJobClient } from '../services/api';
+import { resolveContractSubDivision } from '../services/customContracts';
 import * as XLSX from 'xlsx';
 import {
   DollarSign,

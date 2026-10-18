@@ -7,6 +7,41 @@ const CUSTOM_CONTRACT_RATES_KEY = 'emdad_custom_contract_rates';
 const DELETED_CONTRACTS_KEY = 'emdad_deleted_contracts';
 
 /**
+ * 13 Master Contract to Sub-Division Mapping
+ */
+export const CONTRACT_SUB_DIVISIONS: Record<string, 'FISHING' | 'WHIPSTOCK' | 'RENTALS'> = {
+  '4700018368': 'WHIPSTOCK',
+  '4700023373': 'RENTALS',
+  '4700024096': 'RENTALS',
+  '4700024608': 'FISHING',
+  '444558': 'FISHING',
+  '4700012465': 'WHIPSTOCK',
+  '4700023861': 'RENTALS',
+  '4700016147': 'FISHING',
+  'DVP-2023-K-016': 'FISHING',
+  'ALB/C204/TED/2026-A': 'RENTALS',
+  'CW369672': 'WHIPSTOCK',
+  'TW-2025-1007': 'FISHING',
+  'TW-2025-1026': 'FISHING',
+  '16358.13': 'FISHING',
+};
+
+/**
+ * Resolves the Sub-Division for any contract reference or number
+ */
+export function resolveContractSubDivision(contractRefOrNo?: string): 'FISHING' | 'WHIPSTOCK' | 'RENTALS' | undefined {
+  if (!contractRefOrNo) return undefined;
+  const cleaned = String(contractRefOrNo).trim().toUpperCase();
+  for (const [ref, div] of Object.entries(CONTRACT_SUB_DIVISIONS)) {
+    const normRef = ref.toUpperCase();
+    if (cleaned.includes(normRef) || normRef.includes(cleaned)) {
+      return div;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Normalizes a contract identifier for consistent map lookup
  */
 export function normalizeContractKey(val: any): string {
@@ -252,12 +287,14 @@ export function mergeContractsWithCustom(baseContracts: ContractRecord[] = []): 
         if (kRef) seenCustomKeys.add(kRef);
         if (kNo) seenCustomKeys.add(kNo);
         const merged = { ...c, ...match };
+        merged.subDivision = match.subDivision || c.subDivision || resolveContractSubDivision(c.contractRef || c.contractNo);
         merged.rates = resolveRatesForContract(merged);
         return merged;
       }
 
       return {
         ...c,
+        subDivision: c.subDivision || resolveContractSubDivision(c.contractRef || c.contractNo),
         rates: resolveRatesForContract(c),
       };
     });
@@ -283,6 +320,7 @@ export function mergeContractsWithCustom(baseContracts: ContractRecord[] = []): 
       (kNo && seenCustomKeys.has(kNo));
 
     if (!alreadyIncluded) {
+      c.subDivision = c.subDivision || resolveContractSubDivision(c.contractRef || c.contractNo) || 'RENTALS';
       c.rates = resolveRatesForContract(c);
       brandNew.push(c);
       if (kId) seenCustomKeys.add(kId);

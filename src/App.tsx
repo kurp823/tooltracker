@@ -103,6 +103,18 @@ const ToolRevenueReportView = React.lazy(() =>
   import('./components/ToolRevenueReportView').then((module) => ({ default: module.ToolRevenueReportView }))
 );
 
+const SubContractorRentalView = React.lazy(() =>
+  import('./components/SubContractorRentalView').then((module) => ({ default: module.SubContractorRentalView }))
+);
+
+const MonthlyExpensesView = React.lazy(() =>
+  import('./components/MonthlyExpensesView').then((module) => ({ default: module.MonthlyExpensesView }))
+);
+
+const ConsumablesView = React.lazy(() =>
+  import('./components/ConsumablesView').then((module) => ({ default: module.ConsumablesView }))
+);
+
 
 // Safe localStorage write — never lets a quota failure crash the app.
 //
@@ -200,8 +212,8 @@ export const App: React.FC = () => {
           'dashboard', 'jobs', 'dt', 'rt', 'job-tools-list', 'tool-history', 'callouts',
           'gatepass', 'utilization', 'inventory-dash', 'inventory', 'categories-sizes',
           'maintenance-dash', 'inspection', 'maintenance', 'billing-dash', 'invoicing',
-          'billing-package', 'tool-revenue-report', 'contract-dash', 'contracts',
-          'data-management', 'settings',
+          'billing-package', 'tool-revenue-report', 'subcontractor-rentals', 'monthly-expenses',
+          'consumables', 'contract-dash', 'contracts', 'data-management', 'settings',
         ];
         if (hash && validList.includes(hash)) {
           return hash;
@@ -2089,6 +2101,63 @@ export const App: React.FC = () => {
                   if (serial) setPreSelectedSerialForToolHistory(serial);
                   setActiveView(mod as ViewKey);
                 }}
+                onRefresh={() => handleFetchLiveSql(false)}
+              />
+            </React.Suspense>
+          )}
+
+          {activeView === 'subcontractor-rentals' && (
+            <React.Suspense
+              fallback={
+                <div className="bg-white border border-[#b8c9db] rounded p-12 text-center text-slate-500 font-semibold shadow-sm">
+                  <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                  Loading Sub-Contractor Tool Rentals Ledger...
+                </div>
+              }
+            >
+              <SubContractorRentalView
+                user={currentUser}
+                jobs={jobs}
+                showToast={showToast}
+                onRefresh={() => handleFetchLiveSql(false)}
+                onNavigateToJob={(jId) => {
+                  setActiveView('jobs');
+                }}
+              />
+            </React.Suspense>
+          )}
+
+          {activeView === 'monthly-expenses' && (
+            <React.Suspense
+              fallback={
+                <div className="bg-white border border-[#b8c9db] rounded p-12 text-center text-slate-500 font-semibold shadow-sm">
+                  <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                  Loading Monthly Expenses &amp; Sub-Division P&amp;L...
+                </div>
+              }
+            >
+              <MonthlyExpensesView
+                user={currentUser}
+                showToast={showToast}
+                onRefresh={() => handleFetchLiveSql(false)}
+              />
+            </React.Suspense>
+          )}
+
+          {activeView === 'consumables' && (
+            <React.Suspense
+              fallback={
+                <div className="bg-white border border-[#b8c9db] rounded p-12 text-center text-slate-500 font-semibold shadow-sm">
+                  <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                  Loading Consumables Store &amp; Issuance Vouchers...
+                </div>
+              }
+            >
+              <ConsumablesView
+                user={currentUser}
+                jobs={jobs}
+                inventory={inventory}
+                showToast={showToast}
                 onRefresh={() => handleFetchLiveSql(false)}
               />
             </React.Suspense>

@@ -98,6 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'inventory-dash', label: 'Inventory Dashboard', icon: '📊' },
         { id: 'inventory', label: 'Assets and Inventory', icon: '🧰' },
         { id: 'categories-sizes', label: 'Tool Categories & Sizes', icon: '🏷️' },
+        { id: 'consumables', label: 'Consumables & Store (SIV)', icon: '🧴' },
       ],
     },
     {
@@ -124,12 +125,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'billing',
-      title: 'Billing & Commercial',
+      title: 'Billing & Cost Control',
       icon: '💳',
       items: [
         { id: 'billing-dash', label: 'Billing Dashboard', icon: '📊' },
         { id: 'invoicing', label: 'Invoicing', icon: '📄' },
         { id: 'tool-revenue-report', label: 'Tool Revenue & Utilization Report', icon: '💰' },
+        { id: 'subcontractor-rentals', label: 'Sub-Contractor Rentals', icon: '🤝' },
+        { id: 'monthly-expenses', label: 'Monthly Expense Grid & P&L', icon: '📈' },
       ],
     },
     {

@@ -14,11 +14,12 @@ import { JobDetailModal } from './JobDetailModal';
 import { JobDossierView } from './JobDossierView';
 import { JobToolsListView } from './JobToolsListView';
 import { SearchableSelect } from './SearchableSelect';
-import { ToolItem, ContractRecord, InspectionRecord } from '../types';
+import { ToolItem, ContractRecord, InspectionRecord, SubDivision } from '../types';
 import { isInvalidOrPlaceholderDate } from '../utils';
 import { resolveJobClient } from '../services/api';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 import { useResizableColumns, ResizerHandle, useCustomColumns } from '../services/customColumnService';
+import { resolveContractSubDivision } from '../services/customContracts';
 import {
   Search,
   Download,
@@ -293,6 +294,9 @@ export const JobsView: React.FC<JobsViewProps> = ({
   const [newContract, setNewContract] = useState(
     selectedCalloutForNewJob ? selectedCalloutForNewJob.contract || '' : 'ADNOC Onshore'
   );
+  const [newSubDivision, setNewSubDivision] = useState<SubDivision>(() => {
+    return resolveContractSubDivision(selectedCalloutForNewJob?.contract || 'ADNOC Onshore') || 'RENTALS';
+  });
   const [newPoNumber, setNewPoNumber] = useState(
     selectedCalloutForNewJob ? selectedCalloutForNewJob.poRef || '' : ''
   );
@@ -579,6 +583,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
       well: newWell.trim(),
       client: newClient.trim(),
       contract: newContract.trim(),
+      subDivision: newSubDivision || resolveContractSubDivision(newContract) || 'RENTALS',
       poNumber: newPoNumber.trim(),
       clientRef: newClientRef.trim(),
       holeSection: newHoleSection,
@@ -1540,7 +1545,17 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
                       {/* 3. Project / Contract (clean without "Code:") */}
                       <td className={`px-2.5 ${padY} align-middle font-mono text-xs text-slate-600 truncate min-w-[100px] max-w-[140px]`} title={job.contract || '—'}>
-                        {job.contract || '—'}
+                        <div>{job.contract || '—'}</div>
+                        {(() => {
+                          const sDiv = job.subDivision || resolveContractSubDivision(job.contract);
+                          if (!sDiv) return null;
+                          const color = sDiv === 'FISHING' ? 'text-sky-800 bg-sky-50 border-sky-300' : sDiv === 'WHIPSTOCK' ? 'text-amber-800 bg-amber-50 border-amber-300' : 'text-emerald-800 bg-emerald-50 border-emerald-300';
+                          return (
+                            <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded border mt-0.5 ${color}`}>
+                              {sDiv}
+                            </span>
+                          );
+                        })()}
                       </td>
 
                       {/* 4. Rig */}
@@ -1967,14 +1982,31 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   <input
                     type="text"
                     value={newContract}
-                    onChange={(e) => setNewContract(e.target.value)}
-                    placeholder="e.g. 4700015149"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewContract(val);
+                      const resolved = resolveContractSubDivision(val);
+                      if (resolved) setNewSubDivision(resolved);
+                    }}
+                    placeholder="e.g. 4700018368"
                     className="w-full border rounded px-3 py-1.5"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Sub-Division (P&L Sector) *</label>
+                  <select
+                    value={newSubDivision}
+                    onChange={(e) => setNewSubDivision(e.target.value as SubDivision)}
+                    className="w-full border rounded px-3 py-1.5 font-semibold text-slate-800 bg-white"
+                  >
+                    <option value="FISHING">FISHING</option>
+                    <option value="WHIPSTOCK">WHIPSTOCK</option>
+                    <option value="RENTALS">RENTALS (Downhole Tool Rentals)</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">PO Number</label>
                   <input
@@ -1985,6 +2017,9 @@ export const JobsView: React.FC<JobsViewProps> = ({
                     className="w-full border rounded px-3 py-1.5 font-mono"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Mob Date (Planned)</label>
                   <input
@@ -1994,9 +2029,6 @@ export const JobsView: React.FC<JobsViewProps> = ({
                     className="w-full border rounded px-3 py-1.5 font-mono"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Hole Section</label>
                   <select
