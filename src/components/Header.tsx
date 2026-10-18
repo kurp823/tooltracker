@@ -50,10 +50,10 @@ export const Header: React.FC<HeaderProps> = ({
             {dbStatus?.isConnected ? (
               <span
                 className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1"
-                title={`Azure SQL Database Synchronized:\n• ${dbStatus.counts.inventory} Inventory Tools\n• ${dbStatus.counts.jobs} Drilling Jobs\n• ${dbStatus.counts.dtBatches} Delivery Tickets (DT)\n• ${dbStatus.counts.rtBatches} Receiving Tickets (RT)\n• ${dbStatus.counts.contracts || 0} Master Contracts & Rate Schedules\n• ${dbStatus.counts.callouts || 0} Operational Callouts / Checklists\n• ${dbStatus.counts.gatePasses || 0} Security Gate Passes\n• ${dbStatus.counts.inspections || 0} QC Inspection Records\n• ${dbStatus.counts.maintenance || 0} Maintenance Work Orders`}
+                title="Connected to live Azure SQL database"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>AZURE SQL LIVE ({dbStatus.counts.jobs} Jobs · {dbStatus.counts.inventory} Tools · {dbStatus.counts.contracts || 0} Contracts · {dbStatus.counts.dtBatches} DTs · {dbStatus.counts.rtBatches} RTs)</span>
+                <span>AZURE SQL LIVE</span>
               </span>
             ) : (
               <span

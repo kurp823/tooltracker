@@ -411,9 +411,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           {dbStatus?.isConnected ? (
             <span
               className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded border border-emerald-300"
-              title={`Live Azure SQL Database:\n• ${dbStatus.counts.inventory} Tools\n• ${dbStatus.counts.jobs} Jobs\n• ${dbStatus.counts.dtBatches} DTs\n• ${dbStatus.counts.rtBatches} RTs\n• ${dbStatus.counts.contracts || 0} Contracts\n• ${dbStatus.counts.callouts || 0} Callouts\n• ${dbStatus.counts.gatePasses || 0} Gate Passes\n• ${dbStatus.counts.inspections || 0} Inspections\n• ${dbStatus.counts.maintenance || 0} Maintenance`}
+              title="Connected to live Azure SQL database"
             >
-              🟢 Connected to Azure SQL ({dbStatus.counts.jobs} Jobs, {dbStatus.counts.inventory} Tools, {dbStatus.counts.contracts || 0} Contracts, {dbStatus.counts.dtBatches} DTs, {dbStatus.counts.rtBatches} RTs)
+              🟢 Connected to Azure SQL
             </span>
           ) : (
             <span className="px-2.5 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded border border-amber-300">

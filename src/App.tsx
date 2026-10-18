@@ -489,7 +489,7 @@ export const App: React.FC = () => {
           });
           setSyncStatus('saved');
           if (!isSilent) {
-            showToast(`Azure SQL: ${res.message}`, 'success');
+            showToast(res.message, 'success');
           }
         } else {
           setDbStatus((prev) => ({

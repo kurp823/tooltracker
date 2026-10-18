@@ -1911,7 +1911,7 @@ export async function fetchLiveDatabaseData(): Promise<{
             dtBatches: reconciled.dtBatches,
             rtBatches: reconciled.rtBatches,
           },
-          message: `Loaded live from Azure Data API (${reconciled.inventory?.length ?? 0} tools, ${reconciled.jobs.length} jobs, ${reconciled.dtBatches.length} DTs, ${reconciled.rtBatches.length} RTs)`,
+          message: 'Connected to Azure SQL database',
         };
       }
     } catch (err: any) {
@@ -2140,7 +2140,7 @@ export async function fetchLiveDatabaseData(): Promise<{
               dtBatches: reconciled.dtBatches,
               rtBatches: reconciled.rtBatches,
             },
-            message: `Connected to Azure SQL via API (${reconciled.inventory?.length || 0} tools, ${reconciled.jobs.length} jobs, ${reconciled.dtBatches.length} DTs, ${reconciled.rtBatches.length} RTs)`,
+            message: 'Connected to Azure SQL database',
           };
         } else {
           lastError = `Returned 200 OK but keys were [${Object.keys(payload || {}).join(', ')}]`;
@@ -2643,7 +2643,7 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
   const isConnected = primaryRes.success || Boolean(secondaryRes.contracts || secondaryRes.callouts);
   const source = primaryRes.source !== 'failed' ? primaryRes.source : 'azure-sql';
 
-  const message = `Complete database synchronized across all modules (${counts.inventory} Tools, ${counts.jobs} Jobs, ${counts.dtBatches} DTs, ${counts.rtBatches} RTs, ${counts.contracts} Contracts, ${counts.callouts} Callouts, ${counts.gatePasses} Gate Passes, ${counts.inspections} Inspections, ${counts.maintenance} Maintenance)`;
+  const message = 'Complete database synchronized successfully.';
 
   return {
     success: isConnected,
