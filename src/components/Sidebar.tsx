@@ -98,6 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'inventory-dash', label: 'Inventory Dashboard', icon: '📊' },
         { id: 'inventory', label: 'Assets and Inventory', icon: '🧰' },
         { id: 'categories-sizes', label: 'Tool Categories & Sizes', icon: '🏷️' },
+        { id: 'po-management', label: 'PO & Goods Inward (GRN)', icon: '📑' },
         { id: 'consumables', label: 'Consumables & Store (SIV)', icon: '🧴' },
       ],
     },

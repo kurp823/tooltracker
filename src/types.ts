@@ -36,6 +36,7 @@ export type NavModule =
   | 'subcontractor-rentals' // Sub-Contractor Tool Rentals (Lease Rental-Equipment)
   | 'monthly-expenses'   // Monthly Expense Grid & Sub-Division P&L
   | 'consumables'        // Consumables Store & Store Issuance Vouchers
+  | 'po-management'     // PO Creation, Bulk Upload, Multi-Line GRNs & Supplier Reports
   | 'contract-dash'      // Contracts Analytics Dashboard (Ceiling vs Legally Invoiced Revenue)
   | 'contracts'          // Master Contracts Register
   | 'data-management'   // Data Management Tool (DMT)
@@ -868,5 +869,113 @@ export interface ConsumableIssuance {
   issuedBy: string;
   sivNumber: string; // Store Issuance Voucher #
   remarks?: string;
+}
+
+// ==========================================
+// Field Crew & Manpower Master
+// ==========================================
+export interface CrewPersonnel {
+  id: string;
+  badgeNo: string;
+  name: string;
+  role: string;
+  phone?: string;
+  email?: string;
+  rigPassNo?: string;
+  h2sExpiry?: string;
+  bosietExpiry?: string;
+  medicalExpiry?: string;
+  status: 'Active' | 'On Rig' | 'On Leave' | 'Inactive';
+  dayRateAED?: number;
+  assignedJobId?: string | null;
+  assignedRig?: string | null;
+}
+
+// ==========================================
+// PO & Goods Inward (GRN) Management
+// ==========================================
+export type ProcurementClassification = 'ASSET' | 'INVENTORY' | 'CONSUMABLE';
+
+export interface POLineItem {
+  lineId: string;
+  itemNo: number;
+  partNo: string;
+  description: string;
+  category: string;
+  size?: string;
+  contractRef?: string;
+  subDivision: SubDivision;
+  orderedQty: number;
+  receivedQty: number;
+  balanceQty: number;
+  unitPrice: number;
+  totalPrice: number;
+  classification: ProcurementClassification;
+  belongsTo?: string;
+  usefulLifeMonths?: number;
+  salvageValue?: number;
+  monthlyDepreciation?: number;
+}
+
+export interface PurchaseOrder {
+  poId: string;
+  poNumber: string;
+  supplier: string;
+  orderDate: string;
+  expectedDeliveryDate?: string;
+  currency: 'AED' | 'USD';
+  contractRef?: string;
+  subDivision?: SubDivision;
+  paymentTerms?: string;
+  notes?: string;
+  totalAmount: number;
+  inwardedAmount: number;
+  balanceAmount: number;
+  status: 'DRAFT' | 'OPEN' | 'PARTIALLY_RECEIVED' | 'FULFILLED' | 'CANCELLED';
+  createdBy?: string;
+  createdAt: string;
+  lines: POLineItem[];
+}
+
+export interface GRNLineItem {
+  lineId: string;
+  poLineId?: string;
+  partNo: string;
+  description: string;
+  category: string;
+  size?: string;
+  toolsno?: string;        // Serial / SystemID
+  contractRef?: string;
+  subDivision: SubDivision;
+  qtyReceived: number;
+  unitPrice: number;
+  bookValue: number;
+  currency: 'AED' | 'USD';
+  belongsTo: string;       // EMDAD, CORETRAX, EPIS, etc.
+  reqInsp: boolean;        // Inspection required checkbox
+  insDate?: string;        // Inspection Date
+  classification: ProcurementClassification;
+  usefulLifeMonths?: number;
+  salvageValue?: number;
+  monthlyDepreciation?: number;
+  comments?: string;
+}
+
+export interface GoodsReceiptNote {
+  grnId: string;
+  ticketNo: string;        // Ticket No (e.g. "230")
+  poNumber: string;        // PO Num (e.g. "32175")
+  supplier: string;        // Supplier (e.g. "EMDAD")
+  supplierDt: string;      // Supplier DT / DN (e.g. "DN-66057")
+  dateRecd: string;        // Date Recd (e.g. "8/15/2023")
+  mfgReceivedBy: string;   // Mfg / Received By (e.g. "NOOR ISLAM")
+  currency: 'AED' | 'USD';
+  totalItemsReceived: number;
+  totalInwardValue: number;
+  qcStatus: 'ACCEPTED' | 'ACCEPTED_WITH_DEVIATION' | 'REJECTED' | 'PENDING_INSPECTION';
+  comments?: string;
+  createdAt: string;
+  createdBy?: string;
+  lines: GRNLineItem[];
 }
 

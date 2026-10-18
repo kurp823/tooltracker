@@ -115,6 +115,10 @@ const ConsumablesView = React.lazy(() =>
   import('./components/ConsumablesView').then((module) => ({ default: module.ConsumablesView }))
 );
 
+const POManagementView = React.lazy(() =>
+  import('./components/POManagementView').then((module) => ({ default: module.POManagementView }))
+);
+
 
 // Safe localStorage write — never lets a quota failure crash the app.
 //
@@ -2160,6 +2164,23 @@ export const App: React.FC = () => {
                 inventory={inventory}
                 showToast={showToast}
                 onRefresh={() => handleFetchLiveSql(false)}
+              />
+            </React.Suspense>
+          )}
+
+          {activeView === 'po-management' && (
+            <React.Suspense
+              fallback={
+                <div className="bg-white border border-[#b8c9db] rounded p-12 text-center text-slate-500 font-semibold shadow-sm">
+                  <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                  Loading Purchase Orders &amp; Goods Inward (GRN) Hub...
+                </div>
+              }
+            >
+              <POManagementView
+                user={currentUser}
+                showToast={showToast}
+                onNavigate={(mod) => setActiveView(mod as ViewKey)}
               />
             </React.Suspense>
           )}

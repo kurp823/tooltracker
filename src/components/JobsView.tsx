@@ -1354,11 +1354,20 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
                 {/* 3. Project */}
                 <th
-                  style={{ width: jobsResizer.widths.project || 120 }}
+                  style={{ width: jobsResizer.widths.project || 110 }}
                   className="px-2.5 py-2 whitespace-nowrap relative"
                 >
                   <span>Project</span>
                   <ResizerHandle onMouseDown={(e) => jobsResizer.startResize('project', e)} />
+                </th>
+
+                {/* 3b. Sub-Division (Plain unstyled column, no colors, no wrap) */}
+                <th
+                  style={{ width: jobsResizer.widths.subDivision || 100 }}
+                  className="px-2.5 py-2 whitespace-nowrap relative"
+                >
+                  <span>Sub-Division</span>
+                  <ResizerHandle onMouseDown={(e) => jobsResizer.startResize('subDivision', e)} />
                 </th>
 
                 {/* 4. Rig */}
@@ -1522,7 +1531,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
             <tbody className="divide-y divide-slate-100 bg-white">
               {paginatedJobs.length === 0 ? (
                 <tr>
-                  <td colSpan={13 + jobsCustomCols.length} className="py-12 text-center text-slate-500 font-medium">
+                  <td colSpan={14 + jobsCustomCols.length} className="py-12 text-center text-slate-500 font-medium">
                     <div className="flex flex-col items-center justify-center gap-1">
                       <FileSpreadsheet className="w-8 h-8 text-slate-300" />
                       <div className="font-semibold text-slate-700">No drilling jobs found</div>
@@ -1566,19 +1575,14 @@ export const JobsView: React.FC<JobsViewProps> = ({
                         {job.client || 'ADNOC Drilling'}
                       </td>
 
-                      {/* 3. Project / Contract (clean without "Code:") */}
-                      <td className={`px-2.5 ${padY} align-middle font-mono text-xs text-slate-600 truncate min-w-[100px] max-w-[140px]`} title={job.contract || '—'}>
-                        <div>{job.contract || '—'}</div>
-                        {(() => {
-                          const sDiv = job.subDivision || resolveContractSubDivision(job.contract);
-                          if (!sDiv) return null;
-                          const color = sDiv === 'FISHING' ? 'text-sky-800 bg-sky-50 border-sky-300' : sDiv === 'WHIPSTOCK' ? 'text-amber-800 bg-amber-50 border-amber-300' : 'text-emerald-800 bg-emerald-50 border-emerald-300';
-                          return (
-                            <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded border mt-0.5 ${color}`}>
-                              {sDiv}
-                            </span>
-                          );
-                        })()}
+                      {/* 3. Project / Contract (Single clean line, no wrap) */}
+                      <td className={`px-2.5 ${padY} align-middle font-mono text-xs text-slate-700 whitespace-nowrap`} title={job.contract || '—'}>
+                        {job.contract || '—'}
+                      </td>
+
+                      {/* 3b. Sub-Division (Separate plain column, no badge colors, no wrap) */}
+                      <td className={`px-2.5 ${padY} align-middle text-xs font-semibold text-slate-800 whitespace-nowrap uppercase`}>
+                        {job.subDivision || resolveContractSubDivision(job.contract) || '—'}
                       </td>
 
                       {/* 4. Rig */}

@@ -43,134 +43,28 @@ export function addConsumableCategory(cat: string): string[] {
   return current;
 }
 
-export const INITIAL_CONSUMABLES: ConsumableItem[] = [
-  {
-    id: 'SKU-001',
-    partNo: 'RK-JAR-675',
-    description: 'Redress Seal Kit for 6-3/4" Hydraulic Drilling Jar (High Temp Viton)',
-    category: 'Redress Kit',
-    unit: 'KIT',
-    currentStock: 18,
-    unitCostAED: 1850,
-    reorderLevel: 5,
-    binLocation: 'BAY-A-01',
-    supplier: 'Downhole Seal Tech UAE',
-    lastRestockedDate: '2026-09-12',
-  },
-  {
-    id: 'SKU-002',
-    partNo: 'RK-BUMPER-625',
-    description: 'Complete Packing & O-Ring Redress Kit for 6-1/4" Bumper Sub',
-    category: 'Redress Kit',
-    unit: 'KIT',
-    currentStock: 4,
-    unitCostAED: 1200,
-    reorderLevel: 5,
-    binLocation: 'BAY-A-03',
-    supplier: 'Downhole Seal Tech UAE',
-    lastRestockedDate: '2026-08-20',
-  },
-  {
-    id: 'SKU-003',
-    partNo: 'PNT-EPOXY-BLUE',
-    description: 'Industrial Heavy Duty Epoxy Marine Coating (Emdad Blue, 20L Drum)',
-    category: 'Paint & Coatings',
-    unit: 'CAN',
-    currentStock: 25,
-    unitCostAED: 450,
-    reorderLevel: 8,
-    binLocation: 'CHEM-STORE-02',
-    supplier: 'Jotun Paints Abu Dhabi',
-    lastRestockedDate: '2026-09-25',
-  },
-  {
-    id: 'SKU-004',
-    partNo: 'LUB-THRD-DOPE',
-    description: 'API Spec High-Pressure Tool Joint Compound / Thread Dope (18kg Pail)',
-    category: 'Lubricants & Oils',
-    unit: 'CAN',
-    currentStock: 32,
-    unitCostAED: 620,
-    reorderLevel: 10,
-    binLocation: 'LUB-RACK-01',
-    supplier: 'Bestolife UAE',
-    lastRestockedDate: '2026-09-18',
-  },
-  {
-    id: 'SKU-005',
-    partNo: 'SP-WASHPIPE-800',
-    description: 'Hardened Tungsten Carbide Coated Washpipe Assembly 8"',
-    category: 'Spare Parts',
-    unit: 'EA',
-    currentStock: 6,
-    unitCostAED: 4200,
-    reorderLevel: 3,
-    binLocation: 'MACH-PARTS-04',
-    supplier: 'Rotary Precision UAE',
-    lastRestockedDate: '2026-07-15',
-  },
-  {
-    id: 'SKU-006',
-    partNo: 'HSE-GLOVE-IMPACT',
-    description: 'Heavy Duty Anti-Impact Rig & Workshop Gloves (Size XL, Pair)',
-    category: 'HSE & Safety',
-    unit: 'SET',
-    currentStock: 85,
-    unitCostAED: 65,
-    reorderLevel: 25,
-    binLocation: 'HSE-CAB-01',
-    supplier: 'SafeTech Middle East',
-    lastRestockedDate: '2026-10-01',
-  },
-];
+export const INITIAL_CONSUMABLES: ConsumableItem[] = [];
 
-export const INITIAL_ISSUANCES: ConsumableIssuance[] = [
-  {
-    issuanceId: 'SIV-2026-089',
-    sivNumber: 'SIV-2026-089',
-    issueDate: '2026-10-08',
-    partNo: 'RK-JAR-675',
-    description: 'Redress Seal Kit for 6-3/4" Hydraulic Drilling Jar (High Temp Viton)',
-    qtyIssued: 2,
-    unitCostAED: 1850,
-    totalCostAED: 3700,
-    destinationType: 'TOOL_REDRESS',
-    toolSerialNo: 'JAR-675-014',
-    jobId: 'JOB-026-01798',
-    subDivision: 'RENTALS',
-    requestedBy: 'Tariq Mansour (Lead Workshop Tech)',
-    issuedBy: 'Hamdan Storekeeper',
-    remarks: 'Post-job strip down redress before load test',
-  },
-  {
-    issuanceId: 'SIV-2026-090',
-    sivNumber: 'SIV-2026-090',
-    issueDate: '2026-10-12',
-    partNo: 'PNT-EPOXY-BLUE',
-    description: 'Industrial Heavy Duty Epoxy Marine Coating (Emdad Blue, 20L Drum)',
-    qtyIssued: 3,
-    unitCostAED: 450,
-    totalCostAED: 1350,
-    destinationType: 'WORKSHOP_BASE',
-    workshopArea: 'Main Base Blasting & Painting Yard',
-    subDivision: 'FISHING',
-    requestedBy: 'Mohamed Said (Yard Foreman)',
-    issuedBy: 'Hamdan Storekeeper',
-    remarks: 'Base equipment and basket maintenance repaint',
-  },
-];
+export const INITIAL_ISSUANCES: ConsumableIssuance[] = [];
+
+const MOCK_SKU_IDS = new Set(['SKU-001', 'SKU-002', 'SKU-003', 'SKU-004', 'SKU-005', 'SKU-006']);
+const MOCK_SIV_IDS = new Set(['SIV-2026-089', 'SIV-2026-090']);
 
 export function getConsumablesList(): ConsumableItem[] {
   try {
     const raw = localStorage.getItem(SKUS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) {
+        // Filter out legacy dummy hardcoded SKUs
+        const clean = parsed.filter((i) => i && !MOCK_SKU_IDS.has(i.id));
+        return clean;
+      }
     }
   } catch (e) {
     console.error('Error loading consumables:', e);
   }
-  return INITIAL_CONSUMABLES;
+  return [];
 }
 
 export function saveConsumablesList(items: ConsumableItem[]): void {
@@ -187,12 +81,15 @@ export function getConsumableIssuances(): ConsumableIssuance[] {
     const raw = localStorage.getItem(ISSUANCES_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) {
+        const clean = parsed.filter((i) => i && !MOCK_SIV_IDS.has(i.issuanceId));
+        return clean;
+      }
     }
   } catch (e) {
     console.error('Error loading consumable issuances:', e);
   }
-  return INITIAL_ISSUANCES;
+  return [];
 }
 
 export function saveConsumableIssuances(issuances: ConsumableIssuance[]): void {

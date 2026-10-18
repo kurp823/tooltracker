@@ -42,6 +42,12 @@ import {
 import { DropdownListKey, getDropdownOptions } from '../services/dropdownService';
 import { AdminDropdownModal } from './AdminDropdownModal';
 import { Settings as SettingsIcon } from 'lucide-react';
+import {
+  loadCrewPersonnel,
+  addCrewPersonnel,
+  updateCrewPersonnel,
+  deleteCrewPersonnel,
+} from '../services/crewPersonnelService';
 
 interface JobDossierViewProps {
   job: DrillingJob;
@@ -798,12 +804,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           rt.id === t.rtBatchId ||
           rt.rtNumber === t.rtBatchId
         );
-        const candidateDate = returnBatch
-          ? returnBatch.rtDate || returnBatch.backloadRmDate || (returnBatch as any).Date_In || (returnBatch as any).dateIn
-          : (t as any).rtDate || (t as any).returnDate || (t as any).Date_In || (t as any).dateIn || (t.status === 'Returned' ? jobData.demobDate : null);
+        let candidateDate = null;
+        if (returnBatch) {
+          if (utilEndDateMode === 'BACKLOAD') {
+            candidateDate = returnBatch.backloadRmDate || returnBatch.rtDate || (returnBatch as any).Date_In || (returnBatch as any).dateIn;
+          } else {
+            candidateDate = returnBatch.rtDate || (returnBatch as any).Date_In || (returnBatch as any).dateIn || returnBatch.backloadRmDate;
+          }
+        } else {
+          candidateDate = (t as any).rtDate || (t as any).returnDate || (t as any).Date_In || (t as any).dateIn || (t.status === 'Returned' ? jobData.demobDate : null);
+        }
         
         const isValidDate = candidateDate && (!dtDate || candidateDate >= dtDate);
-        const rDate = isValidDate ? candidateDate : (returnBatch ? returnBatch.rtDate : null);
+        const rDate = isValidDate ? candidateDate : (returnBatch ? (utilEndDateMode === 'BACKLOAD' ? (returnBatch.backloadRmDate || returnBatch.rtDate) : returnBatch.rtDate) : null);
         const rNum = returnBatch ? returnBatch.rtNumber : (isValidDate && t.rtBatchId && t.rtBatchId !== '—' ? t.rtBatchId : null);
 
         return {
@@ -815,7 +828,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         };
       })
     );
-  }, [jobDTs, jobRTs, jobData.demobDate]);
+  }, [jobDTs, jobRTs, jobData.demobDate, utilEndDateMode]);
 
   // Dynamic Month Options based strictly on first DT to last RT
   const utilMonthOptions = useMemo(() => {
@@ -905,19 +918,48 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const [selectedPersonnelRole, setSelectedPersonnelRole] = useState<string>('All Roles');
   const [checkedPersonnelBadges, setCheckedPersonnelBadges] = useState<string[]>([]);
 
+  // Dynamic Master Crew State from crewPersonnelService
+  const [masterCrew, setMasterCrew] = useState(() => loadCrewPersonnel());
+
+  useEffect(() => {
+    const handleCrewUpdate = () => setMasterCrew(loadCrewPersonnel());
+    window.addEventListener('crew_updated', handleCrewUpdate);
+    return () => window.removeEventListener('crew_updated', handleCrewUpdate);
+  }, []);
+
+  // Add / Edit Crew Member Modal State
+  const [isCrewFormModalOpen, setIsCrewFormModalOpen] = useState(false);
+  const [editingCrewId, setEditingCrewId] = useState<string | null>(null);
+  const [crewFormData, setCrewFormData] = useState({
+    badgeNo: '',
+    name: '',
+    role: 'Lead Fishing & Whipstock Specialist',
+    phone: '',
+    email: '',
+    rigPassNo: '',
+    h2sExpiry: '',
+    bosietExpiry: '',
+    medicalExpiry: '',
+    status: 'Active' as const,
+    dayRateAED: 3500,
+  });
+
+  // Utilization Date Boundary: Rig Backload Date (RT) vs Base Yard Return Date
+  const [utilEndDateMode, setUtilEndDateMode] = useState<'BACKLOAD' | 'YARD_RETURN'>('BACKLOAD');
+
   // Unique roles for personnel picker
   const availablePersonnelRoles = useMemo(() => {
     const set = new Set<string>();
-    MASTER_PERSONNEL_ROSTER.forEach((p) => set.add(p.designation));
+    masterCrew.forEach((p) => set.add(p.role));
     return ['All Roles', ...Array.from(set).sort()];
-  }, []);
+  }, [masterCrew]);
 
   const filteredPersonnelRoster = useMemo(() => {
-    return MASTER_PERSONNEL_ROSTER.filter((p) => {
+    return masterCrew.filter((p) => {
       if (selectedPersonnelRole === 'All Roles') return true;
-      return p.designation === selectedPersonnelRole;
+      return p.role === selectedPersonnelRole;
     });
-  }, [selectedPersonnelRole]);
+  }, [masterCrew, selectedPersonnelRole]);
 
   // Selected Checklist within Checklist Tab
   const [selectedCalloutId, setSelectedCalloutId] = useState<string>(() => {
@@ -2061,6 +2103,29 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     onSaveJob(updatedJob);
 
     showToast(`Assigned ${newMembers.length} certified engineer(s) to Rig ${jobData.rig}.`, 'success');
+  };
+
+  // Save / Update Master Crew Member (Admin Only)
+  const handleSaveMasterCrewMember = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!crewFormData.badgeNo.trim()) {
+      showToast('Badge number is required.', 'error');
+      return;
+    }
+    if (!crewFormData.name.trim()) {
+      showToast('Full name is required.', 'error');
+      return;
+    }
+
+    if (editingCrewId) {
+      updateCrewPersonnel(editingCrewId, crewFormData);
+      showToast(`Updated personnel record for ${crewFormData.name}.`, 'success');
+    } else {
+      addCrewPersonnel(crewFormData);
+      showToast(`Added ${crewFormData.name} to Master Certified Personnel.`, 'success');
+    }
+    setMasterCrew(loadCrewPersonnel());
+    setIsCrewFormModalOpen(false);
   };
 
   // Delete Crew Member
@@ -5987,8 +6052,38 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
             {/* 2. Downhole Tool Fleet Utilization Matrix (Second) */}
             <div className="pt-2">
-              <div className="bg-[#1a3055] text-white px-3 py-1.5 rounded-t font-bold text-xs flex items-center justify-between">
-                <span>Downhole Tool Fleet Utilization &bull; {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}</span>
+              <div className="bg-[#1a3055] text-white px-3 py-1.5 rounded-t font-bold text-xs flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <span>Downhole Tool Fleet Utilization &bull; {MONTH_NAMES[selectedUtilMonth - 1]} {selectedUtilYear}</span>
+                  {/* Utilization Boundary Toggle */}
+                  <div className="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded border border-white/20 text-[10px]">
+                    <span className="text-slate-300">End Date Source:</span>
+                    <button
+                      type="button"
+                      onClick={() => setUtilEndDateMode('BACKLOAD')}
+                      className={`px-2 py-0.5 rounded font-black transition cursor-pointer ${
+                        utilEndDateMode === 'BACKLOAD'
+                          ? 'bg-amber-400 text-slate-950 shadow-xs'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                      title="Tool utilization stops when backloaded from rig"
+                    >
+                      Rig Backload Date (RT)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUtilEndDateMode('YARD_RETURN')}
+                      className={`px-2 py-0.5 rounded font-black transition cursor-pointer ${
+                        utilEndDateMode === 'YARD_RETURN'
+                          ? 'bg-amber-400 text-slate-950 shadow-xs'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                      title="Tool utilization stops when physically returned to yard"
+                    >
+                      Yard Return Date
+                    </button>
+                  </div>
+                </div>
                 <div className="flex items-center gap-3">
                   <span className="text-emerald-400 font-mono text-[11px]">
                     Total Tool Revenue: {totalToolRevenueAED.toLocaleString()} AED
@@ -6361,13 +6456,40 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               <div className="flex items-center gap-2">
                 <span>personnelselect &bull; Field Crew Assignment Picker</span>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsPersonnelSelectOpen(false)}
-                className="text-white hover:text-amber-300 font-bold text-base cursor-pointer px-1"
-              >
-                &times;
-              </button>
+              <div className="flex items-center gap-2">
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCrewId(null);
+                      setCrewFormData({
+                        badgeNo: `EMD-${Math.floor(1000 + Math.random() * 9000)}`,
+                        name: '',
+                        role: selectedPersonnelRole === 'All Roles' ? 'Lead Fishing & Whipstock Specialist' : selectedPersonnelRole,
+                        phone: '',
+                        email: '',
+                        rigPassNo: `ADNOC-RP-${Math.floor(10000 + Math.random() * 90000)}`,
+                        h2sExpiry: '2027-12-31',
+                        bosietExpiry: '2028-06-30',
+                        medicalExpiry: '2027-06-30',
+                        status: 'Active',
+                        dayRateAED: 3500,
+                      });
+                      setIsCrewFormModalOpen(true);
+                    }}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-xs flex items-center gap-1 cursor-pointer"
+                  >
+                    + Add Personnel
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsPersonnelSelectOpen(false)}
+                  className="text-white hover:text-amber-300 font-bold text-base cursor-pointer px-1"
+                >
+                  &times;
+                </button>
+              </div>
             </div>
 
             <div className="p-3 flex-1 flex flex-col min-h-0 space-y-2.5">
@@ -6406,12 +6528,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <th className="py-1 px-2 whitespace-nowrap font-mono">H2S Expiry</th>
                       <th className="py-1 px-2 whitespace-nowrap text-center">Status</th>
                       <th className="py-1 px-2 whitespace-nowrap text-center w-14">select [✓]</th>
+                      {isAdmin && <th className="py-1 px-2 whitespace-nowrap text-center w-16">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {filteredPersonnelRoster.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-8 text-center text-slate-500 font-medium">
+                        <td colSpan={isAdmin ? 8 : 7} className="p-8 text-center text-slate-500 font-medium">
                           No personnel found for role: <strong>{selectedPersonnelRole}</strong>.
                         </td>
                       </tr>
@@ -6434,8 +6557,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           >
                             <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900">{p.badgeNo}</td>
                             <td className="py-1 px-2 whitespace-nowrap truncate max-w-[200px] font-bold text-blue-900" title={p.name}>{p.name}</td>
-                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[240px] text-slate-700" title={p.designation}>{p.designation}</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">{p.rigPassNo}</td>
+                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[240px] text-slate-700" title={p.role}>{p.role}</td>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700">{p.rigPassNo || '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{p.h2sExpiry ? formatDateDD_MM_YYYY(p.h2sExpiry) : '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-center">
                               <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
@@ -6456,6 +6579,48 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                                 className="cursor-pointer"
                               />
                             </td>
+                            {isAdmin && (
+                              <td className="py-1 px-2 whitespace-nowrap text-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCrewId(p.id);
+                                    setCrewFormData({
+                                      badgeNo: p.badgeNo,
+                                      name: p.name,
+                                      role: p.role,
+                                      phone: p.phone || '',
+                                      email: p.email || '',
+                                      rigPassNo: p.rigPassNo || '',
+                                      h2sExpiry: p.h2sExpiry || '',
+                                      bosietExpiry: p.bosietExpiry || '',
+                                      medicalExpiry: p.medicalExpiry || '',
+                                      status: p.status || 'Active',
+                                      dayRateAED: p.dayRateAED || 3500,
+                                    });
+                                    setIsCrewFormModalOpen(true);
+                                  }}
+                                  className="px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-100 rounded cursor-pointer"
+                                  title="Edit details"
+                                >
+                                  ✏️
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (window.confirm(`Delete ${p.name} (${p.badgeNo})?`)) {
+                                      deleteCrewPersonnel(p.id);
+                                      setMasterCrew(loadCrewPersonnel());
+                                      showToast(`Removed ${p.name}`, 'info');
+                                    }
+                                  }}
+                                  className="px-1.5 py-0.5 text-xs text-rose-700 hover:bg-rose-100 rounded cursor-pointer"
+                                  title="Delete personnel"
+                                >
+                                  🗑️
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         );
                       })
@@ -6488,6 +6653,170 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADD / EDIT MASTER CREW PERSONNEL MODAL (ADMIN ONLY) */}
+      {isCrewFormModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-3 animate-in fade-in duration-150">
+          <div
+            className="bg-[#dce6f1] border-2 border-[#1a3055] rounded-md shadow-2xl w-full max-w-xl flex flex-col overflow-hidden"
+            style={{ fontFamily: "'Calibri', 'Arial Nova', 'Segoe UI', Arial, sans-serif", fontSize: '9pt' }}
+          >
+            <div className="bg-[#1a3055] text-white px-3 py-1.5 flex items-center justify-between text-xs font-bold flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <span>personnelmaster &bull; {editingCrewId ? 'Edit Certified Personnel' : 'Add New Certified Personnel'} (Admin)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCrewFormModalOpen(false)}
+                className="text-white hover:text-amber-300 font-bold text-base cursor-pointer px-1"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMasterCrewMember} className="p-3 space-y-3 bg-white text-slate-800">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Badge Number *</label>
+                  <input
+                    type="text"
+                    required
+                    value={crewFormData.badgeNo}
+                    onChange={(e) => setCrewFormData({ ...crewFormData, badgeNo: e.target.value.toUpperCase() })}
+                    placeholder="e.g. EMD-4102"
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono font-bold text-slate-900 bg-slate-50 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={crewFormData.name}
+                    onChange={(e) => setCrewFormData({ ...crewFormData, name: e.target.value })}
+                    placeholder="e.g. Ahmed Al-Mansoor"
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-bold text-slate-900 bg-slate-50 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Role / Designation *</label>
+                  <input
+                    type="text"
+                    required
+                    list="crew-roles-list"
+                    value={crewFormData.role}
+                    onChange={(e) => setCrewFormData({ ...crewFormData, role: e.target.value })}
+                    placeholder="Select or enter role"
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-medium text-slate-900 bg-slate-50 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                  <datalist id="crew-roles-list">
+                    <option value="Lead Fishing & Whipstock Specialist" />
+                    <option value="Senior Downhole Tool Engineer" />
+                    <option value="Whipstock Operations Specialist" />
+                    <option value="Senior Fishing Operations Supervisor" />
+                    <option value="Field Service Engineer (Casing Exit & Mills)" />
+                    <option value="Downhole Rentals Field Engineer" />
+                    <option value="Fishing & Redress Tech Specialist" />
+                  </datalist>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">ADNOC Rig Pass #</label>
+                  <input
+                    type="text"
+                    value={crewFormData.rigPassNo}
+                    onChange={(e) => setCrewFormData({ ...crewFormData, rigPassNo: e.target.value.toUpperCase() })}
+                    placeholder="e.g. ADNOC-RP-88412"
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono text-slate-900 bg-slate-50 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">H2S Expiry</label>
+                  <input
+                    type="date"
+                    value={crewFormData.h2sExpiry}
+                    onChange={(e) => setCrewFormData({ ...crewFormData, h2sExpiry: e.target.value })}
+                    className="w-full border border-slate-300 rounded px-2 py-1 text-slate-900 bg-slate-50 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">BOSIET Expiry</label>
+                  <input
+                    type="date"
+                    value={crewFormData.bosietExpiry}
+                    onChange={(e) => setCrewFormData({ ...crewFormData, bosietExpiry: e.target.value })}
+                    className="w-full border border-slate-300 rounded px-2 py-1 text-slate-900 bg-slate-50 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Medical Expiry</label>
+                  <input
+                    type="date"
+                    value={crewFormData.medicalExpiry}
+                    onChange={(e) => setCrewFormData({ ...crewFormData, medicalExpiry: e.target.value })}
+                    className="w-full border border-slate-300 rounded px-2 py-1 text-slate-900 bg-slate-50 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Phone</label>
+                  <input
+                    type="text"
+                    value={crewFormData.phone}
+                    onChange={(e) => setCrewFormData({ ...crewFormData, phone: e.target.value })}
+                    placeholder="+971 50 xxx xxxx"
+                    className="w-full border border-slate-300 rounded px-2.5 py-1 text-slate-900 bg-slate-50"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={crewFormData.status}
+                    onChange={(e) => setCrewFormData({ ...crewFormData, status: e.target.value as any })}
+                    className="w-full border border-slate-300 rounded px-2.5 py-1 text-slate-900 bg-slate-50 font-bold"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="On Leave">On Leave</option>
+                    <option value="Off Duty">Off Duty</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Day Rate (AED)</label>
+                  <input
+                    type="number"
+                    value={crewFormData.dayRateAED}
+                    onChange={(e) => setCrewFormData({ ...crewFormData, dayRateAED: Number(e.target.value) || 0 })}
+                    className="w-full border border-slate-300 rounded px-2.5 py-1 font-mono font-bold text-slate-900 bg-slate-50"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsCrewFormModalOpen(false)}
+                  className="px-4 py-1.5 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-1.5 rounded bg-[#107c41] hover:bg-[#0c6233] text-white font-bold shadow-xs cursor-pointer text-xs"
+                >
+                  💾 {editingCrewId ? 'Update Personnel' : 'Save Personnel'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

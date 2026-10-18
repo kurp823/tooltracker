@@ -243,6 +243,27 @@ export const CategoriesSizesView: React.FC<CategoriesSizesViewProps> = ({
         </div>
 
         <div className="flex items-center gap-3 text-xs">
+          {canEdit && (
+            <button
+              onClick={() => {
+                onUpdateCategories([...categories]);
+                onUpdateSizes([...sizes]);
+                try {
+                  localStorage.setItem('emdad_custom_categories', JSON.stringify(categories));
+                  localStorage.setItem('emdad_custom_sizes', JSON.stringify(sizes));
+                  window.dispatchEvent(new Event('categories_updated'));
+                  window.dispatchEvent(new Event('sizes_updated'));
+                } catch {}
+                showToast('✓ Master Categories & Standard Sizes successfully saved to Master Register!', 'success');
+              }}
+              title="Save all Category & Size modifications to database"
+              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md shadow-emerald-900/20 transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>💾</span>
+              <span>Save &amp; Update Master Data</span>
+            </button>
+          )}
+
           {onRefresh && (
             <button
               onClick={onRefresh}
