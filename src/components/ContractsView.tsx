@@ -21,7 +21,9 @@ import {
   AlertCircle, 
   Info,
   Building2,
-  Eye
+  Eye,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 
 interface ContractsViewProps {
@@ -29,6 +31,7 @@ interface ContractsViewProps {
   contracts: ContractRecord[];
   jobs: DrillingJob[];
   onSaveContract: (contract: ContractRecord) => void;
+  onDeleteContract?: (contractIdOrRef: string) => void;
   onRefresh?: () => Promise<void>;
   onNavigate?: (mod: NavModule) => void;
 }
@@ -38,6 +41,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
   contracts,
   jobs,
   onSaveContract,
+  onDeleteContract,
   onRefresh,
   onNavigate,
 }) => {
@@ -52,23 +56,25 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
   const [detailActiveTab, setDetailActiveTab] = useState<'overview' | 'rates'>('overview');
   const [contractForRates, setContractForRates] = useState<ContractRecord | null>(null);
   const [isNewContractOpen, setIsNewContractOpen] = useState(false);
+  const [editingContract, setEditingContract] = useState<ContractRecord | null>(null);
+  const [contractToDelete, setContractToDelete] = useState<ContractRecord | null>(null);
 
   // Dynamic Custom Columns & Excel-like Resizable Grid Columns
   const contractsCustomCols = useCustomColumns('contracts');
   const contractsResizer = useResizableColumns('contracts_grid', {
-    id: 60,
+    id: 50,
     client: 160,
-    contractRef: 150,
-    shortDesc: 200,
+    contractRef: 140,
+    shortDesc: 220,
     currency: 65,
-    validity: 140,
+    validity: 150,
     status: 80,
     contractValue: 130,
-    pbgNumber: 110,
-    pbgValue: 110,
-    pbgExpiry: 100,
-    rates: 120,
-    actions: 90,
+    pbgNumber: 115,
+    pbgValue: 115,
+    pbgExpiry: 105,
+    rates: 110,
+    actions: 145,
   });
 
   // Form states for New Contract
@@ -204,7 +210,54 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
     XLSX.writeFile(workbook, `tbl_Contracts_Master_Register_${dateStamp}.xlsx`);
   };
 
-  const handleCreateContract = (e: React.FormEvent) => {
+  const openNewContractModal = () => {
+    setEditingContract(null);
+    setContractNo('');
+    setContractRef('');
+    setShortDesc('');
+    setName('');
+    setClient('ADNOC ONSHORE');
+    setStartDate(new Date().toISOString().slice(0, 10));
+    setEndDate('2028-12-31');
+    setCurrency('USD');
+    setStatus('Active');
+    setContractValue('');
+    setIsUnitRate(false);
+    setStandbyDiscount(50);
+    setPbgNumber('');
+    setPbgValue('');
+    setPbgIssueDate('');
+    setPbgExpiryDate('');
+    setPbgOpenEnded(false);
+    setNotes('');
+    setIsNewContractOpen(true);
+  };
+
+  const openEditContractModal = (c: ContractRecord) => {
+    setEditingContract(c);
+    setContractNo(c.contractNo || c.contractRef || '');
+    setContractRef(c.contractRef || c.contractNo || '');
+    setShortDesc(c.shortDesc || c.name || '');
+    setName(c.name || c.shortDesc || '');
+    setClient(c.client || 'ADNOC ONSHORE');
+    setStartDate(c.startDate || new Date().toISOString().slice(0, 10));
+    setEndDate(c.endDate || '2028-12-31');
+    setCurrency((c.currency as 'USD' | 'AED') || 'USD');
+    setStatus((c.status as 'Active' | 'Closed') || 'Active');
+    setIsUnitRate(c.contractValue === null || c.contractValue === undefined);
+    setContractValue(c.contractValue !== null && c.contractValue !== undefined ? String(c.contractValue) : '');
+    setStandbyDiscount(c.standbyDiscountPct ?? 50);
+    setPbgNumber(c.pbgNumber && c.pbgNumber !== '-' ? c.pbgNumber : '');
+    setPbgValue(c.pbgValue !== null && c.pbgValue !== undefined ? String(c.pbgValue) : '');
+    setPbgIssueDate(c.pbgIssueDate || '');
+    const isOpen = c.pbgExpiryDate === 'OPEN ENDED';
+    setPbgOpenEnded(isOpen);
+    setPbgExpiryDate(isOpen ? '' : (c.pbgExpiryDate || ''));
+    setNotes(c.notes || c.description || '');
+    setIsNewContractOpen(true);
+  };
+
+  const handleSaveContractForm = (e: React.FormEvent) => {
     e.preventDefault();
     if (!contractNo || !name) {
       alert('Please provide Contract Number and Name.');
@@ -214,50 +267,77 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
     const val = isUnitRate ? null : (parseFloat(contractValue) || null);
     const pbgVal = parseFloat(pbgValue) || null;
 
-    const newC: ContractRecord = {
-      id: String(contracts.length + 1),
-      contractNo: contractNo.trim(),
-      contractRef: (contractRef || contractNo).trim(),
-      name: name.trim(),
-      shortDesc: (shortDesc || name).trim(),
-      client: client.trim(),
-      startDate,
-      endDate,
-      status,
-      currency,
-      contractValue: val,
-      standbyDiscountPct: Number(standbyDiscount) || 50,
-      pbgNumber: pbgNumber.trim() || undefined,
-      pbgValue: pbgVal,
-      pbgIssueDate: pbgIssueDate || undefined,
-      pbgExpiryDate: pbgOpenEnded ? 'OPEN ENDED' : (pbgExpiryDate || undefined),
-      notes: notes.trim(),
-      rates: [],
-    };
+    if (editingContract) {
+      const updated: ContractRecord = {
+        ...editingContract,
+        contractNo: contractNo.trim(),
+        contractRef: (contractRef || contractNo).trim(),
+        name: name.trim(),
+        shortDesc: (shortDesc || name).trim(),
+        client: client.trim(),
+        startDate,
+        endDate,
+        status,
+        currency,
+        contractValue: val,
+        standbyDiscountPct: Number(standbyDiscount) || 50,
+        pbgNumber: pbgNumber.trim() || undefined,
+        pbgValue: pbgVal,
+        pbgIssueDate: pbgIssueDate || undefined,
+        pbgExpiryDate: pbgOpenEnded ? 'OPEN ENDED' : (pbgExpiryDate || undefined),
+        notes: notes.trim(),
+        rates: editingContract.rates || [],
+      };
+      onSaveContract(updated);
+      if (selectedContract && (selectedContract.id === editingContract.id || selectedContract.contractRef === editingContract.contractRef)) {
+        setSelectedContract(updated);
+      }
+    } else {
+      const newC: ContractRecord = {
+        id: String(contracts.length + 1),
+        contractNo: contractNo.trim(),
+        contractRef: (contractRef || contractNo).trim(),
+        name: name.trim(),
+        shortDesc: (shortDesc || name).trim(),
+        client: client.trim(),
+        startDate,
+        endDate,
+        status,
+        currency,
+        contractValue: val,
+        standbyDiscountPct: Number(standbyDiscount) || 50,
+        pbgNumber: pbgNumber.trim() || undefined,
+        pbgValue: pbgVal,
+        pbgIssueDate: pbgIssueDate || undefined,
+        pbgExpiryDate: pbgOpenEnded ? 'OPEN ENDED' : (pbgExpiryDate || undefined),
+        notes: notes.trim(),
+        rates: [],
+      };
+      onSaveContract(newC);
+    }
 
-    onSaveContract(newC);
     setIsNewContractOpen(false);
-    
-    // Reset form
-    setContractNo('');
-    setContractRef('');
-    setShortDesc('');
-    setName('');
-    setContractValue('');
-    setPbgNumber('');
-    setPbgValue('');
-    setPbgIssueDate('');
-    setPbgExpiryDate('');
-    setPbgOpenEnded(false);
-    setNotes('');
+    setEditingContract(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!contractToDelete) return;
+    const targetKey = contractToDelete.id || contractToDelete.contractRef || contractToDelete.contractNo;
+    if (onDeleteContract) {
+      onDeleteContract(targetKey);
+    }
+    if (selectedContract && (selectedContract.id === contractToDelete.id || selectedContract.contractRef === contractToDelete.contractRef)) {
+      setSelectedContract(null);
+    }
+    setContractToDelete(null);
   };
 
   return (
     <div className="space-y-4">
       {isReadOnly && <ReadOnlyBanner role={user?.role} moduleName="Commercial Contracts & Price Books" />}
 
-      {/* Top Banner Ribbon */}
-      <div className="bg-white border border-[#b8c9db] rounded-lg p-4 shadow-sm">
+      {/* Top Banner Ribbon - Clean Executive Styling */}
+      <div className="bg-white border border-[#b8c9db] rounded-lg p-4 shadow-2xs">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-[#1a3055] text-white flex items-center justify-center shadow-xs">
@@ -266,8 +346,8 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold text-[#1a3055]">Commercial Contracts Master Register</h1>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                   Live SQL: tbl_Contracts ({contracts.length} Agreements)
                 </span>
               </div>
@@ -281,7 +361,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
             {onNavigate && (
               <button
                 onClick={() => onNavigate('contract-dash')}
-                className="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                className="px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-[#1a3055] font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer border border-slate-300 shadow-2xs"
                 title="View Contracts Commercial & Revenue Analytics Dashboard"
               >
                 <span>📊 Contracts Dashboard</span>
@@ -292,17 +372,17 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
               <button
                 onClick={handleRefresh}
                 disabled={isRefreshing}
-                className="px-2.5 py-1.5 rounded border border-[#b8c9db] text-slate-700 bg-slate-50 hover:bg-slate-100 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs disabled:opacity-50"
+                className="px-2.5 py-1.5 rounded border border-[#b8c9db] text-slate-700 bg-slate-50 hover:bg-slate-100 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-2xs disabled:opacity-50"
                 title="Synchronize contracts with Azure SQL tbl_Contracts"
               >
-                <RefreshCw size={13} className={isRefreshing ? 'animate-spin text-blue-600' : 'text-slate-600'} />
+                <RefreshCw size={13} className={isRefreshing ? 'animate-spin text-slate-700' : 'text-slate-600'} />
                 <span>{isRefreshing ? 'Syncing...' : 'Sync SQL'}</span>
               </button>
             )}
 
             <button
               onClick={handleExportCsv}
-              className="px-2.5 py-1.5 rounded border border-[#b8c9db] text-slate-700 bg-slate-50 hover:bg-slate-100 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+              className="px-2.5 py-1.5 rounded border border-[#b8c9db] text-slate-700 bg-slate-50 hover:bg-slate-100 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
               title="Export filtered contracts to Excel"
             >
               <Download size={13} className="text-slate-600" />
@@ -311,8 +391,8 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
 
             {canEdit && (
               <button
-                onClick={() => setIsNewContractOpen(true)}
-                className="px-3 py-1.5 rounded bg-[#1a3055] text-white font-bold text-xs hover:bg-[#24426d] shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                onClick={openNewContractModal}
+                className="px-3 py-1.5 rounded bg-[#1a3055] text-white font-semibold text-xs hover:bg-[#24426d] shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
               >
                 <Plus size={14} className="text-amber-400" />
                 <span>New Contract</span>
@@ -321,35 +401,35 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
           </div>
         </div>
 
-        {/* Portfolio KPI Badges */}
+        {/* Portfolio KPI Badges - Clean Executive Styling without garish colors */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-3 border-t border-slate-100">
-          <div className="bg-slate-50/80 rounded-md p-2.5 border border-slate-200">
+          <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-2xs">
             <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Agreements</div>
             <div className="text-sm font-bold text-[#1a3055] mt-0.5 flex items-baseline gap-2">
               <span>{metrics.total} Contracts</span>
-              <span className="text-[10px] text-emerald-700 font-medium font-mono">
+              <span className="text-[10px] text-slate-500 font-medium font-mono">
                 ({metrics.active} Active / {metrics.closed} Closed)
               </span>
             </div>
           </div>
 
-          <div className="bg-blue-50/60 rounded-md p-2.5 border border-blue-200">
-            <div className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Active Portfolio (USD)</div>
-            <div className="text-sm font-bold text-blue-950 mt-0.5 font-mono">
-              ${(metrics.usdTotal / 1_000_000).toFixed(2)}M <span className="text-[10px] font-sans font-normal text-blue-800">USD</span>
+          <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-2xs">
+            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Active Portfolio (USD)</div>
+            <div className="text-sm font-bold text-[#1a3055] mt-0.5 font-mono">
+              ${(metrics.usdTotal / 1_000_000).toFixed(2)}M <span className="text-[10px] font-sans font-normal text-slate-500">USD</span>
             </div>
           </div>
 
-          <div className="bg-amber-50/60 rounded-md p-2.5 border border-amber-200">
-            <div className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Active Portfolio (AED)</div>
-            <div className="text-sm font-bold text-amber-950 mt-0.5 font-mono">
+          <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-2xs">
+            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Active Portfolio (AED)</div>
+            <div className="text-sm font-bold text-[#1a3055] mt-0.5 font-mono">
               AED {(metrics.aedTotal / 1_000_000).toFixed(2)}M
             </div>
           </div>
 
-          <div className="bg-purple-50/60 rounded-md p-2.5 border border-purple-200">
-            <div className="text-[10px] font-bold text-purple-800 uppercase tracking-wider">Active PBG Security</div>
-            <div className="text-sm font-bold text-purple-950 mt-0.5 font-mono">
+          <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-2xs">
+            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Active PBG Security</div>
+            <div className="text-sm font-bold text-[#1a3055] mt-0.5 font-mono">
               AED {(metrics.pbgAedTotal / 1_000_000).toFixed(2)}M
             </div>
           </div>
@@ -357,15 +437,15 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
       </div>
 
       {/* Control Bar: Filters, Search, and View Switcher */}
-      <div className="bg-white border border-[#b8c9db] rounded-lg p-3 shadow-xs flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white border border-[#b8c9db] rounded-lg p-3 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          {/* Status Tabs */}
-          <div className="flex bg-slate-100 p-0.5 rounded border border-slate-300 text-xs font-bold">
+          {/* Status Tabs - Clean Neutral Segments */}
+          <div className="flex bg-slate-100 p-0.5 rounded border border-slate-200 text-xs font-semibold">
             <button
               onClick={() => setStatusFilter('ALL')}
               className={`px-2.5 py-1 rounded transition cursor-pointer ${
                 statusFilter === 'ALL'
-                  ? 'bg-white text-[#1a3055] shadow-xs'
+                  ? 'bg-[#1a3055] text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -375,7 +455,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
               onClick={() => setStatusFilter('Active')}
               className={`px-2.5 py-1 rounded transition cursor-pointer ${
                 statusFilter === 'Active'
-                  ? 'bg-emerald-600 text-white shadow-xs'
+                  ? 'bg-[#1a3055] text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -385,7 +465,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
               onClick={() => setStatusFilter('Closed')}
               className={`px-2.5 py-1 rounded transition cursor-pointer ${
                 statusFilter === 'Closed'
-                  ? 'bg-slate-700 text-white shadow-xs'
+                  ? 'bg-[#1a3055] text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -397,7 +477,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
           <select
             value={clientFilter}
             onChange={(e) => setClientFilter(e.target.value)}
-            className="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-bold text-slate-700 outline-none focus:ring-1 focus:ring-blue-500"
+            className="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-blue-500"
           >
             <option value="ALL">All Clients ({uniqueClients.length})</option>
             {uniqueClients.map((cl) => (
@@ -515,11 +595,11 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                       <ResizerHandle onMouseDown={(e) => contractsResizer.startResize(c.key, e)} />
                     </th>
                   ))}
-                  <th style={{ width: contractsResizer.widths.rates || 120 }} className="py-2.5 px-3 text-center relative">
+                  <th style={{ width: contractsResizer.widths.rates || 110 }} className="py-2.5 px-3 text-center relative">
                     <span>Rate Schedule</span>
                     <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('rates', e)} />
                   </th>
-                  <th style={{ width: contractsResizer.widths.actions || 100 }} className="py-2.5 px-3 text-center relative">
+                  <th style={{ width: contractsResizer.widths.actions || 145 }} className="py-2.5 px-3 text-center relative">
                     <span>Actions</span>
                     <ResizerHandle onMouseDown={(e) => contractsResizer.startResize('actions', e)} />
                   </th>
@@ -540,108 +620,97 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                     return (
                       <tr
                         key={c.id}
-                        className={`hover:bg-blue-50/50 transition ${isClosed ? 'bg-slate-50/60 opacity-80' : ''}`}
+                        className={`hover:bg-slate-50/80 transition ${isClosed ? 'bg-slate-50/50 opacity-80' : ''}`}
                       >
-                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-500">
+                        <td className="py-2.5 px-3 text-center align-middle font-mono font-semibold text-slate-500">
                           {c.id}
                         </td>
-                        <td className="py-2.5 px-3">
+                        <td className="py-2.5 px-3 text-left align-middle">
                           <div className="font-bold text-[#1a3055] leading-tight">{c.client}</div>
                         </td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
+                        <td className="py-2.5 px-3 text-left align-middle font-mono font-semibold text-slate-800">
                           <div>{c.contractRef || c.contractNo}</div>
                           {c.poNumber && (
                             <div className="text-[10px] text-slate-500 font-normal">{c.poNumber}</div>
                           )}
                         </td>
-                        <td className="py-2.5 px-3">
-                          <div className="font-bold text-slate-900">{c.shortDesc || c.name}</div>
+                        <td className="py-2.5 px-3 text-left align-middle">
+                          <div className="font-semibold text-slate-900">{c.shortDesc || c.name}</div>
                           {c.notes && (
                             <div className="text-[10px] text-slate-500 truncate max-w-xs">{c.notes}</div>
                           )}
                         </td>
-                        <td className="py-2.5 px-2 text-center font-bold">
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
-                              c.currency === 'AED'
-                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                : 'bg-blue-100 text-blue-900 border border-blue-300'
-                            }`}
-                          >
+                        <td className="py-2.5 px-2 text-center align-middle font-semibold">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-100 text-slate-700 border border-slate-200">
                             {c.currency}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 font-mono text-[11px] whitespace-nowrap">
-                          <div className="text-slate-800">{c.startDate}</div>
-                          <div className="text-slate-500 text-[10px]">&rarr; {c.endDate}</div>
+                        <td className="py-2.5 px-3 text-left align-middle font-mono text-[11px] whitespace-nowrap">
+                          <div className="text-slate-800 font-medium">{c.startDate}</div>
+                          <div className="text-slate-400 text-[10px]">&rarr; {c.endDate}</div>
                         </td>
-                        <td className="py-2.5 px-2 text-center">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold inline-block ${
-                              c.status === 'Active'
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                : 'bg-slate-200 text-slate-700 border border-slate-300'
-                            }`}
-                          >
+                        <td className="py-2.5 px-2 text-center align-middle">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 border border-slate-200">
+                            <span className={`w-1.5 h-1.5 rounded-full ${c.status === 'Active' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
                             {c.status}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-right align-middle font-mono font-bold whitespace-nowrap">
                           {c.contractValue !== null && c.contractValue !== undefined ? (
                             <span className="text-[#1a3055]">{formatMoney(c.contractValue, c.currency)}</span>
                           ) : (
-                            <span className="text-[10px] font-sans font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-300">
+                            <span className="text-[10px] font-sans font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
                               UNIT RATE
                             </span>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 font-mono text-xs text-slate-700">
+                        <td className="py-2.5 px-3 text-left align-middle font-mono text-xs text-slate-700">
                           {c.pbgNumber && c.pbgNumber !== '-' ? (
                             <span className="font-semibold text-slate-800">{c.pbgNumber}</span>
                           ) : (
-                            <span className="text-slate-400">-</span>
+                            <span className="text-slate-300">-</span>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-xs whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-right align-middle font-mono text-xs whitespace-nowrap">
                           {c.pbgValue ? (
-                            <span className="font-semibold text-purple-900">{formatPbg(c.pbgValue)}</span>
+                            <span className="font-semibold text-slate-800">{formatPbg(c.pbgValue)}</span>
                           ) : (
-                            <span className="text-slate-400">-</span>
+                            <span className="text-slate-300">-</span>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-center align-middle whitespace-nowrap">
                           {c.pbgExpiryDate === 'OPEN ENDED' ? (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                               OPEN ENDED
                             </span>
                           ) : c.pbgExpiryDate ? (
                             <span className="font-mono text-[11px] text-slate-700">{c.pbgExpiryDate}</span>
                           ) : (
-                            <span className="text-slate-400">-</span>
+                            <span className="text-slate-300">-</span>
                           )}
                         </td>
                         {contractsCustomCols.map((col) => {
                           const val = (c as any)[col.key] ?? (c as any).customFields?.[col.key];
                           return (
-                            <td key={col.key} className="py-2.5 px-3 text-xs text-slate-700 font-mono border-l border-slate-100 whitespace-nowrap">
+                            <td key={col.key} className="py-2.5 px-3 text-xs text-slate-700 font-mono border-l border-slate-100 whitespace-nowrap align-middle">
                               {val !== undefined && val !== null && String(val).trim() !== ''
                                 ? String(val)
                                 : <span className="text-slate-300 font-sans">—</span>}
                             </td>
                           );
                         })}
-                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-center align-middle whitespace-nowrap">
                           {rateCount > 0 ? (
                             <button
                               onClick={() => {
                                 setSelectedContract(c);
                                 setDetailActiveTab('rates');
                               }}
-                              className="px-2.5 py-1 rounded text-[11px] font-bold flex items-center justify-center gap-1.5 mx-auto transition cursor-pointer bg-slate-100 hover:bg-purple-50 text-purple-900 border border-purple-200 hover:border-purple-300 shadow-2xs"
+                              className="px-2.5 py-1 rounded text-[11px] font-semibold flex items-center justify-center gap-1.5 mx-auto transition cursor-pointer bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs"
                               title="View itemized rates schedule"
                             >
-                              <FileSpreadsheet size={13} className="text-purple-700" />
-                              <span>View Rates ({rateCount})</span>
+                              <FileSpreadsheet size={13} className="text-slate-600" />
+                              <span>View Rates</span>
                             </button>
                           ) : (
                             <button
@@ -649,26 +718,49 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                                 setSelectedContract(c);
                                 setDetailActiveTab('rates');
                               }}
-                              className="px-2.5 py-1 rounded text-[11px] font-bold flex items-center justify-center gap-1 mx-auto transition cursor-pointer bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs"
+                              className="px-2.5 py-1 rounded text-[11px] font-semibold flex items-center justify-center gap-1 mx-auto transition cursor-pointer bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200 shadow-2xs"
                               title="Add rates to this contract"
                             >
-                              <Plus size={12} className="text-slate-500" />
+                              <Plus size={12} className="text-slate-400" />
                               <span>Add Rates</span>
                             </button>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                          <button
-                            onClick={() => {
-                              setSelectedContract(c);
-                              setDetailActiveTab('overview');
-                            }}
-                            className="px-2.5 py-1 rounded bg-slate-100 hover:bg-blue-100 text-[#1a3055] font-bold text-[11px] border border-slate-300 hover:border-blue-300 transition cursor-pointer flex items-center justify-center gap-1 mx-auto shadow-2xs"
-                            title="View full contract overview and details"
-                          >
-                            <Eye size={12} className="text-blue-700" />
-                            <span>View</span>
-                          </button>
+                        <td className="py-2.5 px-3 text-center align-middle whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => {
+                                setSelectedContract(c);
+                                setDetailActiveTab('overview');
+                              }}
+                              className="px-2 py-1 rounded bg-slate-50 hover:bg-slate-100 text-[#1a3055] font-semibold text-[11px] border border-slate-300 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                              title="View contract details"
+                            >
+                              <Eye size={12} className="text-slate-600" />
+                              <span>View</span>
+                            </button>
+
+                            {canEdit && (
+                              <button
+                                onClick={() => openEditContractModal(c)}
+                                className="px-2 py-1 rounded bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-[#1a3055] font-semibold text-[11px] border border-slate-300 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                                title="Edit contract details"
+                              >
+                                <Edit3 size={12} className="text-slate-600" />
+                                <span>Edit</span>
+                              </button>
+                            )}
+
+                            {canEdit && (
+                              <button
+                                onClick={() => setContractToDelete(c)}
+                                className="p-1 rounded bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-300 hover:border-rose-300 transition cursor-pointer shadow-2xs"
+                                title={`Delete contract ${c.contractRef || c.contractNo}`}
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -685,7 +777,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
           </div>
         </div>
       ) : (
-        /* Card Grid View */
+        /* Card Grid View - Clean Neutral Styling */
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredContracts.map((c) => {
             const linkedJobs = jobs.filter(
@@ -696,29 +788,24 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
             return (
               <div
                 key={c.id}
-                className="bg-white border border-[#b8c9db] rounded-lg overflow-hidden shadow-xs flex flex-col justify-between hover:shadow-md transition"
+                className="bg-white border border-[#b8c9db] rounded-lg overflow-hidden shadow-2xs flex flex-col justify-between hover:shadow-sm transition"
               >
                 <div className="p-4 space-y-3">
                   <div className="flex justify-between items-start gap-2">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded">
+                        <span className="px-2 py-0.5 bg-slate-100 text-[#1a3055] border border-slate-200 text-[10px] font-semibold rounded">
                           {c.client}
                         </span>
-                        <span className="text-xs font-mono font-bold text-slate-400">ID #{c.id}</span>
+                        <span className="text-xs font-mono font-semibold text-slate-400">ID #{c.id}</span>
                       </div>
                       <h3 className="text-sm font-bold text-[#1a3055] mt-1">{c.shortDesc || c.name}</h3>
-                      <div className="text-xs font-mono font-semibold text-slate-600">
+                      <div className="text-xs font-mono font-medium text-slate-600">
                         Ref: {c.contractRef || c.contractNo} {c.poNumber ? `· ${c.poNumber}` : ''}
                       </div>
                     </div>
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
-                        c.status === 'Active'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                          : 'bg-slate-100 text-slate-700 border border-slate-300'
-                      }`}
-                    >
+                    <span className="px-2 py-0.5 rounded text-[10px] font-medium inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                      <span className={`w-1.5 h-1.5 rounded-full ${c.status === 'Active' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
                       {c.status}
                     </span>
                   </div>
@@ -726,20 +813,20 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                   {/* Financial & Validity Grid */}
                   <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded border border-slate-200 text-xs">
                     <div>
-                      <span className="text-[10px] text-slate-400 font-bold block">Contract Value</span>
+                      <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">Contract Value</span>
                       <span className="font-bold text-[#1a3055] font-mono">
                         {formatMoney(c.contractValue, c.currency)}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 font-bold block">Validity Window</span>
+                      <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">Validity Window</span>
                       <span className="font-mono text-[11px] text-slate-700 block truncate">
                         {c.startDate} ~ {c.endDate}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 font-bold block">PBG Value</span>
-                      <span className="font-bold text-purple-900 font-mono">
+                      <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">PBG Value</span>
+                      <span className="font-semibold text-slate-800 font-mono">
                         {formatPbg(c.pbgValue)}
                       </span>
                     </div>
@@ -747,34 +834,32 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
 
                   {/* PBG Information Row */}
                   {c.pbgNumber && c.pbgNumber !== '-' && (
-                    <div className="flex items-center justify-between text-xs bg-purple-50/50 p-2 rounded border border-purple-100">
-                      <div className="flex items-center gap-1.5 text-purple-950">
-                        <ShieldCheck size={13} className="text-purple-700" />
-                        <span className="font-bold">PBG Ref:</span>
-                        <span className="font-mono text-purple-900">{c.pbgNumber}</span>
+                    <div className="flex items-center justify-between text-xs bg-slate-50 p-2 rounded border border-slate-200">
+                      <div className="flex items-center gap-1.5 text-slate-800">
+                        <ShieldCheck size={13} className="text-slate-600" />
+                        <span className="font-semibold">PBG Ref:</span>
+                        <span className="font-mono text-slate-900">{c.pbgNumber}</span>
                       </div>
-                      <div className="text-[10px] font-mono text-purple-800">
+                      <div className="text-[10px] font-mono text-slate-500">
                         Expiry: {c.pbgExpiryDate || 'N/A'}
                       </div>
                     </div>
                   )}
 
                   {/* Rate Schedule / Price Book Indicator */}
-                  <div className="bg-purple-50/80 border border-purple-200 rounded p-2.5 flex items-center justify-between text-xs">
+                  <div className="bg-slate-50 border border-slate-200 rounded p-2.5 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
-                      <FileSpreadsheet size={15} className="text-purple-700" />
+                      <FileSpreadsheet size={15} className="text-slate-600" />
                       <div>
-                        <span className="font-bold text-[#1a3055] block">Price Book &amp; Rate Schedule</span>
-                        <span className="text-[10px] text-purple-900">
-                          {rateCount > 0
-                            ? `${rateCount} itemized tool/engineer rates configured`
-                            : 'No rate sheet uploaded yet'}
+                        <span className="font-semibold text-[#1a3055] block">Price Book &amp; Rate Schedule</span>
+                        <span className="text-[10px] text-slate-500">
+                          {rateCount > 0 ? 'Itemized tool/engineer rates configured' : 'No rate sheet uploaded yet'}
                         </span>
                       </div>
                     </div>
                     <button
                       onClick={() => setContractForRates(c)}
-                      className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded font-bold text-[11px] shadow-xs cursor-pointer transition flex items-center gap-1"
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded font-semibold text-[11px] shadow-2xs cursor-pointer transition flex items-center gap-1"
                     >
                       <span>{rateCount > 0 ? 'View Rates' : '+ Add Rates'}</span>
                       <ChevronRight size={12} />
@@ -782,7 +867,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                   </div>
                 </div>
 
-                <div className="px-4 py-2.5 bg-slate-50 border-t border-[#b8c9db] flex flex-wrap justify-between items-center gap-2 text-xs">
+                <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex flex-wrap justify-between items-center gap-2 text-xs">
                   <span className="text-slate-500 font-medium">
                     <strong>{linkedJobs.length}</strong> active job(s) linked
                   </span>
@@ -792,7 +877,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                         setSelectedContract(c);
                         setDetailActiveTab('rates');
                       }}
-                      className="text-purple-700 hover:text-purple-900 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                      className="text-slate-700 hover:text-slate-900 font-semibold hover:underline cursor-pointer flex items-center gap-1"
                     >
                       <FileSpreadsheet size={12} /> View Rates
                     </button>
@@ -802,10 +887,28 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                         setSelectedContract(c);
                         setDetailActiveTab('overview');
                       }}
-                      className="text-blue-700 hover:underline font-bold cursor-pointer"
+                      className="text-[#1a3055] hover:underline font-semibold cursor-pointer"
                     >
-                      View Details &rarr;
+                      View Details
                     </button>
+                    {canEdit && (
+                      <>
+                        <span className="text-slate-300">|</span>
+                        <button
+                          onClick={() => openEditContractModal(c)}
+                          className="text-slate-700 hover:text-slate-900 font-semibold hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <Edit3 size={12} /> Edit
+                        </button>
+                        <span className="text-slate-300">|</span>
+                        <button
+                          onClick={() => setContractToDelete(c)}
+                          className="text-rose-600 hover:text-rose-800 font-semibold hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <Trash2 size={12} /> Delete
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -826,7 +929,9 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
             <div className="px-4 py-3 bg-[#1a3055] text-white flex justify-between items-center shrink-0">
               <div className="flex items-center gap-2">
                 <Database size={16} className="text-amber-400" />
-                <h3 className="font-bold text-sm">Add Master Contract to Azure SQL</h3>
+                <h3 className="font-bold text-sm">
+                  {editingContract ? 'Edit Master Contract' : 'Add Master Contract to Azure SQL'}
+                </h3>
               </div>
               <button
                 onClick={() => setIsNewContractOpen(false)}
@@ -836,7 +941,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleCreateContract} className="p-4 space-y-3 text-xs overflow-y-auto">
+            <form onSubmit={handleSaveContractForm} className="p-4 space-y-3 text-xs overflow-y-auto">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold mb-1">Contract Number / Ref *</label>
@@ -966,14 +1071,14 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
               </div>
 
               {/* PBG Section */}
-              <div className="p-3 bg-purple-50/60 rounded border border-purple-200 space-y-2.5">
-                <div className="font-bold text-purple-950 flex items-center gap-1.5">
-                  <ShieldCheck size={14} className="text-purple-700" />
+              <div className="p-3 bg-slate-50 rounded border border-slate-200 space-y-2.5">
+                <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <ShieldCheck size={14} className="text-[#1a3055]" />
                   <span>Performance Bank Guarantee (PBG) Details</span>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-semibold mb-1">PBG Reference Number</label>
+                    <label className="block font-semibold mb-1 text-slate-700">PBG Reference Number</label>
                     <input
                       type="text"
                       placeholder="e.g. ACLG1900238"
@@ -983,7 +1088,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold mb-1">PBG Value (AED)</label>
+                    <label className="block font-semibold mb-1 text-slate-700">PBG Value (AED)</label>
                     <input
                       type="number"
                       step="0.01"
@@ -996,7 +1101,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-semibold mb-1">PBG Issue Date</label>
+                    <label className="block font-semibold mb-1 text-slate-700">PBG Issue Date</label>
                     <input
                       type="date"
                       value={pbgIssueDate}
@@ -1006,8 +1111,8 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                   </div>
                   <div>
                     <div className="flex justify-between items-center mb-1">
-                      <label className="font-semibold">PBG Expiry Date</label>
-                      <label className="flex items-center gap-1 font-normal text-[10px] text-purple-900 cursor-pointer">
+                      <label className="font-semibold text-slate-700">PBG Expiry Date</label>
+                      <label className="flex items-center gap-1 font-normal text-[10px] text-slate-600 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={pbgOpenEnded}
@@ -1048,9 +1153,9 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold hover:bg-amber-500 shadow-sm cursor-pointer"
+                  className="px-4 py-1.5 rounded bg-[#1a3055] text-white font-bold hover:bg-[#24426d] shadow-sm cursor-pointer"
                 >
-                  Save to SQL &rarr;
+                  {editingContract ? 'Update Contract' : 'Save to SQL →'}
                 </button>
               </div>
             </form>
@@ -1071,7 +1176,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
             <div className="px-5 py-3.5 bg-[#1a3055] text-white flex justify-between items-center shrink-0">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 bg-blue-600 text-white font-mono text-[10px] font-bold rounded">
+                  <span className="px-2 py-0.5 bg-white/15 border border-white/20 text-white font-mono text-[10px] font-bold rounded">
                     ID #{selectedContract.id}
                   </span>
                   <h3 className="font-bold text-sm tracking-wide text-white">
@@ -1085,12 +1190,42 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                   {selectedContract.poNumber && <span>• PO: {selectedContract.poNumber}</span>}
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedContract(null)}
-                className="text-white/80 hover:text-amber-300 font-bold text-lg cursor-pointer px-1.5"
-              >
-                &times;
-              </button>
+              <div className="flex items-center gap-2">
+                {canEdit && (
+                  <>
+                    <button
+                      onClick={() => {
+                        const c = selectedContract;
+                        setSelectedContract(null);
+                        openEditContractModal(c);
+                      }}
+                      className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                      title="Edit Contract Details"
+                    >
+                      <Edit3 size={12} /> Edit
+                    </button>
+                    {onDeleteContract && (
+                      <button
+                        onClick={() => {
+                          const c = selectedContract;
+                          setSelectedContract(null);
+                          setContractToDelete(c);
+                        }}
+                        className="px-2.5 py-1 bg-rose-600/80 hover:bg-rose-700 text-white rounded text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                        title="Delete Contract"
+                      >
+                        <Trash2 size={12} /> Delete
+                      </button>
+                    )}
+                  </>
+                )}
+                <button
+                  onClick={() => setSelectedContract(null)}
+                  className="text-white/80 hover:text-amber-300 font-bold text-lg cursor-pointer px-1.5 ml-1"
+                >
+                  &times;
+                </button>
+              </div>
             </div>
 
             {/* Modal Navigation Tabs: Overview vs Rate Schedule */}
@@ -1113,12 +1248,12 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                   onClick={() => setDetailActiveTab('rates')}
                   className={`px-3 py-2 text-xs font-bold transition border-b-2 cursor-pointer flex items-center gap-1.5 ${
                     detailActiveTab === 'rates'
-                      ? 'border-purple-700 text-purple-900 bg-white'
+                      ? 'border-[#1a3055] text-[#1a3055] bg-white'
                       : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  <FileSpreadsheet size={13} className="text-purple-700" />
-                  <span>Itemized Rates Schedule ({selectedContract.rates?.length || 0})</span>
+                  <FileSpreadsheet size={13} className="text-[#1a3055]" />
+                  <span>Itemized Rates Schedule</span>
                 </button>
               </div>
 
@@ -1129,7 +1264,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                     setSelectedContract(null);
                     setContractForRates(c);
                   }}
-                  className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded font-bold text-[11px] shadow-2xs transition flex items-center gap-1 cursor-pointer"
+                  className="px-2.5 py-1 bg-[#1a3055] hover:bg-[#24426d] text-white rounded font-bold text-[11px] shadow-2xs transition flex items-center gap-1 cursor-pointer"
                   title="Open full editor to paste from Excel or modify lines"
                 >
                   <FileSpreadsheet size={12} />
@@ -1149,12 +1284,13 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                   <div>
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Contract Status</span>
                     <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold inline-block mt-0.5 ${
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1 mt-0.5 ${
                         selectedContract.status === 'Active'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          ? 'bg-slate-100 text-slate-800 border border-slate-300'
                           : 'bg-slate-200 text-slate-700'
                       }`}
                     >
+                      <span className={`w-1.5 h-1.5 rounded-full ${selectedContract.status === 'Active' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
                       {selectedContract.status}
                     </span>
                   </div>
@@ -1176,43 +1312,43 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                   </div>
                   <div>
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Standby Discount</span>
-                    <span className="font-bold text-emerald-800 font-mono">{selectedContract.standbyDiscountPct}% of Ops Rate</span>
+                    <span className="font-bold text-slate-800 font-mono">{selectedContract.standbyDiscountPct}% of Ops Rate</span>
                   </div>
                 </div>
 
                 {/* PBG Breakdown */}
-                <div className="p-3.5 bg-purple-50/70 rounded border border-purple-200 space-y-2.5">
-                  <div className="font-bold text-purple-950 flex items-center justify-between">
+                <div className="p-3.5 bg-slate-50 rounded border border-slate-200 space-y-2.5">
+                  <div className="font-bold text-slate-800 flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <ShieldCheck size={14} className="text-purple-700" />
+                      <ShieldCheck size={14} className="text-[#1a3055]" />
                       <span>Performance Bank Guarantee (PBG)</span>
                     </div>
                     {selectedContract.pbgExpiryDate && (
-                      <span className="text-[10px] font-mono font-bold text-purple-800 bg-purple-100 px-2 py-0.5 rounded border border-purple-200">
+                      <span className="text-[10px] font-mono font-bold text-slate-700 bg-slate-200 px-2 py-0.5 rounded border border-slate-300">
                         Expiry: {selectedContract.pbgExpiryDate}
                       </span>
                     )}
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
                     <div>
-                      <span className="text-[10px] font-bold text-purple-900 block">PBG Number</span>
-                      <span className="font-mono font-bold text-purple-950">
+                      <span className="text-[10px] font-bold text-slate-500 block">PBG Number</span>
+                      <span className="font-mono font-bold text-slate-900">
                         {selectedContract.pbgNumber || '-'}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] font-bold text-purple-900 block">PBG Security Value</span>
-                      <span className="font-mono font-bold text-purple-950">
+                      <span className="text-[10px] font-bold text-slate-500 block">PBG Security Value</span>
+                      <span className="font-mono font-bold text-slate-900">
                         {formatPbg(selectedContract.pbgValue)}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] font-bold text-purple-900 block">Issue Date</span>
-                      <span className="font-mono text-purple-900">{selectedContract.pbgIssueDate || '-'}</span>
+                      <span className="text-[10px] font-bold text-slate-500 block">Issue Date</span>
+                      <span className="font-mono text-slate-700">{selectedContract.pbgIssueDate || '-'}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] font-bold text-purple-900 block">Expiry Date</span>
-                      <span className="font-mono text-purple-900">
+                      <span className="text-[10px] font-bold text-slate-500 block">Expiry Date</span>
+                      <span className="font-mono text-slate-700">
                         {selectedContract.pbgExpiryDate || '-'}
                       </span>
                     </div>
@@ -1231,10 +1367,10 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                 {/* Rates Schedule Callout */}
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <FileSpreadsheet size={16} className="text-purple-700" />
+                    <FileSpreadsheet size={16} className="text-[#1a3055]" />
                     <div>
                       <span className="font-bold text-[#1a3055] block">
-                        Rate Schedule ({selectedContract.rates?.length || 0} Rate Lines)
+                        Rate Schedule
                       </span>
                       <span className="text-[11px] text-slate-500">
                         Operating &amp; standby rates, hole sections, redress and run charges
@@ -1262,8 +1398,6 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                     </span>
                     <span>•</span>
                     <span>Currency: <strong className="font-mono text-slate-900">{selectedContract.currency}</strong></span>
-                    <span>•</span>
-                    <span>Total Lines: <strong className="font-mono text-slate-900">{selectedContract.rates?.length || 0}</strong></span>
                   </div>
                   {canEdit && (
                     <button
@@ -1272,7 +1406,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                         setSelectedContract(null);
                         setContractForRates(c);
                       }}
-                      className="text-purple-700 hover:text-purple-900 font-bold hover:underline cursor-pointer flex items-center gap-1 text-[11px]"
+                      className="text-[#1a3055] hover:text-[#24426d] font-bold hover:underline cursor-pointer flex items-center gap-1 text-[11px]"
                     >
                       <Plus size={12} /> Add / Edit in Full Editor &rarr;
                     </button>
@@ -1293,8 +1427,8 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                           <th className="py-2 px-3 border border-[#2d4b7a] font-bold">Tool Description</th>
                           <th className="py-2 px-3 border border-[#2d4b7a] text-center font-bold whitespace-nowrap">Size / OD</th>
                           <th className="py-2 px-3 border border-[#2d4b7a] text-center font-bold whitespace-nowrap">Hole Section</th>
-                          <th className="py-2 px-3 border border-[#2d4b7a] text-right font-bold bg-[#1d4332] whitespace-nowrap">Ops Rate ({selectedContract.currency})</th>
-                          <th className="py-2 px-3 border border-[#2d4b7a] text-right font-bold bg-[#1d4332] whitespace-nowrap">Standby Rate</th>
+                          <th className="py-2 px-3 border border-[#2d4b7a] text-right font-bold whitespace-nowrap">Ops Rate ({selectedContract.currency})</th>
+                          <th className="py-2 px-3 border border-[#2d4b7a] text-right font-bold whitespace-nowrap">Standby Rate</th>
                           <th className="py-2 px-3 border border-[#2d4b7a] text-right font-bold whitespace-nowrap">Run Charge</th>
                           <th className="py-2 px-3 border border-[#2d4b7a] text-right font-bold whitespace-nowrap">Redress</th>
                         </tr>
@@ -1303,7 +1437,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                         {selectedContract.rates.map((r, i) => (
                           <tr
                             key={i}
-                            className={`hover:bg-blue-50/40 transition duration-75 ${
+                            className={`hover:bg-slate-50 transition duration-75 ${
                               i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
                             }`}
                           >
@@ -1322,10 +1456,10 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                             <td className="py-1.5 px-3 border border-slate-100 text-center font-mono text-slate-700 whitespace-nowrap">
                               {r.holeSection || '—'}
                             </td>
-                            <td className="py-1.5 px-3 border border-slate-100 text-right font-mono font-bold text-emerald-900 bg-emerald-50/60 whitespace-nowrap">
+                            <td className="py-1.5 px-3 border border-slate-100 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
                               {r.opsRate?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
-                            <td className="py-1.5 px-3 border border-slate-100 text-right font-mono font-bold text-emerald-900 bg-emerald-50/60 whitespace-nowrap">
+                            <td className="py-1.5 px-3 border border-slate-100 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
                               {r.standbyRate?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                             <td className="py-1.5 px-3 border border-slate-100 text-right font-mono text-slate-600 text-[11px] whitespace-nowrap">
@@ -1346,15 +1480,77 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
             {/* Modal Footer */}
             <div className="px-5 py-3 bg-slate-50 border-t border-[#b8c9db] flex justify-between items-center shrink-0">
               <span className="text-slate-500 text-[11px]">
-                {detailActiveTab === 'overview'
-                  ? `Master Contract #${selectedContract.id} • ${selectedContract.status}`
-                  : `Showing ${selectedContract.rates?.length || 0} rate schedule entries`}
+                Master Contract #{selectedContract.id} • {selectedContract.status}
               </span>
               <button
                 onClick={() => setSelectedContract(null)}
                 className="px-4 py-1.5 rounded bg-[#1a3055] text-white font-bold hover:bg-[#24426d] cursor-pointer text-xs transition"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Contract Confirmation Modal */}
+      {contractToDelete && (
+        <div
+          className="fixed inset-0 bg-black/60 z-60 flex items-center justify-center p-4 no-print animate-in fade-in duration-100"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setContractToDelete(null);
+          }}
+        >
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
+            <div className="px-5 py-3.5 bg-rose-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Trash2 size={16} />
+                <h3 className="font-bold text-sm">Delete Master Contract</h3>
+              </div>
+              <button
+                onClick={() => setContractToDelete(null)}
+                className="text-white/80 hover:text-white text-lg font-bold cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="p-5 text-xs text-slate-700 space-y-3">
+              <p>
+                Are you sure you want to permanently delete contract{' '}
+                <strong className="text-slate-900 font-mono">
+                  {contractToDelete.contractRef || contractToDelete.contractNo}
+                </strong>
+                {contractToDelete.shortDesc && (
+                  <>
+                    {' '}(<strong className="text-slate-900">{contractToDelete.shortDesc}</strong>)
+                  </>
+                )}
+                ?
+              </p>
+              <div className="bg-slate-50 border border-slate-200 rounded p-3 text-slate-600 text-[11px] space-y-1">
+                <div>• Client: <strong>{contractToDelete.client}</strong></div>
+                <div>• Status: <strong>{contractToDelete.status}</strong></div>
+                {contractToDelete.rates && (
+                  <div>• Itemized Rates: <strong>{contractToDelete.rates.length} lines</strong></div>
+                )}
+              </div>
+              <p className="text-rose-600 font-medium text-[11px]">
+                This will archive and delete the contract from Azure SQL and your local workspace. All synced devices will reflect this removal.
+              </p>
+            </div>
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                onClick={() => setContractToDelete(null)}
+                className="px-3.5 py-1.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="px-4 py-1.5 rounded bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer shadow-sm flex items-center gap-1.5"
+              >
+                <Trash2 size={13} />
+                <span>Confirm Delete</span>
               </button>
             </div>
           </div>

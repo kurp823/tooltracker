@@ -283,8 +283,8 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
                 <th className="py-2.5 px-3 border border-[#2d4b7a] font-bold">Tool Short Description</th>
                 <th className="py-2.5 px-3 border border-[#2d4b7a] w-24 text-center font-bold whitespace-nowrap">Tool OD</th>
                 <th className="py-2.5 px-3 border border-[#2d4b7a] w-28 text-center font-bold whitespace-nowrap">Hole Section</th>
-                <th className="py-2.5 px-3 border border-[#2d4b7a] w-28 text-right font-bold bg-[#1d4332] whitespace-nowrap">Ops Rate</th>
-                <th className="py-2.5 px-3 border border-[#2d4b7a] w-28 text-right font-bold bg-[#1d4332] whitespace-nowrap">Standby Rate</th>
+                <th className="py-2.5 px-3 border border-[#2d4b7a] w-28 text-right font-bold whitespace-nowrap">Ops Rate</th>
+                <th className="py-2.5 px-3 border border-[#2d4b7a] w-28 text-right font-bold whitespace-nowrap">Standby Rate</th>
                 <th className="py-2.5 px-3 border border-[#2d4b7a] w-24 text-right font-bold whitespace-nowrap">Run Charge</th>
                 <th className="py-2.5 px-3 border border-[#2d4b7a] w-28 text-right font-bold whitespace-nowrap">Monthly</th>
                 <th className="py-2.5 px-3 border border-[#2d4b7a] w-24 text-right font-bold whitespace-nowrap">Redress</th>
@@ -299,8 +299,8 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
                 <th className="py-1 px-3 border border-slate-200">Inventory Standard</th>
                 <th className="py-1 px-3 border border-slate-200 text-center">OD Size</th>
                 <th className="py-1 px-3 border border-slate-200 text-center">Section Size</th>
-                <th className="py-1 px-3 border border-slate-200 text-right font-mono text-emerald-800 bg-[#eaf7ee]">{contract.currency}/Day</th>
-                <th className="py-1 px-3 border border-slate-200 text-right font-mono text-emerald-800 bg-[#eaf7ee]">{contract.currency}/Day</th>
+                <th className="py-1 px-3 border border-slate-200 text-right font-mono text-slate-600 bg-slate-100">{contract.currency}/Day</th>
+                <th className="py-1 px-3 border border-slate-200 text-right font-mono text-slate-600 bg-slate-100">{contract.currency}/Day</th>
                 <th className="py-1 px-3 border border-slate-200 text-right">Per Run</th>
                 <th className="py-1 px-3 border border-slate-200 text-right">Fixed</th>
                 <th className="py-1 px-3 border border-slate-200 text-right">Per Job</th>
@@ -321,7 +321,7 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
                   return (
                     <tr 
                       key={index}
-                      className={`hover:bg-blue-50/40 transition duration-75 ${
+                      className={`hover:bg-slate-50 transition duration-75 ${
                         index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
                       }`}
                     >
@@ -357,13 +357,13 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
                         {r.holeSection || '—'}
                       </td>
 
-                      {/* 7. Ops Rate (Clean executive highlight) */}
-                      <td className="py-2 px-3 border border-slate-100 text-right font-mono font-bold text-emerald-900 bg-emerald-50/60 whitespace-nowrap">
+                      {/* 7. Ops Rate */}
+                      <td className="py-2 px-3 border border-slate-100 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
                         {r.opsRate?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
 
-                      {/* 8. Standby Rate (Clean executive highlight) */}
-                      <td className="py-2 px-3 border border-slate-100 text-right font-mono font-bold text-emerald-900 bg-emerald-50/60 whitespace-nowrap">
+                      {/* 8. Standby Rate */}
+                      <td className="py-2 px-3 border border-slate-100 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
                         {r.standbyRate?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
 
@@ -393,7 +393,7 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
                           <div className="flex items-center justify-center gap-1.5">
                             <button
                               onClick={() => handleOpenEdit(originalIndex)}
-                              className="p-1 hover:bg-blue-50 text-slate-500 hover:text-blue-700 rounded transition cursor-pointer"
+                              className="p-1 hover:bg-slate-100 text-slate-500 hover:text-slate-800 rounded transition cursor-pointer"
                               title="Edit line"
                             >
                               <Edit3 size={13} />
@@ -438,7 +438,7 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
             </button>
             <button
               onClick={handleFinalSave}
-              className="px-5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer transition"
+              className="px-5 py-1.5 rounded bg-[#1a3055] hover:bg-[#24426d] text-white font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer transition"
             >
               <Check size={14} /> Save Contract Rates
             </button>
@@ -547,10 +547,10 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
               </div>
 
               {/* RATES ROW */}
-              <div className="p-3 bg-emerald-50 rounded border border-emerald-200">
+              <div className="p-3 bg-slate-50 rounded border border-slate-200">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-bold text-emerald-900 mb-1">
+                    <label className="block font-bold text-slate-700 mb-1">
                       Operating Day Rate ({formData.currency}) *
                     </label>
                     <input
@@ -559,11 +559,11 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
                       required
                       value={formData.opsRate}
                       onChange={(e) => handleOpsRateChange(parseFloat(e.target.value) || 0)}
-                      className="w-full border border-emerald-300 rounded px-2.5 py-1.5 font-mono font-bold text-emerald-800 bg-white"
+                      className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono font-bold text-slate-800 bg-white"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-emerald-900 mb-1">
+                    <label className="block font-bold text-slate-700 mb-1">
                       Standby Day Rate ({formData.currency}) *
                     </label>
                     <input
@@ -572,9 +572,9 @@ export const ContractRatesModal: React.FC<ContractRatesModalProps> = ({
                       required
                       value={formData.standbyRate}
                       onChange={(e) => setFormData({ ...formData, standbyRate: parseFloat(e.target.value) || 0 })}
-                      className="w-full border border-emerald-300 rounded px-2.5 py-1.5 font-mono font-bold text-emerald-800 bg-white"
+                      className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono font-bold text-slate-800 bg-white"
                     />
-                    <span className="text-[10px] text-emerald-700 italic">
+                    <span className="text-[10px] text-slate-500 italic">
                       Auto-calculated at {contract.standbyDiscountPct ?? 50}% of Ops Rate
                     </span>
                   </div>

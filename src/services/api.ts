@@ -2922,6 +2922,24 @@ export async function saveContractApi(contract: any): Promise<{ success: boolean
   return executeResilientSave('savecontract', { contract: sanitized }, 'Contract');
 }
 
+export async function deleteContractApi(contract: any): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  const cId = String(contract?.id || '').trim();
+  const cRef = String(contract?.contractRef || contract?.contractNo || '').trim();
+
+  // Try direct delete action
+  try {
+    await fetchWithRetry('deletecontract', { id: cId, contractId: cId, contractRef: cRef, contractNo: cRef, code: cRef }, 2);
+  } catch {}
+
+  // Also update status to 'Archived' in SQL so queries filtering out Archived records exclude it
+  const archived = {
+    ...contract,
+    status: 'Archived',
+    Status: 'Archived',
+  };
+  return executeResilientSave('savecontract', { contract: archived, payload: archived }, 'Contract');
+}
+
 export async function saveInspectionApi(inspection: any): Promise<{ success: boolean; queued?: boolean; message: string }> {
   return executeResilientSave('saveinspection', { inspection }, 'Inspection');
 }

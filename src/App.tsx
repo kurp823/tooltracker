@@ -33,6 +33,7 @@ import {
   saveCalloutApi,
   saveGatePassApi,
   saveContractApi,
+  deleteContractApi,
   saveInspectionApi,
   saveMaintenanceApi,
   saveJobApi,
@@ -60,8 +61,10 @@ import {
 import {
   loadCustomContracts,
   saveCustomContract,
+  deleteCustomContract,
   saveCustomContractRates,
   mergeContractsWithCustom,
+  normalizeContractKey,
 } from './services/customContracts';
 import { MASTER_JOBS } from './data/masterJobs';
 import { Toast, ToastNotification } from './components/Toast';
@@ -1546,6 +1549,43 @@ export const App: React.FC = () => {
     showToast(`Master contract ${c.name || c.contractNo} and rate schedule saved.`, 'success');
   };
 
+  const handleDeleteContract = (contractIdOrRef: string) => {
+    deleteCustomContract(contractIdOrRef);
+    const target = normalizeContractKey(contractIdOrRef);
+
+    let foundContract: ContractRecord | undefined;
+    setContracts((prev) => {
+      foundContract = prev.find(
+        (c) =>
+          normalizeContractKey(c.id) === target ||
+          normalizeContractKey(c.contractRef) === target ||
+          normalizeContractKey(c.contractNo) === target
+      );
+      const next = prev.filter(
+        (c) =>
+          normalizeContractKey(c.id) !== target &&
+          normalizeContractKey(c.contractRef) !== target &&
+          normalizeContractKey(c.contractNo) !== target
+      );
+      saveDatasetToCache({
+        inventory,
+        jobs,
+        dtBatches,
+        rtBatches,
+        contracts: next,
+      });
+      return next;
+    });
+
+    if (foundContract) {
+      deleteContractApi(foundContract);
+    } else {
+      deleteContractApi({ id: contractIdOrRef, contractNo: contractIdOrRef, contractRef: contractIdOrRef });
+    }
+
+    showToast(`Contract ${contractIdOrRef} removed successfully.`, 'success');
+  };
+
   // Backup & Reset
   const handleResetData = () => {
     localStorage.clear();
@@ -2095,6 +2135,7 @@ export const App: React.FC = () => {
               jobs={jobs}
               onNavigate={(mod) => setActiveView(mod as ViewKey)}
               onSaveContract={handleSaveContract}
+              onDeleteContract={handleDeleteContract}
               onRefresh={async () => {
                 const sec = await fetchSecondaryModules();
                 if (sec.contracts && sec.contracts.length > 0) {
