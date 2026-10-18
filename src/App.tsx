@@ -38,6 +38,7 @@ import {
   saveDeliveryTicketApi,
   saveReceivingTicketApi,
   saveInventoryApi,
+  saveContractRatesApi,
 } from './services/api';
 import { loadDatasetFromCache, saveDatasetToCache } from './services/dbCache';
 import {
@@ -53,6 +54,12 @@ import {
   mergeJobsWithCustomJobs,
   syncCustomJobsToIndexedDB,
 } from './services/customJobs';
+import {
+  loadCustomContracts,
+  saveCustomContract,
+  saveCustomContractRates,
+  mergeContractsWithCustom,
+} from './services/customContracts';
 import { MASTER_JOBS } from './data/masterJobs';
 import { Toast, ToastNotification } from './components/Toast';
 import { Header } from './components/Header';
@@ -403,13 +410,7 @@ export const App: React.FC = () => {
   });
 
   const [contracts, setContracts] = useState<ContractRecord[]>(() => {
-    // Stale local storage purge: domain entities are backed by Azure SQL & INITIAL_CONTRACTS
-    try {
-      localStorage.removeItem('emdad_contracts');
-    } catch {
-      // ignore
-    }
-    return INITIAL_CONTRACTS;
+    return mergeContractsWithCustom(INITIAL_CONTRACTS);
   });
 
   // Master Data: Tool Categories & Sizes
@@ -548,6 +549,7 @@ export const App: React.FC = () => {
             ...res.data,
             inventory: mergedInv,
             jobs: mergedJobs,
+            contracts,
           });
 
           // Also refresh secondary modules (callouts/checklists, contracts, inspections) from Azure SQL
@@ -557,15 +559,12 @@ export const App: React.FC = () => {
             if (sec.inspections !== undefined) setInspections(sec.inspections);
             if (sec.maintenance !== undefined) setMaintenance(sec.maintenance);
             if (sec.contracts !== undefined) {
-              setContracts((prev) => {
-                return sec.contracts!.map((c) => {
-                  const existing = prev.find((p) => p.id === c.id || p.contractRef === c.contractRef || (c.contractNo && p.contractNo === c.contractNo));
-                  const initial = INITIAL_CONTRACTS.find((i) => i.id === c.id || i.contractRef === c.contractRef || (c.contractNo && i.contractNo === c.contractNo));
-                  const rates = (c.rates && c.rates.length > 0)
-                    ? c.rates
-                    : ((existing && existing.rates && existing.rates.length > 0) ? existing.rates : (initial?.rates || []));
-                  return { ...c, rates };
-                });
+              const mergedContracts = mergeContractsWithCustom(sec.contracts);
+              setContracts(mergedContracts);
+              saveDatasetToCache({
+                inventory: mergedInv,
+                jobs: mergedJobs,
+                contracts: mergedContracts,
               });
             }
           });
@@ -637,6 +636,7 @@ export const App: React.FC = () => {
         }
         if (cached.dtBatches && cached.dtBatches.length > 0) setDtBatches(cached.dtBatches);
         if (cached.rtBatches && cached.rtBatches.length > 0) setRtBatches(cached.rtBatches);
+        if (cached.contracts && cached.contracts.length > 0) setContracts(mergeContractsWithCustom(cached.contracts));
         setDbStatus((prev) => ({
           ...prev,
           isConnected: true,
@@ -1588,19 +1588,43 @@ export const App: React.FC = () => {
 
   // Contract Actions
   const handleSaveContract = (c: ContractRecord) => {
+    saveCustomContract(c);
+    const updatedRates = c.rates || [];
+    if (c.id) saveCustomContractRates(c.id, updatedRates);
+    if (c.contractRef) saveCustomContractRates(c.contractRef, updatedRates);
+    if (c.contractNo) saveCustomContractRates(c.contractNo, updatedRates);
+
     setContracts((prev) => {
-      const idx = prev.findIndex((item) => item.id === c.id);
+      const idx = prev.findIndex(
+        (item) => item.id === c.id || (c.contractRef && item.contractRef === c.contractRef) || (c.contractNo && item.contractNo === c.contractNo)
+      );
+      let next: ContractRecord[];
       if (idx >= 0) {
-        const next = [...prev];
+        next = [...prev];
         next[idx] = c;
-        return next;
+      } else {
+        next = [c, ...prev];
       }
-      return [c, ...prev];
+      saveDatasetToCache({
+        inventory,
+        jobs,
+        dtBatches,
+        rtBatches,
+        contracts: next,
+      });
+      return next;
     });
+
     saveContractApi(c).then((r) => {
       if (!r.success) showToast(r.message, 'error');
     });
-    showToast(`Master contract ${c.name || c.contractNo} saved.`, 'success');
+
+    const rateKey = c.contractRef || c.contractNo || c.id;
+    if (rateKey && updatedRates.length > 0) {
+      saveContractRatesApi(rateKey, updatedRates);
+    }
+
+    showToast(`Master contract ${c.name || c.contractNo} and rate schedule saved.`, 'success');
   };
 
   // Backup & Reset

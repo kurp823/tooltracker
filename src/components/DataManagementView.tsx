@@ -34,6 +34,10 @@ import {
   saveCustomColumns,
 } from '../services/customColumnService';
 import {
+  saveCustomContract,
+  saveCustomContractRates,
+} from '../services/customContracts';
+import {
   Database,
   FileSpreadsheet,
   Download,
@@ -1434,7 +1438,11 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
             targetContract.rates = currentRates;
             modifiedContracts[cIdx] = targetContract;
 
-            // Persist to Azure SQL
+            // Persist to persistent storage and Azure SQL
+            saveCustomContract(targetContract);
+            saveCustomContractRates(targetContract.id, targetContract.rates);
+            if (targetContract.contractRef) saveCustomContractRates(targetContract.contractRef, targetContract.rates);
+            if (targetContract.contractNo) saveCustomContractRates(targetContract.contractNo, targetContract.rates);
             await saveContractRatesApi(targetContract.id, targetContract.rates);
             await saveContractApi(targetContract);
           } else {
@@ -1538,6 +1546,13 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
           } else if (selectedEntityKey === 'gatePasses') {
             await saveGatePassApi(item);
           } else if (selectedEntityKey === 'contracts') {
+            saveCustomContract(item);
+            if (Array.isArray(item.rates) && item.rates.length > 0) {
+              saveCustomContractRates(item.id, item.rates);
+              if (item.contractRef) saveCustomContractRates(item.contractRef, item.rates);
+              if (item.contractNo) saveCustomContractRates(item.contractNo, item.rates);
+              await saveContractRatesApi(item.contractRef || item.contractNo || item.id, item.rates);
+            }
             await saveContractApi(item);
           } else if (selectedEntityKey === 'inspections') {
             await saveInspectionApi(item);

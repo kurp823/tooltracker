@@ -13,6 +13,7 @@ interface CachedDataset {
   jobs?: any[];
   dtBatches?: any[];
   rtBatches?: any[];
+  contracts?: any[];
   timestamp: number;
 }
 
@@ -42,6 +43,7 @@ export async function saveDatasetToCache(data: {
   jobs?: any[];
   dtBatches?: any[];
   rtBatches?: any[];
+  contracts?: any[];
 }): Promise<void> {
   try {
     const db = await openDB();

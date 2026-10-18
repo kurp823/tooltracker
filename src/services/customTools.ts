@@ -5,8 +5,8 @@ const CUSTOM_TOOLS_KEY = 'emdad_custom_tools';
 
 const DEFAULT_CUSTOM_TOOLS: ToolItem[] = [
   { id: 'EMD-6372', serial: 'EMD-6372', assetNo: 'SM578-001', size: '5-7/8"', shortDesc: 'STRING MILL', desc: '5-7/8" STRING MILL W/ 3-1/2" IF PIN X BOX', qty: 1, location: 'Emdad Base', status: 'Good', ownership: 'EMDAD', isEmdad: true, supplier: 'EMDAD', addedDate: '2024-01-01' },
-  { id: 'EMD-6373', serial: 'EMD-6373', assetNo: 'DS958-001', size: '9-5/8"', shortDesc: 'DRILLING SCRAPER', desc: '9-5/8" DRILLING CASING SCRAPER W/ 4-1/2" IF PIN X BOX', qty: 1, location: 'Emdad Base', status: 'Good', ownership: 'EMDAD', isEmdad: true, supplier: 'EMDAD', addedDate: '2024-01-01' },
-  { id: 'EMD-6374', serial: 'EMD-6374', assetNo: 'DS700-001', size: '7"', shortDesc: 'DRILLING SCRAPER', desc: '7" DRILLING CASING SCRAPER W/ 3-1/2" IF PIN X BOX', qty: 1, location: 'Emdad Base', status: 'Good', ownership: 'EMDAD', isEmdad: true, supplier: 'EMDAD', addedDate: '2024-01-01' },
+  { id: 'DS958-001', serial: 'DS958-001', assetNo: 'DS958-001', size: '9-5/8"', shortDesc: 'DRILLING SCRAPER', desc: '9-5/8" DRILLING CASING SCRAPER W/ 4-1/2" IF PIN X BOX', qty: 1, location: 'Emdad Base', status: 'Good', ownership: 'CORETRAX', isEmdad: false, supplier: 'CORETRAX', addedDate: '2024-01-01' },
+  { id: 'DS700-001', serial: 'DS700-001', assetNo: 'DS700-001', size: '7"', shortDesc: 'DRILLING SCRAPER', desc: '7" DRILLING CASING SCRAPER W/ 3-1/2" IF PIN X BOX', qty: 1, location: 'Emdad Base', status: 'Good', ownership: 'CORETRAX', isEmdad: false, supplier: 'CORETRAX', addedDate: '2024-01-01' },
 ];
 
 /**
@@ -20,7 +20,12 @@ export function loadCustomTools(): ToolItem[] {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          list = parsed.filter((t) => t && (t.id || t.serial));
+          list = parsed
+            .filter((t) => t && (t.id || t.serial))
+            .filter((t) => {
+              const k = String(t.serial || t.id).trim().toUpperCase();
+              return k !== 'EMD-6373' && k !== 'EMD-6374';
+            });
         }
       }
     } catch (err) {
@@ -124,8 +129,13 @@ export function mergeInventoryWithCustomTools(
 
   const seenCustomKeys = new Set<string>();
 
+  const cleanBase = baseInventory.filter((item) => {
+    const k = String(item.serial || item.id).trim().toUpperCase();
+    return k !== 'EMD-6373' && k !== 'EMD-6374';
+  });
+
   // Overlay custom edits on existing base tools
-  const mergedBase = baseInventory.map((item) => {
+  const mergedBase = cleanBase.map((item) => {
     const kId = String(item.id || '').trim().toUpperCase();
     const kSer = String(item.serial || '').trim().toUpperCase();
     const match = (kId && customKeyMap.get(kId)) || (kSer && customKeyMap.get(kSer));
