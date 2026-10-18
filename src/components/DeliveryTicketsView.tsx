@@ -1698,6 +1698,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                                 }
                               }
 
+                               const displaySize = invTool?.size || (t as any).size || '—';
                               const toolType = invTool?.shortDesc?.trim() || t.shortDesc?.trim() || 'Downhole Tool';
                               let description = '';
                               if (invTool?.desc && invTool.desc.trim()) description = invTool.desc.trim();

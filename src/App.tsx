@@ -513,7 +513,7 @@ export const App: React.FC = () => {
 
           setDbStatus({
             isConnected: true,
-            source: res.source === 'failed' ? 'local-cache' : res.source,
+            source: (res.source as string) === 'failed' ? 'local-cache' : res.source,
             lastChecked: new Date().toLocaleTimeString(),
             message: res.message,
             counts: res.counts,

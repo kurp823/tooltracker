@@ -4,8 +4,11 @@ import { Search, ChevronDown, Check, AlertTriangle, Package } from 'lucide-react
 
 interface SearchableConsumableSelectProps {
   items: ConsumableItem[];
-  selectedPartNo: string;
-  onSelect: (item: ConsumableItem) => void;
+  selectedPartNo?: string;
+  value?: string;
+  onSelect?: (item: ConsumableItem) => void;
+  onChange?: (val: string) => void;
+  placeholder?: string;
   disabled?: boolean;
   className?: string;
 }
@@ -13,7 +16,10 @@ interface SearchableConsumableSelectProps {
 export const SearchableConsumableSelect: React.FC<SearchableConsumableSelectProps> = ({
   items,
   selectedPartNo,
+  value,
   onSelect,
+  onChange,
+  placeholder,
   disabled = false,
   className = '',
 }) => {
@@ -22,9 +28,11 @@ export const SearchableConsumableSelect: React.FC<SearchableConsumableSelectProp
   const wrapperRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  const effectivePartNo = value !== undefined ? value : selectedPartNo;
+
   const selectedItem = useMemo(() => {
-    return items.find((i) => i.partNo === selectedPartNo);
-  }, [items, selectedPartNo]);
+    return items.find((i) => i.partNo === effectivePartNo);
+  }, [items, effectivePartNo]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -89,7 +97,7 @@ export const SearchableConsumableSelect: React.FC<SearchableConsumableSelectProp
             </div>
           </div>
         ) : (
-          <span className="text-slate-400 text-xs italic">Select a consumable SKU...</span>
+          <span className="text-slate-400 text-xs italic">{placeholder || 'Select a consumable SKU...'}</span>
         )}
 
         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -119,7 +127,7 @@ export const SearchableConsumableSelect: React.FC<SearchableConsumableSelectProp
               </div>
             ) : (
               filteredItems.map((item) => {
-                const isSelected = item.partNo === selectedPartNo;
+                const isSelected = item.partNo === effectivePartNo;
                 const isOutOfStock = item.currentStock === 0;
                 const isLowStock = item.currentStock <= item.reorderLevel;
 
@@ -127,7 +135,8 @@ export const SearchableConsumableSelect: React.FC<SearchableConsumableSelectProp
                   <div
                     key={item.id}
                     onClick={() => {
-                      onSelect(item);
+                      if (onSelect) onSelect(item);
+                      if (onChange) onChange(item.partNo);
                       setIsOpen(false);
                       setSearch('');
                     }}

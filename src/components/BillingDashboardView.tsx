@@ -39,13 +39,14 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
   onRefresh,
 }) => {
   const [filterStage, setFilterStage] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [search, setSearch] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(50);
 
   const renderBillingStatusBadge = (status: string, legalInvoiceNumber?: string) => {
     if (isLegalInvoiceNumber(legalInvoiceNumber)) {
       return (
-        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-300">
+        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-800 border border-slate-300 whitespace-nowrap">
           Completed / Invoiced
         </span>
       );
@@ -57,7 +58,7 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
       case 'completed':
       case 'job completed':
         return (
-          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-800 border border-slate-300">
+          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-800 border border-slate-300 whitespace-nowrap">
             Completed / Invoiced
           </span>
         );
@@ -305,10 +306,10 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
   }, [finalInvoiced]);
 
   // Sorting state for predictable alignment (default Ascending JOB-00001, JOB-00002, JOB-00003)
-  const [sortField, setSortField] = useState<'id' | 'client' | 'rig' | 'status' | 'po'>('id');
+  const [sortField, setSortField] = useState<'id' | 'client' | 'contract' | 'rig' | 'status' | 'po' | 'draftInvoice' | 'legalInvoice' | 'amount'>('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-  const handleSortToggle = (field: 'id' | 'client' | 'rig' | 'status' | 'po') => {
+  const handleSortToggle = (field: 'id' | 'client' | 'contract' | 'rig' | 'status' | 'po' | 'draftInvoice' | 'legalInvoice' | 'amount') => {
     if (sortField === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
@@ -330,7 +331,7 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter((j) =>
-        `${j.id} ${j.client} ${j.rig} ${j.well} ${j.poNumber || ''} ${j.status} ${j.legalInvoiceNumber || ''} ${j.draftInvoiceNumber || ''} ${j.sesNumber || ''}`
+        `${j.id} ${j.client} ${j.contract || ''} ${j.rig} ${j.well} ${j.poNumber || ''} ${j.status} ${j.legalInvoiceNumber || ''} ${j.draftInvoiceNumber || ''} ${j.sesNumber || ''}`
           .toLowerCase()
           .includes(q)
       );
@@ -342,12 +343,22 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
         comparison = (a.id || '').localeCompare(b.id || '', undefined, { numeric: true, sensitivity: 'base' });
       } else if (sortField === 'client') {
         comparison = (a.client || '').localeCompare(b.client || '');
+      } else if (sortField === 'contract') {
+        comparison = (a.contract || '').localeCompare(b.contract || '');
       } else if (sortField === 'rig') {
         comparison = (a.rig || '').localeCompare(b.rig || '');
       } else if (sortField === 'status') {
         comparison = (a.status || '').localeCompare(b.status || '');
       } else if (sortField === 'po') {
         comparison = (a.poNumber || '').localeCompare(b.poNumber || '');
+      } else if (sortField === 'draftInvoice') {
+        comparison = (a.draftInvoiceNumber || '').localeCompare(b.draftInvoiceNumber || '');
+      } else if (sortField === 'legalInvoice') {
+        comparison = (a.legalInvoiceNumber || '').localeCompare(b.legalInvoiceNumber || '');
+      } else if (sortField === 'amount') {
+        const valA = a.invoiceAmount || (typeof a.cost === 'number' ? a.cost : parseFloat(String(a.cost || '').replace(/[^0-9.-]/g, '')) || 0);
+        const valB = b.invoiceAmount || (typeof b.cost === 'number' ? b.cost : parseFloat(String(b.cost || '').replace(/[^0-9.-]/g, '')) || 0);
+        comparison = (Number(valA) || 0) - (Number(valB) || 0);
       }
       return sortOrder === 'desc' ? -comparison : comparison;
     });
@@ -364,6 +375,14 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
     finalInvoiced,
     completedJobs,
   ]);
+
+  // Paginated jobs for high-performance screenfit display
+  const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(displayedJobs.length / pageSize));
+  const paginatedJobs = useMemo(() => {
+    if (pageSize === 0) return displayedJobs;
+    const start = (currentPage - 1) * pageSize;
+    return displayedJobs.slice(start, start + pageSize);
+  }, [displayedJobs, currentPage, pageSize]);
 
   // Handle Lifecycle Action Transitions
   const handleOpenAction = (
@@ -624,44 +643,69 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {/* View Mode Switcher */}
-            <div className="inline-flex rounded-lg border border-slate-300 p-0.5 bg-white shadow-2xs">
-              <button
-                type="button"
-                onClick={() => setViewMode('cards')}
-                className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
-                  viewMode === 'cards'
-                    ? 'bg-[#1a3055] text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Quick Rows selector */}
+            <div className="flex items-center gap-1.5 text-xs text-slate-600">
+              <span className="font-medium text-slate-500">Rows:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="border border-slate-300 rounded px-2 py-1 text-xs bg-white font-medium outline-none"
               >
-                Cards View
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('table')}
-                className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
-                  viewMode === 'table'
-                    ? 'bg-[#1a3055] text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Table View
-              </button>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={250}>250</option>
+                <option value={0}>All ({displayedJobs.length})</option>
+              </select>
             </div>
 
-            <div className="flex items-center space-x-2">
+            {/* Quick Header Pagination */}
+            {pageSize > 0 && totalPages > 1 && (
+              <div className="flex items-center gap-1 text-xs">
+                <button
+                  type="button"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="px-2 py-1 rounded bg-white border border-slate-300 font-bold text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 cursor-pointer shadow-2xs"
+                >
+                  &larr; Prev
+                </button>
+                <span className="px-1.5 font-mono text-slate-600 font-bold text-[11px]">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className="px-2 py-1 rounded bg-white border border-slate-300 font-bold text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 cursor-pointer shadow-2xs"
+                >
+                  Next &rarr;
+                </button>
+              </div>
+            )}
+
+            {/* Search Input */}
+            <div className="flex items-center space-x-1.5">
               <input
                 type="text"
-                placeholder="Search job ID, client, rig, invoice #..."
+                placeholder="Search Job, Client, Contract, PO, Inv..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="border border-slate-300 rounded px-2.5 py-1 text-xs bg-white w-64 focus:ring-1 focus:ring-[#1a3055] outline-none"
               />
               {search && (
                 <button
-                  onClick={() => setSearch('')}
+                  onClick={() => {
+                    setSearch('');
+                    setCurrentPage(1);
+                  }}
                   className="text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
                 >
                   Clear
@@ -671,332 +715,220 @@ export const BillingDashboardView: React.FC<BillingDashboardViewProps> = ({
           </div>
         </div>
 
-        {/* View content: Cards or Table */}
-        {viewMode === 'cards' ? (
-          <div className="p-4 bg-slate-50/60 min-h-[300px]">
-            {displayedJobs.length === 0 ? (
-              <div className="p-12 text-center text-slate-500 font-medium bg-white rounded-xl border border-slate-200">
-                No jobs matching current filter.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {displayedJobs.map((j) => {
+        {/* Screenfit Scrollable Table Container with Sticky Headers */}
+        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] min-h-[380px] w-full border-t border-slate-200 relative">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="sticky top-0 z-10 bg-slate-100 text-[#1a3055] border-b border-slate-200 font-bold select-none whitespace-nowrap shadow-2xs">
+              <tr>
+                <th
+                  onClick={() => handleSortToggle('id')}
+                  className="px-3 py-2 cursor-pointer hover:bg-slate-200"
+                >
+                  Job ID {sortField === 'id' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
+                <th
+                  onClick={() => handleSortToggle('client')}
+                  className="px-3 py-2 cursor-pointer hover:bg-slate-200"
+                >
+                  Client / Operator {sortField === 'client' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
+                <th
+                  onClick={() => handleSortToggle('contract')}
+                  className="px-3 py-2 cursor-pointer hover:bg-slate-200"
+                >
+                  Contract # {sortField === 'contract' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
+                <th
+                  onClick={() => handleSortToggle('rig')}
+                  className="px-3 py-2 cursor-pointer hover:bg-slate-200"
+                >
+                  Rig &amp; Well {sortField === 'rig' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
+                <th
+                  onClick={() => handleSortToggle('po')}
+                  className="px-3 py-2 cursor-pointer hover:bg-slate-200"
+                >
+                  PO Ref {sortField === 'po' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
+                <th
+                  onClick={() => handleSortToggle('status')}
+                  className="px-3 py-2 cursor-pointer hover:bg-slate-200"
+                >
+                  Status {sortField === 'status' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
+                <th className="px-3 py-2 whitespace-nowrap">Milestone Date</th>
+                <th
+                  onClick={() => handleSortToggle('draftInvoice')}
+                  className="px-3 py-2 cursor-pointer hover:bg-slate-200 whitespace-nowrap"
+                >
+                  Draft Invoice # {sortField === 'draftInvoice' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
+                <th
+                  onClick={() => handleSortToggle('legalInvoice')}
+                  className="px-3 py-2 cursor-pointer hover:bg-slate-200 whitespace-nowrap"
+                >
+                  Legal Invoice # {sortField === 'legalInvoice' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
+                <th
+                  onClick={() => handleSortToggle('amount')}
+                  className="px-3 py-2 text-right cursor-pointer hover:bg-slate-200 whitespace-nowrap"
+                >
+                  Amount (USD) {sortField === 'amount' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                </th>
+                <th className="px-3 py-2 text-center whitespace-nowrap">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {paginatedJobs.length === 0 ? (
+                <tr>
+                  <td colSpan={11} className="p-8 text-center text-slate-400">
+                    No jobs matching current filter.
+                  </td>
+                </tr>
+              ) : (
+                paginatedJobs.map((j) => {
+                  const rawDate = j.finalInvoicedDate || j.draftInvoicedDate || j.lastRtDate || j.firstDtDate;
+                  const formattedDate = formatDateDDMMYYYY(rawDate);
+                  const invValue = j.invoiceAmount || (typeof j.cost === 'number' ? j.cost : parseFloat(String(j.cost || '').replace(/[^0-9.-]/g, '')) || 0);
+
                   return (
-                    <div
-                      key={j.id}
-                      className="bg-white rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-md p-4 transition flex flex-col justify-between"
-                    >
-                      <div>
-                        {/* Header Row */}
-                        <div className="flex items-start justify-between gap-2 mb-2.5">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-slate-900 text-sm">
-                                {j.id}
+                    <tr key={j.id} className="hover:bg-slate-50/80 transition">
+                      <td className="px-3 py-2 font-mono font-bold text-slate-900 whitespace-nowrap">{j.id}</td>
+                      <td className="px-3 py-2 font-semibold text-slate-800 whitespace-nowrap">{j.client}</td>
+                      <td className="px-3 py-2 font-mono text-slate-700 whitespace-nowrap">{j.contract || '—'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <strong className="font-semibold text-slate-900">{j.rig}</strong>{' '}
+                        <span className="text-slate-400">/</span>{' '}
+                        <span className="text-slate-600">{j.well}</span>
+                      </td>
+                      <td className="px-3 py-2 font-mono text-slate-600 whitespace-nowrap">{j.poNumber || '—'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {renderBillingStatusBadge(j.status, j.legalInvoiceNumber)}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-slate-700 whitespace-nowrap text-xs">
+                        {formattedDate || '—'}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-slate-800 whitespace-nowrap text-xs">
+                        {j.draftInvoiceNumber ? (
+                          <span className="font-semibold text-slate-900">{j.draftInvoiceNumber}</span>
+                        ) : (
+                          <span className="text-slate-400 italic">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-slate-800 whitespace-nowrap text-xs">
+                        {j.legalInvoiceNumber ? (
+                          <span className="font-semibold text-slate-900">{j.legalInvoiceNumber}</span>
+                        ) : (
+                          <span className="text-slate-400 italic">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono font-bold text-xs whitespace-nowrap">
+                        {(() => {
+                          if (typeof invValue === 'number' && !isNaN(invValue) && invValue !== 0) {
+                            const isNeg = invValue < 0;
+                            return (
+                              <span className={isNeg ? 'text-rose-600 font-bold' : 'text-slate-900 font-medium'}>
+                                {isNeg
+                                  ? `-$${Math.abs(invValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                  : `$${invValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                               </span>
-                              {j.poNumber && (
-                                <span className="text-[11px] font-mono text-slate-500">
-                                  PO: {j.poNumber}
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs font-bold text-[#1a3055] mt-0.5">{j.client}</div>
-                          </div>
-                          <div>{renderBillingStatusBadge(j.status, j.legalInvoiceNumber)}</div>
-                        </div>
-
-                        {/* Rig & Well */}
-                        <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs mb-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-500 text-[11px] font-semibold uppercase tracking-wider">
-                              Rig &amp; Well
-                            </span>
-                            <div>
-                              <strong className="font-bold text-slate-900">{j.rig}</strong>
-                              <span className="text-slate-400 mx-1.5">/</span>
-                              <span className="font-normal text-slate-600">{j.well}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Invoicing Section */}
-                        <div className="space-y-1.5 mb-3 text-xs">
-                          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block">
-                            Billing Documents &amp; Invoices
-                          </span>
-
-                          {j.legalInvoiceNumber ? (
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="text-slate-500 text-xs">Legal Inv:</span>
-                              {j.legalInvoiceNumber
-                                .split(',')
-                                .map((s) => s.trim())
-                                .filter(Boolean)
-                                .map((inv) => (
-                                  <span
-                                    key={inv}
-                                    className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-xs shadow-2xs"
-                                  >
-                                    {inv}
-                                  </span>
-                                ))}
-                              {(() => {
-                                const invVal = j.invoiceAmount || (typeof j.cost === 'number' ? j.cost : parseFloat(String(j.cost || '').replace(/[^0-9.-]/g, '')) || 0);
-                                if (typeof invVal === 'number' && !isNaN(invVal) && invVal !== 0) {
-                                  const isNeg = invVal < 0;
-                                  return (
-                                    <span className={`font-mono font-bold text-xs ml-auto ${isNeg ? 'text-rose-600' : 'text-slate-900'}`}>
-                                      {isNeg
-                                        ? `-$${Math.abs(invVal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                        : `$${invVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                                    </span>
-                                  );
-                                }
-                                return null;
-                              })()}
-                            </div>
-                          ) : (
-                            <div className="text-slate-400 text-xs italic">
-                              {j.draftInvoiceNumber ? `Draft Inv: ${j.draftInvoiceNumber}` : 'Pending Legal Invoice #'}
-                            </div>
-                          )}
-
-                          {j.sesNumber && (
-                            <div className="text-xs text-slate-600">
-                              SES Approval Ref:{' '}
-                              <span className="font-mono font-medium text-slate-900">{j.sesNumber}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Key Milestone Dates */}
-                        <div className="flex flex-wrap gap-1.5 text-[11px] font-mono text-slate-500 mb-2">
-                          {j.firstDtDate && (
-                            <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                              1st DT: {formatDateDDMMYYYY(j.firstDtDate)}
-                            </span>
-                          )}
-                          {j.lastRtDate && (
-                            <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                              Last RT: {formatDateDDMMYYYY(j.lastRtDate)}
-                            </span>
-                          )}
-                          {j.finalInvoicedDate && (
-                            <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-semibold text-slate-800">
-                              Invoiced: {formatDateDDMMYYYY(j.finalInvoicedDate)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Card Action Footer */}
-                      <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 mt-2">
-                        <div className="flex items-center space-x-1.5 flex-wrap gap-1">
+                            );
+                          }
+                          return <span className="text-slate-300 font-normal">—</span>;
+                        })()}
+                      </td>
+                      <td className="px-3 py-2 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
                           <button
                             type="button"
                             onClick={() => onNavigate('invoicing', j.id)}
-                            className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition border border-slate-300 inline-flex items-center gap-1 cursor-pointer"
+                            className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs border border-slate-300 shadow-2xs cursor-pointer transition inline-flex items-center gap-1"
                             title="Generate/View Invoices & Rental Calculation Ticket"
                           >
-                            <span>Invoicing Screen</span>
+                            <span>📄 Invoicing</span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenOption1Draft(j)}
-                            className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs cursor-pointer transition inline-flex items-center gap-1"
-                            title="Open confirmation modal to review summary and record Draft Invoice"
-                          >
-                            <span>Save Draft Inv</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenOption1Final(j)}
-                            className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs cursor-pointer transition inline-flex items-center gap-1"
-                            title="Open confirmation modal to review summary, SES approval, and mark Final Invoiced"
-                          >
-                            <span>Mark Final Inv</span>
-                          </button>
-                        </div>
-                        <div className="flex items-center space-x-1.5">
-                          {j.status === 'Job completed and waiting signed docs' && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenAction(j, 'submit_billing')}
-                              className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold text-xs shadow-2xs cursor-pointer transition"
-                            >
-                              Submit to Billing &rarr;
-                            </button>
-                          )}
-                          {j.status === 'Draft invoiced' && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenAction(j, 'ses_approval')}
-                              className="px-2.5 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-2xs cursor-pointer transition"
-                            >
-                              Submit for SES &rarr;
-                            </button>
-                          )}
-                          {(j.status === 'Final invoiced' || j.status === 'Closed') && (
-                            <span className="px-2.5 py-1 rounded text-xs font-bold bg-slate-100 text-slate-800 border border-slate-300 inline-flex items-center gap-1">
-                              <span>✓</span> Invoiced &amp; Closed
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-50 text-[#1a3055] border-b border-slate-200 font-bold select-none whitespace-nowrap">
-                <tr>
-                  <th
-                    onClick={() => handleSortToggle('id')}
-                    className="px-3 py-2 cursor-pointer hover:bg-slate-100"
-                  >
-                    Job ID {sortField === 'id' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
-                  </th>
-                  <th
-                    onClick={() => handleSortToggle('client')}
-                    className="px-3 py-2 cursor-pointer hover:bg-slate-100"
-                  >
-                    Client / Operator {sortField === 'client' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
-                  </th>
-                  <th
-                    onClick={() => handleSortToggle('rig')}
-                    className="px-3 py-2 cursor-pointer hover:bg-slate-100"
-                  >
-                    Rig &amp; Well {sortField === 'rig' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
-                  </th>
-                  <th
-                    onClick={() => handleSortToggle('po')}
-                    className="px-3 py-2 cursor-pointer hover:bg-slate-100"
-                  >
-                    PO Ref {sortField === 'po' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
-                  </th>
-                  <th
-                    onClick={() => handleSortToggle('status')}
-                    className="px-3 py-2 cursor-pointer hover:bg-slate-100"
-                  >
-                    Status {sortField === 'status' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
-                  </th>
-                  <th className="px-3 py-2 whitespace-nowrap">Milestone Date</th>
-                  <th className="px-3 py-2 whitespace-nowrap">Invoicing References</th>
-                  <th className="px-3 py-2 text-right whitespace-nowrap">Amount (USD)</th>
-                  <th className="px-3 py-2 text-center whitespace-nowrap">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {displayedJobs.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="p-8 text-center text-slate-400">
-                      No jobs matching current filter.
-                    </td>
-                  </tr>
-                ) : (
-                  displayedJobs.map((j) => {
-                    const rawDate = j.finalInvoicedDate || j.draftInvoicedDate || j.lastRtDate || j.firstDtDate;
-                    const formattedDate = formatDateDDMMYYYY(rawDate);
-                    const invValue = j.invoiceAmount || (typeof j.cost === 'number' ? j.cost : parseFloat(String(j.cost || '').replace(/[^0-9.-]/g, '')) || 0);
-
-                    return (
-                      <tr key={j.id} className="hover:bg-slate-50/80 transition">
-                        <td className="px-3 py-2 font-mono font-bold text-slate-900 whitespace-nowrap">{j.id}</td>
-                        <td className="px-3 py-2 font-semibold text-slate-800 whitespace-nowrap">{j.client}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          <strong className="font-semibold text-slate-900">{j.rig}</strong>{' '}
-                          <span className="text-slate-400">/</span>{' '}
-                          <span className="text-slate-600">{j.well}</span>
-                        </td>
-                        <td className="px-3 py-2 font-mono text-slate-600 whitespace-nowrap">{j.poNumber || '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          {renderBillingStatusBadge(j.status, j.legalInvoiceNumber)}
-                        </td>
-                        <td className="px-3 py-2 font-mono text-slate-700 whitespace-nowrap text-xs">
-                          {formattedDate || '—'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-xs">
-                          <div className="flex items-center gap-1.5 whitespace-nowrap font-mono text-xs">
-                            {j.draftInvoiceNumber ? (
-                              <span className="text-slate-700">
-                                Draft: <strong className="text-slate-900">{j.draftInvoiceNumber}</strong>
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 italic">Draft: —</span>
-                            )}
-
-                            <span className="text-slate-300">•</span>
-
-                            {j.legalInvoiceNumber ? (
-                              <span className="text-slate-700">
-                                Final: <strong className="text-slate-900">{j.legalInvoiceNumber}</strong>
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 italic">Final: Pending</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 text-right font-mono font-bold text-xs whitespace-nowrap">
-                          {(() => {
-                            if (typeof invValue === 'number' && !isNaN(invValue) && invValue !== 0) {
-                              const isNeg = invValue < 0;
-                              return (
-                                <span className={isNeg ? 'text-rose-600 font-bold' : 'text-slate-900 font-medium'}>
-                                  {isNeg
-                                    ? `-$${Math.abs(invValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                    : `$${invValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                                </span>
-                              );
-                            }
-                            return <span className="text-slate-300 font-normal">—</span>;
-                          })()}
-                        </td>
-                        <td className="px-3 py-2 text-center whitespace-nowrap">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => onNavigate('invoicing', j.id)}
-                              className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs border border-slate-300 shadow-2xs cursor-pointer transition inline-flex items-center gap-1"
-                              title="Generate/View Invoices & Rental Calculation Ticket"
-                            >
-                              <span>📄 Invoicing</span>
-                            </button>
-                            {j.status !== 'Final invoiced' && j.status !== 'Closed' && (
-                              <>
-                                {!j.draftInvoiceNumber && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenOption1Draft(j)}
-                                    className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs cursor-pointer transition"
-                                    title="Open confirmation modal to review summary and record Draft Invoice"
-                                  >
-                                    Draft
-                                  </button>
-                                )}
+                          {j.status !== 'Final invoiced' && j.status !== 'Closed' && (
+                            <>
+                              {!j.draftInvoiceNumber && (
                                 <button
                                   type="button"
-                                  onClick={() => handleOpenOption1Final(j)}
-                                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow-2xs cursor-pointer transition"
-                                  title="Open confirmation modal to review summary, SES approval, and mark Final Invoiced"
+                                  onClick={() => handleOpenOption1Draft(j)}
+                                  className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs cursor-pointer transition"
+                                  title="Open confirmation modal to review summary and record Draft Invoice"
                                 >
-                                  Final
+                                  Draft
                                 </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenOption1Final(j)}
+                                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow-2xs cursor-pointer transition"
+                                title="Open confirmation modal to review summary, SES approval, and mark Final Invoiced"
+                              >
+                                Final
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Bottom Pagination Bar */}
+        <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex flex-wrap justify-between items-center text-xs text-slate-600 gap-2">
+          <div>
+            Showing <span className="font-bold text-slate-900">{displayedJobs.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}</span> to{' '}
+            <span className="font-bold text-slate-900">
+              {pageSize === 0 ? displayedJobs.length : Math.min(currentPage * pageSize, displayedJobs.length)}
+            </span>{' '}
+            of <span className="font-bold text-slate-900">{displayedJobs.length}</span> jobs
           </div>
-        )}
+
+          {pageSize > 0 && totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage(1)}
+                className="px-2 py-1 rounded bg-white border border-slate-300 font-semibold text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 cursor-pointer shadow-2xs text-xs"
+              >
+                &laquo; First
+              </button>
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-2 py-1 rounded bg-white border border-slate-300 font-semibold text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 cursor-pointer shadow-2xs text-xs"
+              >
+                &larr; Prev
+              </button>
+              <span className="px-2 font-mono font-bold text-slate-700 text-xs">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-2 py-1 rounded bg-white border border-slate-300 font-semibold text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 cursor-pointer shadow-2xs text-xs"
+              >
+                Next &rarr;
+              </button>
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage(totalPages)}
+                className="px-2 py-1 rounded bg-white border border-slate-300 font-semibold text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 cursor-pointer shadow-2xs text-xs"
+              >
+                Last &raquo;
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Modal for Lifecycle Transitions */}

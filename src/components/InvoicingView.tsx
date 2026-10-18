@@ -482,334 +482,272 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
   const verifiedByName = 'Ravi Kumar Parapu';
 
   return (
-    <div className="space-y-6 pb-24 text-slate-800">
+    <div className="space-y-3 pb-8 text-slate-800">
       {isReadOnly && <ReadOnlyBanner role={user?.role} moduleName="Invoicing & Commercial Verification" />}
 
-      {/* 1. Header & Stage Filters */}
-      <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-5">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div>
-            <div className="flex items-center space-x-2.5">
-              <span className="p-2 bg-blue-50 text-blue-700 rounded-lg">
-                <FileText className="w-5 h-5" />
-              </span>
-              <div>
-                <h1 className="text-xl font-bold text-slate-900 tracking-tight">Invoicing & Commercial Verification</h1>
-                <p className="text-xs text-slate-500">
-                  Separation of duties: Review operations handover, verify rental calculation ticket, and issue Draft &amp; Final Tax Invoices.
-                </p>
-              </div>
+      {/* 1. Compact Control & Action Header */}
+      <div className="bg-white rounded-lg shadow-2xs border border-slate-200 p-3 space-y-2.5">
+        {/* Row 1: Title, Job Selector, Search, & Actions */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex items-center space-x-2 shrink-0">
+            <span className="p-1.5 bg-blue-50 text-blue-700 rounded-md">
+              <FileText className="w-4 h-4" />
+            </span>
+            <h1 className="text-sm font-bold text-slate-900 tracking-tight">Invoicing &amp; Commercial Verification</h1>
+          </div>
+
+          {/* Job Dropdown Selector & Quick Search */}
+          <div className="flex items-center gap-2 flex-1 max-w-xl min-w-[280px]">
+            <div className="flex-1 min-w-0">
+              <JobSearchSelect
+                jobs={filteredJobs.length > 0 ? filteredJobs : jobs}
+                selectedJobId={selectedJobId}
+                onSelectJob={(jobId) => setSelectedJobId(jobId)}
+                buttonClassName="py-1 px-2.5 text-xs font-semibold rounded"
+                placeholder="Select drilling job..."
+              />
+            </div>
+            <div className="w-44 relative shrink-0">
+              <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search jobs..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-7 pr-6 py-1 text-xs bg-slate-50 border border-slate-200 rounded outline-none focus:border-blue-500 focus:bg-white"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Quick Action Buttons */}
-          <div className="flex items-center flex-wrap gap-2">
+          {/* Action Buttons */}
+          <div className="flex items-center gap-1.5 shrink-0">
             {onRefresh && (
               <button
                 onClick={onRefresh}
-                title="Refresh Invoicing Records from Azure SQL / Database"
-                className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                title="Refresh Records"
+                className="inline-flex items-center px-2 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
               >
                 <span>🔄</span>
-                <span>Refresh</span>
               </button>
             )}
 
             {canEdit && (
               <button
                 onClick={handleGenerateDraftInvoice}
-                className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                className="inline-flex items-center space-x-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold shadow-2xs transition-colors cursor-pointer"
               >
-                <Save className="w-3.5 h-3.5" />
-                <span>Generate Draft Invoice</span>
+                <Save className="w-3 h-3" />
+                <span>Draft Invoice</span>
               </button>
             )}
 
             {canEdit && (
               <button
                 onClick={handleOpenFinalInvoiceModal}
-                className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                className="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold shadow-2xs transition-colors cursor-pointer"
               >
-                <FileCheck className="w-3.5 h-3.5" />
-                <span>Issue Final Tax Invoice (Epicor)</span>
+                <FileCheck className="w-3 h-3" />
+                <span>Final Tax Invoice</span>
               </button>
             )}
 
             <button
               onClick={handlePrint}
-              className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer print:hidden"
+              className="inline-flex items-center space-x-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-bold shadow-2xs transition-colors cursor-pointer print:hidden"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print Dossier</span>
+              <Printer className="w-3 h-3" />
+              <span>Print</span>
             </button>
           </div>
         </div>
 
-        {/* Audit & Turnaround KPI Ribbon */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5 pt-4 border-t border-slate-100">
-          <div className="bg-slate-50/80 p-3 rounded-lg border border-slate-200/70">
-            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Awaiting Draft Invoicing</div>
-            <div className="text-xl font-bold text-blue-700 mt-0.5">{auditMetrics.submittedCount} Jobs</div>
-            <div className="text-[10px] text-slate-400 mt-0.5">Submitted by Operations</div>
-          </div>
-          <div className="bg-slate-50/80 p-3 rounded-lg border border-slate-200/70">
-            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Demob ➔ Billing Handover</div>
-            <div className="text-xl font-bold text-slate-800 mt-0.5">{auditMetrics.avgDemobToSub} Days</div>
-            <div className="text-[10px] text-slate-400 mt-0.5">Operations turnaround speed</div>
-          </div>
-          <div className="bg-slate-50/80 p-3 rounded-lg border border-slate-200/70">
-            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Submission ➔ Draft Invoice</div>
-            <div className="text-xl font-bold text-amber-700 mt-0.5">{auditMetrics.avgSubToDraft} Days</div>
-            <div className="text-[10px] text-slate-400 mt-0.5">Commercial team cycle time</div>
-          </div>
-          <div className="bg-slate-50/80 p-3 rounded-lg border border-slate-200/70">
-            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Draft ➔ Final Legal (SES)</div>
-            <div className="text-xl font-bold text-emerald-700 mt-0.5">{auditMetrics.avgDraftToFinal} Days</div>
-            <div className="text-[10px] text-slate-400 mt-0.5">Client approval &amp; Epicor issuance</div>
-          </div>
-        </div>
-
-        {/* Stage Filter Chips */}
-        <div className="flex flex-wrap items-center gap-1.5 mt-4 pt-3 border-t border-slate-100">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-2">Filter Stage:</span>
-          {[
-            { id: 'all_ready', label: 'All Ready for Invoicing', count: auditMetrics.readyCount },
-            { id: 'submitted', label: 'Submitted by Ops (Queue)', count: auditMetrics.submittedCount },
-            { id: 'draft_invoiced', label: 'Draft Invoiced', count: auditMetrics.draftCount },
-            { id: 'ses_approval', label: 'Under SES Approval', count: auditMetrics.sesCount },
-            { id: 'final_invoiced', label: 'Final Legal Invoiced', count: auditMetrics.finalCount },
-            { id: 'all', label: 'All Jobs', count: jobs.length },
-          ].map((f) => (
-            <button
-              key={f.id}
-              onClick={() => setStageFilter(f.id as any)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer flex items-center space-x-1.5 ${
-                stageFilter === f.id
-                  ? 'bg-blue-600 text-white font-semibold shadow-2xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <span>{f.label}</span>
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                  stageFilter === f.id ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-700'
+        {/* Row 2: Filter Stage Pills & Turnaround Metric Strip */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Stage:</span>
+            {[
+              { id: 'all_ready', label: 'Ready', count: auditMetrics.readyCount },
+              { id: 'submitted', label: 'Ops Queue', count: auditMetrics.submittedCount },
+              { id: 'draft_invoiced', label: 'Draft', count: auditMetrics.draftCount },
+              { id: 'ses_approval', label: 'SES', count: auditMetrics.sesCount },
+              { id: 'final_invoiced', label: 'Final Legal', count: auditMetrics.finalCount },
+              { id: 'all', label: 'All', count: jobs.length },
+            ].map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setStageFilter(f.id as any)}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer flex items-center space-x-1 ${
+                  stageFilter === f.id
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                {f.count}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 2. Job Search, Selector & Audit Timeline */}
-      <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-5 space-y-4">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-3">
-          {/* Job Dropdown Selector with Type-to-Search */}
-          <div className="flex-1 w-full flex items-center space-x-2">
-            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider shrink-0">Selected Job:</span>
-            <div className="flex-1 w-full min-w-0">
-              <JobSearchSelect
-                jobs={filteredJobs.length > 0 ? filteredJobs : jobs}
-                selectedJobId={selectedJobId}
-                onSelectJob={(jobId) => setSelectedJobId(jobId)}
-                buttonClassName="py-2 px-3 text-xs font-semibold rounded-lg"
-                placeholder="Type to search and select drilling job..."
-              />
-            </div>
-          </div>
-
-          {/* Search Box with Clear */}
-          <div className="w-full md:w-72 relative">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search Job, Rig, Well, PO, Inv..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white"
-            />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
+                <span>{f.label}</span>
+                <span
+                  className={`text-[9px] px-1 py-0.1 rounded-full ${
+                    stageFilter === f.id ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {f.count}
+                </span>
               </button>
-            )}
+            ))}
+          </div>
+
+          {/* Turnaround Speed Strip */}
+          <div className="flex items-center gap-2 text-[11px] text-slate-600 bg-slate-50 border border-slate-200/80 rounded px-2.5 py-0.5 font-mono">
+            <span>Queue: <strong className="text-blue-700">{auditMetrics.submittedCount}</strong></span>
+            <span className="text-slate-300">•</span>
+            <span>Demob➔Sub: <strong className="text-slate-900">{auditMetrics.avgDemobToSub}d</strong></span>
+            <span className="text-slate-300">•</span>
+            <span>Sub➔Draft: <strong className="text-amber-700">{auditMetrics.avgSubToDraft}d</strong></span>
+            <span className="text-slate-300">•</span>
+            <span>Draft➔Final: <strong className="text-emerald-700">{auditMetrics.avgDraftToFinal}d</strong></span>
           </div>
         </div>
 
-        {/* Selected Job Audit Lifecycle Timeline */}
+        {/* Row 3: Selected Job Lifecycle Timeline & Supporting Documents Checklist */}
         {currentJob && jobAuditTrail && (
-          <div className="bg-blue-50/50 rounded-lg border border-blue-100/80 p-3.5">
-            <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
-              <div className="flex items-center space-x-2">
-                <span className="font-bold text-blue-900">Job Lifecycle &amp; Audit Trail:</span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                  {currentJob.status}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+            <div className="flex items-center space-x-2 flex-wrap">
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-200">
+                {currentJob.status}
+              </span>
+              {currentJob.legalInvoiceNumber && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono">
+                  Tax Inv: {currentJob.legalInvoiceNumber}
                 </span>
-                {currentJob.legalInvoiceNumber && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono">
-                    Epicor Tax Inv: {currentJob.legalInvoiceNumber}
-                  </span>
-                )}
-                {currentJob.draftInvoiceNumber && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 font-mono">
-                    Draft Inv: {currentJob.draftInvoiceNumber}
-                  </span>
-                )}
+              )}
+              {currentJob.draftInvoiceNumber && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 font-mono">
+                  Draft: {currentJob.draftInvoiceNumber}
+                </span>
+              )}
+              <div className="flex items-center space-x-1.5 text-[10px] text-slate-500 font-mono">
+                <span>Mob: {jobAuditTrail.mob}</span>
+                <span>➔</span>
+                <span>Demob: {jobAuditTrail.demob}</span>
+                <span>➔</span>
+                <span>Ops: {jobAuditTrail.submitted}</span>
+                <span>➔</span>
+                <span>Draft: {jobAuditTrail.draftDate}</span>
+                <span>➔</span>
+                <span>Final: {jobAuditTrail.finalDate}</span>
               </div>
+            </div>
 
-              <div className="flex items-center space-x-4 text-[11px] text-slate-600">
-                <span>
-                  Mob: <strong>{jobAuditTrail.mob}</strong>
-                </span>
-                <span>➔</span>
-                <span>
-                  Demob: <strong>{jobAuditTrail.demob}</strong>
-                </span>
-                <span>➔</span>
-                <span>
-                  Ops Submitted: <strong>{jobAuditTrail.submitted}</strong>
-                </span>
-                <span>➔</span>
-                <span>
-                  Draft Invoiced: <strong>{jobAuditTrail.draftDate}</strong>
-                </span>
-                <span>➔</span>
-                <span>
-                  Final Invoiced: <strong>{jobAuditTrail.finalDate}</strong>
-                </span>
-              </div>
+            {/* Supporting Documents Inline Checklist */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Docs:</span>
+              {[
+                { id: 'signed_dt', label: 'Signed DT', key: 'signed_dt' },
+                { id: 'cargo_manifest', label: 'Manifest', key: 'cargo_manifest' },
+                { id: 'rig_log', label: 'Run Log', key: 'rig_log' },
+                { id: 'signed_rt', label: 'Signed RT', key: 'signed_rt' },
+                { id: 'client_approval', label: 'SES Approval', key: 'client_approval' },
+              ].map((item) => {
+                const isChecked = checkedDocs[item.key];
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => toggleDocCheck(item.key)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition cursor-pointer flex items-center space-x-1 ${
+                      isChecked
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                        : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>{isChecked ? '✓' : '○'}</span>
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
       </div>
 
-      {/* 3. Supporting Documents Checklist (Separately emailed by Invoicing team) */}
-      <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center space-x-2">
-            <Paperclip className="w-4 h-4 text-slate-500" />
-            <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Supporting Field Attachments Checklist (For Email Package)
-            </h2>
-          </div>
-          <span className="text-[11px] text-slate-500 italic">
-            Physical stamped scans will be attached separately in email by the invoicing team
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mt-3 pt-3 border-t border-slate-100">
-          {[
-            { id: 'signed_dt', label: 'Signed DT (Rig Stamped)', key: 'signed_dt' },
-            { id: 'cargo_manifest', label: 'Marine / Cargo Manifest', key: 'cargo_manifest' },
-            { id: 'rig_log', label: 'Signed Utilization / Run Log', key: 'rig_log' },
-            { id: 'signed_rt', label: 'Signed RT (Base Stamped)', key: 'signed_rt' },
-            { id: 'client_approval', label: 'Client SES / Email Approval', key: 'client_approval' },
-          ].map((item) => {
-            const isChecked = checkedDocs[item.key];
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => toggleDocCheck(item.key)}
-                className={`p-2.5 rounded-lg border text-left flex items-start space-x-2 transition-colors cursor-pointer ${
-                  isChecked
-                    ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
-                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {isChecked ? (
-                  <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                ) : (
-                  <Square className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                )}
-                <div>
-                  <div className="text-xs font-semibold leading-tight">{item.label}</div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">
-                    {isChecked ? 'Ready to attach' : 'Pending copy'}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 4. Commercial Verification & Calculation Ticket Ledger */}
-      <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* 2. Commercial Verification & Calculation Ticket Ledger */}
+      <div className="bg-white rounded-lg shadow-2xs border border-slate-200 p-3 space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
               <span>Tool &amp; Personnel Rental Calculation Ledger</span>
-              <span className="text-xs font-normal text-slate-500">(Services &amp; Tools Rental Calculation Ticket)</span>
+              <span className="text-[11px] font-normal text-slate-500">(Rental Calculation Ticket)</span>
             </h2>
-            <p className="text-xs text-slate-500">
-              Contract No: <strong>{packageData.contractNo}</strong> | Customer: <strong>{packageData.customerName}</strong> | Rig: <strong>{packageData.rig}</strong> | Well: <strong>{packageData.well}</strong>
+            <p className="text-[11px] text-slate-500">
+              Contract No: <strong className="text-slate-800">{packageData.contractNo}</strong> | Customer: <strong className="text-slate-800">{packageData.customerName}</strong> | Rig: <strong className="text-slate-800">{packageData.rig}</strong> | Well: <strong className="text-slate-800">{packageData.well}</strong>
             </p>
           </div>
 
           <div className="flex items-center space-x-2">
-            <span className="text-xs text-slate-500">Draft Number Ref:</span>
+            <span className="text-[11px] font-semibold text-slate-500">Draft Ref:</span>
             <input
               type="text"
               value={draftNumber}
               onChange={(e) => setDraftNumber(e.target.value)}
-              className="px-2.5 py-1 text-xs font-mono font-bold bg-slate-50 border border-slate-300 rounded focus:bg-white focus:border-blue-500 outline-none w-40"
+              className="px-2 py-0.5 text-xs font-mono font-bold bg-slate-50 border border-slate-300 rounded focus:bg-white focus:border-blue-500 outline-none w-36"
               title="Continuation draft invoice number based on Job Number & Year"
             />
           </div>
         </div>
 
-        {/* Interactive Verification Table */}
-        <div className="overflow-x-auto border border-slate-200 rounded-lg">
+        {/* Interactive Verification Table with Sticky Headers & Screenfit scroll */}
+        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-360px)] min-h-[260px] border border-slate-200 rounded-lg">
           <table className="w-full text-left text-xs border-collapse font-sans">
-            <thead>
-              <tr className="bg-slate-100/90 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
-                <th className="py-2.5 px-3 w-10 text-center">#</th>
-                <th className="py-2.5 px-3">Serial / Asset No</th>
-                <th className="py-2.5 px-3">Description</th>
-                <th className="py-2.5 px-2 text-center w-12">Qty</th>
-                <th className="py-2.5 px-2">Delivery Ticket</th>
-                <th className="py-2.5 px-2">Return Ticket</th>
-                <th className="py-2.5 px-2 text-center">Ref</th>
-                <th className="py-2.5 px-2 text-center">Rental Days</th>
-                <th className="py-2.5 px-2 text-center bg-blue-50/60 text-blue-950">Oper Days</th>
-                <th className="py-2.5 px-2 text-right bg-blue-50/60 text-blue-950">Oper Rate ($)</th>
-                <th className="py-2.5 px-2 text-center bg-amber-50/60 text-amber-950">Standby Days</th>
-                <th className="py-2.5 px-2 text-right bg-amber-50/60 text-amber-950">Standby Rate ($)</th>
-                <th className="py-2.5 px-3 text-right border-r-2 border-slate-300">Total ($ USD)</th>
+            <thead className="sticky top-0 z-10 bg-slate-100 shadow-2xs text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
+              <tr className="whitespace-nowrap">
+                <th className="py-1.5 px-2 w-8 text-center">#</th>
+                <th className="py-1.5 px-2">Serial / Asset No</th>
+                <th className="py-1.5 px-2">Description</th>
+                <th className="py-1.5 px-1.5 text-center w-10">Qty</th>
+                <th className="py-1.5 px-1.5">Delivery Ticket</th>
+                <th className="py-1.5 px-1.5">Return Ticket</th>
+                <th className="py-1.5 px-1.5 text-center">Ref</th>
+                <th className="py-1.5 px-1.5 text-center">Rental Days</th>
+                <th className="py-1.5 px-1.5 text-center bg-blue-50/60 text-blue-950">Oper Days</th>
+                <th className="py-1.5 px-1.5 text-right bg-blue-50/60 text-blue-950">Oper Rate ($)</th>
+                <th className="py-1.5 px-1.5 text-center bg-amber-50/60 text-amber-950">Standby Days</th>
+                <th className="py-1.5 px-1.5 text-right bg-amber-50/60 text-amber-950">Standby Rate ($)</th>
+                <th className="py-1.5 px-2 text-right border-r-2 border-slate-300">Total ($ USD)</th>
                 {/* Subcontractor Cost Breakdown */}
-                <th className="py-2.5 px-3 text-left bg-orange-100 text-orange-950">Supplier</th>
-                <th className="py-2.5 px-2 text-center bg-orange-100 text-orange-950">Sub SB Days</th>
-                <th className="py-2.5 px-2 text-center bg-orange-100 text-orange-950">Sub Ops Days</th>
-                <th className="py-2.5 px-2 text-right bg-orange-50 text-orange-950">Sub SB Rate ($)</th>
-                <th className="py-2.5 px-2 text-right bg-orange-50 text-orange-950">Sub Ops Rate ($)</th>
-                <th className="py-2.5 px-3 text-right bg-orange-200/80 text-orange-950">Sub Cost ($ USD)</th>
+                <th className="py-1.5 px-2 text-left bg-orange-100 text-orange-950">Supplier</th>
+                <th className="py-1.5 px-1.5 text-center bg-orange-100 text-orange-950">Sub SB</th>
+                <th className="py-1.5 px-1.5 text-center bg-orange-100 text-orange-950">Sub Ops</th>
+                <th className="py-1.5 px-1.5 text-right bg-orange-50 text-orange-950">Sub SB Rate ($)</th>
+                <th className="py-1.5 px-1.5 text-right bg-orange-50 text-orange-950">Sub Ops Rate ($)</th>
+                <th className="py-1.5 px-2 text-right bg-orange-200/80 text-orange-950">Sub Cost ($)</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody className="divide-y divide-slate-100 text-slate-700 whitespace-nowrap">
               {editableLines.length === 0 ? (
                 <tr>
-                  <td colSpan={19} className="py-6 text-center text-slate-400">
+                  <td colSpan={19} className="py-4 text-center text-slate-400">
                     No tools or services found for this job.
                   </td>
                 </tr>
               ) : (
                 editableLines.map((line, idx) => (
                   <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-2 px-3 text-center text-slate-400 font-mono text-[11px]">{line.itemNo || idx + 1}</td>
-                    <td className="py-2 px-3 font-mono font-semibold text-slate-900">{line.serialNumber}</td>
-                    <td className="py-2 px-3 text-slate-800 max-w-xs truncate" title={line.toolDescription}>
+                    <td className="py-1 px-2 text-center text-slate-400 font-mono text-[11px]">{line.itemNo || idx + 1}</td>
+                    <td className="py-1 px-2 font-mono font-semibold text-slate-900">{line.serialNumber}</td>
+                    <td className="py-1 px-2 text-slate-800 max-w-xs truncate" title={line.toolDescription}>
                       {line.toolDescription}
                     </td>
-                    <td className="py-2 px-2 text-center text-slate-600">{line.qty || 1}</td>
-                    <td className="py-2 px-2 text-slate-600 font-mono text-[11px]">{line.deliveryDate || '—'}</td>
-                    <td className="py-2 px-2 text-slate-600 font-mono text-[11px]">{line.returnDate || '—'}</td>
-                    <td className="py-2 px-2 text-center text-slate-500 font-mono text-[11px]">{line.contractRefOper || 'A-4.1'}</td>
-                    <td className="py-2 px-2 text-center font-semibold text-slate-700">{line.rentalDays || 10}</td>
+                    <td className="py-1 px-1.5 text-center text-slate-600">{line.qty || 1}</td>
+                    <td className="py-1 px-1.5 text-slate-600 font-mono text-[11px]">{line.deliveryDate || '—'}</td>
+                    <td className="py-1 px-1.5 text-slate-600 font-mono text-[11px]">{line.returnDate || '—'}</td>
+                    <td className="py-1 px-1.5 text-center text-slate-500 font-mono text-[11px]">{line.contractRefOper || 'A-4.1'}</td>
+                    <td className="py-1 px-1.5 text-center font-semibold text-slate-700">{line.rentalDays || 10}</td>
 
                     {/* Oper Days (Editable) */}
                     <td className="py-2 px-2 text-center bg-blue-50/30">
@@ -858,12 +796,12 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                     </td>
 
                     {/* Total Revenue */}
-                    <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 border-r-2 border-slate-300">
+                    <td className="py-1 px-2 text-right font-mono font-bold text-slate-900 border-r-2 border-slate-300">
                       ${(line.totalChargesUSD || 0).toFixed(2)}
                     </td>
 
                     {/* Subcontractor Columns */}
-                    <td className="py-2 px-3 whitespace-nowrap bg-orange-50/30 font-medium">
+                    <td className="py-1 px-2 whitespace-nowrap bg-orange-50/30 font-medium">
                       {line.isSubTool ? (
                         <span className="px-1.5 py-0.5 rounded font-bold text-[10px] bg-orange-100 text-orange-900 border border-orange-200">
                           {line.supplier}
@@ -873,7 +811,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                       )}
                     </td>
 
-                    <td className="py-2 px-2 text-center bg-orange-50/20">
+                    <td className="py-1 px-1.5 text-center bg-orange-50/20">
                       {line.isSubTool ? (
                         <input
                           type="number"
@@ -887,7 +825,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                       )}
                     </td>
 
-                    <td className="py-2 px-2 text-center bg-orange-50/20">
+                    <td className="py-1 px-1.5 text-center bg-orange-50/20">
                       {line.isSubTool ? (
                         <input
                           type="number"
@@ -901,7 +839,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                       )}
                     </td>
 
-                    <td className="py-2 px-2 text-right bg-orange-50/10">
+                    <td className="py-1 px-1.5 text-right bg-orange-50/10">
                       {line.isSubTool ? (
                         <input
                           type="number"
@@ -916,7 +854,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                       )}
                     </td>
 
-                    <td className="py-2 px-2 text-right bg-orange-50/10">
+                    <td className="py-1 px-1.5 text-right bg-orange-50/10">
                       {line.isSubTool ? (
                         <input
                           type="number"
@@ -931,7 +869,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                       )}
                     </td>
 
-                    <td className="py-2 px-3 text-right font-mono font-bold text-orange-950 bg-orange-100/60">
+                    <td className="py-1 px-2 text-right font-mono font-bold text-orange-950 bg-orange-100/60">
                       {line.isSubTool ? (
                         <span>${(line.totalSubCostUSD || 0).toFixed(2)}</span>
                       ) : (
@@ -946,21 +884,21 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
         </div>
 
         {/* Commercial Totals Summary (USD & Pegged AED) */}
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
             <div className="space-y-1 text-xs text-slate-600">
-              <div>
-                <strong>Amount in Words (USD):</strong>
+              <div className="text-[11px] font-bold text-slate-700">
+                Amount in Words (USD):
               </div>
-              <div className="font-mono text-blue-900 bg-white p-2 rounded border border-slate-200 uppercase font-semibold">
+              <div className="font-mono text-blue-900 bg-white p-1.5 rounded border border-slate-200 uppercase font-semibold text-[11px]">
                 {financialTotals.words}
               </div>
-              <div className="text-[11px] text-slate-400 pt-1">
+              <div className="text-[10px] text-slate-400">
                 Fixed UAE Central Bank Peg: 1 USD = 3.6725 AED | UAE VAT: 5.0%
               </div>
             </div>
 
-            <div className="space-y-1.5 text-xs">
+            <div className="space-y-1 text-xs">
               <div className="flex justify-between py-0.5 border-b border-slate-200">
                 <span className="text-slate-600">Operational Rental Charges:</span>
                 <span className="font-mono font-semibold">${financialTotals.operTotal.toFixed(2)} USD</span>
@@ -977,16 +915,16 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                 <span>UAE VAT (5%):</span>
                 <span className="font-mono font-semibold">${financialTotals.vatUSD.toFixed(2)} USD</span>
               </div>
-              <div className="flex justify-between py-1 bg-blue-100/60 px-2 rounded font-bold text-slate-900 text-sm">
+              <div className="flex justify-between py-0.5 bg-blue-100/60 px-2 rounded font-bold text-slate-900 text-xs">
                 <span>Grand Total (USD):</span>
                 <span className="font-mono">${financialTotals.grandTotalUSD.toFixed(2)} USD</span>
               </div>
-              <div className="flex justify-between py-1 bg-emerald-50 px-2 rounded font-bold text-emerald-900 text-xs">
+              <div className="flex justify-between py-0.5 bg-emerald-50 px-2 rounded font-bold text-emerald-900 text-[11px]">
                 <span>Grand Total (AED @ 3.6725):</span>
                 <span className="font-mono">{financialTotals.grandTotalAED.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AED</span>
               </div>
               {financialTotals.totalSubCostUSD > 0 && (
-                <div className="flex justify-between py-1 bg-orange-100/70 border border-orange-200 px-2 rounded font-bold text-orange-950 text-xs">
+                <div className="flex justify-between py-0.5 bg-orange-100/70 border border-orange-200 px-2 rounded font-bold text-orange-950 text-[11px]">
                   <span>Sub-Rental Supplier Cost Accrual:</span>
                   <span className="font-mono">
                     ${financialTotals.totalSubCostUSD.toFixed(2)} USD ({financialTotals.totalSubCostAED.toLocaleString()} AED)
@@ -998,8 +936,8 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
         </div>
       </div>
 
-      {/* 5. Document Preview & Print Tabs (Draft Invoice, Final Tax Invoice, Calculation Ticket) */}
-      <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-5 space-y-4">
+      {/* 3. Document Preview & Print Tabs (Draft Invoice, Final Tax Invoice, Calculation Ticket) */}
+      <div className="bg-white rounded-lg shadow-2xs border border-slate-200 p-3 space-y-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
           <div className="flex items-center space-x-2">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Preview Document:</span>

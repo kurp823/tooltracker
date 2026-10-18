@@ -91,6 +91,8 @@ export interface CalloutItem {
   partNo?: string;
   description?: string;
   supplier?: string;
+  ownership?: string;
+  isEmdad?: boolean;
   qtyIn?: number;
   insNum?: string;
   insDate?: string;
@@ -387,6 +389,7 @@ export interface RTLine {
   condition?: string;
   size?: string;
   ownership?: string;
+  supplier?: string;
   qty?: number;
   remarks?: string;
   dateIn?: string;
@@ -763,6 +766,7 @@ export interface DraftInvoicePackageData {
 
 export interface SubContractorRental {
   rentalId: string;
+  id?: string;
   jobId: string;
   supplierName: string; // Motormax, Epis, Coretrax, Weatherford, etc.
   rentalAgreementNo: string;

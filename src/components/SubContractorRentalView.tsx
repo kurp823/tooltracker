@@ -321,14 +321,16 @@ export const SubContractorRentalView: React.FC<SubContractorRentalViewProps> = (
         const sbDays = 2;
         const total = (opDays * rate) + (sbDays * sbRate);
 
+        const genRentalId = `SRA-SYNC-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase();
         const newRec: SubContractorRental = {
-          id: `SRA-SYNC-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase(),
+          rentalId: genRentalId,
+          id: genRentalId,
           jobId: tool.currentJobId || linkedJob?.id || 'ACTIVE-RENTAL',
           supplierName: supplier,
           rentalAgreementNo: `SRA-AUTO-${tool.serial}`,
           toolDesc: tool.shortDesc || tool.desc || 'Downhole Rented Tool',
           serialNo: tool.serial,
-          rentalType: tool.subRentalAgreementType || 'Daily',
+          rentalType: tool.subRentalAgreementType === 'MonthlyPool' ? 'Monthly' : 'Daily',
           rateAmount: rate,
           standbyRate: sbRate,
           startDate: tool.rentalStartDate || linkedJob?.mobDate || '2026-10-01',
@@ -371,8 +373,10 @@ export const SubContractorRentalView: React.FC<SubContractorRentalViewProps> = (
             const sbRate = 1000;
             const total = (opDays * rate) + (sbDays * sbRate);
 
+            const genJobRentalId = `SRA-JOB-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase();
             const newRec: SubContractorRental = {
-              id: `SRA-JOB-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase(),
+              rentalId: genJobRentalId,
+              id: genJobRentalId,
               jobId: job.id,
               supplierName: costObj.supplier || 'Sub-Contractor',
               rentalAgreementNo: `SRA-JOB-${toolKey}`,
@@ -387,6 +391,7 @@ export const SubContractorRentalView: React.FC<SubContractorRentalViewProps> = (
               standbyDays: sbDays,
               accrualMonth: '2026-10',
               totalAccrued: total,
+              poReference: job.poNumber || (costObj as any).poNumber || '',
               division: job.subDivision || resolveContractSubDivision(job.contract || '') || 'RENTALS',
               clientCode: job.client || 'ADNOC Onshore',
               rig: job.rig || '',

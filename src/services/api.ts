@@ -1672,6 +1672,7 @@ async function fetchAllTablePages(
   for (const tbl of tableVariants) {
     try {
       let allRows: any[] = [];
+      let pages = 0;
       let nextUrl: string | null = `${baseEndpoint}/${tbl}?$top=5000`;
       const fetchHeaders = {
         'Cache-Control': 'no-cache, no-store, must-revalidate',

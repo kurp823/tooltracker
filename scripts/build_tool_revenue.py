@@ -4,7 +4,7 @@ import re
 from collections import defaultdict
 
 USD_AED_RATE = 3.6725
-AED_CONTRACTS = {"4700024096"}
+AED_CONTRACTS = {"4700024096", "4700018368"}
 
 # 1. Load Categories
 categories = []

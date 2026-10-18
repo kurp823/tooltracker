@@ -191,7 +191,7 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
 
   // Export to Excel
   const handleExportExcel = () => {
-    const data = editedRows.map((r) => ({
+    const data: any[] = editedRows.map((r) => ({
       'Cost Code': r.code,
       'Description': r.name,
       'Category': r.category,

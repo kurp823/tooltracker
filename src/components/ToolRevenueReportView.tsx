@@ -888,63 +888,63 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
         <div className="bg-white border border-slate-300 rounded-xl shadow-2xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px] select-none">
-                <tr>
-                  <th className="p-2.5 text-center w-12">#</th>
-                  <th className="p-2.5 cursor-pointer hover:bg-blue-100" onClick={() => handleSort('totalRevenue')}>
-                    <div className="flex items-center gap-1">
+              <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px] select-none whitespace-nowrap">
+                <tr className="whitespace-nowrap">
+                  <th className="p-2.5 text-center w-12 whitespace-nowrap">#</th>
+                  <th className="p-2.5 cursor-pointer hover:bg-blue-100 whitespace-nowrap" onClick={() => handleSort('totalRevenue')}>
+                    <div className="flex items-center gap-1 whitespace-nowrap">
                       <span>Tool Serial</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
-                  <th className="p-2.5">Description</th>
-                  <th className="p-2.5">Category</th>
-                  <th className="p-2.5">Size</th>
-                  <th className="p-2.5 text-center">Rate Curr</th>
-                  <th className="p-2.5 text-right cursor-pointer hover:bg-blue-100" onClick={() => handleSort('totalRevenue')}>
-                    <div className="flex items-center justify-end gap-1">
+                  <th className="p-2.5 whitespace-nowrap">Description</th>
+                  <th className="p-2.5 whitespace-nowrap">Category</th>
+                  <th className="p-2.5 whitespace-nowrap">Size</th>
+                  <th className="p-2.5 text-center whitespace-nowrap">Rate Curr</th>
+                  <th className="p-2.5 text-right cursor-pointer hover:bg-blue-100 whitespace-nowrap" onClick={() => handleSort('totalRevenue')}>
+                    <div className="flex items-center justify-end gap-1 whitespace-nowrap">
                       <span>Total Rev ({currencyMode})</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
-                  <th className="p-2.5 text-right cursor-pointer hover:bg-blue-100" onClick={() => handleSort('operRevenue')}>
-                    <div className="flex items-center justify-end gap-1">
+                  <th className="p-2.5 text-right cursor-pointer hover:bg-blue-100 whitespace-nowrap" onClick={() => handleSort('operRevenue')}>
+                    <div className="flex items-center justify-end gap-1 whitespace-nowrap">
                       <span>Ops Rev</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
-                  <th className="p-2.5 text-right cursor-pointer hover:bg-blue-100" onClick={() => handleSort('standbyRevenue')}>
-                    <div className="flex items-center justify-end gap-1">
+                  <th className="p-2.5 text-right cursor-pointer hover:bg-blue-100 whitespace-nowrap" onClick={() => handleSort('standbyRevenue')}>
+                    <div className="flex items-center justify-end gap-1 whitespace-nowrap">
                       <span>Standby Rev</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
-                  <th className="p-2.5 text-center cursor-pointer hover:bg-blue-100" onClick={() => handleSort('operDays')}>
-                    <div className="flex items-center justify-center gap-1">
+                  <th className="p-2.5 text-center cursor-pointer hover:bg-blue-100 whitespace-nowrap" onClick={() => handleSort('operDays')}>
+                    <div className="flex items-center justify-center gap-1 whitespace-nowrap">
                       <span>Ops ('1')</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
-                  <th className="p-2.5 text-center cursor-pointer hover:bg-blue-100" onClick={() => handleSort('standbyDays')}>
-                    <div className="flex items-center justify-center gap-1">
+                  <th className="p-2.5 text-center cursor-pointer hover:bg-blue-100 whitespace-nowrap" onClick={() => handleSort('standbyDays')}>
+                    <div className="flex items-center justify-center gap-1 whitespace-nowrap">
                       <span>Stby ('S')</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
-                  <th className="p-2.5 text-center cursor-pointer hover:bg-blue-100" onClick={() => handleSort('jobsCount')}>
-                    <div className="flex items-center justify-center gap-1">
+                  <th className="p-2.5 text-center cursor-pointer hover:bg-blue-100 whitespace-nowrap" onClick={() => handleSort('jobsCount')}>
+                    <div className="flex items-center justify-center gap-1 whitespace-nowrap">
                       <span>Jobs</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
-                  <th className="p-2.5">Contracts</th>
-                  <th className="p-2.5 text-center">Action</th>
+                  <th className="p-2.5 whitespace-nowrap">Contracts</th>
+                  <th className="p-2.5 text-center whitespace-nowrap">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 font-medium">
+              <tbody className="divide-y divide-slate-200 font-medium whitespace-nowrap">
                 {paginatedTools.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="p-8 text-center text-slate-500 font-medium">
+                    <td colSpan={14} className="p-8 text-center text-slate-500 font-medium whitespace-nowrap">
                       No tool records match your filter criteria.
                     </td>
                   </tr>
@@ -954,16 +954,16 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
                     const isToolAED = tool.currency === 'AED';
 
                     return (
-                      <tr key={tool.serial} className="hover:bg-blue-50/60 transition h-8 leading-none">
-                        <td className="py-1.5 px-2.5 text-center font-mono text-slate-400 font-bold">{globalRank}</td>
+                      <tr key={tool.serial} className="hover:bg-blue-50/60 transition h-8 leading-none whitespace-nowrap">
+                        <td className="py-1.5 px-2.5 text-center font-mono text-slate-400 font-bold whitespace-nowrap">{globalRank}</td>
                         <td className="py-1.5 px-2.5 whitespace-nowrap font-mono font-bold text-slate-900">
                           {tool.serial}
                         </td>
-                        <td className="py-1.5 px-2.5 truncate max-w-[260px] text-slate-800" title={tool.desc}>
+                        <td className="py-1.5 px-2.5 whitespace-nowrap max-w-xs truncate text-slate-800" title={tool.desc}>
                           {tool.desc || '—'}
                         </td>
                         <td className="py-1.5 px-2.5 whitespace-nowrap">
-                          <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded text-[11px] font-semibold">
+                          <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded text-[11px] font-semibold whitespace-nowrap">
                             {tool.category || 'OTHER'}
                           </span>
                         </td>
@@ -972,32 +972,32 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
                         </td>
                         <td className="py-1.5 px-2.5 text-center whitespace-nowrap">
                           <span
-                            className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+                            className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold whitespace-nowrap ${
                               isToolAED ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
                             }`}
                           >
                             {tool.currency || 'USD'}
                           </span>
                         </td>
-                        <td className="py-1.5 px-2.5 text-right font-mono font-bold text-emerald-700">
+                        <td className="py-1.5 px-2.5 text-right font-mono font-bold text-emerald-700 whitespace-nowrap">
                           {formatMoney(tool.totalRevenueAED, tool.totalRevenueUSD, tool.currency)}
                         </td>
-                        <td className="py-1.5 px-2.5 text-right font-mono text-blue-700">
+                        <td className="py-1.5 px-2.5 text-right font-mono text-blue-700 whitespace-nowrap">
                           {formatMoney(tool.operRevenueAED, tool.operRevenueUSD, tool.currency)}
                         </td>
-                        <td className="py-1.5 px-2.5 text-right font-mono text-amber-700">
+                        <td className="py-1.5 px-2.5 text-right font-mono text-amber-700 whitespace-nowrap">
                           {formatMoney(tool.standbyRevenueAED, tool.standbyRevenueUSD, tool.currency)}
                         </td>
-                        <td className="py-1.5 px-2.5 text-center font-mono font-bold text-blue-900 bg-blue-50/40">
+                        <td className="py-1.5 px-2.5 text-center font-mono font-bold text-blue-900 bg-blue-50/40 whitespace-nowrap">
                           {tool.operDays}
                         </td>
-                        <td className="py-1.5 px-2.5 text-center font-mono font-bold text-amber-900 bg-amber-50/40">
+                        <td className="py-1.5 px-2.5 text-center font-mono font-bold text-amber-900 bg-amber-50/40 whitespace-nowrap">
                           {tool.standbyDays}
                         </td>
-                        <td className="py-1.5 px-2.5 text-center font-mono font-bold text-slate-700">
+                        <td className="py-1.5 px-2.5 text-center font-mono font-bold text-slate-700 whitespace-nowrap">
                           {tool.jobsCount}
                         </td>
-                        <td className="py-1.5 px-2.5 truncate max-w-[150px] text-slate-600 font-mono text-[11px]" title={(tool.contracts || []).join(', ')}>
+                        <td className="py-1.5 px-2.5 whitespace-nowrap text-slate-600 font-mono text-[11px]" title={(tool.contracts || []).join(', ')}>
                           {(tool.contracts || []).join(', ') || (tool.clients || []).join(', ') || '444558'}
                         </td>
                         <td className="py-1.5 px-2.5 text-center whitespace-nowrap">
@@ -1063,24 +1063,24 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px] select-none">
-                  <tr>
-                    <th className="p-2.5 text-center w-12">#</th>
-                    <th className="p-2.5">Badge Number</th>
-                    <th className="p-2.5">Engineer / Specialist Name</th>
-                    <th className="p-2.5">Operational Designation</th>
-                    <th className="p-2.5 text-right">Total Revenue ({currencyMode})</th>
-                    <th className="p-2.5 text-center">Billed Days ('1')</th>
-                    <th className="p-2.5 text-center">Jobs Served</th>
-                    <th className="p-2.5 text-right">Avg Rate / Day</th>
-                    <th className="p-2.5">Client Operators Served</th>
-                    <th className="p-2.5 text-center">Audit Lines</th>
+                <thead className="bg-[#e9f0f8] text-[#1a3055] border-b border-[#b8cce0] font-bold text-[11px] select-none whitespace-nowrap">
+                  <tr className="whitespace-nowrap">
+                    <th className="p-2.5 text-center w-12 whitespace-nowrap">#</th>
+                    <th className="p-2.5 whitespace-nowrap">Badge Number</th>
+                    <th className="p-2.5 whitespace-nowrap">Engineer / Specialist Name</th>
+                    <th className="p-2.5 whitespace-nowrap">Operational Designation</th>
+                    <th className="p-2.5 text-right whitespace-nowrap">Total Revenue ({currencyMode})</th>
+                    <th className="p-2.5 text-center whitespace-nowrap">Billed Days ('1')</th>
+                    <th className="p-2.5 text-center whitespace-nowrap">Jobs Served</th>
+                    <th className="p-2.5 text-right whitespace-nowrap">Avg Rate / Day</th>
+                    <th className="p-2.5 whitespace-nowrap">Client Operators Served</th>
+                    <th className="p-2.5 text-center whitespace-nowrap">Audit Lines</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 font-medium">
+                <tbody className="divide-y divide-slate-200 font-medium whitespace-nowrap">
                   {sortedPersonnel.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="p-8 text-center text-slate-500 font-medium">
+                      <td colSpan={10} className="p-8 text-center text-slate-500 font-medium whitespace-nowrap">
                         No field personnel match your search filters.
                       </td>
                     </tr>
@@ -1095,8 +1095,8 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
                           : 0;
 
                       return (
-                        <tr key={person.serial} className="hover:bg-blue-50/60 transition h-9 leading-none">
-                          <td className="py-2 px-2.5 text-center font-mono text-slate-400 font-bold">{idx + 1}</td>
+                        <tr key={person.serial} className="hover:bg-blue-50/60 transition h-9 leading-none whitespace-nowrap">
+                          <td className="py-2 px-2.5 text-center font-mono text-slate-400 font-bold whitespace-nowrap">{idx + 1}</td>
                           <td className="py-2 px-2.5 whitespace-nowrap font-mono font-bold text-slate-900">
                             {person.serial}
                           </td>
@@ -1104,25 +1104,25 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
                             {person.desc}
                           </td>
                           <td className="py-2 px-2.5 whitespace-nowrap text-slate-700">
-                            <span className="bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded text-[11px] font-semibold">
+                            <span className="bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded text-[11px] font-semibold whitespace-nowrap">
                               {designation}
                             </span>
                           </td>
-                          <td className="py-2 px-2.5 text-right font-mono font-bold text-emerald-700 text-xs">
+                          <td className="py-2 px-2.5 text-right font-mono font-bold text-emerald-700 text-xs whitespace-nowrap">
                             {formatMoney(person.totalRevenueAED, person.totalRevenueUSD)}
                           </td>
-                          <td className="py-2 px-2.5 text-center font-mono font-bold text-blue-900 bg-blue-50/40">
+                          <td className="py-2 px-2.5 text-center font-mono font-bold text-blue-900 bg-blue-50/40 whitespace-nowrap">
                             {person.operDays}
                           </td>
-                          <td className="py-2 px-2.5 text-center font-mono font-bold text-slate-700">
+                          <td className="py-2 px-2.5 text-center font-mono font-bold text-slate-700 whitespace-nowrap">
                             {person.jobsCount}
                           </td>
-                          <td className="py-2 px-2.5 text-right font-mono font-bold text-slate-700">
+                          <td className="py-2 px-2.5 text-right font-mono font-bold text-slate-700 whitespace-nowrap">
                             {isAED
                               ? `AED ${Math.round(avgDailyRate).toLocaleString()}`
                               : `$${Math.round(avgDailyRate).toLocaleString()}`}
                           </td>
-                          <td className="py-2 px-2.5 truncate max-w-[200px] text-slate-600 font-mono text-[11px]" title={(person.clients || []).join(', ')}>
+                          <td className="py-2 px-2.5 whitespace-nowrap text-slate-600 font-mono text-[11px]" title={(person.clients || []).join(', ')}>
                             {(person.clients || []).join(', ') || 'ADNOC Onshore, Weatherford'}
                           </td>
                           <td className="py-2 px-2.5 text-center whitespace-nowrap">
@@ -1447,21 +1447,21 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
                   </div>
                   <div className="overflow-x-auto max-h-48 border border-slate-200 rounded-lg">
                     <table className="w-full text-left text-[11px] font-mono">
-                      <thead className="bg-slate-100 text-slate-700 sticky top-0 border-b border-slate-200">
-                        <tr>
-                          <th className="p-2">Job Number</th>
-                          <th className="p-2">DT Number</th>
-                          <th className="p-2 text-center">Standby (Days @ Rate)</th>
-                          <th className="p-2 text-center">Operating (Days @ Rate)</th>
-                          <th className="p-2 text-right">Line Total</th>
+                      <thead className="bg-slate-100 text-slate-700 sticky top-0 border-b border-slate-200 whitespace-nowrap">
+                        <tr className="whitespace-nowrap">
+                          <th className="p-2 whitespace-nowrap">Job Number</th>
+                          <th className="p-2 whitespace-nowrap">DT Number</th>
+                          <th className="p-2 text-center whitespace-nowrap">Standby (Days @ Rate)</th>
+                          <th className="p-2 text-center whitespace-nowrap">Operating (Days @ Rate)</th>
+                          <th className="p-2 text-right whitespace-nowrap">Line Total</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
+                      <tbody className="divide-y divide-slate-100 bg-white whitespace-nowrap">
                         {selectedToolDetail.lineItems.map((li: any, lIdx: number) => {
                           const isAEDLine = li.currency === 'AED';
                           const currSym = isAEDLine ? 'AED ' : '$';
                           return (
-                            <tr key={lIdx} className="hover:bg-slate-50">
+                            <tr key={lIdx} className="hover:bg-slate-50 whitespace-nowrap">
                               <td className="p-2 font-bold text-blue-900">{li.jobId}</td>
                               <td className="p-2 text-slate-600">{li.dtNumber || '—'}</td>
                               <td className="p-2 text-center text-amber-800">

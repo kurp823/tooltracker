@@ -628,7 +628,7 @@ export const INITIAL_CONTRACTS: ContractRecord[] = [
     name: 'ADNOC DRILLING - WHIPSTOCK',
     shortDesc: 'ADNOC DRILLING - WHIPSTOCK',
     client: 'ADNOC DRILLING COMPANY P.J.S.C.',
-    currency: 'USD',
+    currency: 'AED',
     status: 'Active',
     contractValue: 2825700.00,
     startDate: '2023-05-30',

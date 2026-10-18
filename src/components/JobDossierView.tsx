@@ -507,6 +507,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     action: 55,
   });
 
+  // Utilization Date Boundary: Rig Backload Date (RT) vs Base Yard Return Date
+  const [utilEndDateMode, setUtilEndDateMode] = useState<'BACKLOAD' | 'YARD_RETURN'>('BACKLOAD');
+
   // Daily Field Log state (Daily Drilling Report / Operational Remarks)
   const [dailyLogs, setDailyLogs] = useState<DailyFieldLog[]>(() => {
     return jobData.dailyLogs || [];
@@ -940,12 +943,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     h2sExpiry: '',
     bosietExpiry: '',
     medicalExpiry: '',
-    status: 'Active' as const,
+    status: 'Active' as 'Active' | 'On Rig' | 'On Leave' | 'Inactive',
     dayRateAED: 3500,
   });
 
-  // Utilization Date Boundary: Rig Backload Date (RT) vs Base Yard Return Date
-  const [utilEndDateMode, setUtilEndDateMode] = useState<'BACKLOAD' | 'YARD_RETURN'>('BACKLOAD');
+
 
   // Unique roles for personnel picker
   const availablePersonnelRoles = useMemo(() => {
