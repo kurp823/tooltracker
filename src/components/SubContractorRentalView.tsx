@@ -7,6 +7,8 @@ import {
   calculateSubContractorTotals,
 } from '../services/subContractorRentalService';
 import { resolveContractSubDivision } from '../services/customContracts';
+import { DropdownListKey, getDropdownOptions } from '../services/dropdownService';
+import { AdminDropdownModal } from './AdminDropdownModal';
 import {
   Search,
   Filter,
@@ -24,6 +26,7 @@ import {
   Layers,
   ArrowRight,
   TrendingUp,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -55,8 +58,24 @@ export const SubContractorRentalView: React.FC<SubContractorRentalViewProps> = (
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRental, setEditingRental] = useState<SubContractorRental | null>(null);
 
+  // Dynamic Dropdown Lists from dropdownService
+  const [adminModalKey, setAdminModalKey] = useState<DropdownListKey | null>(null);
+  const [suppliersList, setSuppliersList] = useState<string[]>(() => getDropdownOptions('suppliers'));
+  const [divisionsList, setDivisionsList] = useState<string[]>(() => getDropdownOptions('subDivisions'));
+  const [rentalModelsList, setRentalModelsList] = useState<string[]>(() => getDropdownOptions('rentalAgreementModels'));
+
+  useEffect(() => {
+    const handleDropdownUpdate = () => {
+      setSuppliersList(getDropdownOptions('suppliers'));
+      setDivisionsList(getDropdownOptions('subDivisions'));
+      setRentalModelsList(getDropdownOptions('rentalAgreementModels'));
+    };
+    window.addEventListener('dropdown_options_updated', handleDropdownUpdate);
+    return () => window.removeEventListener('dropdown_options_updated', handleDropdownUpdate);
+  }, []);
+
   // Form Fields
-  const [supplierName, setSupplierName] = useState('Motormax Drilling Technologies');
+  const [supplierName, setSupplierName] = useState(() => getDropdownOptions('suppliers')[0] || 'Motormax Drilling Technologies');
   const [rentalAgreementNo, setRentalAgreementNo] = useState('');
   const [jobId, setJobId] = useState('');
   const [toolDesc, setToolDesc] = useState('');
@@ -550,10 +569,20 @@ export const SubContractorRentalView: React.FC<SubContractorRentalViewProps> = (
             className="border border-slate-300 rounded px-2 py-1.5 bg-white font-medium text-slate-800 cursor-pointer"
           >
             <option value="ALL">All Divisions</option>
-            <option value="FISHING">FISHING</option>
-            <option value="WHIPSTOCK">WHIPSTOCK</option>
-            <option value="RENTALS">RENTALS</option>
+            {divisionsList.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
           </select>
+          {user?.role === 'Admin' && (
+            <button
+              type="button"
+              onClick={() => setAdminModalKey('subDivisions')}
+              className="p-1 text-slate-400 hover:text-blue-700 rounded hover:bg-slate-100 cursor-pointer"
+              title="Manage Sub-Divisions (Admin)"
+            >
+              <SettingsIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         <div className="flex items-center space-x-1.5">
@@ -564,10 +593,20 @@ export const SubContractorRentalView: React.FC<SubContractorRentalViewProps> = (
             className="border border-slate-300 rounded px-2 py-1.5 bg-white font-medium text-slate-800 cursor-pointer max-w-[150px] truncate"
           >
             <option value="ALL">All Suppliers</option>
-            {supplierList.map((s) => (
+            {Array.from(new Set([...suppliersList, ...supplierList])).map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
+          {user?.role === 'Admin' && (
+            <button
+              type="button"
+              onClick={() => setAdminModalKey('suppliers')}
+              className="p-1 text-slate-400 hover:text-blue-700 rounded hover:bg-slate-100 cursor-pointer"
+              title="Manage Suppliers (Admin)"
+            >
+              <SettingsIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         <div className="flex items-center space-x-1.5">
@@ -795,15 +834,30 @@ export const SubContractorRentalView: React.FC<SubContractorRentalViewProps> = (
               {/* Row 1: Supplier & Agreement */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Sub-Contractor / Supplier *</label>
-                  <input
-                    type="text"
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">Sub-Contractor / Supplier *</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('suppliers')}
+                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-1 font-bold cursor-pointer"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" />
+                        <span>Manage List</span>
+                      </button>
+                    )}
+                  </div>
+                  <select
                     value={supplierName}
                     onChange={(e) => setSupplierName(e.target.value)}
-                    placeholder="e.g. Motormax, Epis, Coretrax, Weatherford"
                     required
-                    className="w-full border rounded px-2.5 py-1.5 font-medium"
-                  />
+                    className="w-full border rounded px-2.5 py-1.5 font-medium bg-white"
+                  >
+                    <option value="">-- Choose Supplier --</option>
+                    {suppliersList.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Rental Agreement # *</label>
@@ -835,15 +889,27 @@ export const SubContractorRentalView: React.FC<SubContractorRentalViewProps> = (
                   </select>
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Sub-Division (P&amp;L Sector) *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">Sub-Division (P&amp;L Sector) *</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('subDivisions')}
+                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-1 font-bold cursor-pointer"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" />
+                        <span>Manage List</span>
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={division}
                     onChange={(e) => setDivision(e.target.value as SubDivision)}
                     className="w-full border rounded px-2.5 py-1.5 font-bold text-slate-800 bg-white"
                   >
-                    <option value="FISHING">FISHING</option>
-                    <option value="WHIPSTOCK">WHIPSTOCK</option>
-                    <option value="RENTALS">RENTALS (Downhole Tool Rentals)</option>
+                    {divisionsList.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -882,9 +948,9 @@ export const SubContractorRentalView: React.FC<SubContractorRentalViewProps> = (
                     onChange={(e) => setRentalType(e.target.value as any)}
                     className="w-full border rounded px-2 py-1 bg-white font-medium"
                   >
-                    <option value="Daily">Daily Rate</option>
-                    <option value="Monthly">Monthly Rate</option>
-                    <option value="Lumpsum">Lumpsum Job Charge</option>
+                    {rentalModelsList.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -1058,6 +1124,21 @@ export const SubContractorRentalView: React.FC<SubContractorRentalViewProps> = (
             </form>
           </div>
         </div>
+      )}
+
+      {/* Admin Dropdown Manager Modal */}
+      {adminModalKey && (
+        <AdminDropdownModal
+          isOpen={true}
+          onClose={() => setAdminModalKey(null)}
+          dropdownKey={adminModalKey}
+          isAdmin={user?.role === 'Admin'}
+          onUpdated={() => {
+            setSuppliersList(getDropdownOptions('suppliers'));
+            setDivisionsList(getDropdownOptions('subDivisions'));
+            setRentalModelsList(getDropdownOptions('rentalAgreementModels'));
+          }}
+        />
       )}
     </div>
   );

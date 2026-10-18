@@ -4,6 +4,9 @@ import { TOOL_SIZES } from '../data/initialData';
 import { ToolPickerModal } from './ToolPickerModal';
 import { formatDateDDMMYY } from '../utils';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
+import { DropdownListKey, getDropdownOptions } from '../services/dropdownService';
+import { AdminDropdownModal } from './AdminDropdownModal';
+import { Settings as SettingsIcon } from 'lucide-react';
 
 interface CalloutsViewProps {
   user?: User | null;
@@ -43,6 +46,20 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
   const [tab, setTab] = useState<'active' | 'closed'>('active');
   const [search, setSearch] = useState('');
   const [selectedCalloutDetail, setSelectedCalloutDetail] = useState<Callout | null>(null);
+
+  // Dynamic Dropdown Lists from dropdownService
+  const [adminModalKey, setAdminModalKey] = useState<DropdownListKey | null>(null);
+  const [rigsList, setRigsList] = useState<string[]>(() => getDropdownOptions('rigs'));
+  const [clientsList, setClientsList] = useState<string[]>(() => getDropdownOptions('clients'));
+
+  React.useEffect(() => {
+    const handleUpdate = () => {
+      setRigsList(getDropdownOptions('rigs'));
+      setClientsList(getDropdownOptions('clients'));
+    };
+    window.addEventListener('dropdown_options_updated', handleUpdate);
+    return () => window.removeEventListener('dropdown_options_updated', handleUpdate);
+  }, []);
   const [linkingCallout, setLinkingCallout] = useState<Callout | null>(null);
   const [linkJobSearch, setLinkJobSearch] = useState('');
 
@@ -662,15 +679,33 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
             <form onSubmit={handleCreateCalloutSubmit} className="p-4 overflow-y-auto flex-1 text-xs space-y-3">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-bold mb-1">Rig *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold">Rig *</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('rigs')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                        title="Admin: Manage Rigs"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" /> Manage
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
                     required
+                    list="calloutRigsList"
                     placeholder="e.g. ND-11, AD-45"
                     value={newRig}
                     onChange={(e) => setNewRig(e.target.value)}
-                    className="w-full border rounded px-2.5 py-1.5"
+                    className="w-full border rounded px-2.5 py-1.5 bg-white"
                   />
+                  <datalist id="calloutRigsList">
+                    {rigsList.map((r) => (
+                      <option key={r} value={r} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="block font-bold mb-1">Well *</label>
@@ -684,28 +719,49 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">Client *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold">Client *</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('clients')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                        title="Admin: Manage Clients"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" /> Manage
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
                     required
+                    list="calloutClientsList"
                     placeholder="e.g. ADNOC Onshore"
                     value={newClient}
                     onChange={(e) => setNewClient(e.target.value)}
-                    className="w-full border rounded px-2.5 py-1.5"
+                    className="w-full border rounded px-2.5 py-1.5 bg-white"
                   />
+                  <datalist id="calloutClientsList">
+                    {clientsList.map((cl) => (
+                      <option key={cl} value={cl} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">Contract Code</label>
-                  <select
+                  <label className="block font-bold mb-1">Contract Code / Client</label>
+                  <input
+                    type="text"
+                    list="calloutContractsList"
+                    placeholder="e.g. 4700023373 or ADNOC Onshore"
                     value={newContract}
                     onChange={(e) => setNewContract(e.target.value)}
-                    className="w-full border rounded px-2.5 py-1.5 font-bold"
-                  >
-                    <option value="ADNOC Onshore">ADNOC Onshore</option>
-                    <option value="ADNOC Drilling">ADNOC Drilling</option>
-                    <option value="ADNOC Offshore">ADNOC Offshore</option>
-                    <option value="Turnwell">Turnwell</option>
-                  </select>
+                    className="w-full border rounded px-2.5 py-1.5 font-bold bg-white"
+                  />
+                  <datalist id="calloutContractsList">
+                    {clientsList.map((cl) => (
+                      <option key={cl} value={cl} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="block font-bold mb-1">PO Reference</label>
@@ -1487,6 +1543,19 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
           preSelectedIds={pickerConfig.preSelectedIds}
           onConfirm={pickerConfig.onConfirm}
           onClose={() => setPickerConfig((p) => ({ ...p, isOpen: false }))}
+        />
+      )}
+
+      {adminModalKey && (
+        <AdminDropdownModal
+          listKey={adminModalKey}
+          user={user}
+          isOpen={true}
+          onClose={() => setAdminModalKey(null)}
+          onChanged={() => {
+            setRigsList(getDropdownOptions('rigs'));
+            setClientsList(getDropdownOptions('clients'));
+          }}
         />
       )}
     </div>

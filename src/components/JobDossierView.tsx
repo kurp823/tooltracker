@@ -39,6 +39,9 @@ import {
   ResizerHandle,
   useCustomColumns,
 } from '../services/customColumnService';
+import { DropdownListKey, getDropdownOptions } from '../services/dropdownService';
+import { AdminDropdownModal } from './AdminDropdownModal';
+import { Settings as SettingsIcon } from 'lucide-react';
 
 interface JobDossierViewProps {
   job: DrillingJob;
@@ -356,6 +359,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       .replace(/^0+/, '')
       .replace(/-0+/, '-');
   };
+
+  // Dynamic Dropdowns from dropdownService
+  const [adminModalKey, setAdminModalKey] = useState<DropdownListKey | null>(null);
+  const [serviceCategoriesList, setServiceCategoriesList] = useState<string[]>(() => getDropdownOptions('jobServiceCategories'));
+  const [subDivisionsList, setSubDivisionsList] = useState<string[]>(() => getDropdownOptions('subDivisions'));
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setServiceCategoriesList(getDropdownOptions('jobServiceCategories'));
+      setSubDivisionsList(getDropdownOptions('subDivisions'));
+    };
+    window.addEventListener('dropdown_options_updated', handleUpdate);
+    return () => window.removeEventListener('dropdown_options_updated', handleUpdate);
+  }, []);
 
   // Job Header state with resilient notes persistence across tab switches and live re-fetches
   const [jobData, setJobData] = useState<DrillingJob>(() => {
@@ -3558,9 +3575,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
                 {/* Service Category */}
                 <div className="flex items-center">
-                  <label className="w-28 font-bold text-slate-700 text-right pr-3">Service Category:</label>
+                  <div className="w-28 flex items-center justify-end pr-3 gap-1">
+                    <label className="font-bold text-slate-700 text-right">Service Category:</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('jobServiceCategories')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 cursor-pointer"
+                        title="Admin: Manage Service Categories"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" />
+                      </button>
+                    )}
+                  </div>
                   <select
-                    value={jobData.serviceCategory || jobData.serviceType || 'DOWN HOLE RENTALS'}
+                    value={jobData.serviceCategory || jobData.serviceType || (serviceCategoriesList[0] || 'DOWN HOLE RENTALS')}
                     disabled={isLocked}
                     onChange={(e) =>
                       setJobData({
@@ -3571,15 +3600,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     }
                     className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-64 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   >
-                    <option value="DOWN HOLE RENTALS">DOWN HOLE RENTALS</option>
-                    <option value="FISHING SERVICES">FISHING SERVICES</option>
-                    <option value="WHIPSTOCK SERVICES">WHIPSTOCK SERVICES</option>
-                    <option value="CASING EXIT SERVICES">CASING EXIT SERVICES</option>
-                    <option value="THRU TUBING SERVICES">THRU TUBING SERVICES</option>
-                    <option value="MILLING & WORKOVER">MILLING &amp; WORKOVER</option>
-                    <option value="WELLBORE CLEANOUT">WELLBORE CLEANOUT</option>
-                    <option value="DRILLING TOOLS">DRILLING TOOLS</option>
-                    <option value='"DUAL COMPLETION"'>"DUAL COMPLETION"</option>
+                    {serviceCategoriesList.map((sc) => (
+                      <option key={sc} value={sc}>
+                        {sc}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -3692,16 +3717,30 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </div>
 
                 <div className="flex items-center">
-                  <label className="w-28 font-bold text-slate-700 text-right pr-3">Sub-Division:</label>
+                  <div className="w-28 flex items-center justify-end pr-3 gap-1">
+                    <label className="font-bold text-slate-700 text-right">Sub-Division:</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('subDivisions')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 cursor-pointer"
+                        title="Admin: Manage Sub-Divisions"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" />
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={jobData.subDivision || resolveContractSubDivision(jobData.contractNo || jobData.contract) || 'RENTALS'}
                     disabled={isLocked}
                     onChange={(e) => setJobData({ ...jobData, subDivision: e.target.value as SubDivision })}
                     className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-blue-900 w-64 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   >
-                    <option value="FISHING">FISHING</option>
-                    <option value="WHIPSTOCK">WHIPSTOCK</option>
-                    <option value="RENTALS">RENTALS (Downhole Tool Rentals)</option>
+                    {subDivisionsList.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -7232,6 +7271,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           </span>
         </div>
       </div>
+
+      {adminModalKey && (
+        <AdminDropdownModal
+          listKey={adminModalKey}
+          user={user}
+          isOpen={true}
+          onClose={() => setAdminModalKey(null)}
+          onChanged={() => {
+            setServiceCategoriesList(getDropdownOptions('jobServiceCategories'));
+            setSubDivisionsList(getDropdownOptions('subDivisions'));
+          }}
+        />
+      )}
     </div>
   );
 };

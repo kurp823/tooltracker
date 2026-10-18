@@ -1,8 +1,11 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { ToolItem, User } from '../types';
 import { TOOL_SIZES } from '../data/initialData';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 import { useResizableColumns, ResizerHandle, useCustomColumns } from '../services/customColumnService';
+import { DropdownListKey, getDropdownOptions } from '../services/dropdownService';
+import { AdminDropdownModal } from './AdminDropdownModal';
+import { Settings as SettingsIcon } from 'lucide-react';
 
 interface InventoryViewProps {
   user?: User | null;
@@ -66,6 +69,24 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [selectedOwner, setSelectedOwner] = useState('ALL');
   const [page, setPage] = useState(1);
   const pageSize = 48;
+
+  // Dynamic Dropdown Lists from dropdownService
+  const [adminModalKey, setAdminModalKey] = useState<DropdownListKey | null>(null);
+  const [statusesList, setStatusesList] = useState<string[]>(() => getDropdownOptions('toolStatuses'));
+  const [locationsList, setLocationsList] = useState<string[]>(() => getDropdownOptions('toolLocations'));
+  const [ownersList, setOwnersList] = useState<string[]>(() => getDropdownOptions('toolOwnerships'));
+  const [suppliersList, setSuppliersList] = useState<string[]>(() => getDropdownOptions('suppliers'));
+
+  useEffect(() => {
+    const handleDropdownUpdate = () => {
+      setStatusesList(getDropdownOptions('toolStatuses'));
+      setLocationsList(getDropdownOptions('toolLocations'));
+      setOwnersList(getDropdownOptions('toolOwnerships'));
+      setSuppliersList(getDropdownOptions('suppliers'));
+    };
+    window.addEventListener('dropdown_options_updated', handleDropdownUpdate);
+    return () => window.removeEventListener('dropdown_options_updated', handleDropdownUpdate);
+  }, []);
 
   // Dynamic Custom Columns & Excel-like Resizable Grid Columns
   const inventoryCustomCols = useCustomColumns('inventory');
@@ -733,21 +754,31 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 </option>
               ))}
             </select>
-            <select
-              value={selectedStatus}
-              onChange={(e) => {
-                setSelectedStatus(e.target.value);
-                setPage(1);
-              }}
-              className="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-medium outline-none"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="Good">Good / Ready</option>
-              <option value="Repair">Under Repair</option>
-              <option value="Inspection">Inspection</option>
-              <option value="Redress">Redress</option>
-              <option value="Removed">Removed / Released</option>
-            </select>
+            <div className="flex items-center gap-1">
+              <select
+                value={selectedStatus}
+                onChange={(e) => {
+                  setSelectedStatus(e.target.value);
+                  setPage(1);
+                }}
+                className="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-medium outline-none"
+              >
+                <option value="ALL">All Statuses</option>
+                {statusesList.map((st) => (
+                  <option key={st} value={st}>{st}</option>
+                ))}
+              </select>
+              {user?.role === 'Admin' && (
+                <button
+                  type="button"
+                  onClick={() => setAdminModalKey('toolStatuses')}
+                  className="p-1 text-slate-400 hover:text-blue-700 rounded hover:bg-slate-100 cursor-pointer"
+                  title="Manage Equipment Statuses (Admin)"
+                >
+                  <SettingsIcon className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
 
             <select
               value={selectedOwner}
@@ -1425,25 +1456,52 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold mb-1">Initial Location</label>
-                  <input
-                    type="text"
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold">Initial Location</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('toolLocations')}
+                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" />
+                        <span>Manage</span>
+                      </button>
+                    )}
+                  </div>
+                  <select
                     value={newLocation}
                     onChange={(e) => setNewLocation(e.target.value)}
-                    className="w-full border rounded px-2.5 py-1.5"
-                  />
+                    className="w-full border rounded px-2.5 py-1.5 bg-white text-xs font-medium"
+                  >
+                    <option value="">-- Select Location --</option>
+                    {locationsList.map((loc) => (
+                      <option key={loc} value={loc}>{loc}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">Initial Status</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold">Initial Status</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('toolStatuses')}
+                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" />
+                        <span>Manage</span>
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={newStatus}
                     onChange={(e) => setNewStatus(e.target.value as ToolItem['status'])}
-                    className="w-full border rounded px-2.5 py-1.5 font-bold"
+                    className="w-full border rounded px-2.5 py-1.5 font-bold bg-white text-xs"
                   >
-                    <option value="Good">Good</option>
-                    <option value="Repair">Repair</option>
-                    <option value="Inspection">Inspection</option>
-                    <option value="Redress">Redress</option>
+                    {statusesList.map((st) => (
+                      <option key={st} value={st}>{st}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1628,29 +1686,54 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               {/* Status and Location */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Operational Status</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">Operational Status</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('toolStatuses')}
+                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" />
+                        <span>Manage</span>
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={editStatus}
                     onChange={(e) => setEditStatus(e.target.value as ToolItem['status'])}
-                    className="w-full border rounded px-2.5 py-1.5 font-bold text-slate-800 bg-white"
+                    className="w-full border rounded px-2.5 py-1.5 font-bold text-slate-800 bg-white text-xs"
                   >
-                    <option value="Good">Available / Good</option>
-                    <option value="Repair">Under Repair</option>
-                    <option value="Inspection">Inspection</option>
-                    <option value="Redress">Redress</option>
-                    <option value="Removed">De-inventoried / Removed</option>
+                    {statusesList.map((st) => (
+                      <option key={st} value={st}>{st}</option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Physical Location</label>
-                  <input
-                    type="text"
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">Physical Location</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('toolLocations')}
+                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" />
+                        <span>Manage</span>
+                      </button>
+                    )}
+                  </div>
+                  <select
                     value={editLocation}
                     onChange={(e) => setEditLocation(e.target.value)}
-                    placeholder="e.g. Emdad Base, Rig ADNOC DRILLING, Supplier Yard"
-                    className="w-full border rounded px-2.5 py-1.5 text-slate-800 bg-white"
-                  />
+                    className="w-full border rounded px-2.5 py-1.5 text-slate-800 bg-white text-xs"
+                  >
+                    <option value="">-- Select Location --</option>
+                    {locationsList.map((loc) => (
+                      <option key={loc} value={loc}>{loc}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -1669,17 +1752,32 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
                   <div className="grid grid-cols-3 gap-2.5">
                     <div className="col-span-2">
-                      <label className="block font-semibold mb-1 text-slate-700">
-                        Supplier / Vendor Name *
-                      </label>
-                      <input
-                        type="text"
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block font-semibold text-slate-700">
+                          Supplier / Vendor Name *
+                        </label>
+                        {user?.role === 'Admin' && (
+                          <button
+                            type="button"
+                            onClick={() => setAdminModalKey('suppliers')}
+                            className="text-[10px] text-blue-700 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
+                          >
+                            <SettingsIcon className="w-2.5 h-2.5" />
+                            <span>Manage</span>
+                          </button>
+                        )}
+                      </div>
+                      <select
                         required={editOwnershipType === 'sub'}
-                        placeholder="e.g. MOTORMAX, SALTIRE, HUNTING, CORETRAX"
                         value={editSupplier}
                         onChange={(e) => setEditSupplier(e.target.value)}
                         className="w-full border rounded px-2.5 py-1.5 font-medium text-xs bg-white"
-                      />
+                      >
+                        <option value="">-- Select Vendor / Supplier --</option>
+                        {suppliersList.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block font-semibold mb-1 text-slate-700">Agreement Model</label>
@@ -1864,6 +1962,22 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Admin Dropdown Manager Modal */}
+      {adminModalKey && (
+        <AdminDropdownModal
+          isOpen={true}
+          onClose={() => setAdminModalKey(null)}
+          dropdownKey={adminModalKey}
+          isAdmin={user?.role === 'Admin'}
+          onUpdated={() => {
+            setStatusesList(getDropdownOptions('toolStatuses'));
+            setLocationsList(getDropdownOptions('toolLocations'));
+            setOwnersList(getDropdownOptions('toolOwnerships'));
+            setSuppliersList(getDropdownOptions('suppliers'));
+          }}
+        />
       )}
     </div>
   );

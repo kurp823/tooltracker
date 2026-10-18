@@ -20,6 +20,8 @@ import { resolveJobClient } from '../services/api';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 import { useResizableColumns, ResizerHandle, useCustomColumns } from '../services/customColumnService';
 import { resolveContractSubDivision } from '../services/customContracts';
+import { DropdownListKey, getDropdownOptions } from '../services/dropdownService';
+import { AdminDropdownModal } from './AdminDropdownModal';
 import {
   Search,
   Download,
@@ -45,6 +47,7 @@ import {
   Calendar,
   ShieldCheck,
   Send,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 
 interface JobsViewProps {
@@ -306,6 +309,26 @@ export const JobsView: React.FC<JobsViewProps> = ({
   const [newInvoicingType, setNewInvoicingType] = useState<'PerJob' | 'Monthly'>('PerJob');
   const [newCurrency, setNewCurrency] = useState('USD');
   const [newMobDate, setNewMobDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Dynamic Dropdown Lists from dropdownService
+  const [adminModalKey, setAdminModalKey] = useState<DropdownListKey | null>(null);
+  const [divisionsList, setDivisionsList] = useState<string[]>(() => getDropdownOptions('subDivisions'));
+  const [holeSectionsList, setHoleSectionsList] = useState<string[]>(() => getDropdownOptions('holeSections'));
+  const [serviceTypesList, setServiceTypesList] = useState<string[]>(() => getDropdownOptions('jobServiceCategories'));
+  const [rigsList, setRigsList] = useState<string[]>(() => getDropdownOptions('rigs'));
+  const [clientsList, setClientsList] = useState<string[]>(() => getDropdownOptions('clients'));
+
+  React.useEffect(() => {
+    const handleDropdownUpdate = () => {
+      setDivisionsList(getDropdownOptions('subDivisions'));
+      setHoleSectionsList(getDropdownOptions('holeSections'));
+      setServiceTypesList(getDropdownOptions('jobServiceCategories'));
+      setRigsList(getDropdownOptions('rigs'));
+      setClientsList(getDropdownOptions('clients'));
+    };
+    window.addEventListener('dropdown_options_updated', handleDropdownUpdate);
+    return () => window.removeEventListener('dropdown_options_updated', handleDropdownUpdate);
+  }, []);
 
   // Robust DT and RT tool count indexing with cross-normalized keys (shared bucket mapping)
   const jobToolStats = useMemo(() => {
@@ -1942,15 +1965,33 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Rig Identification *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">Rig Identification *</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('rigs')}
+                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" />
+                        <span>Manage</span>
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
+                    list="job-rigs-list"
                     value={newRig}
                     onChange={(e) => setNewRig(e.target.value)}
                     placeholder="e.g. AD-33, ND-19, RIG-8"
                     required
                     className="w-full border rounded px-3 py-1.5"
                   />
+                  <datalist id="job-rigs-list">
+                    {rigsList.map((r) => (
+                      <option key={r} value={r} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Well Identifier *</label>
@@ -1967,15 +2008,33 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Operator / Client *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">Operator / Client *</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('clients')}
+                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" />
+                        <span>Manage</span>
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
+                    list="job-clients-list"
                     value={newClient}
                     onChange={(e) => setNewClient(e.target.value)}
                     placeholder="e.g. ADNOC Onshore, ADNOC Drilling"
                     required
                     className="w-full border rounded px-3 py-1.5"
                   />
+                  <datalist id="job-clients-list">
+                    {clientsList.map((c) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Contract / Project Code</label>
@@ -1996,15 +2055,27 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Sub-Division (P&L Sector) *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">Sub-Division (P&amp;L Sector) *</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('subDivisions')}
+                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" />
+                        <span>Manage</span>
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={newSubDivision}
                     onChange={(e) => setNewSubDivision(e.target.value as SubDivision)}
                     className="w-full border rounded px-3 py-1.5 font-semibold text-slate-800 bg-white"
                   >
-                    <option value="FISHING">FISHING</option>
-                    <option value="WHIPSTOCK">WHIPSTOCK</option>
-                    <option value="RENTALS">RENTALS (Downhole Tool Rentals)</option>
+                    {divisionsList.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -2030,30 +2101,51 @@ export const JobsView: React.FC<JobsViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Hole Section</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">Hole Section</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('holeSections')}
+                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" />
+                        <span>Manage</span>
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={newHoleSection}
                     onChange={(e) => setNewHoleSection(e.target.value)}
-                    className="w-full border rounded px-3 py-1.5"
+                    className="w-full border rounded px-3 py-1.5 bg-white"
                   >
-                    <option value="26&quot;">26&quot; Section</option>
-                    <option value="17-1/2&quot;">17-1/2&quot; Section</option>
-                    <option value="12-1/4&quot;">12-1/4&quot; Section</option>
-                    <option value="8-1/2&quot;">8-1/2&quot; Section</option>
-                    <option value="6&quot;">6&quot; Section</option>
+                    {holeSectionsList.map((hs) => (
+                      <option key={hs} value={hs}>{hs} Section</option>
+                    ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Service Type</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">Service Type</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('jobServiceCategories')}
+                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" />
+                        <span>Manage</span>
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={newServiceType}
                     onChange={(e) => setNewServiceType(e.target.value)}
-                    className="w-full border rounded px-3 py-1.5"
+                    className="w-full border rounded px-3 py-1.5 bg-white"
                   >
-                    <option value="Downhole Rental">Downhole Rental</option>
-                    <option value="Fishing Service">Fishing Service</option>
-                    <option value="Whipstock Operations">Whipstock Operations</option>
-                    <option value="Workover / Milling">Workover / Milling</option>
+                    {serviceTypesList.map((st) => (
+                      <option key={st} value={st}>{st}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -2179,6 +2271,22 @@ export const JobsView: React.FC<JobsViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {adminModalKey && (
+        <AdminDropdownModal
+          listKey={adminModalKey}
+          user={user}
+          isOpen={true}
+          onClose={() => setAdminModalKey(null)}
+          onChanged={() => {
+            setDivisionsList(getDropdownOptions('subDivisions'));
+            setHoleSectionsList(getDropdownOptions('holeSections'));
+            setServiceTypesList(getDropdownOptions('jobServiceCategories'));
+            setRigsList(getDropdownOptions('rigs'));
+            setClientsList(getDropdownOptions('clients'));
+          }}
+        />
       )}
     </div>
   );

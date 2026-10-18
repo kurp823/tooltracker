@@ -1,6 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { InspectionRecord, MaintenanceRecord, ToolItem, User } from '../types';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
+import { DropdownListKey, getDropdownOptions } from '../services/dropdownService';
+import { AdminDropdownModal } from './AdminDropdownModal';
+import { Settings as SettingsIcon } from 'lucide-react';
 
 interface InspectionViewProps {
   user?: User | null;
@@ -27,6 +30,20 @@ export const InspectionView: React.FC<InspectionViewProps> = ({
   const [tab, setTab] = useState<'pending' | 'complete'>('pending');
   const [search, setSearch] = useState('');
   const [editingInspection, setEditingInspection] = useState<InspectionRecord | null>(null);
+
+  // Dynamic Dropdown Lists from dropdownService
+  const [adminModalKey, setAdminModalKey] = useState<DropdownListKey | null>(null);
+  const [dispositionsList, setDispositionsList] = useState<string[]>(() => getDropdownOptions('inspectionDispositions'));
+  const [inspectorsList, setInspectorsList] = useState<string[]>(() => getDropdownOptions('maintenanceTechnicians'));
+
+  React.useEffect(() => {
+    const handleUpdate = () => {
+      setDispositionsList(getDropdownOptions('inspectionDispositions'));
+      setInspectorsList(getDropdownOptions('maintenanceTechnicians'));
+    };
+    window.addEventListener('dropdown_options_updated', handleUpdate);
+    return () => window.removeEventListener('dropdown_options_updated', handleUpdate);
+  }, []);
 
   // Form State
   const [inspectorName, setInspectorName] = useState(user?.name || 'QC Inspector');
@@ -267,14 +284,33 @@ export const InspectionView: React.FC<InspectionViewProps> = ({
             <form onSubmit={handleSaveInspectionSubmit} className="p-4 space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold mb-1">Inspector Name *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold">Inspector Name *</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('maintenanceTechnicians')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                        title="Admin: Manage Inspectors / Techs"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" /> Manage
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
                     required
+                    list="inspectorsList"
                     value={inspectorName}
                     onChange={(e) => setInspectorName(e.target.value)}
-                    className="w-full border rounded px-2.5 py-1.5"
+                    placeholder="Enter or select inspector"
+                    className="w-full border rounded px-2.5 py-1.5 bg-white"
                   />
+                  <datalist id="inspectorsList">
+                    {inspectorsList.map((insp) => (
+                      <option key={insp} value={insp} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="block font-bold mb-1">Inspection Date</label>
@@ -298,28 +334,40 @@ export const InspectionView: React.FC<InspectionViewProps> = ({
                       if (res === 'Pass') setDisposition('Return to Base');
                       else setDisposition('Repair');
                     }}
-                    className="w-full border rounded px-2.5 py-1.5 font-bold"
+                    className="w-full border rounded px-2.5 py-1.5 font-bold bg-white"
                   >
                     <option value="Pass">Pass (Return to Base as Good)</option>
                     <option value="Fail">Fail (Send to Workshop)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">Disposition Action</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold">Disposition Action</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('inspectionDispositions')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                        title="Admin: Manage Inspection Dispositions"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" /> Manage
+                      </button>
+                    )}
+                  </div>
                   <select
                     disabled={result === 'Pass'}
                     value={disposition}
                     onChange={(e) => setDisposition(e.target.value as any)}
-                    className="w-full border rounded px-2.5 py-1.5 font-bold disabled:bg-slate-100"
+                    className="w-full border rounded px-2.5 py-1.5 font-bold disabled:bg-slate-100 bg-white"
                   >
                     {result === 'Pass' ? (
                       <option value="Return to Base">Return to Base as Good</option>
                     ) : (
-                      <>
-                        <option value="Repair">Send for Repair</option>
-                        <option value="Redress">Send for Redress Overhaul</option>
-                        <option value="Scrap">Scrap / Decommission</option>
-                      </>
+                      dispositionsList.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))
                     )}
                   </select>
                 </div>
@@ -364,6 +412,19 @@ export const InspectionView: React.FC<InspectionViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {adminModalKey && (
+        <AdminDropdownModal
+          listKey={adminModalKey}
+          user={user}
+          isOpen={true}
+          onClose={() => setAdminModalKey(null)}
+          onChanged={() => {
+            setDispositionsList(getDropdownOptions('inspectionDispositions'));
+            setInspectorsList(getDropdownOptions('maintenanceTechnicians'));
+          }}
+        />
       )}
     </div>
   );

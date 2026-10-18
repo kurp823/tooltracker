@@ -25,8 +25,11 @@ import {
   Sparkles,
   Shield,
   FileSpreadsheet,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { DropdownListKey, getDropdownOptions } from '../services/dropdownService';
+import { AdminDropdownModal } from './AdminDropdownModal';
 
 interface MonthlyExpensesViewProps {
   user?: User | null;
@@ -44,6 +47,18 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
   const [activeRecord, setActiveRecord] = useState<MonthlyExpenseRecord>(() => {
     return allRecords['2026-10'] || allRecords['2026-09'] || FROZEN_SEP_2026;
   });
+
+  // Master Dropdown List for Depreciation Sectors
+  const [adminModalKey, setAdminModalKey] = useState<DropdownListKey | null>(null);
+  const [sectorsList, setSectorsList] = useState<string[]>(() => getDropdownOptions('depreciationSectors'));
+
+  useEffect(() => {
+    const handleDropdownUpdate = () => {
+      setSectorsList(getDropdownOptions('depreciationSectors'));
+    };
+    window.addEventListener('dropdown_options_updated', handleDropdownUpdate);
+    return () => window.removeEventListener('dropdown_options_updated', handleDropdownUpdate);
+  }, []);
 
   // Track unsaved local edits
   const [editedRows, setEditedRows] = useState<MonthlyExpenseRow[]>([]);
@@ -464,16 +479,27 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
                       {isDepRow ? (
                         <div className="flex items-center space-x-1.5">
                           <select
-                            value={r.sector || 'P&M'}
+                            value={r.sector || (sectorsList[0] || 'P&M')}
                             disabled={isFrozen}
                             onChange={(e) => handleCellChange(r.code, 'sector', e.target.value)}
                             className="text-[10px] border border-slate-300 rounded px-1.5 py-0.5 bg-white font-semibold text-slate-700"
                           >
-                            <option value="P&M">P&amp;M</option>
-                            <option value="Vehicles">Vehicles</option>
-                            <option value="Comp & Printers">Comp/Print</option>
-                            <option value="IP Rights">IP Rights</option>
+                            {sectorsList.map((sec) => (
+                              <option key={sec} value={sec}>
+                                {sec}
+                              </option>
+                            ))}
                           </select>
+                          {user?.role === 'Admin' && !isFrozen && (
+                            <button
+                              type="button"
+                              onClick={() => setAdminModalKey('depreciationSectors')}
+                              title="Admin: Manage Depreciation Sectors"
+                              className="p-1 text-slate-400 hover:text-blue-600 rounded hover:bg-slate-100 transition"
+                            >
+                              <SettingsIcon className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <input
                             type="number"
                             value={r.usefulLifeMonths || 60}
@@ -516,6 +542,18 @@ export const MonthlyExpensesView: React.FC<MonthlyExpensesViewProps> = ({
           </table>
         </div>
       </div>
+
+      {adminModalKey && (
+        <AdminDropdownModal
+          listKey={adminModalKey}
+          user={user}
+          isOpen={true}
+          onClose={() => setAdminModalKey(null)}
+          onChanged={() => {
+            setSectorsList(getDropdownOptions('depreciationSectors'));
+          }}
+        />
+      )}
     </div>
   );
 };

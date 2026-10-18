@@ -8,6 +8,9 @@ import {
 } from '../services/consumablesService';
 import { SearchableConsumableSelect } from './SearchableConsumableSelect';
 import { openPrintWindow } from '../services/ticketPrintService';
+import { DropdownListKey, getDropdownOptions } from '../services/dropdownService';
+import { AdminDropdownModal } from './AdminDropdownModal';
+import { Settings as SettingsIcon } from 'lucide-react';
 
 interface MaintenanceViewProps {
   user?: User | null;
@@ -58,6 +61,22 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   const [tab, setTab] = useState<'active' | 'vendor' | 'ready_qc' | 'completed'>('active');
   const [search, setSearch] = useState('');
   const [isNewMntOpen, setIsNewMntOpen] = useState(false);
+
+  // Dynamic Dropdown Lists from dropdownService
+  const [adminModalKey, setAdminModalKey] = useState<DropdownListKey | null>(null);
+  const [mTypesList, setMTypesList] = useState<string[]>(() => getDropdownOptions('maintenanceTypes'));
+  const [mTechsList, setMTechsList] = useState<string[]>(() => getDropdownOptions('maintenanceTechnicians'));
+  const [suppliersList, setSuppliersList] = useState<string[]>(() => getDropdownOptions('suppliers'));
+
+  React.useEffect(() => {
+    const handleUpdate = () => {
+      setMTypesList(getDropdownOptions('maintenanceTypes'));
+      setMTechsList(getDropdownOptions('maintenanceTechnicians'));
+      setSuppliersList(getDropdownOptions('suppliers'));
+    };
+    window.addEventListener('dropdown_options_updated', handleUpdate);
+    return () => window.removeEventListener('dropdown_options_updated', handleUpdate);
+  }, []);
 
   // Modals
   const [dispatchModalRecord, setDispatchModalRecord] = useState<MaintenanceRecord | null>(null);
@@ -683,25 +702,59 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Service Channel</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-slate-700">Service Channel</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('maintenanceTypes')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                        title="Admin: Manage Service Channels"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" /> Manage
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={newType}
                     onChange={(e) => setNewType(e.target.value as any)}
-                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-medium outline-none"
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-medium outline-none bg-white"
                   >
-                    <option value="InHouse">In-House Base Workshop</option>
-                    <option value="Vendor">3rd Party Repair Vendor</option>
+                    {mTypesList.map((t) => (
+                      <option key={t} value={t === '3rd Party Repair Vendor' ? 'Vendor' : t === 'In-House Base Workshop' ? 'InHouse' : t}>
+                        {t === 'InHouse' ? 'In-House Base Workshop' : t === 'Vendor' ? '3rd Party Repair Vendor' : t}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Assigned Technician</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-slate-700">Assigned Technician</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('maintenanceTechnicians')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                        title="Admin: Manage Technicians"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" /> Manage
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
+                    list="maintenanceTechniciansList"
                     value={newAssignedTo}
                     onChange={(e) => setNewAssignedTo(e.target.value)}
-                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-medium outline-none"
+                    placeholder="Select or enter technician"
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-medium outline-none bg-white"
                   />
+                  <datalist id="maintenanceTechniciansList">
+                    {mTechsList.map((tech) => (
+                      <option key={tech} value={tech} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
@@ -710,15 +763,33 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                   <div className="font-bold text-[11px] text-amber-900">Third-Party Vendor Details</div>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Vendor Name</label>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <label className="text-[10px] font-semibold text-slate-700">Vendor Name</label>
+                        {user?.role === 'Admin' && (
+                          <button
+                            type="button"
+                            onClick={() => setAdminModalKey('suppliers')}
+                            className="text-[9px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                            title="Admin: Manage Vendors/Suppliers"
+                          >
+                            <SettingsIcon className="w-2.5 h-2.5" /> Manage
+                          </button>
+                        )}
+                      </div>
                       <input
                         type="text"
+                        list="maintenanceSuppliersList"
                         value={newVendor}
                         onChange={(e) => setNewVendor(e.target.value)}
                         placeholder="e.g. MOTORMAX, Machine Shop"
                         required={newType === 'Vendor'}
                         className="w-full bg-white border border-slate-300 rounded px-2 py-1 outline-none"
                       />
+                      <datalist id="maintenanceSuppliersList">
+                        {suppliersList.map((s) => (
+                          <option key={s} value={s} />
+                        ))}
+                      </datalist>
                     </div>
                     <div>
                       <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Repair PO Reference</label>
@@ -818,14 +889,27 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
             <form onSubmit={handleDispatchSubmit} className="p-4 space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Vendor Facility / Name <span className="text-red-500">*</span></label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-slate-700">Vendor Facility / Name <span className="text-red-500">*</span></label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('suppliers')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                        title="Admin: Manage Vendors/Suppliers"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" /> Manage
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
+                    list="maintenanceSuppliersList"
                     value={dispVendor}
                     onChange={(e) => setDispVendor(e.target.value)}
                     required
                     placeholder="e.g. MOTORMAX, Machine Shop"
-                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none font-medium"
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 outline-none font-medium bg-white"
                   />
                 </div>
                 <div>
@@ -1213,6 +1297,20 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {adminModalKey && (
+        <AdminDropdownModal
+          listKey={adminModalKey}
+          user={user}
+          isOpen={true}
+          onClose={() => setAdminModalKey(null)}
+          onChanged={() => {
+            setMTypesList(getDropdownOptions('maintenanceTypes'));
+            setMTechsList(getDropdownOptions('maintenanceTechnicians'));
+            setSuppliersList(getDropdownOptions('suppliers'));
+          }}
+        />
       )}
     </div>
   );

@@ -28,8 +28,11 @@ import {
   Wrench,
   Warehouse,
   History,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { DropdownListKey, getDropdownOptions } from '../services/dropdownService';
+import { AdminDropdownModal } from './AdminDropdownModal';
 
 interface ConsumablesViewProps {
   user?: User | null;
@@ -49,7 +52,24 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
   const [activeTab, setActiveTab] = useState<'stock' | 'issuance' | 'receipt'>('stock');
   const [stockItems, setStockItems] = useState<ConsumableItem[]>(getConsumablesList());
   const [issuances, setIssuances] = useState<ConsumableIssuance[]>(getConsumableIssuances());
-  const [categories, setCategories] = useState<string[]>(getConsumableCategories());
+
+  // Master Dynamic Dropdowns from dropdownService
+  const [adminModalKey, setAdminModalKey] = useState<DropdownListKey | null>(null);
+  const [divisionsList, setDivisionsList] = useState<string[]>(() => getDropdownOptions('subDivisions'));
+  const [unitsList, setUnitsList] = useState<string[]>(() => getDropdownOptions('consumableUnits'));
+  const [consumableCategoriesList, setConsumableCategoriesList] = useState<string[]>(() => getDropdownOptions('consumableCategories'));
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setDivisionsList(getDropdownOptions('subDivisions'));
+      setUnitsList(getDropdownOptions('consumableUnits'));
+      setConsumableCategoriesList(getDropdownOptions('consumableCategories'));
+    };
+    window.addEventListener('dropdown_options_updated', handleUpdate);
+    return () => window.removeEventListener('dropdown_options_updated', handleUpdate);
+  }, []);
+
+  const [categories, setCategories] = useState<string[]>(() => getDropdownOptions('consumableCategories'));
   const [isAddingNewCat, setIsAddingNewCat] = useState(false);
   const [newCatInput, setNewCatInput] = useState('');
   const [search, setSearch] = useState('');
@@ -395,10 +415,20 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
                 className="border border-slate-300 rounded px-2 py-1.5 bg-white font-medium text-slate-800 cursor-pointer"
               >
                 <option value="ALL">All Categories</option>
-                {categories.map((c) => (
+                {consumableCategoriesList.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
+              {user?.role === 'Admin' && (
+                <button
+                  type="button"
+                  onClick={() => setAdminModalKey('consumableCategories')}
+                  className="p-1 text-slate-500 hover:text-blue-600 rounded hover:bg-slate-100 cursor-pointer"
+                  title="Admin: Manage Consumable Categories"
+                >
+                  <SettingsIcon className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
             <button
@@ -616,15 +646,29 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Sub-Division P&amp;L</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-slate-700">Sub-Division P&amp;L</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('subDivisions')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                        title="Admin: Manage Sub-Divisions"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" /> Manage
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={subDivision}
                     onChange={(e) => setSubDivision(e.target.value as SubDivision)}
                     className="w-full border rounded px-2.5 py-1.5 font-bold text-slate-800 bg-white"
                   >
-                    <option value="RENTALS">RENTALS</option>
-                    <option value="FISHING">FISHING</option>
-                    <option value="WHIPSTOCK">WHIPSTOCK</option>
+                    {divisionsList.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -979,17 +1023,29 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Unit of Measure</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-slate-700">Unit of Measure</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('consumableUnits')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                        title="Admin: Manage Units of Measure"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" /> Manage
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={newUnit}
                     onChange={(e) => setNewUnit(e.target.value)}
                     className="w-full border rounded px-2 py-1 bg-white font-medium"
                   >
-                    <option value="KIT">KIT</option>
-                    <option value="EA">EA</option>
-                    <option value="CAN">CAN</option>
-                    <option value="LTR">LTR</option>
-                    <option value="SET">SET</option>
+                    {unitsList.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1012,6 +1068,20 @@ export const ConsumablesView: React.FC<ConsumablesViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {adminModalKey && (
+        <AdminDropdownModal
+          listKey={adminModalKey}
+          user={user}
+          isOpen={true}
+          onClose={() => setAdminModalKey(null)}
+          onChanged={() => {
+            setDivisionsList(getDropdownOptions('subDivisions'));
+            setUnitsList(getDropdownOptions('consumableUnits'));
+            setConsumableCategoriesList(getDropdownOptions('consumableCategories'));
+          }}
+        />
       )}
     </div>
   );

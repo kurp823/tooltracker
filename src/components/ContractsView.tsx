@@ -24,8 +24,11 @@ import {
   Building2,
   Eye,
   Edit3,
-  Trash2
+  Trash2,
+  Settings as SettingsIcon,
 } from 'lucide-react';
+import { DropdownListKey, getDropdownOptions } from '../services/dropdownService';
+import { AdminDropdownModal } from './AdminDropdownModal';
 
 interface ContractsViewProps {
   user?: User | null;
@@ -59,6 +62,22 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
   const [isNewContractOpen, setIsNewContractOpen] = useState(false);
   const [editingContract, setEditingContract] = useState<ContractRecord | null>(null);
   const [contractToDelete, setContractToDelete] = useState<ContractRecord | null>(null);
+
+  // Dynamic Dropdown Lists from dropdownService
+  const [adminModalKey, setAdminModalKey] = useState<DropdownListKey | null>(null);
+  const [clientsList, setClientsList] = useState<string[]>(() => getDropdownOptions('clients'));
+  const [divisionsList, setDivisionsList] = useState<string[]>(() => getDropdownOptions('subDivisions'));
+  const [currenciesList, setCurrenciesList] = useState<string[]>(() => getDropdownOptions('currencies'));
+
+  React.useEffect(() => {
+    const handleUpdate = () => {
+      setClientsList(getDropdownOptions('clients'));
+      setDivisionsList(getDropdownOptions('subDivisions'));
+      setCurrenciesList(getDropdownOptions('currencies'));
+    };
+    window.addEventListener('dropdown_options_updated', handleUpdate);
+    return () => window.removeEventListener('dropdown_options_updated', handleUpdate);
+  }, []);
 
   // Dynamic Custom Columns & Excel-like Resizable Grid Columns
   const contractsCustomCols = useCustomColumns('contracts');
@@ -1006,37 +1025,60 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">Client Entity *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold">Client Entity *</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('clients')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                        title="Admin: Manage Clients"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" /> Manage
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={client}
                     onChange={(e) => setClient(e.target.value)}
-                    className="w-full border rounded px-2.5 py-1.5 font-bold"
+                    className="w-full border rounded px-2.5 py-1.5 font-bold bg-white"
                   >
-                    <option value="ADNOC OFFSHORE">ADNOC OFFSHORE</option>
-                    <option value="ADNOC ONSHORE">ADNOC ONSHORE</option>
-                    <option value="ADNOC DRILLING COMPANY P.J.S.C.">ADNOC DRILLING COMPANY P.J.S.C.</option>
-                    <option value="ADNOC SOUR GAS">ADNOC SOUR GAS</option>
-                    <option value="TURNWELL INDUSTRIES LLC">TURNWELL INDUSTRIES LLC</option>
-                    <option value="BUNDUQ COMPANY LIMITED">BUNDUQ COMPANY LIMITED</option>
-                    <option value="COSMO E&P ALBAHRIYA LIMITED">COSMO E&P ALBAHRIYA LIMITED</option>
-                    <option value="HALLIBURTON WORLDWIDE LIMITED">HALLIBURTON WORLDWIDE LIMITED</option>
+                    {clientsList.map((cl) => (
+                      <option key={cl} value={cl}>
+                        {cl}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-bold mb-1 text-slate-800">
-                    Sub-Division <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-slate-800">
+                      Sub-Division <span className="text-rose-500">*</span>
+                    </label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('subDivisions')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                        title="Admin: Manage Sub-Divisions"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" /> Manage
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={subDivision}
                     onChange={(e) => setSubDivision(e.target.value as SubDivision)}
                     className="w-full border rounded px-2.5 py-1.5 font-bold bg-amber-50/50 border-amber-300 text-slate-800"
                   >
-                    <option value="FISHING">FISHING</option>
-                    <option value="WHIPSTOCK">WHIPSTOCK</option>
-                    <option value="RENTALS">RENTALS</option>
+                    {divisionsList.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -1098,14 +1140,29 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
               {/* Commercials */}
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-bold mb-1">Billing Currency</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold">Billing Currency</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('currencies')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer"
+                        title="Admin: Manage Currencies"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" /> Manage
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={currency}
                     onChange={(e) => setCurrency(e.target.value as 'USD' | 'AED')}
-                    className="w-full border rounded px-2.5 py-1.5 font-bold"
+                    className="w-full border rounded px-2.5 py-1.5 font-bold bg-white"
                   >
-                    <option value="USD">USD ($)</option>
-                    <option value="AED">AED</option>
+                    {currenciesList.map((curr) => (
+                      <option key={curr} value={curr}>
+                        {curr}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="col-span-2">
@@ -1629,6 +1686,20 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
             setContractForRates(null);
           }}
           onClose={() => setContractForRates(null)}
+        />
+      )}
+
+      {adminModalKey && (
+        <AdminDropdownModal
+          listKey={adminModalKey}
+          user={user}
+          isOpen={true}
+          onClose={() => setAdminModalKey(null)}
+          onChanged={() => {
+            setClientsList(getDropdownOptions('clients'));
+            setDivisionsList(getDropdownOptions('subDivisions'));
+            setCurrenciesList(getDropdownOptions('currencies'));
+          }}
         />
       )}
     </div>
