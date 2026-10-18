@@ -2263,6 +2263,10 @@ export const App: React.FC = () => {
               inspections={inspections}
               maintenance={maintenance}
               contracts={contracts}
+              customCategories={customCategories}
+              customSizes={customSizes}
+              onUpdateCustomCategories={handleUpdateCustomCategories}
+              onUpdateCustomSizes={handleUpdateCustomSizes}
               onUpdateState={(tableKey: TableEntityKey, updater: (prev: any[]) => any[]) => {
                 switch (tableKey) {
                   case 'jobs':
@@ -2297,6 +2301,20 @@ export const App: React.FC = () => {
                   case 'contracts':
                   case 'contractRates':
                     setContracts((prev) => updater(prev));
+                    break;
+                  case 'tool_categories':
+                    setCustomCategories((prev) => {
+                      const updated = updater(prev);
+                      handleUpdateCustomCategories(updated);
+                      return updated;
+                    });
+                    break;
+                  case 'tool_sizes':
+                    setCustomSizes((prev) => {
+                      const updated = updater(prev);
+                      handleUpdateCustomSizes(updated);
+                      return updated;
+                    });
                     break;
                 }
               }}

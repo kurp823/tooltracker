@@ -12,6 +12,7 @@ import {
   GatePass,
   ContractRecord,
   ContractRateItem,
+  SubDivision,
 } from '../types';
 import {
   saveJobApi,
@@ -38,6 +39,42 @@ import {
   saveCustomContractRates,
 } from '../services/customContracts';
 import {
+  getConsumablesList,
+  saveConsumablesList,
+  getConsumableIssuances,
+  saveConsumableIssuances,
+} from '../services/consumablesService';
+import {
+  loadPurchaseOrders,
+  saveAllPurchaseOrders,
+  loadGoodsReceiptNotes,
+  saveAllGoodsReceiptNotes,
+  PurchaseOrder,
+  GoodsReceiptNote,
+  POLineItem,
+  GRNLineItem,
+} from '../services/poManagementService';
+import {
+  getSubContractorRentals,
+  saveSubContractorRentals,
+} from '../services/subContractorRentalService';
+import {
+  getMonthlyExpenseRecords,
+  saveMonthExpenseRecord,
+  STANDARD_COST_CODES,
+} from '../services/monthlyExpenseService';
+import {
+  loadCrewPersonnel,
+  saveAllCrewPersonnel,
+} from '../services/crewPersonnelService';
+import {
+  DROPDOWN_DEFINITIONS,
+  getDropdownOptions,
+  saveDropdownOptions,
+  addDropdownOption,
+  DropdownListKey,
+} from '../services/dropdownService';
+import {
   Database,
   FileSpreadsheet,
   Download,
@@ -60,9 +97,13 @@ import {
   Sliders,
   ShieldAlert,
   Info,
+  Eye,
+  Table,
+  ListFilter,
 } from 'lucide-react';
 
 export type TableEntityKey =
+  // Core Operations
   | 'jobs'
   | 'inventory'
   | 'dtBatches'
@@ -73,6 +114,22 @@ export type TableEntityKey =
   | 'maintenance'
   | 'contracts'
   | 'contractRates'
+  // Consumables & Stores
+  | 'consumables'
+  | 'consumable_issuances'
+  // Procurement & Goods Inward (PO & GRN)
+  | 'purchase_orders'
+  | 'purchase_order_lines'
+  | 'goods_receipts'
+  | 'goods_receipt_lines'
+  // Financial, Sub-Contractors & P&L
+  | 'subcontractor_rentals'
+  | 'monthly_expenses'
+  // Master Configuration & Personnel
+  | 'tool_categories'
+  | 'tool_sizes'
+  | 'crew_members'
+  | 'dropdown_lookups'
   // Job Dossier Sub-Screens
   | 'dossier_checklist'
   | 'dossier_itemsselect'
@@ -92,13 +149,23 @@ export interface FieldDefinition {
   isCustom?: boolean;
 }
 
+export type TableCategory =
+  | 'Operations'
+  | 'Inventory & Stores'
+  | 'Procurement (PO & GRN)'
+  | 'Financial & Sub-Rentals'
+  | 'Quality & Maintenance'
+  | 'Commercial & Contracts'
+  | 'Master Config & Personnel'
+  | 'Job Dossier';
+
 interface TableDefinition {
   key: TableEntityKey;
   sqlTable: string;
   epicorCode: string;
   name: string;
   primaryKey: string;
-  category: 'Operations' | 'Inventory' | 'Quality' | 'Commercial' | 'Job Dossier';
+  category: TableCategory;
   description: string;
   fields: FieldDefinition[];
   detailKey?: string;
@@ -243,7 +310,7 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
     epicorCode: 'UD102 - Tool Fleet Inventory',
     name: 'Tool Fleet & Assets',
     primaryKey: 'serial',
-    category: 'Inventory',
+    category: 'Inventory & Stores',
     description: 'Downhole drilling tools, jars, shock tools, reamers, stabilizers, crossovers, and motors inventory.',
     fields: [
       { key: 'serial', label: 'Serial Number', type: 'string', required: true, description: 'Physical serial / Asset ID', sample: 'EMD-1025' },
@@ -448,7 +515,7 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
     epicorCode: 'UD106 - Security Gate Passes',
     name: 'Security Gate Passes',
     primaryKey: 'gpNumber',
-    category: 'Inventory',
+    category: 'Inventory & Stores',
     description: 'Security gate passes for sending tools to vendors or third-party workshops.',
     fields: [
       { key: 'gpNumber', label: 'Gate Pass Number', type: 'string', required: true, description: 'Unique gate pass number (e.g. GP-26-0001)', sample: 'GP-26-0001' },
@@ -465,7 +532,7 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
     epicorCode: 'UD107 - QC Inspections',
     name: 'QC Inspection Bay',
     primaryKey: 'woNumber',
-    category: 'Quality',
+    category: 'Quality & Maintenance',
     description: 'Receiving inspection, MPI, ultrasonic, thread visual, and QA/QC certifications.',
     fields: [
       { key: 'woNumber', label: 'Work Order Number', type: 'string', required: true, description: 'Unique inspection WO (e.g. WO-INS-26-0001)', sample: 'WO-INS-26-0001' },
@@ -501,7 +568,7 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
     epicorCode: 'UD108 - Maintenance Orders',
     name: 'Maintenance & Repairs',
     primaryKey: 'woNumber',
-    category: 'Quality',
+    category: 'Quality & Maintenance',
     description: 'In-house workshop redressing, OEM servicing, machining, hardbanding, and third-party repairs.',
     fields: [
       { key: 'woNumber', label: 'Work Order Number', type: 'string', required: true, description: 'Maintenance WO (e.g. WO-MNT-26-0001)', sample: 'WO-MNT-26-0001' },
@@ -537,7 +604,7 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
     epicorCode: 'UD109 - Master Contracts',
     name: 'Master Contracts Register',
     primaryKey: 'id',
-    category: 'Commercial',
+    category: 'Commercial & Contracts',
     description: 'Client frame agreements, PO numbers, contract duration, status, and bank guarantees.',
     fields: [
       { key: 'id', label: 'ContractID', type: 'string', required: true, description: 'Unique Contract reference (e.g. 1 or CON-ADNOC-01)', sample: '1' },
@@ -580,7 +647,7 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
     epicorCode: 'UD110 - Contract Rates Schedule',
     name: 'Contract Rates Schedule',
     primaryKey: 'rateId',
-    category: 'Commercial',
+    category: 'Commercial & Contracts',
     description: 'Itemized equipment day rates, standby rates, run charges, and redress fees linked to master contracts.',
     fields: [
       { key: 'contractCode', label: 'ContractCode', type: 'string', required: true, description: 'Master Contract ID or Ref (e.g. 1, 2, AOF, 444558)', sample: '1' },
@@ -606,6 +673,544 @@ const TABLE_DEFINITIONS: Record<TableEntityKey, TableDefinition> = {
       },
     ],
   },
+  // ==========================================
+  // Consumables & Stores Module
+  // ==========================================
+  consumables: {
+    key: 'consumables',
+    sqlTable: 'tbl_Consumables',
+    epicorCode: 'UD201 - Consumables & Store SKUs',
+    name: 'Consumables & Store SKUs',
+    primaryKey: 'partNo',
+    category: 'Inventory & Stores',
+    description: 'Consumables inventory catalog, redress seal kits, paints, lubricants, stock on hand, bin locations, and reorder levels.',
+    fields: [
+      { key: 'partNo', label: 'Part / SKU Number', type: 'string', required: true, description: 'Consumable Part Number (e.g. RK-JAR-650)', sample: 'RK-JAR-650' },
+      { key: 'id', label: 'Internal ID', type: 'string', description: 'Internal SKU Identifier', sample: 'SKU-001' },
+      { key: 'description', label: 'Description', type: 'string', required: true, description: 'Item name / technical description', sample: '6-1/2" HYD JAR COMPLETE REDRESS SEAL KIT' },
+      {
+        key: 'category',
+        label: 'Category',
+        type: 'string',
+        required: true,
+        description: 'Store category',
+        sample: 'Redress Kit (Options: Redress Kit | Paint & Coatings | Spare Parts | Lubricants & Oils | HSE & Safety | Seals & O-Rings)',
+        defaultSample: 'Redress Kit',
+        allowedValues: ['Redress Kit', 'Paint & Coatings', 'Spare Parts', 'Lubricants & Oils', 'HSE & Safety', 'Seals & O-Rings'],
+      },
+      {
+        key: 'unit',
+        label: 'Unit of Measure',
+        type: 'string',
+        description: 'Packaging unit (EA, KIT, LTR, CAN, SET, BOX)',
+        sample: 'KIT (Options: EA | KIT | LTR | CAN | SET | BOX)',
+        defaultSample: 'KIT',
+        allowedValues: ['EA', 'KIT', 'LTR', 'CAN', 'SET', 'BOX'],
+      },
+      { key: 'currentStock', label: 'Current Stock', type: 'number', required: true, description: 'Physical quantity in store', sample: 24 },
+      { key: 'reorderLevel', label: 'Reorder Level', type: 'number', description: 'Minimum stock alert threshold', sample: 5 },
+      { key: 'unitCostAED', label: 'Unit Cost (AED)', type: 'number', required: true, description: 'Standard unit acquisition cost in AED', sample: 1850 },
+      { key: 'binLocation', label: 'Bin / Shelf Location', type: 'string', description: 'Physical warehouse bin rack', sample: 'BIN-B3-04' },
+      { key: 'supplier', label: 'Vendor / Manufacturer', type: 'string', description: 'OEM supplier or manufacturer', sample: 'Cougar / Specialist Seals' },
+      { key: 'lastRestockedDate', label: 'Last Restocked Date', type: 'date', description: 'Most recent replenishment date', sample: '2026-03-01' },
+    ],
+  },
+  consumable_issuances: {
+    key: 'consumable_issuances',
+    sqlTable: 'tbl_StoreIssues',
+    epicorCode: 'UD202 - Store Issuance Vouchers (SIV)',
+    name: 'Store Issuance Vouchers (SIV)',
+    primaryKey: 'issuanceId',
+    category: 'Inventory & Stores',
+    description: 'Store issues to workshop bays, redress orders, jobs, or rigs with cost allocation by sub-division.',
+    fields: [
+      { key: 'issuanceId', label: 'Issuance ID', type: 'string', required: true, description: 'Unique SIV record key', sample: 'SIV-2026-001' },
+      { key: 'sivNumber', label: 'SIV Voucher #', type: 'string', description: 'Official store voucher number', sample: 'SIV-001' },
+      { key: 'issueDate', label: 'Issue Date', type: 'date', required: true, description: 'Date item was issued (YYYY-MM-DD)', sample: '2026-03-12' },
+      { key: 'partNo', label: 'Part Number', type: 'string', required: true, description: 'Issued SKU part number', sample: 'RK-JAR-650' },
+      { key: 'description', label: 'Description', type: 'string', description: 'Consumable description', sample: '6-1/2" HYD JAR COMPLETE REDRESS SEAL KIT' },
+      { key: 'qtyIssued', label: 'Quantity Issued', type: 'number', required: true, description: 'Number of units disbursed', sample: 1 },
+      { key: 'unitCostAED', label: 'Unit Cost (AED)', type: 'number', description: 'Unit cost at time of issue', sample: 1850 },
+      { key: 'totalCostAED', label: 'Total Value (AED)', type: 'number', description: 'Total disbursed value in AED', sample: 1850 },
+      {
+        key: 'destinationType',
+        label: 'Destination Type',
+        type: 'string',
+        description: 'Usage location',
+        sample: 'TOOL_REDRESS (Options: WORKSHOP_BASE | TOOL_REDRESS)',
+        defaultSample: 'TOOL_REDRESS',
+        allowedValues: ['WORKSHOP_BASE', 'TOOL_REDRESS'],
+      },
+      { key: 'workshopArea', label: 'Workshop Bay', type: 'string', description: 'Target workshop bay or work center', sample: 'Bay 2 - Redress Area' },
+      { key: 'toolSerialNo', label: 'Linked Tool Serial', type: 'string', description: 'Serial of tool receiving the consumable', sample: 'EMD-1025' },
+      { key: 'jobId', label: 'Linked Job Number', type: 'string', description: 'Drilling job charging this expense', sample: 'Job-023-00001' },
+      {
+        key: 'subDivision',
+        label: 'Division Allocation',
+        type: 'string',
+        description: 'P&L sector allocation',
+        sample: 'FISHING (Options: FISHING | WHIPSTOCK | RENTALS)',
+        defaultSample: 'FISHING',
+        allowedValues: ['FISHING', 'WHIPSTOCK', 'RENTALS'],
+      },
+      { key: 'requestedBy', label: 'Requested By', type: 'string', description: 'Technician requesting materials', sample: 'Nihas' },
+      { key: 'issuedBy', label: 'Issued By', type: 'string', description: 'Storekeeper issuing goods', sample: 'Deen' },
+      { key: 'remarks', label: 'Remarks / Notes', type: 'string', description: 'Issuance reason / job purpose', sample: 'Allocated for post-job redress' },
+    ],
+  },
+  // ==========================================
+  // Procurement: Purchase Orders & Goods Inward
+  // ==========================================
+  purchase_orders: {
+    key: 'purchase_orders',
+    sqlTable: 'tbl_PurchaseOrders',
+    epicorCode: 'UD203 - Purchase Orders Master',
+    name: 'Purchase Orders (PO)',
+    primaryKey: 'poNumber',
+    category: 'Procurement (PO & GRN)',
+    description: 'Commercial purchase orders for tools/assets, fleet inventory, and consumables with contract link and division.',
+    detailKey: 'lines',
+    detailForeignKey: 'poNumber',
+    detailName: 'PO Line Items (Details)',
+    detailSqlTable: 'tbl_PurchaseOrderLines',
+    fields: [
+      { key: 'poNumber', label: 'PO Number', type: 'string', required: true, description: 'Commercial PO Number (e.g. PO-2026-001)', sample: 'PO-2026-001' },
+      { key: 'supplier', label: 'Supplier / Vendor', type: 'string', required: true, description: 'Vendor company name', sample: 'COUGAR DRILLING SERVICES' },
+      { key: 'orderDate', label: 'PO Date', type: 'date', required: true, description: 'Issuance date (YYYY-MM-DD)', sample: '2026-02-15' },
+      { key: 'expectedDeliveryDate', label: 'Delivery Due Date', type: 'date', description: 'Expected delivery date', sample: '2026-03-15' },
+      {
+        key: 'currency',
+        label: 'Currency',
+        type: 'string',
+        required: true,
+        description: 'PO commercial currency: AED or USD',
+        sample: 'USD (Options: USD | AED)',
+        defaultSample: 'USD',
+        allowedValues: ['USD', 'AED'],
+      },
+      { key: 'contractRef', label: 'Contract Reference', type: 'string', description: 'Client master contract SAP code (e.g. 444558)', sample: '444558' },
+      {
+        key: 'subDivision',
+        label: 'Business Division',
+        type: 'string',
+        description: 'Division allocation',
+        sample: 'FISHING (Options: FISHING | WHIPSTOCK | RENTALS)',
+        defaultSample: 'FISHING',
+        allowedValues: ['FISHING', 'WHIPSTOCK', 'RENTALS'],
+      },
+      { key: 'totalAmount', label: 'Total PO Amount', type: 'number', description: 'Total purchase order value', sample: 125000 },
+      { key: 'inwardedAmount', label: 'Inwarded Value', type: 'number', description: 'Cumulative amount received on GRNs', sample: 0 },
+      { key: 'balanceAmount', label: 'Balance Outstanding', type: 'number', description: 'Remaining unfulfilled amount', sample: 125000 },
+      {
+        key: 'status',
+        label: 'PO Status',
+        type: 'string',
+        description: 'Order fulfillment status',
+        sample: 'OPEN (Options: DRAFT | OPEN | PARTIALLY_RECEIVED | FULFILLED | CANCELLED)',
+        defaultSample: 'OPEN',
+        allowedValues: ['DRAFT', 'OPEN', 'PARTIALLY_RECEIVED', 'FULFILLED', 'CANCELLED'],
+      },
+      { key: 'paymentTerms', label: 'Payment Terms', type: 'string', description: 'Commercial payment terms', sample: 'Net 60 Days' },
+      { key: 'notes', label: 'Remarks / Notes', type: 'string', description: 'Commercial notes and specifications', sample: 'Procurement of replacement jar mandrels and assemblies' },
+    ],
+    detailFields: [
+      { key: 'poNumber', label: 'PO Number (Parent)', type: 'string', required: true, description: 'Parent Purchase Order Number', sample: 'PO-2026-001' },
+      { key: 'itemNo', label: 'Line Item #', type: 'number', required: true, description: 'Line sequence number', sample: 1 },
+      { key: 'partNo', label: 'Part / SKU Number', type: 'string', required: true, description: 'Tool or consumable part number', sample: 'DJ650-003' },
+      { key: 'description', label: 'Item Description', type: 'string', required: true, description: 'Detailed item description', sample: '6-1/2" HYDRAULIC DRILLING JAR' },
+      { key: 'category', label: 'Tool Category', type: 'string', description: 'Catalog category', sample: 'HYD DRILLING JAR' },
+      { key: 'size', label: 'Tool OD / Size', type: 'string', description: 'OD dimension', sample: '6-1/2"' },
+      {
+        key: 'classification',
+        label: '3-Way Classification',
+        type: 'string',
+        required: true,
+        description: 'Procurement destination: ASSET (CapEx with depreciation), INVENTORY (Fleet), or CONSUMABLE',
+        sample: 'ASSET (Options: ASSET | INVENTORY | CONSUMABLE)',
+        defaultSample: 'ASSET',
+        allowedValues: ['ASSET', 'INVENTORY', 'CONSUMABLE'],
+      },
+      {
+        key: 'subDivision',
+        label: 'Division',
+        type: 'string',
+        description: 'Operational sector',
+        sample: 'FISHING (Options: FISHING | WHIPSTOCK | RENTALS)',
+        defaultSample: 'FISHING',
+        allowedValues: ['FISHING', 'WHIPSTOCK', 'RENTALS'],
+      },
+      { key: 'contractRef', label: 'Contract Reference', type: 'string', description: 'Linked contract code', sample: '444558' },
+      { key: 'orderedQty', label: 'Ordered Qty', type: 'number', required: true, description: 'Ordered quantity', sample: 2 },
+      { key: 'receivedQty', label: 'Received Qty', type: 'number', description: 'Inwarded quantity to date', sample: 0 },
+      { key: 'balanceQty', label: 'Balance Qty', type: 'number', description: 'Pending delivery quantity', sample: 2 },
+      { key: 'unitPrice', label: 'Unit Price', type: 'number', required: true, description: 'Price per unit in PO currency', sample: 25000 },
+      { key: 'totalPrice', label: 'Total Price', type: 'number', description: 'Extended line amount', sample: 50000 },
+      { key: 'usefulLifeMonths', label: 'Useful Life (Months)', type: 'number', description: 'Asset depreciation period in months (for ASSET classification)', sample: 60 },
+      { key: 'salvageValue', label: 'Salvage Value', type: 'number', description: 'Residual asset value', sample: 5000 },
+      { key: 'monthlyDepreciation', label: 'Monthly Depreciation', type: 'number', description: 'Calculated monthly depreciation cost', sample: 750 },
+    ],
+  },
+  purchase_order_lines: {
+    key: 'purchase_order_lines',
+    sqlTable: 'tbl_PurchaseOrderLines',
+    epicorCode: 'UD204 - PO Line Items (Flat)',
+    name: 'PO Line Items (All Orders)',
+    primaryKey: 'lineId',
+    category: 'Procurement (PO & GRN)',
+    description: 'Flattened purchase order item lines across all active and fulfilled POs with asset classification and depreciation parameters.',
+    fields: [
+      { key: 'lineId', label: 'Line ID', type: 'string', required: true, description: 'Unique line identifier', sample: 'PO-2026-001-1' },
+      { key: 'poNumber', label: 'PO Number', type: 'string', required: true, description: 'Parent PO Number', sample: 'PO-2026-001' },
+      { key: 'itemNo', label: 'Item #', type: 'number', required: true, description: 'Sequence number', sample: 1 },
+      { key: 'partNo', label: 'Part Number', type: 'string', required: true, description: 'Part number', sample: 'DJ650-003' },
+      { key: 'description', label: 'Item Description', type: 'string', required: true, description: 'Item description', sample: '6-1/2" HYDRAULIC DRILLING JAR' },
+      { key: 'category', label: 'Category', type: 'string', description: 'Tool category', sample: 'HYD DRILLING JAR' },
+      { key: 'size', label: 'Size', type: 'string', description: 'Tool size / OD', sample: '6-1/2"' },
+      {
+        key: 'classification',
+        label: 'Classification',
+        type: 'string',
+        required: true,
+        description: 'ASSET, INVENTORY, or CONSUMABLE',
+        sample: 'ASSET (Options: ASSET | INVENTORY | CONSUMABLE)',
+        defaultSample: 'ASSET',
+        allowedValues: ['ASSET', 'INVENTORY', 'CONSUMABLE'],
+      },
+      {
+        key: 'subDivision',
+        label: 'Sub-Division',
+        type: 'string',
+        description: 'Division allocation',
+        sample: 'FISHING (Options: FISHING | WHIPSTOCK | RENTALS)',
+        defaultSample: 'FISHING',
+        allowedValues: ['FISHING', 'WHIPSTOCK', 'RENTALS'],
+      },
+      { key: 'contractRef', label: 'Contract Reference', type: 'string', description: 'SAP Contract Ref', sample: '444558' },
+      { key: 'orderedQty', label: 'Ordered Qty', type: 'number', required: true, description: 'Quantity ordered', sample: 2 },
+      { key: 'receivedQty', label: 'Received Qty', type: 'number', description: 'Quantity inwarded', sample: 0 },
+      { key: 'balanceQty', label: 'Balance Qty', type: 'number', description: 'Quantity remaining', sample: 2 },
+      { key: 'unitPrice', label: 'Unit Price', type: 'number', required: true, description: 'Unit price in currency', sample: 25000 },
+      { key: 'totalPrice', label: 'Total Price', type: 'number', description: 'Total line amount', sample: 50000 },
+      { key: 'usefulLifeMonths', label: 'Useful Life (Months)', type: 'number', description: 'Depreciation life', sample: 60 },
+      { key: 'salvageValue', label: 'Salvage Value', type: 'number', description: 'Salvage value', sample: 5000 },
+      { key: 'monthlyDepreciation', label: 'Monthly Depreciation', type: 'number', description: 'Monthly depreciation', sample: 750 },
+    ],
+  },
+  goods_receipts: {
+    key: 'goods_receipts',
+    sqlTable: 'tbl_GoodsReceipts',
+    epicorCode: 'UD205 - Goods Receipt Notes (GRN)',
+    name: 'Goods Receipt Notes (GRN)',
+    primaryKey: 'ticketNo',
+    category: 'Procurement (PO & GRN)',
+    description: 'Warehouse and base receipt tickets inwarding physical tools, serialized assets, and consumables against POs.',
+    detailKey: 'lines',
+    detailForeignKey: 'ticketNo',
+    detailName: 'GRN Line Items (Details)',
+    detailSqlTable: 'tbl_GoodsReceiptLines',
+    fields: [
+      { key: 'ticketNo', label: 'GRN Ticket #', type: 'string', required: true, description: 'Unique Goods Receipt Ticket Number (e.g. GRN-2026-001)', sample: 'GRN-2026-001' },
+      { key: 'poNumber', label: 'PO Number', type: 'string', required: true, description: 'Matching Purchase Order number', sample: 'PO-2026-001' },
+      { key: 'supplier', label: 'Supplier / Vendor', type: 'string', required: true, description: 'Delivering vendor name', sample: 'COUGAR DRILLING SERVICES' },
+      { key: 'supplierDt', label: 'Supplier Delivery Note', type: 'string', description: 'Vendor delivery note / packing slip #', sample: 'DN-99412' },
+      { key: 'dateRecd', label: 'Date Received', type: 'date', required: true, description: 'Physical receipt date (YYYY-MM-DD)', sample: '2026-03-10' },
+      { key: 'mfgReceivedBy', label: 'Received By', type: 'string', description: 'Receiving storekeeper / inspector', sample: 'Noor Islam' },
+      {
+        key: 'currency',
+        label: 'Currency',
+        type: 'string',
+        description: 'Currency: USD or AED',
+        sample: 'USD (Options: USD | AED)',
+        defaultSample: 'USD',
+        allowedValues: ['USD', 'AED'],
+      },
+      { key: 'totalItemsReceived', label: 'Total Items Received', type: 'number', description: 'Total item count', sample: 2 },
+      { key: 'totalInwardValue', label: 'Total Inward Value', type: 'number', description: 'Total landed value', sample: 50000 },
+      {
+        key: 'qcStatus',
+        label: 'QC Status',
+        type: 'string',
+        description: 'Goods inward QA/QC verification state',
+        sample: 'ACCEPTED (Options: ACCEPTED | ACCEPTED_WITH_DEVIATION | REJECTED | PENDING_INSPECTION)',
+        defaultSample: 'ACCEPTED',
+        allowedValues: ['ACCEPTED', 'ACCEPTED_WITH_DEVIATION', 'REJECTED', 'PENDING_INSPECTION'],
+      },
+      { key: 'comments', label: 'Receipt Remarks', type: 'string', description: 'Quality inspection & receiving remarks', sample: 'All items received in good condition with OEM certs' },
+    ],
+    detailFields: [
+      { key: 'ticketNo', label: 'GRN Ticket # (Parent)', type: 'string', required: true, description: 'Parent GRN ticket number', sample: 'GRN-2026-001' },
+      { key: 'poNumber', label: 'PO Number', type: 'string', description: 'Parent PO number', sample: 'PO-2026-001' },
+      { key: 'partNo', label: 'Part / Catalog #', type: 'string', required: true, description: 'Part number', sample: 'DJ650-003' },
+      { key: 'toolsno', label: 'Serial / Asset ID', type: 'string', description: 'Physical serialized identifier assigned to fleet', sample: 'EMD-1025' },
+      { key: 'description', label: 'Description', type: 'string', description: 'Item description', sample: '6-1/2" HYDRAULIC DRILLING JAR' },
+      { key: 'category', label: 'Category', type: 'string', description: 'Tool category', sample: 'HYD DRILLING JAR' },
+      { key: 'size', label: 'Size', type: 'string', description: 'Tool size', sample: '6-1/2"' },
+      {
+        key: 'classification',
+        label: 'Classification',
+        type: 'string',
+        required: true,
+        description: 'ASSET, INVENTORY, or CONSUMABLE',
+        sample: 'ASSET (Options: ASSET | INVENTORY | CONSUMABLE)',
+        defaultSample: 'ASSET',
+        allowedValues: ['ASSET', 'INVENTORY', 'CONSUMABLE'],
+      },
+      {
+        key: 'subDivision',
+        label: 'Division',
+        type: 'string',
+        description: 'Operational sector',
+        sample: 'FISHING (Options: FISHING | WHIPSTOCK | RENTALS)',
+        defaultSample: 'FISHING',
+        allowedValues: ['FISHING', 'WHIPSTOCK', 'RENTALS'],
+      },
+      { key: 'contractRef', label: 'Contract Reference', type: 'string', description: 'Linked contract SAP code', sample: '444558' },
+      { key: 'qtyReceived', label: 'Qty Received', type: 'number', required: true, description: 'Received count', sample: 1 },
+      { key: 'unitPrice', label: 'Unit Price', type: 'number', required: true, description: 'Acquisition price per unit', sample: 25000 },
+      { key: 'bookValue', label: 'Book Value', type: 'number', description: 'Recorded asset book value', sample: 25000 },
+      { key: 'currency', label: 'Currency', type: 'string', description: 'Currency', sample: 'USD' },
+      { key: 'belongsTo', label: 'Ownership', type: 'string', description: 'Owner entity (EMDAD, MOTORMAX, etc.)', sample: 'EMDAD' },
+      { key: 'reqInsp', label: 'QC Inspection Required?', type: 'boolean', description: 'Flag if tool requires NDT inspection before dispatch', sample: true },
+      { key: 'insDate', label: 'Inspection Date', type: 'date', description: 'Date of receiving QC inspection', sample: '2026-03-11' },
+      { key: 'usefulLifeMonths', label: 'Useful Life (Months)', type: 'number', description: 'Depreciation duration in months', sample: 60 },
+      { key: 'salvageValue', label: 'Salvage Value', type: 'number', description: 'Salvage value', sample: 2500 },
+      { key: 'monthlyDepreciation', label: 'Monthly Depreciation', type: 'number', description: 'Monthly depreciation', sample: 375 },
+      { key: 'comments', label: 'Line Comments', type: 'string', description: 'Line remarks', sample: 'Passed visual & thread inspection' },
+    ],
+  },
+  goods_receipt_lines: {
+    key: 'goods_receipt_lines',
+    sqlTable: 'tbl_GoodsReceiptLines',
+    epicorCode: 'UD206 - Goods Receipt Line Items',
+    name: 'GRN Inward Lines (All Receipts)',
+    primaryKey: 'lineId',
+    category: 'Procurement (PO & GRN)',
+    description: 'Flattened goods receipt item lines inwarded into inventory or asset register with serial numbers and inspection flags.',
+    fields: [
+      { key: 'lineId', label: 'Line ID', type: 'string', required: true, description: 'Unique receipt line key', sample: 'GRN-2026-001-1' },
+      { key: 'ticketNo', label: 'GRN Ticket #', type: 'string', required: true, description: 'Parent GRN ticket #', sample: 'GRN-2026-001' },
+      { key: 'poNumber', label: 'PO Number', type: 'string', description: 'Purchase order #', sample: 'PO-2026-001' },
+      { key: 'partNo', label: 'Part Number', type: 'string', required: true, description: 'Part number', sample: 'DJ650-003' },
+      { key: 'toolsno', label: 'Serial / Asset ID', type: 'string', description: 'Tool physical serial number', sample: 'EMD-1025' },
+      { key: 'description', label: 'Description', type: 'string', description: 'Item description', sample: '6-1/2" HYDRAULIC DRILLING JAR' },
+      { key: 'category', label: 'Category', type: 'string', description: 'Tool category', sample: 'HYD DRILLING JAR' },
+      { key: 'size', label: 'Size', type: 'string', description: 'Size / OD', sample: '6-1/2"' },
+      {
+        key: 'classification',
+        label: 'Classification',
+        type: 'string',
+        required: true,
+        description: 'ASSET, INVENTORY, or CONSUMABLE',
+        sample: 'ASSET (Options: ASSET | INVENTORY | CONSUMABLE)',
+        defaultSample: 'ASSET',
+        allowedValues: ['ASSET', 'INVENTORY', 'CONSUMABLE'],
+      },
+      {
+        key: 'subDivision',
+        label: 'Sub-Division',
+        type: 'string',
+        description: 'Division allocation',
+        sample: 'FISHING (Options: FISHING | WHIPSTOCK | RENTALS)',
+        defaultSample: 'FISHING',
+        allowedValues: ['FISHING', 'WHIPSTOCK', 'RENTALS'],
+      },
+      { key: 'contractRef', label: 'Contract Reference', type: 'string', description: 'Contract SAP reference', sample: '444558' },
+      { key: 'qtyReceived', label: 'Qty Received', type: 'number', required: true, description: 'Inwarded count', sample: 1 },
+      { key: 'unitPrice', label: 'Unit Price', type: 'number', required: true, description: 'Unit cost', sample: 25000 },
+      { key: 'bookValue', label: 'Book Value', type: 'number', description: 'Asset book value', sample: 25000 },
+      { key: 'currency', label: 'Currency', type: 'string', description: 'Currency', sample: 'USD' },
+      { key: 'belongsTo', label: 'Ownership', type: 'string', description: 'Owner entity', sample: 'EMDAD' },
+      { key: 'reqInsp', label: 'Inspection Required?', type: 'boolean', description: 'Inspection required flag', sample: true },
+      { key: 'insDate', label: 'Inspection Date', type: 'date', description: 'Inspection certification date', sample: '2026-03-11' },
+      { key: 'usefulLifeMonths', label: 'Useful Life (Months)', type: 'number', description: 'Useful life in months', sample: 60 },
+      { key: 'salvageValue', label: 'Salvage Value', type: 'number', description: 'Salvage value', sample: 2500 },
+      { key: 'monthlyDepreciation', label: 'Monthly Depreciation', type: 'number', description: 'Monthly depreciation', sample: 375 },
+      { key: 'comments', label: 'Comments', type: 'string', description: 'Line comments', sample: 'Passed visual inspection' },
+    ],
+  },
+  // ==========================================
+  // Financial, Sub-Contractors & P&L Module
+  // ==========================================
+  subcontractor_rentals: {
+    key: 'subcontractor_rentals',
+    sqlTable: 'tbl_SubContractorRentals',
+    epicorCode: 'UD207 - Sub-Contractor Tool Rentals',
+    name: 'Sub-Contractor Rentals (3rd Party)',
+    primaryKey: 'rentalId',
+    category: 'Financial & Sub-Rentals',
+    description: 'Third-party cross-rental equipment hired for customer jobs, daily/standby rates, accruals, and supplier invoices.',
+    fields: [
+      { key: 'rentalId', label: 'Rental Record ID', type: 'string', required: true, description: 'Unique rental record ID (e.g. SRA-2026-001)', sample: 'SRA-2026-001' },
+      { key: 'jobId', label: 'Job Number', type: 'string', required: true, description: 'Linked drilling job number', sample: 'Job-023-00001' },
+      { key: 'supplierName', label: 'Sub-Contractor Vendor', type: 'string', required: true, description: 'Rental tool supplier name', sample: 'Motormax Drilling Technologies' },
+      { key: 'rentalAgreementNo', label: 'Agreement / PO #', type: 'string', description: 'Vendor agreement or callout number', sample: 'MM-RA-2026-44' },
+      { key: 'toolDesc', label: 'Tool Description', type: 'string', required: true, description: 'Hired tool description', sample: '8" HYDRAULIC DRILLING JAR' },
+      { key: 'serialNo', label: 'Serial Number', type: 'string', required: true, description: 'Vendor physical tool serial number', sample: 'MM-JAR-801' },
+      {
+        key: 'rentalType',
+        label: 'Rental Rate Model',
+        type: 'string',
+        description: 'Pricing model: Daily, Monthly, or Lumpsum',
+        sample: 'Daily (Options: Daily | Monthly | Lumpsum)',
+        defaultSample: 'Daily',
+        allowedValues: ['Daily', 'Monthly', 'Lumpsum'],
+      },
+      { key: 'rateAmount', label: 'Operating Rate / Day', type: 'number', required: true, description: 'Daily operating rental charge', sample: 650 },
+      { key: 'standbyRate', label: 'Standby Rate / Day', type: 'number', description: 'Daily standby rental charge', sample: 325 },
+      { key: 'startDate', label: 'Hire Start Date', type: 'date', required: true, description: 'Start date of rental agreement', sample: '2026-03-01' },
+      { key: 'endDate', label: 'Hire Return Date', type: 'date', description: 'End date or return date (blank if active)', sample: '2026-03-15' },
+      { key: 'operatingDays', label: 'Operating Days', type: 'number', description: 'Total operating days billed', sample: 10 },
+      { key: 'standbyDays', label: 'Standby Days', type: 'number', description: 'Total standby days billed', sample: 4 },
+      { key: 'totalAccrued', label: 'Total Accrued Cost', type: 'number', description: 'Calculated internal cost accrual', sample: 7800 },
+      { key: 'poReference', label: 'Client PO Reference', type: 'string', description: 'Client PO reference', sample: 'PO-2026-088' },
+      { key: 'invoiceRef', label: 'Vendor Invoice #', type: 'string', description: 'Actual supplier tax invoice number', sample: 'INV-MM-9102' },
+      { key: 'invoiceDate', label: 'Invoice Date', type: 'date', description: 'Date of supplier invoice', sample: '2026-03-20' },
+      { key: 'invoiceAmount', label: 'Invoice Amount', type: 'number', description: 'Actual billed amount from vendor', sample: 7800 },
+      { key: 'variance', label: 'Accrual Variance', type: 'number', description: 'Difference between invoice and accrual', sample: 0 },
+      {
+        key: 'division',
+        label: 'Division Allocation',
+        type: 'string',
+        description: 'Business division',
+        sample: 'RENTALS (Options: FISHING | WHIPSTOCK | RENTALS)',
+        defaultSample: 'RENTALS',
+        allowedValues: ['FISHING', 'WHIPSTOCK', 'RENTALS'],
+      },
+      { key: 'clientCode', label: 'Client / Operator', type: 'string', description: 'Client code', sample: 'ADNOC OFFSHORE' },
+      { key: 'rig', label: 'Rig', type: 'string', description: 'Rig name', sample: 'AL YASAT' },
+      { key: 'well', label: 'Well', type: 'string', description: 'Well identifier', sample: 'ZK-89.5-68' },
+      { key: 'contractRef', label: 'Contract Reference', type: 'string', description: 'Contract reference', sample: '444558' },
+      { key: 'accrualMonth', label: 'Accrual Month (YYYY-MM)', type: 'string', required: true, description: 'Accounting period for accrual', sample: '2026-03' },
+      {
+        key: 'status',
+        label: 'Status',
+        type: 'string',
+        description: 'Rental lifecycle status',
+        sample: 'ACCRUED (Options: ACCRUED | INVOICE_RECEIVED | PAID | DISPUTED)',
+        defaultSample: 'ACCRUED',
+        allowedValues: ['ACCRUED', 'INVOICE_RECEIVED', 'PAID', 'DISPUTED'],
+      },
+      { key: 'notes', label: 'Notes', type: 'string', description: 'Operational rental remarks', sample: 'Third party rental jar mobilized to rig' },
+    ],
+  },
+  monthly_expenses: {
+    key: 'monthly_expenses',
+    sqlTable: 'tbl_MonthlyExpenses',
+    epicorCode: 'UD208 - Monthly P&L Expenses',
+    name: 'Monthly P&L Expenses & Depreciation',
+    primaryKey: 'code',
+    category: 'Financial & Sub-Rentals',
+    description: 'Cost code ledger breakdown across Fishing, Whipstock, and Rentals divisions with depreciation schedule.',
+    fields: [
+      { key: 'periodKey', label: 'Period Key (YYYY-MM)', type: 'string', required: true, description: 'Month period (e.g. 2026-09)', sample: '2026-09' },
+      { key: 'code', label: 'Cost Code', type: 'string', required: true, description: 'Standard financial cost code (e.g. CC-01, CC-10)', sample: 'CC-01' },
+      { key: 'name', label: 'Expense Name', type: 'string', required: true, description: 'Ledger line description', sample: 'Cost of Materials' },
+      {
+        key: 'category',
+        label: 'Cost Category',
+        type: 'string',
+        description: 'Cost classification',
+        sample: 'DIRECT (Options: DIRECT | OVERHEAD | DEPRECIATION)',
+        defaultSample: 'DIRECT',
+        allowedValues: ['DIRECT', 'OVERHEAD', 'DEPRECIATION'],
+      },
+      { key: 'fishing', label: 'Fishing Division (AED)', type: 'number', description: 'Expense incurred by Fishing', sample: 85000 },
+      { key: 'whipstock', label: 'Whipstock Division (AED)', type: 'number', description: 'Expense incurred by Whipstock', sample: 14000 },
+      { key: 'rentals', label: 'Rentals Division (AED)', type: 'number', description: 'Expense incurred by Rentals', sample: 62000 },
+      { key: 'total', label: 'Total Expense (AED)', type: 'number', description: 'Total combined expenditure', sample: 161000 },
+      { key: 'sourceType', label: 'Source Type', type: 'string', description: 'Calculation origin (MANUAL_ADMIN, CONSUMABLES_AUTO, SUB_RENTAL_AUTO, DEPRECIATION_AUTO, TRUE_UP)', sample: 'MANUAL_ADMIN' },
+      { key: 'sector', label: 'Asset Sector', type: 'string', description: 'Depreciation sector (e.g. P&M, Vehicles, Comp & Printers)', sample: 'P&M' },
+      { key: 'usefulLifeMonths', label: 'Useful Life (Months)', type: 'number', description: 'Depreciation schedule useful life', sample: 60 },
+    ],
+  },
+  // ==========================================
+  // Master Configuration & Personnel Module
+  // ==========================================
+  tool_categories: {
+    key: 'tool_categories',
+    sqlTable: 'tbl_ToolCategories',
+    epicorCode: 'UD209 - Tool Categories Master',
+    name: 'Tool Categories Master',
+    primaryKey: 'categoryName',
+    category: 'Master Config & Personnel',
+    description: 'Downhole tool catalog categories (e.g. HYD DRILLING JAR, CASING SCRAPER, SECTION MILL) for fleet classification.',
+    fields: [
+      { key: 'categoryName', label: 'Category Name', type: 'string', required: true, description: 'Tool category in uppercase (e.g. HYD DRILLING JAR, WHIPSTOCK)', sample: 'HYD DRILLING JAR' },
+      {
+        key: 'division',
+        label: 'Default Division',
+        type: 'string',
+        description: 'Associated business sector',
+        sample: 'FISHING (Options: FISHING | WHIPSTOCK | RENTALS | GENERAL)',
+        defaultSample: 'FISHING',
+        allowedValues: ['FISHING', 'WHIPSTOCK', 'RENTALS', 'GENERAL'],
+      },
+      { key: 'description', label: 'Description', type: 'string', description: 'Category technical description', sample: 'Hydraulic and mechanical downhole jars' },
+      { key: 'active', label: 'Is Active?', type: 'boolean', description: 'Active in dropdown selections', sample: true },
+    ],
+  },
+  tool_sizes: {
+    key: 'tool_sizes',
+    sqlTable: 'tbl_ToolSizes',
+    epicorCode: 'UD210 - Tool Sizes Master',
+    name: 'Tool Sizes Master',
+    primaryKey: 'sizeString',
+    category: 'Master Config & Personnel',
+    description: 'Standardized outer diameter (OD) sizes (e.g., 6-1/2", 8", 9-1/2") for tools and hole sections.',
+    fields: [
+      { key: 'sizeString', label: 'Size / OD (Inches)', type: 'string', required: true, description: 'Tool outer diameter string (e.g. 6-1/2", 8", 12-1/4")', sample: '6-1/2"' },
+      { key: 'category', label: 'Tool Category', type: 'string', description: 'Category applicability (e.g. ALL or HYD DRILLING JAR)', sample: 'ALL' },
+      { key: 'odInches', label: 'OD Numeric Value (Inches)', type: 'number', description: 'Decimal outer diameter (e.g. 6.5 for 6-1/2")', sample: 6.5 },
+      { key: 'active', label: 'Is Active?', type: 'boolean', description: 'Active in dropdown selections', sample: true },
+    ],
+  },
+  crew_members: {
+    key: 'crew_members',
+    sqlTable: 'tbl_CrewMembers',
+    epicorCode: 'UD211 - Certified Field Crew & Engineers',
+    name: 'Field Crew & Engineers Master',
+    primaryKey: 'badgeNo',
+    category: 'Master Config & Personnel',
+    description: 'Certified field supervisors, fishing specialists, rig engineers, safety passports, and offshore cert expiries.',
+    fields: [
+      { key: 'badgeNo', label: 'Badge Number', type: 'string', required: true, description: 'Company badge ID (e.g. EMD-4102)', sample: 'EMD-4102' },
+      { key: 'name', label: 'Full Engineer Name', type: 'string', required: true, description: 'Certified personnel full name', sample: 'Ahmed Al-Mansoor' },
+      { key: 'role', label: 'Professional Designation', type: 'string', required: true, description: 'Operational engineering title', sample: 'Lead Fishing & Whipstock Specialist' },
+      { key: 'phone', label: 'Phone Number', type: 'string', description: 'Contact mobile number', sample: '+971 50 123 4567' },
+      { key: 'email', label: 'Email Address', type: 'string', description: 'Corporate email address', sample: 'ahmed.mansoor@emdad.ae' },
+      { key: 'rigPassNo', label: 'Rig Pass Passport #', type: 'string', description: 'ADNOC / Industry Rig Pass ID', sample: 'ADNOC-RP-88412' },
+      { key: 'h2sExpiry', label: 'H2S Certification Expiry', type: 'date', description: 'H2S safety ticket expiry date', sample: '2027-04-15' },
+      { key: 'bosietExpiry', label: 'BOSIET / Offshore Expiry', type: 'date', description: 'BOSIET offshore survival expiry', sample: '2027-08-20' },
+      { key: 'medicalExpiry', label: 'Offshore Medical Expiry', type: 'date', description: 'Offshore medical certification expiry', sample: '2027-01-10' },
+      {
+        key: 'status',
+        label: 'Personnel Status',
+        type: 'string',
+        description: 'Current readiness status',
+        sample: 'Active (Options: Active | On Rig | On Leave | Inactive)',
+        defaultSample: 'Active',
+        allowedValues: ['Active', 'On Rig', 'On Leave', 'Inactive'],
+      },
+      { key: 'dayRateAED', label: 'Manpower Day Rate (AED)', type: 'number', description: 'Standard billable / internal cost day rate in AED', sample: 3500 },
+    ],
+  },
+  dropdown_lookups: {
+    key: 'dropdown_lookups',
+    sqlTable: 'tbl_DropdownLookups',
+    epicorCode: 'UD212 - Master Dropdowns & Lookups',
+    name: 'Master Dropdowns & Lookups',
+    primaryKey: 'lookupId',
+    category: 'Master Config & Personnel',
+    description: 'Centralized dropdown items (clients, rigs, suppliers, categories, units, statuses, currencies) across the application.',
+    fields: [
+      { key: 'lookupId', label: 'Composite Lookup ID', type: 'string', required: true, description: 'Unique lookup ID: listKey_optionValue', sample: 'suppliers_Weatherford' },
+      { key: 'listKey', label: 'Dropdown List Key', type: 'string', required: true, description: 'Lookup classification key (e.g. suppliers, clients, rigs, consumableUnits)', sample: 'suppliers' },
+      { key: 'group', label: 'Lookup Group', type: 'string', description: 'Functional group', sample: 'Commercial & Financial' },
+      { key: 'optionValue', label: 'Dropdown Option Value', type: 'string', required: true, description: 'Selectable dropdown item text', sample: 'Weatherford' },
+      { key: 'sortOrder', label: 'Display Order', type: 'number', description: 'Sequence index in dropdown menus', sample: 1 },
+      { key: 'active', label: 'Is Active?', type: 'boolean', description: 'Active in dropdown menus', sample: true },
+    ],
+  },
 };
 
 interface DataManagementViewProps {
@@ -622,6 +1227,10 @@ interface DataManagementViewProps {
   onUpdateState: (key: TableEntityKey, updater: (prev: any[]) => any[]) => void;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
   onRefreshAllData?: () => Promise<void>;
+  customCategories?: string[];
+  customSizes?: string[];
+  onUpdateCustomCategories?: (cats: string[]) => void;
+  onUpdateCustomSizes?: (sizes: string[]) => void;
 }
 
 export const DataManagementView: React.FC<DataManagementViewProps> = ({
@@ -638,11 +1247,16 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
   onUpdateState,
   showToast,
   onRefreshAllData,
+  customCategories,
+  customSizes,
+  onUpdateCustomCategories,
+  onUpdateCustomSizes,
 }) => {
   const [selectedEntityKey, setSelectedEntityKey] = useState<TableEntityKey>('jobs');
   const [isDetailMode, setIsDetailMode] = useState<boolean>(false);
   const [searchFilter, setSearchFilter] = useState('');
-  const [activeTab, setActiveTab] = useState<'import' | 'preview'>('preview');
+  const [activeTab, setActiveTab] = useState<'import' | 'live' | 'preview'>('live');
+  const [liveDataSearch, setLiveDataSearch] = useState('');
 
   // Custom Columns State
   const [allCustomColumns, setAllCustomColumns] = useState<CustomColumnDef[]>(() => getCustomColumns());
@@ -740,7 +1354,64 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
     }
   };
 
-  // Map state to selected entity
+  // Helper to dynamically calculate live record count for each entity
+  const getEntityCount = (key: TableEntityKey): number => {
+    switch (key) {
+      case 'jobs': return jobs.length;
+      case 'inventory': return inventory.length;
+      case 'dtBatches': return dtBatches.length;
+      case 'rtBatches': return rtBatches.length;
+      case 'callouts': return callouts.length;
+      case 'gatePasses': return gatePasses.length;
+      case 'inspections': return inspections.length;
+      case 'maintenance': return maintenance.length;
+      case 'contracts': return contracts.length;
+      case 'contractRates': return contracts.reduce((acc, c) => acc + (c.rates?.length || 0), 0);
+      case 'consumables': return getConsumablesList().length;
+      case 'consumable_issuances': return getConsumableIssuances().length;
+      case 'purchase_orders': return loadPurchaseOrders().length;
+      case 'purchase_order_lines': return loadPurchaseOrders().reduce((acc, p) => acc + (p.lines?.length || 0), 0);
+      case 'goods_receipts': return loadGoodsReceiptNotes().length;
+      case 'goods_receipt_lines': return loadGoodsReceiptNotes().reduce((acc, g) => acc + (g.lines?.length || 0), 0);
+      case 'subcontractor_rentals': return getSubContractorRentals().length;
+      case 'monthly_expenses': {
+        const records = getMonthlyExpenseRecords();
+        return Object.values(records).reduce((acc, r) => acc + (r.rows?.length || 0), 0) || STANDARD_COST_CODES.length;
+      }
+      case 'tool_categories': {
+        let cats = customCategories;
+        if (!cats || cats.length === 0) {
+          try {
+            const s = localStorage.getItem('emdad_custom_categories');
+            if (s) cats = JSON.parse(s);
+          } catch {}
+        }
+        return cats?.length || 16;
+      }
+      case 'tool_sizes': {
+        let szs = customSizes;
+        if (!szs || szs.length === 0) {
+          try {
+            const s = localStorage.getItem('emdad_custom_sizes');
+            if (s) szs = JSON.parse(s);
+          } catch {}
+        }
+        return szs?.length || 14;
+      }
+      case 'crew_members': return loadCrewPersonnel().length;
+      case 'dropdown_lookups': {
+        return Object.keys(DROPDOWN_DEFINITIONS).reduce((acc, k) => acc + getDropdownOptions(k as DropdownListKey).length, 0);
+      }
+      case 'dossier_checklist': return dtBatches.reduce((acc, dt) => acc + (dt.toolLines?.length || 0), 0);
+      case 'dossier_itemsselect': return inventory.length;
+      case 'dossier_crew': return loadCrewPersonnel().length;
+      case 'dossier_ddr': return 2;
+      case 'dossier_utilization': return dtBatches.reduce((acc, dt) => acc + (dt.toolLines?.length || 0), 0);
+      default: return 0;
+    }
+  };
+
+  // Map state to selected entity across all 27 tables in ToolTracker
   const currentTableData = useMemo(() => {
     switch (selectedEntityKey) {
       case 'jobs':
@@ -786,10 +1457,282 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
         });
         return allRates;
       }
+      case 'consumables':
+        return getConsumablesList();
+      case 'consumable_issuances':
+        return getConsumableIssuances();
+      case 'purchase_orders':
+        return loadPurchaseOrders();
+      case 'purchase_order_lines': {
+        const allLines: any[] = [];
+        loadPurchaseOrders().forEach((po) => {
+          if (Array.isArray(po.lines)) {
+            po.lines.forEach((line, idx) => {
+              allLines.push({
+                lineId: line.lineId || `${po.poNumber}-${idx + 1}`,
+                poNumber: po.poNumber,
+                itemNo: line.itemNo ?? idx + 1,
+                partNo: line.partNo || '',
+                description: line.description || '',
+                category: line.category || '',
+                size: line.size || '',
+                classification: line.classification || 'INVENTORY',
+                subDivision: line.subDivision || po.subDivision || 'FISHING',
+                contractRef: line.contractRef || po.contractRef || '',
+                orderedQty: line.orderedQty ?? 1,
+                receivedQty: line.receivedQty ?? 0,
+                balanceQty: line.balanceQty ?? line.orderedQty ?? 1,
+                unitPrice: line.unitPrice ?? 0,
+                totalPrice: line.totalPrice ?? ((line.orderedQty ?? 1) * (line.unitPrice ?? 0)),
+                usefulLifeMonths: line.usefulLifeMonths ?? 60,
+                salvageValue: line.salvageValue ?? 0,
+                monthlyDepreciation: line.monthlyDepreciation ?? 0,
+              });
+            });
+          }
+        });
+        return allLines;
+      }
+      case 'goods_receipts':
+        return loadGoodsReceiptNotes();
+      case 'goods_receipt_lines': {
+        const allLines: any[] = [];
+        loadGoodsReceiptNotes().forEach((grn) => {
+          if (Array.isArray(grn.lines)) {
+            grn.lines.forEach((line, idx) => {
+              allLines.push({
+                lineId: line.lineId || `${grn.ticketNo}-${idx + 1}`,
+                ticketNo: grn.ticketNo,
+                poNumber: grn.poNumber,
+                partNo: line.partNo || '',
+                toolsno: line.toolsno || '',
+                description: line.description || '',
+                category: line.category || '',
+                size: line.size || '',
+                classification: line.classification || 'INVENTORY',
+                subDivision: line.subDivision || 'FISHING',
+                contractRef: line.contractRef || '',
+                qtyReceived: line.qtyReceived ?? 1,
+                unitPrice: line.unitPrice ?? 0,
+                bookValue: line.bookValue ?? line.unitPrice ?? 0,
+                currency: line.currency || grn.currency || 'USD',
+                belongsTo: line.belongsTo || grn.supplier || 'EMDAD',
+                reqInsp: line.reqInsp ?? false,
+                insDate: line.insDate || '',
+                usefulLifeMonths: line.usefulLifeMonths ?? 60,
+                salvageValue: line.salvageValue ?? 0,
+                monthlyDepreciation: line.monthlyDepreciation ?? 0,
+                comments: line.comments || '',
+              });
+            });
+          }
+        });
+        return allLines;
+      }
+      case 'subcontractor_rentals':
+        return getSubContractorRentals();
+      case 'monthly_expenses': {
+        const records = getMonthlyExpenseRecords();
+        const rows: any[] = [];
+        Object.entries(records).forEach(([periodKey, rec]) => {
+          if (Array.isArray(rec.rows)) {
+            rec.rows.forEach((r) => {
+              rows.push({
+                periodKey,
+                code: r.code,
+                name: r.name,
+                category: r.category,
+                fishing: r.fishing ?? 0,
+                whipstock: r.whipstock ?? 0,
+                rentals: r.rentals ?? 0,
+                total: r.total ?? ((r.fishing || 0) + (r.whipstock || 0) + (r.rentals || 0)),
+                sourceType: r.sourceType || 'MANUAL_ADMIN',
+                sector: r.sector || '',
+                usefulLifeMonths: r.usefulLifeMonths ?? 60,
+              });
+            });
+          }
+        });
+        return rows.length > 0 ? rows : STANDARD_COST_CODES.map((c) => ({
+          periodKey: '2026-09',
+          code: c.code,
+          name: c.name,
+          category: c.category,
+          fishing: 0,
+          whipstock: 0,
+          rentals: 0,
+          total: 0,
+          sourceType: c.sourceType,
+          sector: (c as any).sector || '',
+          usefulLifeMonths: (c as any).usefulLifeMonths || 60,
+        }));
+      }
+      case 'tool_categories': {
+        let cats = customCategories;
+        if (!cats || cats.length === 0) {
+          try {
+            const s = localStorage.getItem('emdad_custom_categories');
+            if (s) cats = JSON.parse(s);
+          } catch {}
+        }
+        if (!cats || cats.length === 0) {
+          cats = [
+            'BIT SUB', 'CARGO BASKET', 'CROSSOVER SUB', 'CUTLIP GUIDE', 'DRILL PIPE',
+            'DRILLING JAR', 'FISHING JAR', 'GUNDRILL REAMER', 'HOLE OPENER',
+            'HYD DRILLING JAR', 'MOTOR', 'OVERSHOT', 'ROLLER REAMER', 'SAFETY VALVE',
+            'STABILIZER', 'WHIPSTOCK',
+          ];
+        }
+        return cats.map((catName) => ({
+          categoryName: catName,
+          division: catName.includes('WHIPSTOCK') ? 'WHIPSTOCK' : catName.includes('JAR') ? 'FISHING' : 'RENTALS',
+          description: `Downhole ${catName} equipment`,
+          active: true,
+        }));
+      }
+      case 'tool_sizes': {
+        let szList = customSizes;
+        if (!szList || szList.length === 0) {
+          try {
+            const s = localStorage.getItem('emdad_custom_sizes');
+            if (s) szList = JSON.parse(s);
+          } catch {}
+        }
+        if (!szList || szList.length === 0) {
+          szList = ['3-1/2"', '4-3/4"', '5-3/4"', '6"', '6-1/2"', '6-3/4"', '8"', '8-1/8"', '8-1/2"', '9-1/2"', '11-3/4"', '12-1/4"', '17-1/2"', '26"'];
+        }
+        return szList.map((sz) => {
+          const num = parseFloat(sz.replace(/[^0-9.]/g, '')) || 0;
+          return {
+            sizeString: sz,
+            category: 'ALL',
+            odInches: num,
+            active: true,
+          };
+        });
+      }
+      case 'crew_members':
+        return loadCrewPersonnel();
+      case 'dropdown_lookups': {
+        const lookups: any[] = [];
+        Object.entries(DROPDOWN_DEFINITIONS).forEach(([k, def]) => {
+          const options = getDropdownOptions(k as DropdownListKey);
+          options.forEach((opt, idx) => {
+            lookups.push({
+              lookupId: `${k}_${opt.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+              listKey: k,
+              group: def.group,
+              optionValue: opt,
+              sortOrder: idx + 1,
+              active: true,
+            });
+          });
+        });
+        return lookups;
+      }
+      case 'dossier_checklist': {
+        const lines: any[] = [];
+        dtBatches.forEach((dt) => {
+          if (Array.isArray(dt.toolLines)) {
+            dt.toolLines.forEach((l, idx) => {
+              lines.push({
+                itemNo: l.itemNo ?? idx + 1,
+                partNo: l.serial || l.assetNo || `SER-${idx + 1}`,
+                description: l.desc || l.shortDesc || '',
+                size: l.size || '',
+                qty: l.qty ?? 1,
+                supplier: l.ownership || 'EMDAD',
+                qtyIn: 1,
+                insNum: 'GIS-Z-01480-2023',
+                insDate: '2023-05-15',
+                comments: l.remarks || 'ACCEPTED',
+                cat: l.shortDesc || 'DRILLING JAR',
+              });
+            });
+          }
+        });
+        return lines;
+      }
+      case 'dossier_itemsselect':
+        return inventory.map((t, idx) => ({
+          serial: t.serial || `SER-${idx + 1}`,
+          description: t.desc || t.shortDesc || '',
+          size: t.size || '',
+          qty: t.qty ?? 1,
+          supplier: t.ownership || t.supplier || 'EMDAD',
+          insDate: '2023-03-31',
+          insNum: 'GIS-Z-01073-2023',
+          condition: t.status || 'ACCEPTED',
+        }));
+      case 'dossier_crew': {
+        const crew = loadCrewPersonnel();
+        return crew.map((c) => ({
+          badgeNo: c.badgeNo,
+          name: c.name,
+          designation: c.role,
+          mobDate: '2023-05-15',
+          demobDate: '2023-05-28',
+          rigPassNo: c.rigPassNo || 'ADNOC-RP-88412',
+          h2sExpiry: c.h2sExpiry || '2027-04-15',
+          status: c.status || 'Mobilized (On Rig)',
+        }));
+      }
+      case 'dossier_ddr': {
+        const logs: any[] = [];
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('emdad_daily_logs_')) {
+              const raw = localStorage.getItem(k);
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) logs.push(...parsed);
+              }
+            }
+          }
+        } catch {}
+        if (logs.length > 0) return logs;
+        return [
+          { id: 'DDR-01', date: '2023-05-16', status: 'Operational', depth: '8-1/2" Section (3,420 m)', activity: 'Run in hole with fishing assembly. Latched fish at 3,410m.', loggedBy: 'Ahmed Al-Mansoor' },
+          { id: 'DDR-02', date: '2023-05-17', status: 'Operational', depth: '8-1/2" Section (3,420 m)', activity: 'Worked jar up and down. Successfully recovered fish to surface.', loggedBy: 'Ahmed Al-Mansoor' },
+        ];
+      }
+      case 'dossier_utilization': {
+        const utils: any[] = [];
+        dtBatches.forEach((dt) => {
+          if (Array.isArray(dt.toolLines)) {
+            dt.toolLines.forEach((l) => {
+              utils.push({
+                serial: l.serial,
+                assetNo: l.assetNo || l.serial,
+                operDays: 10,
+                standbyDays: 2,
+                dayRate: 450,
+                standbyRate: 225,
+                totalAmount: 4950,
+              });
+            });
+          }
+        });
+        return utils;
+      }
       default:
         return [];
     }
-  }, [selectedEntityKey, jobs, inventory, dtBatches, rtBatches, callouts, gatePasses, inspections, maintenance, contracts]);
+  }, [
+    selectedEntityKey,
+    jobs,
+    inventory,
+    dtBatches,
+    rtBatches,
+    callouts,
+    gatePasses,
+    inspections,
+    maintenance,
+    contracts,
+    customCategories,
+    customSizes,
+  ]);
 
   // Admin access protection
   if (user?.role !== 'Admin') {
@@ -839,6 +1782,20 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
   const activeSqlTable = isDetailMode && selectedDef.detailSqlTable
     ? selectedDef.detailSqlTable
     : selectedDef.sqlTable;
+
+  const filteredLiveData = useMemo(() => {
+    if (!currentTableData || currentTableData.length === 0) return [];
+    if (!liveDataSearch.trim()) return currentTableData;
+    const q = liveDataSearch.trim().toLowerCase();
+    return currentTableData.filter((row: any) => {
+      if (!row) return false;
+      return Object.values(row).some((val) => {
+        if (val === null || val === undefined) return false;
+        if (typeof val === 'object') return false;
+        return String(val).toLowerCase().includes(q);
+      });
+    });
+  }, [currentTableData, liveDataSearch]);
 
   // Flexible resolver helper that matches key, label, uppercase, lowercase, stripped spaces
   const resolveFieldVal = (row: any, fieldKey: string, fieldLabel?: string) => {
@@ -951,6 +1908,64 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
                 routedTo: line.routedTo || 'Inspection Bay',
                 condition: line.condition || '',
                 remarks: line.remarks || '',
+              });
+            });
+          }
+        });
+      } else if (selectedEntityKey === 'purchase_orders') {
+        const pos = loadPurchaseOrders();
+        pos.forEach((po) => {
+          if (Array.isArray(po.lines)) {
+            po.lines.forEach((line, idx) => {
+              exportLines.push({
+                poNumber: po.poNumber,
+                itemNo: line.itemNo ?? idx + 1,
+                partNo: line.partNo || '',
+                description: line.description || '',
+                category: line.category || '',
+                size: line.size || '',
+                classification: line.classification || 'INVENTORY',
+                subDivision: line.subDivision || po.subDivision || 'FISHING',
+                contractRef: line.contractRef || po.contractRef || '',
+                orderedQty: line.orderedQty ?? 1,
+                receivedQty: line.receivedQty ?? 0,
+                balanceQty: line.balanceQty ?? line.orderedQty ?? 1,
+                unitPrice: line.unitPrice ?? 0,
+                totalPrice: line.totalPrice ?? ((line.orderedQty ?? 1) * (line.unitPrice ?? 0)),
+                usefulLifeMonths: line.usefulLifeMonths ?? 60,
+                salvageValue: line.salvageValue ?? 0,
+                monthlyDepreciation: line.monthlyDepreciation ?? 0,
+              });
+            });
+          }
+        });
+      } else if (selectedEntityKey === 'goods_receipts') {
+        const grns = loadGoodsReceiptNotes();
+        grns.forEach((grn) => {
+          if (Array.isArray(grn.lines)) {
+            grn.lines.forEach((line, idx) => {
+              exportLines.push({
+                ticketNo: grn.ticketNo,
+                poNumber: grn.poNumber,
+                partNo: line.partNo || '',
+                toolsno: line.toolsno || '',
+                description: line.description || '',
+                category: line.category || '',
+                size: line.size || '',
+                classification: line.classification || 'INVENTORY',
+                subDivision: line.subDivision || 'FISHING',
+                contractRef: line.contractRef || '',
+                qtyReceived: line.qtyReceived ?? 1,
+                unitPrice: line.unitPrice ?? 0,
+                bookValue: line.bookValue ?? line.unitPrice ?? 0,
+                currency: line.currency || grn.currency || 'USD',
+                belongsTo: line.belongsTo || grn.supplier || 'EMDAD',
+                reqInsp: line.reqInsp ?? false,
+                insDate: line.insDate || '',
+                usefulLifeMonths: line.usefulLifeMonths ?? 60,
+                salvageValue: line.salvageValue ?? 0,
+                monthlyDepreciation: line.monthlyDepreciation ?? 0,
+                comments: line.comments || '',
               });
             });
           }
@@ -1213,7 +2228,7 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
       return cleaned;
     };
 
-    // BRANCH A: Line Items Detail Import (DT Tool Lines or RT Tool Lines)
+    // BRANCH A: Line Items Detail Import (DT, RT, PO, GRN)
     if (isDetailMode && (selectedEntityKey === 'dtBatches' || selectedEntityKey === 'rtBatches')) {
       try {
         const parentKey = selectedEntityKey === 'dtBatches' ? 'dtNumber' : 'rtNumber';
@@ -1335,6 +2350,181 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
           ...prev,
         ]);
         showToast('Error persisting tool lines to database.', 'error');
+      } finally {
+        setIsProcessing(false);
+      }
+      return;
+    }
+
+    // Detail Import for Purchase Order Lines
+    if (isDetailMode && selectedEntityKey === 'purchase_orders') {
+      try {
+        const pos = loadPurchaseOrders();
+        const posMap = new Map(pos.map((p) => [p.poNumber.trim().toUpperCase(), p]));
+        for (let i = 0; i < parsedRows.length; i++) {
+          const raw = parsedRows[i];
+          const poNumVal = String(raw.poNumber || raw.PONUMBER || raw['PO Number'] || '').trim();
+          const partNoVal = String(raw.partNo || raw.PARTNO || raw['Part Number'] || '').trim();
+          if (!poNumVal || !partNoVal) {
+            errorCount++;
+            continue;
+          }
+          let poObj = posMap.get(poNumVal.toUpperCase());
+          if (!poObj) {
+            if (allowAdd) {
+              poObj = {
+                poId: `PO-${Date.now()}-${i}`,
+                poNumber: poNumVal,
+                supplier: String(raw.supplier || 'SUPPLIER'),
+                orderDate: new Date().toISOString().split('T')[0],
+                currency: 'USD',
+                totalAmount: 0,
+                inwardedAmount: 0,
+                balanceAmount: 0,
+                status: 'OPEN',
+                createdAt: new Date().toISOString(),
+                lines: [],
+              };
+              posMap.set(poNumVal.toUpperCase(), poObj);
+            } else {
+              errorCount++;
+              continue;
+            }
+          }
+          const lineCleaned = cleanRow(raw, activeFields);
+          if (!poObj.lines) poObj.lines = [];
+          const existingLineIdx = poObj.lines.findIndex(
+            (l) => (l.partNo && l.partNo.toUpperCase() === partNoVal.toUpperCase()) || String(l.itemNo) === String(lineCleaned.itemNo)
+          );
+          if (existingLineIdx >= 0) {
+            if (allowUpdate) {
+              poObj.lines[existingLineIdx] = { ...poObj.lines[existingLineIdx], ...lineCleaned };
+              updatedCount++;
+            }
+          } else {
+            if (allowAdd) {
+              poObj.lines.push({
+                ...lineCleaned,
+                lineId: `POL-${Date.now()}-${i}`,
+                itemNo: lineCleaned.itemNo || poObj.lines.length + 1,
+              });
+              addedCount++;
+            }
+          }
+          if (i % 25 === 0 || i === total - 1) {
+            const elapsedMin = (Date.now() - startTime) / 60000;
+            const rpm = elapsedMin > 0 ? Math.round((i + 1) / elapsedMin) : 0;
+            setProcessProgress({ current: i + 1, total, rpm });
+          }
+        }
+        const updatedPOs = Array.from(posMap.values()).map((p) => {
+          const totalAmt = p.lines.reduce((s: number, l: any) => s + (l.totalPrice || (l.orderedQty * l.unitPrice) || 0), 0);
+          return {
+            ...p,
+            totalAmount: totalAmt,
+            balanceAmount: totalAmt - (p.inwardedAmount || 0),
+          };
+        });
+        saveAllPurchaseOrders(updatedPOs);
+        onUpdateState('purchase_orders', () => updatedPOs);
+        const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
+        const summaryMsg = `Processed ${total} PO lines in ${elapsedSec}s: ${addedCount} Added, ${updatedCount} Updated, ${errorCount} Skipped.`;
+        setProcessLogs((prev) => [
+          { time: new Date().toLocaleTimeString(), type: 'success', msg: summaryMsg },
+          ...prev,
+        ]);
+        showToast(summaryMsg, 'success');
+      } catch (err: any) {
+        showToast(`Error processing PO lines: ${err?.message}`, 'error');
+      } finally {
+        setIsProcessing(false);
+      }
+      return;
+    }
+
+    // Detail Import for Goods Receipt Lines
+    if (isDetailMode && selectedEntityKey === 'goods_receipts') {
+      try {
+        const grns = loadGoodsReceiptNotes();
+        const grnsMap = new Map(grns.map((g) => [g.ticketNo.trim().toUpperCase(), g]));
+        for (let i = 0; i < parsedRows.length; i++) {
+          const raw = parsedRows[i];
+          const ticketVal = String(raw.ticketNo || raw.TICKETNO || raw['Ticket No'] || '').trim();
+          const partNoVal = String(raw.partNo || raw.PARTNO || raw['Part Number'] || '').trim();
+          if (!ticketVal || !partNoVal) {
+            errorCount++;
+            continue;
+          }
+          let grnObj = grnsMap.get(ticketVal.toUpperCase());
+          if (!grnObj) {
+            if (allowAdd) {
+              grnObj = {
+                grnId: `GRN-${Date.now()}-${i}`,
+                ticketNo: ticketVal,
+                poNumber: String(raw.poNumber || ''),
+                supplier: String(raw.supplier || 'SUPPLIER'),
+                supplierDt: String(raw.supplierDt || ''),
+                dateRecd: new Date().toISOString().split('T')[0],
+                mfgReceivedBy: user.name,
+                currency: 'USD',
+                totalItemsReceived: 0,
+                totalInwardValue: 0,
+                qcStatus: 'ACCEPTED',
+                createdAt: new Date().toISOString(),
+                lines: [],
+              };
+              grnsMap.set(ticketVal.toUpperCase(), grnObj);
+            } else {
+              errorCount++;
+              continue;
+            }
+          }
+          const lineCleaned = cleanRow(raw, activeFields);
+          if (!grnObj.lines) grnObj.lines = [];
+          const existingLineIdx = grnObj.lines.findIndex(
+            (l) => (l.toolsno && l.toolsno.toUpperCase() === String(raw.toolsno || '').toUpperCase()) ||
+                   (l.partNo && l.partNo.toUpperCase() === partNoVal.toUpperCase() && !l.toolsno)
+          );
+          if (existingLineIdx >= 0) {
+            if (allowUpdate) {
+              grnObj.lines[existingLineIdx] = { ...grnObj.lines[existingLineIdx], ...lineCleaned };
+              updatedCount++;
+            }
+          } else {
+            if (allowAdd) {
+              grnObj.lines.push({
+                ...lineCleaned,
+                lineId: `GRL-${Date.now()}-${i}`,
+              });
+              addedCount++;
+            }
+          }
+          if (i % 25 === 0 || i === total - 1) {
+            const elapsedMin = (Date.now() - startTime) / 60000;
+            const rpm = elapsedMin > 0 ? Math.round((i + 1) / elapsedMin) : 0;
+            setProcessProgress({ current: i + 1, total, rpm });
+          }
+        }
+        const updatedGRNs = Array.from(grnsMap.values()).map((g) => {
+          const totalVal = g.lines.reduce((s: number, l: any) => s + (l.bookValue || (l.qtyReceived * l.unitPrice) || 0), 0);
+          const totalQty = g.lines.reduce((s: number, l: any) => s + (l.qtyReceived || 0), 0);
+          return {
+            ...g,
+            totalItemsReceived: totalQty,
+            totalInwardValue: totalVal,
+          };
+        });
+        saveAllGoodsReceiptNotes(updatedGRNs);
+        onUpdateState('goods_receipts', () => updatedGRNs);
+        const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
+        const summaryMsg = `Processed ${total} GRN lines in ${elapsedSec}s: ${addedCount} Added, ${updatedCount} Updated, ${errorCount} Skipped.`;
+        setProcessLogs((prev) => [
+          { time: new Date().toLocaleTimeString(), type: 'success', msg: summaryMsg },
+          ...prev,
+        ]);
+        showToast(summaryMsg, 'success');
+      } catch (err: any) {
+        showToast(`Error processing GRN lines: ${err?.message}`, 'error');
       } finally {
         setIsProcessing(false);
       }
@@ -1562,6 +2752,90 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
         }
       }
 
+      // Specific module storage engines
+      if (selectedEntityKey === 'consumables') {
+        saveConsumablesList(updatedStateList);
+      } else if (selectedEntityKey === 'consumable_issuances') {
+        saveConsumableIssuances(updatedStateList);
+      } else if (selectedEntityKey === 'purchase_orders') {
+        saveAllPurchaseOrders(updatedStateList);
+      } else if (selectedEntityKey === 'purchase_order_lines') {
+        const currentPOs = loadPurchaseOrders();
+        const poMap = new Map(currentPOs.map((p) => [p.poNumber.toUpperCase(), p]));
+        updatedStateList.forEach((line) => {
+          const parentPO = poMap.get((line.poNumber || '').toUpperCase());
+          if (parentPO) {
+            if (!parentPO.lines) parentPO.lines = [];
+            const lIdx = parentPO.lines.findIndex((pl) => pl.lineId === line.lineId || pl.itemNo === line.itemNo);
+            if (lIdx >= 0) parentPO.lines[lIdx] = { ...parentPO.lines[lIdx], ...line };
+            else parentPO.lines.push(line);
+          }
+        });
+        saveAllPurchaseOrders(currentPOs);
+      } else if (selectedEntityKey === 'goods_receipts') {
+        saveAllGoodsReceiptNotes(updatedStateList);
+      } else if (selectedEntityKey === 'goods_receipt_lines') {
+        const currentGRNs = loadGoodsReceiptNotes();
+        const grnMap = new Map(currentGRNs.map((g) => [g.ticketNo.toUpperCase(), g]));
+        updatedStateList.forEach((line) => {
+          const parentGRN = grnMap.get((line.ticketNo || '').toUpperCase());
+          if (parentGRN) {
+            if (!parentGRN.lines) parentGRN.lines = [];
+            const lIdx = parentGRN.lines.findIndex((gl) => gl.lineId === line.lineId || gl.toolsno === line.toolsno);
+            if (lIdx >= 0) parentGRN.lines[lIdx] = { ...parentGRN.lines[lIdx], ...line };
+            else parentGRN.lines.push(line);
+          }
+        });
+        saveAllGoodsReceiptNotes(currentGRNs);
+      } else if (selectedEntityKey === 'subcontractor_rentals') {
+        saveSubContractorRentals(updatedStateList);
+      } else if (selectedEntityKey === 'monthly_expenses') {
+        const records = getMonthlyExpenseRecords();
+        updatedStateList.forEach((row) => {
+          const pKey = row.periodKey || '2026-09';
+          if (!records[pKey]) {
+            records[pKey] = {
+              periodKey: pKey,
+              monthName: pKey,
+              year: parseInt(pKey.split('-')[0], 10) || 2026,
+              isFrozen: false,
+              status: 'DRAFT',
+              rows: [],
+              totalFishing: 0,
+              totalWhipstock: 0,
+              totalRentals: 0,
+              grandTotal: 0,
+            };
+          }
+          const rIdx = records[pKey].rows.findIndex((r) => r.code === row.code);
+          if (rIdx >= 0) {
+            records[pKey].rows[rIdx] = { ...records[pKey].rows[rIdx], ...row };
+          } else {
+            records[pKey].rows.push(row);
+          }
+        });
+        Object.values(records).forEach((rec) => saveMonthExpenseRecord(rec));
+        window.dispatchEvent(new Event('monthly_expenses_updated'));
+      } else if (selectedEntityKey === 'tool_categories') {
+        const cats = Array.from(new Set(updatedStateList.map((c) => c.categoryName || c.name || c.category).filter(Boolean))).sort() as string[];
+        localStorage.setItem('emdad_custom_categories', JSON.stringify(cats));
+        if (onUpdateCustomCategories) onUpdateCustomCategories(cats);
+        window.dispatchEvent(new Event('categories_updated'));
+      } else if (selectedEntityKey === 'tool_sizes') {
+        const szs = Array.from(new Set(updatedStateList.map((s) => s.sizeString || s.name || s.size).filter(Boolean))) as string[];
+        localStorage.setItem('emdad_custom_sizes', JSON.stringify(szs));
+        if (onUpdateCustomSizes) onUpdateCustomSizes(szs);
+        window.dispatchEvent(new Event('sizes_updated'));
+      } else if (selectedEntityKey === 'crew_members') {
+        saveAllCrewPersonnel(updatedStateList);
+      } else if (selectedEntityKey === 'dropdown_lookups') {
+        updatedStateList.forEach((lookup) => {
+          if (lookup.listKey && lookup.optionValue) {
+            addDropdownOption(lookup.listKey as DropdownListKey, lookup.optionValue);
+          }
+        });
+      }
+
       // Update in-memory state
       onUpdateState(selectedEntityKey, () => updatedStateList);
 
@@ -1710,19 +2984,7 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
                   <div className="mt-0.5 space-y-0.5 pl-2">
                     {matchedItems.map((def) => {
                       const isSelected = selectedEntityKey === def.key;
-                      let count = 0;
-                      switch (def.key) {
-                        case 'jobs': count = jobs.length; break;
-                        case 'inventory': count = inventory.length; break;
-                        case 'dtBatches': count = dtBatches.length; break;
-                        case 'rtBatches': count = rtBatches.length; break;
-                        case 'callouts': count = callouts.length; break;
-                        case 'gatePasses': count = gatePasses.length; break;
-                        case 'inspections': count = inspections.length; break;
-                        case 'maintenance': count = maintenance.length; break;
-                        case 'contracts': count = contracts.length; break;
-                        case 'contractRates': count = contracts.reduce((acc, c) => acc + (c.rates?.length || 0), 0); break;
-                      }
+                      const count = getEntityCount(def.key);
 
                       return (
                         <button
@@ -1896,33 +3158,199 @@ export const DataManagementView: React.FC<DataManagementViewProps> = ({
             )}
           </div>
 
-          {/* Workspace Tabs (Data Preview / Field Mapping) */}
+          {/* Workspace Tabs (Live View / Data Import / Schema Mapping) */}
           <div className="flex border-b border-slate-200 bg-white px-4 text-xs font-semibold">
             <button
+              onClick={() => setActiveTab('live')}
+              className={`py-2 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'live'
+                  ? 'border-[#1a3055] text-[#1a3055]'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Database className="w-3.5 h-3.5 text-blue-600" />
+              <span>Live Database View ({currentTableData.length} records)</span>
+            </button>
+            <button
               onClick={() => setActiveTab('import')}
-              className={`py-2 px-3 border-b-2 transition-colors cursor-pointer ${
+              className={`py-2 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'import'
                   ? 'border-[#1a3055] text-[#1a3055]'
                   : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
             >
-              Data Import & Preview ({parsedRows.length} rows loaded)
+              <Upload className="w-3.5 h-3.5 text-slate-500" />
+              <span>Data Import & Preview ({parsedRows.length} rows loaded)</span>
             </button>
             <button
               onClick={() => setActiveTab('preview')}
-              className={`py-2 px-3 border-b-2 transition-colors cursor-pointer ${
+              className={`py-2 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'preview'
                   ? 'border-[#1a3055] text-[#1a3055]'
                   : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
             >
-              Database Schema & Columns ({activeFields.length} columns)
+              <Table className="w-3.5 h-3.5 text-slate-500" />
+              <span>Database Schema & Columns ({activeFields.length} columns)</span>
             </button>
           </div>
 
           {/* Central Workspace Table */}
           <div className="flex-1 overflow-auto p-3">
-            {activeTab === 'import' ? (
+            {activeTab === 'live' ? (
+              <div className="bg-white border border-slate-300 rounded shadow-xs overflow-hidden flex flex-col h-full">
+                {/* Search & Actions Bar for Live Database */}
+                <div className="bg-[#f8fafc] px-3 py-2 border-b border-slate-300 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-1 max-w-md">
+                    <div className="relative w-full">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={liveDataSearch}
+                        onChange={(e) => setLiveDataSearch(e.target.value)}
+                        placeholder={`Search in ${activeTableName} across all columns...`}
+                        className="w-full pl-8 pr-7 py-1 text-xs border border-slate-300 rounded bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 font-sans"
+                      />
+                      {liveDataSearch && (
+                        <button
+                          onClick={() => setLiveDataSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer font-bold"
+                          title="Clear search"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                      Showing {filteredLiveData.length} of {currentTableData.length} records
+                    </span>
+                    <button
+                      onClick={handleExportCurrentData}
+                      className="px-2.5 py-1 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold rounded border border-emerald-300 flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Export live table to Excel"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>Export Excel</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('import')}
+                      className="px-2.5 py-1 text-xs bg-blue-50 hover:bg-blue-100 text-blue-900 font-semibold rounded border border-blue-300 flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Upload data into this table"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-blue-700" />
+                      <span>Bulk Upload / Correct</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Live Records Table */}
+                {filteredLiveData.length > 0 ? (
+                  <div className="flex-1 overflow-auto max-h-[520px]">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-100 text-slate-700 sticky top-0 border-b border-slate-200 font-bold z-10">
+                        <tr>
+                          <th className="p-2 w-12 text-center text-[10px] text-slate-400 border-r border-slate-200">#</th>
+                          {activeFields.map((field) => (
+                            <th key={field.key} className="p-2 whitespace-nowrap border-r border-slate-200 bg-slate-100">
+                              <div className="flex flex-col">
+                                <span>{field.label}</span>
+                                <span className="text-[10px] font-mono text-slate-400 font-normal">
+                                  {field.key} {field.required && <span className="text-rose-600 font-bold">*</span>}
+                                </span>
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredLiveData.map((row: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-blue-50/50 transition-colors">
+                            <td className="p-2 text-center font-mono text-[10px] text-slate-400 bg-slate-50/50 border-r border-slate-200">
+                              {idx + 1}
+                            </td>
+                            {activeFields.map((field) => {
+                              const val = resolveFieldVal(row, field.key, field.label);
+                              let displayVal: React.ReactNode = <span className="text-slate-300">—</span>;
+                              if (val !== undefined && val !== null && val !== '') {
+                                if (typeof val === 'boolean') {
+                                  displayVal = (
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${val ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                                      {val ? 'TRUE' : 'FALSE'}
+                                    </span>
+                                  );
+                                } else if (typeof val === 'object') {
+                                  displayVal = (
+                                    <span className="font-mono text-[10px] text-slate-600 truncate max-w-[200px] block" title={JSON.stringify(val)}>
+                                      {Array.isArray(val) ? `[${val.length} items]` : JSON.stringify(val)}
+                                    </span>
+                                  );
+                                } else {
+                                  displayVal = (
+                                    <span className="truncate max-w-[240px] block" title={String(val)}>
+                                      {String(val)}
+                                    </span>
+                                  );
+                                }
+                              }
+                              return (
+                                <td key={field.key} className="p-2 whitespace-nowrap border-r border-slate-100 font-mono text-[11px] text-slate-800">
+                                  {displayVal}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-white min-h-[260px]">
+                    {currentTableData.length === 0 ? (
+                      <>
+                        <Database className="w-12 h-12 text-slate-300 mb-2" />
+                        <div className="text-sm font-bold text-slate-700">No Records Found in {activeTableName}</div>
+                        <p className="text-xs text-slate-500 max-w-md mt-1 mb-4">
+                          This table is currently empty in live storage. You can download the template builder and import records directly.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleDownloadTemplate}
+                            className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded border border-slate-300 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Download className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Download Template Builder</span>
+                          </button>
+                          <button
+                            onClick={() => setActiveTab('import')}
+                            className="px-3.5 py-1.5 text-xs bg-[#1a3055] hover:bg-[#24426d] text-white font-semibold rounded shadow-xs flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Upload className="w-3.5 h-3.5 text-blue-200" />
+                            <span>Upload Excel File</span>
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-10 h-10 text-slate-300 mb-2" />
+                        <div className="text-sm font-bold text-slate-700">No Matching Records</div>
+                        <p className="text-xs text-slate-500 max-w-md mt-1 mb-3">
+                          No records match your filter: <code className="font-mono text-rose-600">"{liveDataSearch}"</code>
+                        </p>
+                        <button
+                          onClick={() => setLiveDataSearch('')}
+                          className="px-3 py-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded border border-slate-300 cursor-pointer"
+                        >
+                          Clear Search
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : activeTab === 'import' ? (
               parsedRows.length > 0 ? (
                 <div className="bg-white border border-slate-300 rounded shadow-xs overflow-hidden">
                   <div className="max-h-[220px] overflow-auto">
