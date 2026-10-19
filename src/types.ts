@@ -736,6 +736,15 @@ export interface DraftInvoicePackageData {
   // this job (lines is empty) - the UI must show this plainly, never fill
   // the gap with invented tools/ticket numbers.
   noMatchedRecords?: boolean;
+  // true when at least one line's Operating/Standby days came from real
+  // confirmed daily logs (tbl_DailyFieldLogs, saved by the Utilization
+  // screen) rather than the flat "2 operating days if used" estimate.
+  usesConfirmedUtilization?: boolean;
+  // Tool descriptions on this invoice whose category/description could not
+  // be mapped to any contract rate line and ended up on a $0 or generic
+  // fallback rate - a pricing gap to fix on the Contracts/Rates screen, not
+  // a real $0 charge.
+  unmappedToolDescriptions?: string[];
   // where `lines` came from: 'live' DT/RT batches, 'historical' archived
   // utilization records, or 'none' when nothing real was found.
   dataSource?: 'live' | 'historical' | 'none';
