@@ -355,8 +355,23 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   customCategories: propCustomCategories,
   customSizes: propCustomSizes,
 }) => {
-  // Current active top tab
-  const [activeTab, setActiveTab] = useState<DossierTabKey>('job-header');
+  // Current active top tab - restored across browser refreshes
+  const [activeTab, setActiveTabState] = useState<DossierTabKey>(() => {
+    try {
+      const saved = sessionStorage.getItem(`emdad_active_dossier_tab_${jobData?.id}`);
+      if (saved) return saved as DossierTabKey;
+    } catch {}
+    return 'job-header';
+  });
+
+  const setActiveTab = useCallback((t: DossierTabKey) => {
+    setActiveTabState(t);
+    try {
+      if (jobData?.id) {
+        sessionStorage.setItem(`emdad_active_dossier_tab_${jobData.id}`, t);
+      }
+    } catch {}
+  }, [jobData?.id]);
 
   // Technical Details sub-tab
   const [techSubTab, setTechSubTab] = useState<'fishing' | 'whipstock' | 'rentals'>('fishing');
@@ -1255,24 +1270,22 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Checklist Items State
   const [checklistItems, setChecklistItems] = useState<CalloutItem[]>(() => {
-    if (isTargetJob01816) {
-      return DEFAULT_WHIPSTOCK_TOOLS_01816.map((it, idx) => resolveChecklistItemWithDT(it, idx));
-    }
     if (activeCallout?.items && activeCallout.items.length > 0) {
       return activeCallout.items.filter(Boolean).map((it, idx) => resolveChecklistItemWithDT(it, idx));
+    }
+    if (isTargetJob01816) {
+      return DEFAULT_WHIPSTOCK_TOOLS_01816.map((it, idx) => resolveChecklistItemWithDT(it, idx));
     }
     return [];
   });
 
   useEffect(() => {
-    if (isTargetJob01816) {
-      setChecklistItems(DEFAULT_WHIPSTOCK_TOOLS_01816.map((it, idx) => resolveChecklistItemWithDT(it, idx)));
-    } else if (activeCallout && Array.isArray(activeCallout.items) && activeCallout.items.length > 0) {
+    if (activeCallout && Array.isArray(activeCallout.items)) {
       setChecklistItems(
         activeCallout.items.filter(Boolean).map((it, idx) => resolveChecklistItemWithDT(it, idx))
       );
     }
-  }, [activeCallout, resolveChecklistItemWithDT, isTargetJob01816]);
+  }, [activeCallout, resolveChecklistItemWithDT]);
 
   // Master Tool Categories & Sizes for Tool Picker
   const customCategories = useMemo<string[]>(() => {
@@ -2474,6 +2487,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     }
     const updated = checklistItems.filter((item) => item.seq !== seq);
     setChecklistItems(updated);
+    setSelectedChecklistSeqs((prev) => prev.filter((s) => s !== seq));
     const calloutToSave = ({
       ...activeCallout,
       jobId: jobData.id,
