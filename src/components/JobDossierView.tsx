@@ -333,6 +333,22 @@ const MASTER_PERSONNEL_ROSTER: Omit<JobCrewMember, 'operatingDays' | 'standbyDay
   },
 ];
 
+export const getCleanAssetNo = (...candidates: (string | undefined | null)[]): string => {
+  for (const c of candidates) {
+    if (!c) continue;
+    const str = String(c).trim();
+    if (str && !str.toUpperCase().startsWith('EMD-') && str !== '—' && str !== '-') {
+      return str;
+    }
+  }
+  for (const c of candidates) {
+    if (!c) continue;
+    const str = String(c).trim();
+    if (str && str !== '—' && str !== '-') return str;
+  }
+  return '—';
+};
+
 export const JobDossierView: React.FC<JobDossierViewProps> = ({
   job: initialJob,
   user,
@@ -1103,42 +1119,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       });
     }
 
-    // Priority 1: Genuine inventory Asset Number (never EMD- if a physical assetNo exists)
-    let assetNo = '';
+    // Priority 1: Genuine physical Asset Number (never EMD- if a physical asset exists)
     const invAsset = String(inv?.assetNo || '').trim();
     const invOem = String(inv?.oemSerial || '').trim();
     const invSerial = String(inv?.serial || '').trim();
 
-    if (rawAsset && !rawAsset.toUpperCase().startsWith('EMD-') && rawAsset !== '—') {
-      assetNo = rawAsset;
-    } else if (matchedByKey && invAsset && !invAsset.toUpperCase().startsWith('EMD-')) {
-      assetNo = invAsset;
-    } else if (matchedByKey && invOem && !invOem.toUpperCase().startsWith('EMD-')) {
-      assetNo = invOem;
-    } else if (rawSer && !rawSer.toUpperCase().startsWith('EMD-') && rawSer !== '—') {
-      assetNo = rawSer;
-    } else if (matchedByKey && invSerial && !invSerial.toUpperCase().startsWith('EMD-')) {
-      assetNo = invSerial;
-    } else if (inv && inv.isEmdad === false && matchedByKey) {
-      assetNo = String(inv.assetNo || inv.serial || inv.oemSerial || rawAsset || rawSer || '').trim();
-    } else {
+    let assetNo = getCleanAssetNo(rawAsset, invAsset, invOem, rawSer, invSerial);
+    if (!assetNo || assetNo === '—') {
       assetNo = rawAsset || rawSer || (matchedByKey ? (invAsset || invSerial) : '') || '—';
     }
 
     // Priority 2: Genuine Serial Number
-    let serial = '';
-    if (rawSer && !rawSer.toUpperCase().startsWith('EMD-') && rawSer !== '—') {
-      serial = rawSer;
-    } else if (matchedByKey && invSerial && !invSerial.toUpperCase().startsWith('EMD-')) {
-      serial = invSerial;
-    } else if (rawAsset && !rawAsset.toUpperCase().startsWith('EMD-') && rawAsset !== '—') {
-      serial = rawAsset;
-    } else if (rawSer) {
-      serial = rawSer;
-    } else if (matchedByKey && invSerial) {
-      serial = invSerial;
-    } else {
-      serial = assetNo || '—';
+    let serial = getCleanAssetNo(rawSer, invSerial, rawAsset, invAsset, invOem);
+    if (!serial || serial === '—') {
+      serial = rawSer || (matchedByKey ? invSerial : '') || assetNo || '—';
     }
 
     // Priority 3: Genuine Technical Description (never bare tool type if technical description is available)
@@ -1223,7 +1217,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       ...it,
       dtNumber: targetDT ? targetDT.dtNumber : undefined,
       status: (targetDT ? 'Released' : (it.status === 'Released' ? 'Assigned' : it.status || 'Assigned')) as any,
-      partNo: it.partNo || resolved.assetNo,
+      partNo: getCleanAssetNo(it.partNo, resolved.assetNo, it.serialNos?.[0], resolved.serial),
       serialNos: (it.serialNos && it.serialNos.length > 0 && it.serialNos[0] !== '—') ? it.serialNos : [resolved.serial && resolved.serial !== '—' ? resolved.serial : resolved.assetNo],
       description: it.description || resolved.desc,
       shortDesc: it.shortDesc || it.cat || resolved.shortDesc,
@@ -1305,6 +1299,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const [selectedToolSize, setSelectedToolSize] = useState<string>('');
   const [toolSearchQuery, setToolSearchQuery] = useState<string>('');
   const [checkedToolSerials, setCheckedToolSerials] = useState<string[]>([]);
+  // Stores the EXACT asset number shown in the picker table for each checked key,
+  // so handleInsertSelectedTools uses what the user actually saw — no re-computation.
+  const [checkedToolDisplayMap, setCheckedToolDisplayMap] = useState<Record<string, string>>({});
 
   // Unique categories in inventory + custom categories
   const availableCategories = useMemo(() => {
@@ -1634,9 +1631,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             id: idx + 1,
             itemNo: idx + 1,
             serial: resolved.serial,
-            assetNo: resolved.assetNo,
-            shortDesc: resolved.shortDesc,
-            desc: resolved.desc,
+            assetNo: getCleanAssetNo(ci.partNo, resolved.assetNo, ci.serialNos?.[0], resolved.serial),
+            shortDesc: ci.cat || ci.shortDesc || resolved.shortDesc,
+            desc: ci.description || resolved.desc,
             size: ci.size || resolved.inv?.size || '—',
             status: 'OnRig' as const,
             ownership: resolved.supplier,
@@ -2218,28 +2215,32 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const newItems: CalloutItem[] = newlySelectedTools.map((t, idx) => {
       const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier, t.ownership);
 
-      // Compute the physical (non-EMD) display asset number directly from inventory fields,
-      // mirroring the same priority logic used in the tool-picker table column rendering.
+      const toolKey = (t.id ? String(t.id).trim() : '') || (t.serial ? String(t.serial).trim() : '') || (t.assetNo ? String(t.assetNo).trim() : '');
+      const pickedAssetNo = checkedToolDisplayMap[toolKey] || (t.serial ? checkedToolDisplayMap[t.serial] : '') || (t.assetNo ? checkedToolDisplayMap[t.assetNo] : '');
+
       const _tAsset  = String(t.assetNo   || '').trim();
       const _tSerial = String(t.serial     || '').trim();
       const _tOem    = String(t.oemSerial  || '').trim();
       const _isEmd   = (v: string) => !v || v.toUpperCase().startsWith('EMD-');
 
+      // The exact asset number the user selected from the screen
       const exactAssetNo: string =
+        pickedAssetNo ||
         (!_isEmd(_tAsset)  ? _tAsset  : '') ||
-        (!_isEmd(_tOem)    ? _tOem    : '') ||
         (!_isEmd(_tSerial) ? _tSerial : '') ||
-        _tAsset || _tSerial || resolved.assetNo;
+        (!_isEmd(_tOem)    ? _tOem    : '') ||
+        _tAsset || _tSerial || resolved.assetNo || '—';
 
       const exactSerial: string =
         (!_isEmd(_tSerial) ? _tSerial : '') ||
         (!_isEmd(_tAsset)  ? _tAsset  : '') ||
         (!_isEmd(_tOem)    ? _tOem    : '') ||
-        _tSerial || _tAsset || resolved.serial;
-      const exactDesc = resolved.desc;
-      const exactShortDesc = resolved.shortDesc;
+        exactAssetNo || _tSerial || resolved.serial || '—';
+
+      const exactDesc = t.desc || t.shortDesc || resolved.desc;
+      const exactShortDesc = t.shortDesc || t.desc || resolved.shortDesc;
       const exactSize = t.size || resolved.inv?.size || '—';
-      const exactSupplier = resolved.supplier;
+      const exactSupplier = t.supplier || t.ownership || resolved.supplier;
 
       // Look up genuine inspection record for this tool
       const toolInspections = (inspections || []).filter(
@@ -2295,6 +2296,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const updated = [...checklistItems, ...newItems];
     setChecklistItems(updated);
     setCheckedToolSerials([]);
+    setCheckedToolDisplayMap({});
     setToolSearchQuery('');
     setIsToolSelectOpen(false);
 
@@ -2415,8 +2417,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         assigned: 1,
         serialNos: [resolved.serial],
         status: 'Assigned',
-        partNo: resolved.assetNo,
-        description: resolved.desc,
+        partNo: getCleanAssetNo(tl.assetNo, resolved.assetNo, tl.serial, resolved.serial),
+        description: tl.desc || resolved.desc,
         supplier: resolved.supplier,
         ownership: resolved.supplier,
         isEmdad: resolved.isEmdad,
@@ -2560,8 +2562,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       isLocked: false,
       toolLines: toolsToMobilize.map((ci, idx) => {
         const resolved = resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.shortDesc || ci.cat, ci.supplier);
-        const finalAssetNo = String(ci.partNo || resolved.assetNo || '').trim();
-        const finalSerial = String(ci.serialNos?.[0] || resolved.serial || finalAssetNo || '').trim();
+        const finalAssetNo = getCleanAssetNo(ci.partNo, resolved.assetNo, ci.serialNos?.[0], resolved.serial);
+        const finalSerial = String(
+          (ci.serialNos?.[0] && !ci.serialNos[0].toUpperCase().startsWith('EMD-') && ci.serialNos[0] !== '—' ? ci.serialNos[0] : '') ||
+          (resolved.serial && !resolved.serial.toUpperCase().startsWith('EMD-') && resolved.serial !== '—' ? resolved.serial : '') ||
+          finalAssetNo || ci.serialNos?.[0] || resolved.serial || ''
+        ).trim();
         const finalDesc = String(ci.description || resolved.desc || ci.shortDesc || '').trim();
         return {
           id: idx + 1,
@@ -2638,12 +2644,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       const resolved = resolveToolDetails(tl.serial, tl.assetNo, tl.desc, tl.shortDesc, tl.supplier || (tl as any).ownership);
       return {
         ...tl,
-        assetNo: resolved.assetNo,
+        assetNo: getCleanAssetNo(tl.assetNo, resolved.assetNo, tl.serial, resolved.serial),
         serial: resolved.serial,
         ownership: resolved.supplier,
         supplier: resolved.supplier,
         isEmdad: resolved.isEmdad,
-        desc: resolved.desc,
+        desc: tl.desc || resolved.desc,
         shortDesc: resolved.shortDesc,
       };
     });
@@ -2735,9 +2741,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         id: idx + 1,
         itemNo: idx + 1,
         serial: resolved.serial,
-        assetNo: resolved.assetNo,
-        shortDesc: resolved.shortDesc,
-        desc: resolved.desc,
+        assetNo: getCleanAssetNo(ci.partNo, resolved.assetNo, ci.serialNos?.[0], resolved.serial),
+        shortDesc: ci.cat || ci.shortDesc || resolved.shortDesc,
+        desc: ci.description || resolved.desc,
         size: ci.size || resolved.inv?.size || '—',
         status: 'OnRig' as const,
         ownership: resolved.supplier,
@@ -2899,9 +2905,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       return {
         itemNo: (targetRT!.toolLines?.length || 0) + idx + 1,
         serial: resolved.serial || t.serial,
-        assetNo: resolved.assetNo,
-        shortDesc: resolved.shortDesc,
-        desc: resolved.desc,
+        assetNo: getCleanAssetNo(t.assetNo, resolved.assetNo, t.serial, resolved.serial),
+        shortDesc: t.shortDesc || resolved.shortDesc,
+        desc: t.desc || resolved.desc,
         size: t.size,
         used: true,
         condition: 'USED',
@@ -2965,9 +2971,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
         return {
           itemNo: idx + 1,
-          partNo: resolved.assetNo,
+          partNo: getCleanAssetNo(t.assetNo, resolved.assetNo, t.serial, resolved.serial),
           serial: resolved.serial,
-          description: resolved.desc,
+          description: t.desc || resolved.desc,
           qty: t.qty || 1,
           size: t.size || resolved.inv?.size || '—',
         };
@@ -2986,8 +2992,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
         return {
           lineNo: idx + 1,
-          partNo: resolved.assetNo,
-          description: resolved.desc,
+          partNo: getCleanAssetNo(t.assetNo, resolved.assetNo, t.serial, resolved.serial),
+          description: t.desc || resolved.desc,
           qty: t.qty || 1,
         };
       });
@@ -2999,8 +3005,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             const resolved = resolveToolDetails(s, it.partNo, it.description, it.shortDesc || it.cat, it.supplier);
             return {
               lineNo: `${idx + 1}.${sIdx + 1}`,
-              partNo: resolved.assetNo,
-              description: resolved.desc,
+              partNo: getCleanAssetNo(it.partNo, resolved.assetNo, s, resolved.serial),
+              description: it.description || resolved.desc,
               qty: 1,
             };
           });
@@ -3008,8 +3014,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         const resolved = resolveToolDetails(undefined, it.partNo, it.description, it.shortDesc || it.cat, it.supplier);
         return [{
           lineNo: idx + 1,
-          partNo: resolved.assetNo,
-          description: resolved.desc,
+          partNo: getCleanAssetNo(it.partNo, resolved.assetNo, resolved.serial),
+          description: it.description || resolved.desc,
           qty: (it as any).qtyRequired || it.qty || 1,
         }];
       });
@@ -4795,6 +4801,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         type="button"
                         onClick={() => {
                           setCheckedToolSerials([]);
+                          setCheckedToolDisplayMap({});
                           setToolSearchQuery('');
                           setIsToolSelectOpen(true);
                         }}
@@ -5050,6 +5057,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     checklistItems.map((item, i) => {
                       const assignedDT = getAssignedDTForChecklistItem(item);
                       const resolved = resolveToolDetails(item.serialNos?.[0], item.partNo, item.description, item.cat || item.shortDesc, item.supplier);
+                      const displayItemAssetNo =
+                        (item.partNo && !item.partNo.toUpperCase().startsWith('EMD-') && item.partNo !== '—' ? item.partNo : '') ||
+                        (resolved.assetNo && !resolved.assetNo.toUpperCase().startsWith('EMD-') && resolved.assetNo !== '—' ? resolved.assetNo : '') ||
+                        (item.serialNos?.[0] && !item.serialNos[0].toUpperCase().startsWith('EMD-') && item.serialNos[0] !== '—' ? item.serialNos[0] : '') ||
+                        (resolved.serial && !resolved.serial.toUpperCase().startsWith('EMD-') && resolved.serial !== '—' ? resolved.serial : '') ||
+                        item.partNo || resolved.assetNo || '—';
+                      const displayItemDesc = item.description || resolved.desc;
 
                       // Look up genuine inspection record if item has none or has dummy GIS-Z-
                       const itemInspections = (inspections || []).filter(
@@ -5098,20 +5112,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             )}
                           </td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600 truncate">{i + 1}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={resolved.assetNo}>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={displayItemAssetNo}>
                             {adminUnlocked ? (
                               <input
                                 type="text"
-                                defaultValue={resolved.assetNo}
+                                defaultValue={displayItemAssetNo}
                                 onBlur={(e) => handleUpdateChecklistItemField(item.seq, 'partNo', e.target.value)}
                                 className="bg-amber-50 border border-amber-300 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-slate-900 w-28 focus:ring-1 focus:ring-blue-500"
                                 title="Admin Edit: Edit Asset No"
                               />
                             ) : (
-                              resolved.assetNo
+                              displayItemAssetNo
                             )}
                           </td>
-                          <td className="py-1 px-2 whitespace-nowrap truncate font-medium text-slate-800" title={resolved.desc}>{resolved.desc}</td>
+                          <td className="py-1 px-2 whitespace-nowrap truncate font-medium text-slate-800" title={displayItemDesc}>{displayItemDesc}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qty || 1}</td>
                           <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700 truncate" title={resolved.supplier}>{resolved.supplier}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qtyIn || 1}</td>
@@ -5495,6 +5509,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     {effectiveDT.toolLines && effectiveDT.toolLines.length > 0 ? (
                       effectiveDT.toolLines.map((t, idx) => {
                         const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
+                        const displayDtAssetNo =
+                          (t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') && t.assetNo !== '—' ? t.assetNo : '') ||
+                          (resolved.assetNo && !resolved.assetNo.toUpperCase().startsWith('EMD-') && resolved.assetNo !== '—' ? resolved.assetNo : '') ||
+                          (t.serial && !t.serial.toUpperCase().startsWith('EMD-') && t.serial !== '—' ? t.serial : '') ||
+                          (resolved.serial && !resolved.serial.toUpperCase().startsWith('EMD-') && resolved.serial !== '—' ? resolved.serial : '') ||
+                          t.assetNo || resolved.assetNo || '—';
+                        const displayDtDesc = t.desc || resolved.desc;
                         const tSerial = (resolved.serial || t.serial || '').trim().toUpperCase();
                         const tAsset = (resolved.assetNo || t.assetNo || '').trim().toUpperCase();
                         const directRtRef = String((t as any).returnedRtNumber || t.rtBatchId || (t as any).rgtNo || '').trim();
@@ -5536,20 +5557,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         return (
                           <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
                             <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900" title={t.assetNo || resolved.assetNo}>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900" title={displayDtAssetNo}>
                               {adminUnlocked ? (
                                 <input
                                   type="text"
-                                  defaultValue={t.assetNo || resolved.assetNo}
+                                  defaultValue={displayDtAssetNo}
                                   onBlur={(e) => handleUpdateDTLineAssetNo(idx, e.target.value)}
                                   className="bg-amber-50 border border-amber-300 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-slate-900 w-32 focus:ring-1 focus:ring-blue-500"
                                   title="Admin Edit: Edit Asset No"
                                 />
                               ) : (
-                                t.assetNo || resolved.assetNo
+                                displayDtAssetNo
                               )}
                             </td>
-                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || resolved.desc}>{t.desc || resolved.desc}</td>
+                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={displayDtDesc}>{displayDtDesc}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{t.qty || 1}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{formatDateDD_MM_YYYY(effectiveDT.dispatchDate)}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-blue-700">{jobData.id}</td>
@@ -5991,6 +6012,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   ) : (
                     effectiveRT.toolLines.map((t, idx) => {
                       const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
+                      const displayRtAssetNo =
+                        (t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') && t.assetNo !== '—' ? t.assetNo : '') ||
+                        (resolved.assetNo && !resolved.assetNo.toUpperCase().startsWith('EMD-') && resolved.assetNo !== '—' ? resolved.assetNo : '') ||
+                        (t.serial && !t.serial.toUpperCase().startsWith('EMD-') && t.serial !== '—' ? t.serial : '') ||
+                        (resolved.serial && !resolved.serial.toUpperCase().startsWith('EMD-') && resolved.serial !== '—' ? resolved.serial : '') ||
+                        t.assetNo || resolved.assetNo || '—';
+                      const displayRtDesc = t.desc || resolved.desc;
                       const matchedDTLine = jobDTs.flatMap((dt) => dt.toolLines || []).find(
                         (dtl: any) => dtl.serial && t.serial && String(dtl.serial).trim().toUpperCase() === String(t.serial).trim().toUpperCase()
                       );
@@ -6020,8 +6048,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       return (
                         <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900" title={resolved.assetNo}>{resolved.assetNo}</td>
-                          <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={resolved.desc}>{resolved.desc}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900" title={displayRtAssetNo}>{displayRtAssetNo}</td>
+                          <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={displayRtDesc}>{displayRtDesc}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-mono font-bold text-blue-800">{effectiveRT.rtNumber}</td>
                           <td className="py-1 px-2 whitespace-nowrap">
                             {isClosedOrInvoiced || isLocked ? (
@@ -6162,13 +6190,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       ) : (
                         rgtDTToolsToReturn.map((t, idx) => {
                           const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
+                          const displayRgtAssetNo = getCleanAssetNo(t.assetNo, resolved.assetNo, t.serial, resolved.serial);
+                          const displayRgtDesc = t.desc || resolved.desc;
                           const isChecked = rgtCheckedSerials.includes(t.serial);
                           return (
                             <tr key={idx} className={`h-7 leading-none ${isChecked ? 'bg-amber-100/80 font-semibold' : 'hover:bg-slate-50'}`}>
                               <td className="py-1 px-2 whitespace-nowrap text-center font-mono text-slate-600">{rgtSearchDTNo}</td>
                               <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
-                              <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900" title={resolved.assetNo}>{resolved.assetNo}</td>
-                              <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={resolved.desc}>{resolved.desc}</td>
+                              <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900" title={displayRgtAssetNo}>{displayRgtAssetNo}</td>
+                              <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={displayRgtDesc}>{displayRgtDesc}</td>
                               <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{t.qty || 1}</td>
                               <td className="py-1 px-2 whitespace-nowrap text-center">
                                 <input
@@ -7239,6 +7269,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   onClick={() => {
                     setIsToolSelectOpen(false);
                     setCheckedToolSerials([]);
+                    setCheckedToolDisplayMap({});
                     setToolSearchQuery('');
                   }}
                   className="text-white hover:text-amber-300 font-bold text-base cursor-pointer px-1"
@@ -7429,8 +7460,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           onChange={(e) => {
                             if (e.target.checked) {
                               setCheckedToolSerials(modalAvailableTools.map((t) => (t.id ? String(t.id).trim() : '') || (t.serial ? String(t.serial).trim() : '') || (t.assetNo ? String(t.assetNo).trim() : '')));
+                              setCheckedToolDisplayMap(Object.fromEntries(modalAvailableTools.map((t) => {
+                                const k = (t.id ? String(t.id).trim() : '') || (t.serial ? String(t.serial).trim() : '') || (t.assetNo ? String(t.assetNo).trim() : '');
+                                const disp = (t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') ? t.assetNo : '') || (t.serial && !t.serial.toUpperCase().startsWith('EMD-') ? t.serial : '') || t.assetNo || t.serial || '';
+                                return [k, disp];
+                              })));
                             } else {
                               setCheckedToolSerials([]);
+                              setCheckedToolDisplayMap({});
                             }
                           }}
                           className="cursor-pointer w-4 h-4 text-blue-600 rounded"
@@ -7564,14 +7601,23 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           ? latestIns.status.toUpperCase()
                           : (tool.status?.toUpperCase() === 'GOOD' ? 'ACCEPTED' : (tool.status?.toUpperCase() || 'ACCEPTED'));
 
+
+                         // The EXACT asset number shown in the picker table cell
+                         const pickerDisplayAssetNo =
+                           (tool.assetNo && !tool.assetNo.toUpperCase().startsWith('EMD-') ? tool.assetNo : '') ||
+                           (tool.serial  && !tool.serial.toUpperCase().startsWith('EMD-')  ? tool.serial  : '') ||
+                           tool.assetNo || tool.serial || '';
+
                         return (
                           <tr
                             key={toolKey}
                             onClick={() => {
                               if (isChecked) {
                                 setCheckedToolSerials((prev) => prev.filter((s) => s !== toolKey && s !== tool.serial));
+                                setCheckedToolDisplayMap((prev) => { const m = { ...prev }; delete m[toolKey]; return m; });
                               } else {
                                 setCheckedToolSerials((prev) => [...prev, toolKey]);
+                                setCheckedToolDisplayMap((prev) => ({ ...prev, [toolKey]: pickerDisplayAssetNo }));
                               }
                             }}
                             className={`cursor-pointer transition h-7 leading-none ${
@@ -7585,15 +7631,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                                 onChange={(e) => {
                                   if (e.target.checked) {
                                     setCheckedToolSerials((prev) => [...prev, toolKey]);
+                                    setCheckedToolDisplayMap((prev) => ({ ...prev, [toolKey]: pickerDisplayAssetNo }));
                                   } else {
                                     setCheckedToolSerials((prev) => prev.filter((s) => s !== toolKey && s !== tool.serial));
+                                    setCheckedToolDisplayMap((prev) => { const m = { ...prev }; delete m[toolKey]; return m; });
                                   }
                                 }}
                                 className="cursor-pointer w-4 h-4 text-blue-600 rounded"
                               />
                             </td>
-                            <td className="py-1 px-3 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={(tool.assetNo && !tool.assetNo.toUpperCase().startsWith('EMD-') ? tool.assetNo : '') || (tool.serial && !tool.serial.toUpperCase().startsWith('EMD-') ? tool.serial : '') || tool.assetNo || tool.serial}>
-                              {(tool.assetNo && !tool.assetNo.toUpperCase().startsWith('EMD-') ? tool.assetNo : '') || (tool.serial && !tool.serial.toUpperCase().startsWith('EMD-') ? tool.serial : '') || tool.assetNo || tool.serial}
+                            <td className="py-1 px-3 whitespace-nowrap font-mono font-bold text-slate-900 truncate" title={pickerDisplayAssetNo}>
+                              {pickerDisplayAssetNo}
                             </td>
                             <td className="py-1 px-3 whitespace-nowrap font-medium text-slate-800 truncate" title={tool.desc || tool.shortDesc}>
                               {tool.desc || tool.shortDesc}
@@ -7637,6 +7685,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     onClick={() => {
                       setIsToolSelectOpen(false);
                       setCheckedToolSerials([]);
+                      setCheckedToolDisplayMap({});
                       setToolSearchQuery('');
                     }}
                     className="px-3.5 py-1 rounded bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer text-xs"
