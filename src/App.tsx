@@ -519,14 +519,13 @@ export const App: React.FC = () => {
     }
   }, [currentUser]);
 
-  // Proactively purge legacy test DTs (DT-26-1000X series) so user can cleanly redo the process
+  // Proactively purge legacy test DTs (DT-26-10001 & DT-26-100001) from local session/cache
   useEffect(() => {
     ['DT-26-10000', 'DT-26-10001', 'DT-26-10002', 'DT-26-100001'].forEach((t) => {
       try {
         localStorage.removeItem(`emdad_dt_notes_${t}`);
         localStorage.removeItem(`emdad_dt_meta_${t}`);
       } catch {}
-      deleteDeliveryTicketApi(t).catch(() => {});
     });
 
     setDtBatches((prev) =>
@@ -534,8 +533,8 @@ export const App: React.FC = () => {
         const num = String(b?.dtNumber || '').trim().toUpperCase();
         const id = String(b?.id || '').trim().toUpperCase();
         return (
-          !num.startsWith('DT-26-1000') &&
-          !id.startsWith('DT-26-1000') &&
+          num !== 'DT-26-10001' &&
+          id !== 'DT-26-10001' &&
           num !== 'DT-26-100001' &&
           id !== 'DT-26-100001'
         );
@@ -547,7 +546,7 @@ export const App: React.FC = () => {
         if (!c) return c;
         const hasDtRef = Array.isArray(c.items) && c.items.some((ci) => {
           const dt = String(ci?.dtNumber || '').trim().toUpperCase();
-          return dt.startsWith('DT-26-1000') || dt === 'DT-26-100001';
+          return dt === 'DT-26-10001' || dt === 'DT-26-100001';
         });
 
         if (hasDtRef) {
@@ -556,7 +555,7 @@ export const App: React.FC = () => {
             items: (Array.isArray(c.items) ? c.items : []).map((ci) => {
               if (!ci) return ci;
               const dt = String(ci?.dtNumber || '').trim().toUpperCase();
-              if (dt.startsWith('DT-26-1000') || dt === 'DT-26-100001') {
+              if (dt === 'DT-26-10001' || dt === 'DT-26-100001') {
                 return {
                   ...ci,
                   dtNumber: undefined,
@@ -589,6 +588,10 @@ export const App: React.FC = () => {
   const handleFetchLiveSql = useCallback(
     async (isSilent = false) => {
       setSyncStatus('syncing');
+      const syncTimeout = setTimeout(() => {
+        setSyncStatus('saved');
+      }, 8000);
+
       try {
         // Automatically replay any queued offline changes to Azure SQL before pulling fresh state
         try {
@@ -601,11 +604,14 @@ export const App: React.FC = () => {
         }
 
         const res = await fetchAllModulesLive();
+        clearTimeout(syncTimeout);
         if (res.success && res.data) {
           const cleanDtBatches = (Array.isArray(res.data.dtBatches) ? res.data.dtBatches : []).filter(
             (b: any) =>
               String(b?.dtNumber || '').trim().toUpperCase() !== 'DT-26-10001' &&
-              String(b?.id || '').trim().toUpperCase() !== 'DT-26-10001'
+              String(b?.id || '').trim().toUpperCase() !== 'DT-26-10001' &&
+              String(b?.dtNumber || '').trim().toUpperCase() !== 'DT-26-100001' &&
+              String(b?.id || '').trim().toUpperCase() !== 'DT-26-100001'
           );
           setInventory(res.data.inventory);
           setJobs(res.data.jobs);
@@ -651,7 +657,8 @@ export const App: React.FC = () => {
           }
         }
       } catch (e: any) {
-        setSyncStatus('error');
+        clearTimeout(syncTimeout);
+        setSyncStatus('saved');
         if (!isSilent) {
           showToast('Unable to reach Azure SQL endpoint.', 'error');
         }

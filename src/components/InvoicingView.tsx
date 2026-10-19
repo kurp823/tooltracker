@@ -744,8 +744,14 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
                       {line.toolDescription}
                     </td>
                     <td className="py-1 px-1.5 text-center text-slate-600">{line.qty || 1}</td>
-                    <td className="py-1 px-1.5 text-slate-600 font-mono text-[11px]">{line.deliveryDate || '—'}</td>
-                    <td className="py-1 px-1.5 text-slate-600 font-mono text-[11px]">{line.returnDate || '—'}</td>
+                    <td className="py-1 px-1.5 text-slate-800 font-mono text-[11px]">
+                      <div className="font-semibold text-blue-900">{line.deliveryTicketNo || packageData.deliveryTicketRefs || '—'}</div>
+                      {line.deliveryDate && <div className="text-[10px] text-slate-400 font-sans">{line.deliveryDate}</div>}
+                    </td>
+                    <td className="py-1 px-1.5 text-slate-800 font-mono text-[11px]">
+                      <div className="font-semibold text-emerald-900">{line.rgtNo || packageData.returnLoadingNoteNo || '—'}</div>
+                      {line.returnDate && <div className="text-[10px] text-slate-400 font-sans">{line.returnDate}</div>}
+                    </td>
                     <td className="py-1 px-1.5 text-center text-slate-500 font-mono text-[11px]">{line.contractRefOper || 'A-4.1'}</td>
                     <td className="py-1 px-1.5 text-center font-semibold text-slate-700">{line.rentalDays || 10}</td>
 

@@ -14,15 +14,21 @@ import {
   INITIAL_GATE_PASSES,
   INITIAL_INSPECTIONS,
   INITIAL_MAINTENANCE,
+  INITIAL_INVENTORY,
+  INITIAL_DT_BATCHES,
+  INITIAL_RT_BATCHES,
 } from '../data/initialData';
 import { addToOutbox, flushOutbox, getOutboxCount } from './outboxQueue';
 
 export function formatStandardJobId(id?: string): string {
   if (!id) return '';
   const s = String(id).trim();
-  // Standardize JOB-026-XXXXX, Job-026-XXXXX, or job-026-XXXXX -> JOB-26-XXXXX (no zero in front of 26)
-  const withoutZeroYear = s.replace(/^JOB-?0(\d{2})-/i, 'JOB-$1-');
-  return withoutZeroYear.replace(/^job-/i, 'JOB-');
+  if (!s || s === '—' || s === '-') return '';
+  // Strip any leading JOB/job/Job prefix with optional dash or space
+  const bare = s.replace(/^JOB[-_\s]?/i, '');
+  // Strip leading 0 before 2 digits and dash (e.g. 026-XXXXX -> 26-XXXXX)
+  const normalizedYear = bare.replace(/^0(\d{2}-)/, '$1');
+  return `JOB-${normalizedYear}`;
 }
 
 export const normalizeJobKey = (str?: string): string => {
@@ -30,7 +36,7 @@ export const normalizeJobKey = (str?: string): string => {
   const s = str
     .trim()
     .toUpperCase()
-    .replace(/^JOB[-_]?/i, '');
+    .replace(/^JOB[-_\s]?/i, '');
   return s.replace(/^0(\d{2}-)/, '$1');
 };
 
@@ -1554,7 +1560,17 @@ export function reconcileJobsDTRTAndInventory(
   // 1. Purge any synthetic dummy tickets (DT-CLS, DT-AUTO, RT-CLS, RT-AUTO)
   dtBatches = (dtBatches || []).filter((b: any) => {
     const id = String(b?.id || '').toUpperCase();
-    return !id.startsWith('DT-AUTO') && !id.startsWith('DT-CLS') && !num.startsWith('DT-CLS') && !num.startsWith('DT-AUTO') && !num.startsWith('DT-26-1000') && !id.startsWith('DT-26-1000') && num !== 'DT-26-100001' && id !== 'DT-26-100001';
+    const num = String(b?.dtNumber || '').toUpperCase();
+    return (
+      !id.startsWith('DT-AUTO') &&
+      !id.startsWith('DT-CLS') &&
+      !num.startsWith('DT-CLS') &&
+      !num.startsWith('DT-AUTO') &&
+      num !== 'DT-26-10001' &&
+      id !== 'DT-26-10001' &&
+      num !== 'DT-26-100001' &&
+      id !== 'DT-26-100001'
+    );
   });
 
   rtBatches = (rtBatches || []).filter((b: any) => {
@@ -2835,7 +2851,12 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
   const customTools = loadCustomTools();
   const customJobs = loadCustomJobs();
 
-  let invList: any[] = primaryRes.data?.inventory || [];
+  const isPureSql = typeof window !== 'undefined' && localStorage.getItem('emdad_mode') === 'production';
+
+  let invList: any[] =
+    primaryRes.data?.inventory && primaryRes.data.inventory.length > 0
+      ? primaryRes.data.inventory
+      : (isPureSql ? [] : INITIAL_INVENTORY);
   invList = mergeInventoryWithCustomTools(invList, customTools);
 
   let jobsList: any[] =
@@ -2844,12 +2865,21 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
       : MASTER_JOBS;
   jobsList = mergeJobsWithCustomJobs(jobsList, customJobs);
 
-  const dtList: any[] = (primaryRes.data?.dtBatches || []).filter((b: any) => {
+  const rawDtList: any[] =
+    primaryRes.data?.dtBatches && primaryRes.data.dtBatches.length > 0
+      ? primaryRes.data.dtBatches
+      : (isPureSql ? [] : INITIAL_DT_BATCHES);
+
+  const dtList: any[] = (rawDtList || []).filter((b: any) => {
     const id = String(b?.id || '').toUpperCase();
     const num = String(b?.dtNumber || '').toUpperCase();
-    return !num.startsWith('DT-26-1000') && !id.startsWith('DT-26-1000') && num !== 'DT-26-100001' && id !== 'DT-26-100001';
+    return num !== 'DT-26-10001' && id !== 'DT-26-10001' && num !== 'DT-26-100001' && id !== 'DT-26-100001';
   });
-  const rtList: any[] = primaryRes.data?.rtBatches || [];
+
+  const rtList: any[] =
+    primaryRes.data?.rtBatches && primaryRes.data.rtBatches.length > 0
+      ? primaryRes.data.rtBatches
+      : (isPureSql ? [] : INITIAL_RT_BATCHES);
 
   let contractsList: any[] =
     secondaryRes.contracts && secondaryRes.contracts.length > 0

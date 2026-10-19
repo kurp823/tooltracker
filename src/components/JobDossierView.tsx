@@ -682,8 +682,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         id.startsWith('DT-CLS') ||
         num.startsWith('DT-CLS') ||
         num.startsWith('DT-AUTO') ||
-        num.startsWith('DT-26-1000') ||
-        id.startsWith('DT-26-1000') ||
+        num === 'DT-26-10001' ||
+        id === 'DT-26-10001' ||
         num === 'DT-26-100001' ||
         id === 'DT-26-100001'
       ) {
@@ -1195,7 +1195,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const resolveChecklistItemWithDT = useCallback((it: CalloutItem, idx: number) => {
     if (!it) return it;
     const rawDt = String(it?.dtNumber || '').trim().toUpperCase();
-    if (rawDt.startsWith('DT-26-1000') || rawDt === 'DT-26-100001') {
+    if (rawDt === 'DT-26-10001' || rawDt === 'DT-26-100001') {
       return {
         ...it,
         dtNumber: undefined,
@@ -1334,7 +1334,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const getAssignedDTForChecklistItem = useCallback((item: CalloutItem): { dtNumber: string; isLocked: boolean } | null => {
     if (item.dtNumber) {
       const itUpper = (item.dtNumber || '').trim().toUpperCase();
-      if (itUpper.startsWith('DT-26-1000') || itUpper === 'DT-26-100001') return null;
+      if (itUpper === 'DT-26-10001' || itUpper === 'DT-26-100001') return null;
       const match = jobDTs.find((d) => (d.dtNumber || '').trim().toUpperCase() === itUpper);
       return { dtNumber: item.dtNumber, isLocked: match?.isLocked ?? false };
     }
@@ -1342,7 +1342,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     if (!itemSerial) return null;
     for (const dt of jobDTs) {
       const dtUpper = (dt.dtNumber || '').trim().toUpperCase();
-      if (dtUpper.startsWith('DT-26-1000') || dtUpper === 'DT-26-100001') continue;
+      if (dtUpper === 'DT-26-10001' || dtUpper === 'DT-26-100001') continue;
       const match = dt.toolLines?.some((l) => {
         const s = (l.serial || '').trim().toUpperCase();
         const a = (l.assetNo || '').trim().toUpperCase();

@@ -1,4 +1,5 @@
 import { CalculationTicketLine, DraftInvoicePackageData, DrillingJob, ContractRecord, DTBatch, RTBatch, AttachedDoc } from '../types';
+import { normalizeJobKey } from './api';
 import {
   getContractRateOptionsForTool,
   findBestMatchingOption,
@@ -181,16 +182,20 @@ export function generateInvoicePackageForJob(
   }
 ): DraftInvoicePackageData {
   // Normalize job keys
+  const jobNormKey = normalizeJobKey(job.id || job.jobNumber);
   const jobKey = String(job.id || '').trim().toUpperCase();
   const jobNoKey = String(job.jobNumber || '').trim().toUpperCase();
-  const rawNum = jobKey.replace(/^JOB[-_]?/i, '');
 
   const matchesJob = (bJobId?: string, bJobNo?: string) => {
     if (!bJobId && !bJobNo) return false;
     const candidates = [bJobId, bJobNo]
       .filter(Boolean)
       .map((k) => String(k).trim().toUpperCase());
-    return candidates.some((c) => c === jobKey || c === jobNoKey || c.replace(/^JOB[-_]?/i, '') === rawNum);
+    return candidates.some((c) => {
+      if (c === jobKey || c === jobNoKey) return true;
+      const cNorm = normalizeJobKey(c);
+      return Boolean(jobNormKey && cNorm === jobNormKey);
+    });
   };
 
   // Find DTs and RTs for this job
