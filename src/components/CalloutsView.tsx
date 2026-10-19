@@ -269,7 +269,7 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
       return;
     }
 
-    const curYr = new Date().getFullYear().toString().slice(-2);
+    const curYr = new Date().getFullYear().toString().slice(-3);
     const calNums = callouts
       .map((c) => {
         const m = c.id.match(/^CAL-\d+-(\d+)$/);

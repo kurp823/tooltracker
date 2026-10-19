@@ -1102,9 +1102,16 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
     const rawAsset = String(rawAssetNo || '').trim();
     const rawSer = String(rawSerial || '').trim();
+    // IMPORTANT: a stored EMD- SystemID still counts as an explicit identity.
+    // Excluding it here let the description-match fallback below silently
+    // swap an EMD- referenced tool (e.g. EMD-6380) for a different, unrelated
+    // physical tool whenever its description also matched something else in
+    // inventory - this is the exact bug that made the same tool resolve
+    // differently on the Checklist vs. the Delivery Ticket. Any non-blank,
+    // non-dash reference - EMD- or not - must skip the fuzzy match.
     const hasExplicitIdentity = Boolean(
-      (rawAsset && !rawAsset.toUpperCase().startsWith('EMD-') && rawAsset !== '—') ||
-      (rawSer && !rawSer.toUpperCase().startsWith('EMD-') && rawSer !== '—')
+      (rawAsset && rawAsset !== '—') ||
+      (rawSer && rawSer !== '—')
     );
 
     let inv = lookupInv(rawSerial) || lookupInv(rawAssetNo);
@@ -1606,7 +1613,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [jobDTs, selectedDTNumber]);
 
   const draftDT = useMemo<DTBatch>(() => {
-    const curYr = new Date().getFullYear().toString().slice(-2);
+    const curYr = new Date().getFullYear().toString().slice(-3);
     const existingSeqs = dtBatches
       .filter((b) => {
         const s = String(b.dtNumber || '').toUpperCase();
@@ -1682,7 +1689,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [jobRTs, selectedRTNumber]);
 
   const draftRT = useMemo<RTBatch>(() => {
-    const curYr = new Date().getFullYear().toString().slice(-2);
+    const curYr = new Date().getFullYear().toString().slice(-3);
     const rtNums = rtBatches
       .map((b) => {
         const m = (b.rtNumber || '').match(/^RT-\d+-(\d+)$/);
@@ -1718,7 +1725,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       showToast('Cannot create delivery ticket: this job is invoiced and locked.', 'error');
       return;
     }
-    const curYr = new Date().getFullYear().toString().slice(-2);
+    const curYr = new Date().getFullYear().toString().slice(-3);
     const existingSeqs = dtBatches
       .filter((b) => {
         const s = String(b.dtNumber || '').toUpperCase();
@@ -1997,7 +2004,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       showToast('Cannot create return ticket: this job is invoiced and locked.', 'error');
       return;
     }
-    const curYr = new Date().getFullYear().toString().slice(-2);
+    const curYr = new Date().getFullYear().toString().slice(-3);
     const rtNums = rtBatches
       .map((b) => {
         const m = b.rtNumber.match(/^RT-\d+-(\d+)$/);
@@ -2518,7 +2525,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     );
     if (!confirmed) return;
 
-    const curYr = new Date().getFullYear().toString().slice(-2);
+    const curYr = new Date().getFullYear().toString().slice(-3);
     const existingSeqs = dtBatches
       .filter((b) => {
         const s = String(b.dtNumber || '').toUpperCase();
@@ -2868,7 +2875,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     let targetRT = activeRT;
     if (!targetRT) {
       // Automatically create a new RT batch for this job
-      const curYr = new Date().getFullYear().toString().slice(-2);
+      const curYr = new Date().getFullYear().toString().slice(-3);
       const rtNums = rtBatches
         .map((b) => {
           const m = b.rtNumber.match(/^RT-\d+-(\d+)$/);

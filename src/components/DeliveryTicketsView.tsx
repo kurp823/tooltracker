@@ -204,7 +204,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
 
   // Next DT Number
   const nextDtNumber = useMemo(() => {
-    const curYr = new Date().getFullYear().toString().slice(-2);
+    const curYr = new Date().getFullYear().toString().slice(-3);
     const dtNums = dtBatches
       .filter((b) => {
         const s = String(b.dtNumber || '').toUpperCase();
@@ -1679,6 +1679,12 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                               const aKey = (t.assetNo || '').trim().toUpperCase();
                               const invTool = (sKey ? inventoryMap.get(sKey) : undefined) || (aKey ? inventoryMap.get(aKey) : undefined);
                               
+                              // Resolve by serial/assetNo/SystemID/OEM serial only - NO description
+                              // guessing. A description match can silently substitute a DIFFERENT
+                              // physical tool (e.g. EMD-6380 -> an unrelated tool with similar text),
+                              // which is exactly what made the same item resolve differently on the
+                              // Checklist vs. the Delivery Ticket. If nothing resolves, show what is
+                              // stored - that record needs a data correction, not an invented match.
                               let assetNo = '';
                               if (invTool?.assetNo && invTool.assetNo.trim() && !invTool.assetNo.toUpperCase().startsWith('EMD-')) assetNo = invTool.assetNo.trim();
                               else if (t.assetNo && t.assetNo.trim() && !t.assetNo.trim().toUpperCase().startsWith('EMD-')) assetNo = t.assetNo.trim();
@@ -1686,17 +1692,10 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                               else if (invTool?.serial && !invTool.serial.toUpperCase().startsWith('EMD-')) assetNo = invTool.serial;
                               else if (t.serial && !t.serial.toUpperCase().startsWith('EMD-')) assetNo = t.serial;
                               else {
-                                const descToMatch = (invTool?.desc || (t as any).toolDescription || t.desc || '').trim().toUpperCase();
-                                if (descToMatch) {
-                                  const m = inventory.find((it) => it.desc && it.desc.trim().toUpperCase() === descToMatch && it.assetNo && !it.assetNo.toUpperCase().startsWith('EMD-'));
-                                  if (m?.assetNo) assetNo = m.assetNo.trim();
-                                }
-                                if (!assetNo) {
-                                  assetNo = (invTool?.assetNo && !invTool.assetNo.toUpperCase().startsWith('EMD-') ? invTool.assetNo : '') ||
-                                            (t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') ? t.assetNo : '') ||
-                                            (t.serial && !t.serial.toUpperCase().startsWith('EMD-') ? t.serial : '') ||
-                                            invTool?.assetNo || t.assetNo || t.serial || '—';
-                                }
+                                assetNo = (invTool?.assetNo && !invTool.assetNo.toUpperCase().startsWith('EMD-') ? invTool.assetNo : '') ||
+                                          (t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') ? t.assetNo : '') ||
+                                          (t.serial && !t.serial.toUpperCase().startsWith('EMD-') ? t.serial : '') ||
+                                          invTool?.assetNo || t.assetNo || t.serial || '—';
                               }
 
                                const displaySize = invTool?.size || (t as any).size || '—';
