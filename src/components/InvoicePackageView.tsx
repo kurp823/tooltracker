@@ -14,6 +14,7 @@ import {
   UAE_VAT_PERCENTAGE,
   convertAmountToWords,
 } from '../services/billingPackageService';
+import { fetchDailyFieldLogsApi } from '../services/api';
 import { EmdadLogo } from '../constants/branding';
 import {
   FileText,
@@ -151,6 +152,23 @@ export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
     }
   }, [initialJobId]);
 
+  // Fetch the real, confirmed per-day Operating/Standby records for the
+  // selected job from the Utilization screen's own data (tbl_DailyFieldLogs),
+  // so invoiced days reflect what was actually confirmed there instead of a
+  // flat guess. Re-fetched whenever the selected job changes.
+  const [dailyFieldLogs, setDailyFieldLogs] = useState<Array<Record<string, any>>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentJob?.id) {
+      setDailyFieldLogs([]);
+      return;
+    }
+    fetchDailyFieldLogsApi(currentJob.id)
+      .then((rows) => { if (!cancelled) setDailyFieldLogs(rows || []); })
+      .catch(() => { if (!cancelled) setDailyFieldLogs([]); });
+    return () => { cancelled = true; };
+  }, [currentJob?.id]);
+
   // Generate the full invoice package dataset
   const packageData: DraftInvoicePackageData = useMemo(() => {
     if (!currentJob) {
@@ -167,8 +185,8 @@ export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
       invoiceDate,
       dateOfSupply,
       poNo: poNumber,
-    });
-  }, [currentJob, dtBatches, rtBatches, currentContract, invoiceNumber, invoiceDate, dateOfSupply, poNumber]);
+    }, dailyFieldLogs);
+  }, [currentJob, dtBatches, rtBatches, currentContract, invoiceNumber, invoiceDate, dateOfSupply, poNumber, dailyFieldLogs]);
 
   // Two-step confirmation modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -363,11 +381,29 @@ export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
           </div>
         )}
 
+        {!packageData.isLocked && (packageData.unmappedToolDescriptions?.length ?? 0) > 0 && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-red-50 border border-red-300 text-red-800 text-xs font-semibold">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>
+              Contract pricing could not be mapped by category for: {packageData.unmappedToolDescriptions!.join(', ')} — these are charged at a $0 or generic fallback rate below. Fix the category mapping on the Contracts/Rates screen before invoicing.
+            </span>
+          </div>
+        )}
+
         {!packageData.isLocked && packageData.noMatchedRecords && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-300 text-amber-800 text-xs font-semibold">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>
               No Delivery Ticket or Receiving Ticket records found for this job — no tools or charges can be shown. This is a real data gap, not an error: link the correct DT/RT to this job before invoicing.
+            </span>
+          </div>
+        )}
+
+        {!packageData.isLocked && packageData.usesConfirmedUtilization && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-semibold">
+            <Check className="w-4 h-4 shrink-0" />
+            <span>
+              Operating/Standby days below are taken from confirmed records on the Utilization tab for this job.
             </span>
           </div>
         )}

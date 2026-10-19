@@ -180,8 +180,28 @@ export function generateInvoicePackageForJob(
     invoiceDate?: string;
     dateOfSupply?: string;
     poNo?: string;
-  }
+  },
+  // Real confirmed per-day Operating/Standby records for this job, as saved
+  // by the Utilization screen (tbl_DailyFieldLogs via fetchDailyFieldLogsApi).
+  // Raw SQL row shape, field names vary by source - read defensively.
+  dailyFieldLogs?: Array<Record<string, any>>
 ): DraftInvoicePackageData {
+  // Index confirmed daily logs by tool serial/asset no (upper-cased) so each
+  // tool line can look up its own real Operating/Standby day counts, instead
+  // of guessing a flat "2 operating days" for every tool that was used.
+  const confirmedDaysBySerial = new Map<string, { operDays: number; standbyDays: number }>();
+  (dailyFieldLogs || []).forEach((row) => {
+    const serial = String(row.ToolSerial || row.toolSerial || row.Serial || row.AssetNo || row.assetNo || '').trim().toUpperCase();
+    if (!serial) return;
+    const status = String(row.Status || row.status || '').trim().toUpperCase();
+    const isOper = status === '1' || status === 'OPERATIONAL' || status === 'OPER' || status === 'OPS';
+    const isStandby = status === 'S' || status === 'STANDBY' || status === 'SB';
+    if (!isOper && !isStandby) return;
+    const entry = confirmedDaysBySerial.get(serial) || { operDays: 0, standbyDays: 0 };
+    if (isOper) entry.operDays += 1;
+    if (isStandby) entry.standbyDays += 1;
+    confirmedDaysBySerial.set(serial, entry);
+  });
   // Normalize job keys
   const jobNormKey = normalizeJobKey(job.id || job.jobNumber);
   const jobKey = String(job.id || '').trim().toUpperCase();
@@ -319,6 +339,11 @@ export function generateInvoicePackageForJob(
 
   // Build calculation lines
   let lines: CalculationTicketLine[] = [];
+  let usesConfirmedUtilization = false;
+  // Tool descriptions whose contract rate could not be mapped by category at
+  // all (ended up on a $0 / generic fallback rate). Surfaced so a mapping
+  // gap is visible on the invoice instead of silently billing at zero.
+  const unmappedToolDescriptions = new Set<string>();
 
   if (jobDTs.length > 0 && jobDTs.some((dt) => dt.toolLines && dt.toolLines.length > 0)) {
     // Dynamically derive from live DT and RT batches
@@ -379,9 +404,20 @@ export function generateInvoicePackageForJob(
           }
         }
 
+        // getContractRateOptionsForTool() returns a contractRef of '—' with
+        // opsRate/standbyRate of 0 when it could not map this tool's
+        // category/description to any contract rate line at all (no exact
+        // category match, no fuzzy/synonym match). That is a real pricing
+        // gap, not a legitimate $0 rate - flag it so it's visible on the
+        // invoice instead of silently billing the tool at zero.
+        const isUnmappedCategory = Boolean(selectedHoleSectionOpt && selectedHoleSectionOpt.contractRef === '—');
+        if (isUnmappedCategory) {
+          unmappedToolDescriptions.add(tl.desc || tl.shortDesc || serial);
+        }
+
         let rateLookup = CONTRACT_444558_RATES[serial];
 
-        if (selectedHoleSectionOpt) {
+        if (selectedHoleSectionOpt && !isUnmappedCategory) {
           const isAED = selectedHoleSectionOpt.currency === 'AED';
           rateLookup = {
             contractRefOper: selectedHoleSectionOpt.contractRef || 'SCHEDULE 2',
@@ -411,10 +447,13 @@ export function generateInvoicePackageForJob(
               operRate: isAED ? matched.opsRate / USD_TO_AED_EXCHANGE_RATE : matched.opsRate,
               standbyRate: isAED ? matched.standbyRate / USD_TO_AED_EXCHANGE_RATE : matched.standbyRate,
             };
+            // Recovered via a direct contract-rate match - not actually unmapped.
+            unmappedToolDescriptions.delete(tl.desc || tl.shortDesc || serial);
           }
         }
 
         if (!rateLookup) {
+          unmappedToolDescriptions.add(tl.desc || tl.shortDesc || serial);
           rateLookup = {
             contractRefOper: 'A.4.1',
             contractRefStandby: 'A.4.1',
@@ -430,14 +469,29 @@ export function generateInvoicePackageForJob(
         const deliveryDate = formatJobDisplayDate(dt.dispatchDate || dt.rmDate || mobDateRaw);
         const returnDate = formatJobDisplayDate(rtBatch?.rtDate || demobDateRaw);
 
-        const isOper = tl.used === true;
-        const operDays = isOper ? 2 : 0;
-        const uncappedStandby = Math.max(0, rentalDays - operDays);
-        let standbyDays = uncappedStandby;
-        if (isAdnocOnshore) {
-          standbyDays = Math.min(uncappedStandby, 6);
-        } else if (isAdnocDrilling) {
-          standbyDays = Math.min(uncappedStandby, 10);
+        // Prefer the real, confirmed per-day Operating/Standby count from the
+        // Utilization screen (tbl_DailyFieldLogs) over the flat "2 operating
+        // days if used, else 0" guess below - that guess ignored whatever was
+        // actually confirmed against this job and is why invoiced days could
+        // disagree with the Utilization tab.
+        const confirmedDays = confirmedDaysBySerial.get(String(serial).trim().toUpperCase());
+
+        let operDays: number;
+        let standbyDays: number;
+        if (confirmedDays) {
+          operDays = confirmedDays.operDays;
+          standbyDays = confirmedDays.standbyDays;
+          usesConfirmedUtilization = true;
+        } else {
+          const isOper = tl.used === true;
+          operDays = isOper ? 2 : 0;
+          const uncappedStandby = Math.max(0, rentalDays - operDays);
+          standbyDays = uncappedStandby;
+          if (isAdnocOnshore) {
+            standbyDays = Math.min(uncappedStandby, 6);
+          } else if (isAdnocDrilling) {
+            standbyDays = Math.min(uncappedStandby, 10);
+          }
         }
 
         const operTotalUSD = Math.round(operDays * rateLookup.operRate * 100) / 100;
@@ -736,6 +790,8 @@ export function generateInvoicePackageForJob(
     returnLoadingNoteNo,
     lines,
     noMatchedRecords: lines.length === 0,
+    usesConfirmedUtilization,
+    unmappedToolDescriptions: Array.from(unmappedToolDescriptions),
     dataSource: (jobDTs.length > 0 && jobDTs.some((dt) => dt.toolLines && dt.toolLines.length > 0))
       ? 'live'
       : (historicalRecords.length > 0 ? 'historical' : 'none'),
