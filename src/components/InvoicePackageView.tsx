@@ -326,8 +326,9 @@ export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
             )}
             <button
               onClick={handleOpenDraftConfirm}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-              title="Review financial summary and save Draft Invoiced"
+              disabled={packageData.isLocked}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-md text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+              title={packageData.isLocked ? 'This job is already Final Invoiced and is locked' : 'Review financial summary and save Draft Invoiced'}
             >
               <Save className="w-3.5 h-3.5" />
               <span>Save Draft Invoiced</span>
@@ -335,8 +336,9 @@ export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
 
             <button
               onClick={handleOpenFinalConfirm}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-              title="Review summary, SES approval, and mark Final Invoiced"
+              disabled={packageData.isLocked}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-md text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+              title={packageData.isLocked ? 'This job is already Final Invoiced and is locked' : 'Review summary, SES approval, and mark Final Invoiced'}
             >
               <Check className="w-3.5 h-3.5" />
               <span>Mark Final Invoiced</span>
@@ -351,6 +353,33 @@ export const InvoicePackageView: React.FC<InvoicePackageViewProps> = ({
             </button>
           </div>
         </div>
+
+        {packageData.isLocked && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-slate-100 border border-slate-300 text-slate-700 text-xs font-semibold">
+            <Shield className="w-4 h-4 shrink-0" />
+            <span>
+              Locked — this job is already Final Invoiced ({currentJob?.legalInvoiceNumber}). Figures shown are read-only archived data and cannot be regenerated or re-finalized.
+            </span>
+          </div>
+        )}
+
+        {!packageData.isLocked && packageData.noMatchedRecords && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-300 text-amber-800 text-xs font-semibold">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>
+              No Delivery Ticket or Receiving Ticket records found for this job — no tools or charges can be shown. This is a real data gap, not an error: link the correct DT/RT to this job before invoicing.
+            </span>
+          </div>
+        )}
+
+        {!packageData.isLocked && packageData.dataSource === 'historical' && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-blue-50 border border-blue-300 text-blue-800 text-xs font-semibold">
+            <Info className="w-4 h-4 shrink-0" />
+            <span>
+              No live DT/RT batch is linked to this job — the tool lines below are pulled from archived job utilization history instead.
+            </span>
+          </div>
+        )}
 
         {/* Row 2: Job Selector & Operational Parameters */}
         <div className="pt-2.5 border-t border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
