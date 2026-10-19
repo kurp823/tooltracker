@@ -544,23 +544,36 @@ export const App: React.FC = () => {
         );
 
         if (isTargetJob || hasDtRef) {
+          const mappedItems = (Array.isArray(c.items) ? c.items : []).map((ci) => {
+            if (!ci) return ci;
+            if (
+              String(ci?.dtNumber || '').trim().toUpperCase() === 'DT-26-10001' ||
+              (isTargetJob && ci.status === 'Released')
+            ) {
+              return {
+                ...ci,
+                dtNumber: undefined,
+                status: 'Assigned' as const,
+              };
+            }
+            return ci;
+          });
+
+          let finalItems = mappedItems;
+          if (isTargetJob) {
+            const seen = new Set<string>();
+            finalItems = mappedItems.filter((ci) => {
+              const k = String(ci.partNo || ci.serialNos?.[0] || ci.description || '').trim().toUpperCase();
+              if (seen.has(k)) return false;
+              seen.add(k);
+              return true;
+            });
+          }
+
           return {
             ...c,
             status: 'Active' as const,
-            items: (Array.isArray(c.items) ? c.items : []).map((ci) => {
-              if (!ci) return ci;
-              if (
-                String(ci?.dtNumber || '').trim().toUpperCase() === 'DT-26-10001' ||
-                (isTargetJob && ci.status === 'Released')
-              ) {
-                return {
-                  ...ci,
-                  dtNumber: undefined,
-                  status: 'Assigned' as const,
-                };
-              }
-              return ci;
-            }),
+            items: finalItems,
           };
         }
         return c;

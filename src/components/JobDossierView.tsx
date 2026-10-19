@@ -1255,26 +1255,22 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Checklist Items State
   const [checklistItems, setChecklistItems] = useState<CalloutItem[]>(() => {
+    if (isTargetJob01816) {
+      return DEFAULT_WHIPSTOCK_TOOLS_01816.map((it, idx) => resolveChecklistItemWithDT(it, idx));
+    }
     if (activeCallout?.items && activeCallout.items.length > 0) {
       return activeCallout.items.filter(Boolean).map((it, idx) => resolveChecklistItemWithDT(it, idx));
-    }
-    const rawId = String(jobData?.id || jobData?.jobNumber || '').trim().toUpperCase();
-    if (rawId === 'JOB-26-01816' || rawId === 'JOB-026-01816' || (rawId && normalizeJobKey(rawId) === normalizeJobKey('JOB-26-01816'))) {
-      return DEFAULT_WHIPSTOCK_TOOLS_01816.map((it, idx) => resolveChecklistItemWithDT(it, idx));
     }
     return [];
   });
 
   useEffect(() => {
-    if (activeCallout && Array.isArray(activeCallout.items) && activeCallout.items.length > 0) {
+    if (isTargetJob01816) {
+      setChecklistItems(DEFAULT_WHIPSTOCK_TOOLS_01816.map((it, idx) => resolveChecklistItemWithDT(it, idx)));
+    } else if (activeCallout && Array.isArray(activeCallout.items) && activeCallout.items.length > 0) {
       setChecklistItems(
         activeCallout.items.filter(Boolean).map((it, idx) => resolveChecklistItemWithDT(it, idx))
       );
-    } else if (isTargetJob01816) {
-      setChecklistItems((prev) => {
-        if (prev && prev.length > 0) return prev;
-        return DEFAULT_WHIPSTOCK_TOOLS_01816.map((it, idx) => resolveChecklistItemWithDT(it, idx));
-      });
     }
   }, [activeCallout, resolveChecklistItemWithDT, isTargetJob01816]);
 
@@ -1642,7 +1638,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         return m ? parseInt(m[0], 10) : 0;
       })
       .filter((n) => !isNaN(n));
-    const nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2120 + jobDTs.length;
+    let nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2120 + jobDTs.length;
+    if (nextSeq <= 10001) nextSeq = 10002;
+    while (dtBatches.some((b) => String(b.dtNumber || '').toUpperCase() === `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`)) {
+      nextSeq++;
+    }
     const nextDTNum = `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`;
     const dispatchDateStr = formatDateDD_MM_YYYY(jobData.mobDate || new Date().toISOString());
 
@@ -1747,7 +1747,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         return m ? parseInt(m[0], 10) : 0;
       })
       .filter((n) => !isNaN(n));
-    const nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2120 + jobDTs.length;
+    let nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2120 + jobDTs.length;
+    if (nextSeq <= 10001) nextSeq = 10002;
+    while (dtBatches.some((b) => String(b.dtNumber || '').toUpperCase() === `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`)) {
+      nextSeq++;
+    }
     const nextDTNum = `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`;
     const dispatchDateStr = formatDateDD_MM_YYYY(jobData.mobDate || new Date().toISOString());
 
@@ -2521,7 +2525,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         return m ? parseInt(m[1], 10) : 0;
       })
       .filter((n) => !isNaN(n));
-    const nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2120 + jobDTs.length;
+    let nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2120 + jobDTs.length;
+    if (nextSeq <= 10001) nextSeq = 10002;
+    while (dtBatches.some((b) => String(b.dtNumber || '').toUpperCase() === `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`)) {
+      nextSeq++;
+    }
     const nextDTNum = `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`;
 
     const newDT: DTBatch = {
@@ -5215,8 +5223,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               <div className="flex items-center gap-2">
                 <label className="text-xs font-bold text-slate-700 whitespace-nowrap">Select Delivery Ticket:</label>
                 {jobDTs.length === 0 ? (
-                  <span className="text-xs font-mono font-bold text-blue-900 bg-blue-50 border border-blue-200 rounded px-2.5 py-1">
-                    {effectiveDT.dtNumber} (Draft Manifest - Not Dispatched)
+                  <span className="text-xs font-mono font-bold text-amber-900 bg-amber-50 border border-amber-300 rounded px-2.5 py-1">
+                    No DT Generated (Draft Checklist Manifest)
                   </span>
                 ) : (
                   <select
@@ -5261,10 +5269,28 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               </div>
               <div className="flex items-center gap-2">
                 {jobDTs.length === 0 ? (
-                  <span className="bg-amber-50 text-amber-900 border border-amber-300 font-bold text-xs px-2.5 py-1 rounded flex items-center gap-1 shadow-2xs">
-                    <span>📝</span>
-                    <span>Draft Preview (Not Dispatched)</span>
-                  </span>
+                  <>
+                    <span className="bg-amber-50 text-amber-900 border border-amber-300 font-bold text-xs px-2.5 py-1 rounded flex items-center gap-1 shadow-2xs">
+                      <span>📝</span>
+                      <span>Draft Preview (Not Dispatched)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const confirmed = window.confirm(
+                          'Reset draft checklist tools for this job back to default whipstock tools (9 items)?'
+                        );
+                        if (!confirmed) return;
+                        setChecklistItems(DEFAULT_WHIPSTOCK_TOOLS_01816);
+                        showToast('Checklist tools reset to standard whipstock package (9 items).', 'success');
+                      }}
+                      className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs transition cursor-pointer flex items-center gap-1"
+                      title="Reset draft checklist tools"
+                    >
+                      <span>🗑️</span>
+                      <span>Reset Draft Checklist</span>
+                    </button>
+                  </>
                 ) : (activeDT?.isLocked || isClosedOrInvoiced) && !adminUnlocked ? (
                   <>
                     <span className="bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs px-3 py-1 rounded flex items-center gap-1 shadow-2xs">
@@ -5385,7 +5411,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-2">
                   <h3 className="font-bold text-blue-900 text-sm">Rental Ticket / Delivery Manifest</h3>
                   <span className="text-xs font-mono">
-                    Ticket No : <strong className="text-red-600 font-bold text-base">{effectiveDT.dtNumber}</strong>
+                    Ticket No : {jobDTs.length === 0 ? (
+                      <span className="text-amber-800 font-bold text-sm bg-amber-50 border border-amber-300 px-2 py-0.5 rounded">
+                        Draft Preview (Not Dispatched)
+                      </span>
+                    ) : (
+                      <strong className="text-red-600 font-bold text-base">{effectiveDT.dtNumber}</strong>
+                    )}
                   </span>
                 </div>
 
