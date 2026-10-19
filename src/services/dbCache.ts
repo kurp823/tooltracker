@@ -54,7 +54,7 @@ export async function saveDatasetToCache(data: {
       ? data.dtBatches.filter((b: any) => {
           const id = String(b?.id || '').toUpperCase();
           const num = String(b?.dtNumber || '').toUpperCase();
-          return !id.startsWith('DT-AUTO') && !id.startsWith('DT-CLS') && !num.startsWith('DT-CLS') && !num.startsWith('DT-AUTO');
+          return !id.startsWith('DT-AUTO') && !id.startsWith('DT-CLS') && !num.startsWith('DT-CLS') && !num.startsWith('DT-AUTO') && num !== 'DT-26-10001' && id !== 'DT-26-10001';
         })
       : data.dtBatches;
 
@@ -97,7 +97,7 @@ export async function loadDatasetFromCache(): Promise<CachedDataset | null> {
             result.dtBatches = result.dtBatches.filter((b: any) => {
               const id = String(b?.id || '').toUpperCase();
               const num = String(b?.dtNumber || '').toUpperCase();
-              return !id.startsWith('DT-AUTO') && !id.startsWith('DT-CLS') && !num.startsWith('DT-CLS') && !num.startsWith('DT-AUTO');
+              return !id.startsWith('DT-AUTO') && !id.startsWith('DT-CLS') && !num.startsWith('DT-CLS') && !num.startsWith('DT-AUTO') && num !== 'DT-26-10001' && id !== 'DT-26-10001';
             });
           }
           if (Array.isArray(result.rtBatches)) {

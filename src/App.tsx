@@ -510,6 +510,79 @@ export const App: React.FC = () => {
     }
   }, [currentUser]);
 
+  // Proactively purge DT-26-10001 and reset checklist on JOB-26-01816 so user can cleanly redo the process
+  useEffect(() => {
+    try {
+      localStorage.removeItem('emdad_dt_notes_DT-26-10001');
+      localStorage.removeItem('emdad_dt_meta_DT-26-10001');
+    } catch {}
+
+    deleteDeliveryTicketApi('DT-26-10001').catch(() => {});
+
+    setDtBatches((prev) =>
+      prev.filter(
+        (b) =>
+          (b.dtNumber || '').trim().toUpperCase() !== 'DT-26-10001' &&
+          (b.id || '').trim().toUpperCase() !== 'DT-26-10001'
+      )
+    );
+
+    setCallouts((prev) =>
+      prev.map((c) => {
+        const jId = (c.jobId || (c as any).jobNumber || '').trim().toUpperCase();
+        const isTargetJob =
+          jId === 'JOB-26-01816' ||
+          jId === 'JOB-026-01816' ||
+          normalizeJobKey(jId) === normalizeJobKey('JOB-26-01816');
+        const hasDtRef = (c.items || []).some(
+          (ci) => (ci.dtNumber || '').trim().toUpperCase() === 'DT-26-10001'
+        );
+
+        if (isTargetJob || hasDtRef) {
+          return {
+            ...c,
+            status: 'Active' as const,
+            items: (c.items || []).map((ci) => {
+              if (
+                (ci.dtNumber || '').trim().toUpperCase() === 'DT-26-10001' ||
+                (isTargetJob && ci.status === 'Released')
+              ) {
+                return {
+                  ...ci,
+                  dtNumber: undefined,
+                  status: 'Assigned' as const,
+                };
+              }
+              return ci;
+            }),
+          };
+        }
+        return c;
+      })
+    );
+
+    setInventory((prev) =>
+      prev.map((tool) => {
+        const jId = (tool.currentJobId || '').trim().toUpperCase();
+        const isTargetJob =
+          jId === 'JOB-26-01816' ||
+          jId === 'JOB-026-01816' ||
+          normalizeJobKey(jId) === normalizeJobKey('JOB-26-01816');
+        if (isTargetJob && tool.status === 'On Rig') {
+          return {
+            ...tool,
+            status: 'Good' as const,
+            location: 'Emdad Base',
+            currentJobId: null,
+            currentRig: null,
+            rig: undefined,
+          };
+        }
+        return tool;
+      })
+    );
+  }, []);
+
   // Azure SQL Connection and Data State
   const [dbStatus, setDbStatus] = useState<DbConnectionStatus>({
     isConnected: false,
@@ -540,9 +613,14 @@ export const App: React.FC = () => {
 
         const res = await fetchAllModulesLive();
         if (res.success && res.data) {
+          const cleanDtBatches = (res.data.dtBatches || []).filter(
+            (b: any) =>
+              (b.dtNumber || '').trim().toUpperCase() !== 'DT-26-10001' &&
+              (b.id || '').trim().toUpperCase() !== 'DT-26-10001'
+          );
           setInventory(res.data.inventory);
           setJobs(res.data.jobs);
-          setDtBatches(res.data.dtBatches);
+          setDtBatches(cleanDtBatches);
           setRtBatches(res.data.rtBatches);
           setContracts(res.data.contracts);
           setCallouts(res.data.callouts);
@@ -554,7 +632,7 @@ export const App: React.FC = () => {
           saveDatasetToCache({
             inventory: res.data.inventory,
             jobs: res.data.jobs,
-            dtBatches: res.data.dtBatches,
+            dtBatches: cleanDtBatches,
             rtBatches: res.data.rtBatches,
             contracts: res.data.contracts,
           });
@@ -1206,58 +1284,79 @@ export const App: React.FC = () => {
   };
 
   const handleDeleteDTBatch = (dtNumber: string) => {
-    const dt = dtBatches.find((b) => b.dtNumber === dtNumber || b.id === dtNumber);
-    if (!dt) return;
+    const targetUpper = (dtNumber || '').trim().toUpperCase();
+    const dt = dtBatches.find(
+      (b) =>
+        (b.dtNumber || '').trim().toUpperCase() === targetUpper ||
+        (b.id || '').trim().toUpperCase() === targetUpper
+    );
 
-    setDtBatches((prev) => prev.filter((b) => b.dtNumber !== dtNumber && b.id !== dtNumber));
+    setDtBatches((prev) =>
+      prev.filter(
+        (b) =>
+          (b.dtNumber || '').trim().toUpperCase() !== targetUpper &&
+          (b.id || '').trim().toUpperCase() !== targetUpper
+      )
+    );
     deleteDeliveryTicketApi(dtNumber).catch(() => {});
 
     // Revert tool statuses in inventory to 'Good' / 'Emdad Base'
     const lineSerials = new Set<string>();
-    (dt.toolLines || []).forEach((t) => {
-      const s = (t.serial || '').trim().toUpperCase();
-      const a = (t.assetNo || '').trim().toUpperCase();
-      if (s) {
-        lineSerials.add(s);
-        lineSerials.add(s.replace(/^EMD-?/i, ''));
-      }
-      if (a) {
-        lineSerials.add(a);
-        lineSerials.add(a.replace(/^EMD-?/i, ''));
-      }
-    });
-
-    setInventory((prev) =>
-      prev.map((tool) => {
-        const s = (tool.serial || '').trim().toUpperCase();
-        const a = (tool.assetNo || '').trim().toUpperCase();
-        const sStrip = s.replace(/^EMD-?/i, '');
-        const aStrip = a.replace(/^EMD-?/i, '');
-        if (lineSerials.has(s) || lineSerials.has(a) || lineSerials.has(sStrip) || lineSerials.has(aStrip)) {
-          const updated: ToolItem = {
-            ...tool,
-            status: 'Good',
-            location: 'Emdad Base',
-            currentJobId: null,
-            currentRig: null,
-            rig: undefined,
-          };
-          saveInventoryApi(updated).catch(() => {});
-          return updated;
+    if (dt && dt.toolLines) {
+      (dt.toolLines || []).forEach((t) => {
+        const s = (t.serial || '').trim().toUpperCase();
+        const a = (t.assetNo || '').trim().toUpperCase();
+        if (s) {
+          lineSerials.add(s);
+          lineSerials.add(s.replace(/^EMD-?/i, ''));
         }
-        return tool;
-      })
-    );
+        if (a) {
+          lineSerials.add(a);
+          lineSerials.add(a.replace(/^EMD-?/i, ''));
+        }
+      });
+    }
+
+    if (lineSerials.size > 0) {
+      setInventory((prev) =>
+        prev.map((tool) => {
+          const s = (tool.serial || '').trim().toUpperCase();
+          const a = (tool.assetNo || '').trim().toUpperCase();
+          const sStrip = s.replace(/^EMD-?/i, '');
+          const aStrip = a.replace(/^EMD-?/i, '');
+          if (lineSerials.has(s) || lineSerials.has(a) || lineSerials.has(sStrip) || lineSerials.has(aStrip)) {
+            const updated: ToolItem = {
+              ...tool,
+              status: 'Good',
+              location: 'Emdad Base',
+              currentJobId: null,
+              currentRig: null,
+              rig: undefined,
+            };
+            saveInventoryApi(updated).catch(() => {});
+            return updated;
+          }
+          return tool;
+        })
+      );
+    }
 
     // Clear dtNumber in linked callouts/checklists
     setCallouts((prev) =>
       prev.map((c) => {
-        if (c.jobId === dt.jobId || (c as any).jobNumber === dt.jobId) {
+        const jId = (c.jobId || (c as any).jobNumber || '').trim().toUpperCase();
+        const dtJob = (dt?.jobId || '').trim().toUpperCase();
+        const isJobMatch = dtJob ? (jId === dtJob || normalizeJobKey(jId) === normalizeJobKey(dtJob)) : false;
+        const hasDt = (c.items || []).some(
+          (ci) => (ci.dtNumber || '').trim().toUpperCase() === targetUpper
+        );
+
+        if (isJobMatch || hasDt) {
           return {
             ...c,
             status: 'Active',
             items: (c.items || []).map((ci) => {
-              if (ci.dtNumber === dt.dtNumber) {
+              if ((ci.dtNumber || '').trim().toUpperCase() === targetUpper || isJobMatch) {
                 return { ...ci, dtNumber: undefined, status: 'Assigned' as const };
               }
               return ci;
@@ -1267,6 +1366,14 @@ export const App: React.FC = () => {
         return c;
       })
     );
+
+    // Clear localStorage cached notes / meta for this DT
+    try {
+      localStorage.removeItem(`emdad_dt_notes_${dtNumber}`);
+      localStorage.removeItem(`emdad_dt_notes_${targetUpper}`);
+      localStorage.removeItem(`emdad_dt_meta_${dtNumber}`);
+      localStorage.removeItem(`emdad_dt_meta_${targetUpper}`);
+    } catch {}
 
     broadcastSync();
     showToast(`Delivery Ticket ${dtNumber} deleted and tools returned to yard inventory.`, 'success');

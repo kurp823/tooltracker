@@ -674,7 +674,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return dtBatches.filter((b) => {
       const id = String(b.id || '').toUpperCase();
       const num = String(b.dtNumber || '').toUpperCase();
-      if (id.startsWith('DT-AUTO') || id.startsWith('DT-CLS') || num.startsWith('DT-CLS') || num.startsWith('DT-AUTO')) {
+      if (id.startsWith('DT-AUTO') || id.startsWith('DT-CLS') || num.startsWith('DT-CLS') || num.startsWith('DT-AUTO') || num === 'DT-26-10001' || id === 'DT-26-10001') {
         return false;
       }
       const bJob = (b.jobId || (b as any).jobNumber || '').trim().toUpperCase();
@@ -1158,55 +1158,95 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return { inv, assetNo, serial, desc, shortDesc, supplier, ownership: supplier, isEmdad };
   }, [inventoryMap, inventory]);
 
+  // Default whipstock checklist tools for Job-026-01816
+  const DEFAULT_WHIPSTOCK_TOOLS_01816: CalloutItem[] = [
+    { seq: 1, partNo: 'EW-004', serialNos: ['EW-004'], size: '—', shortDesc: 'CARGO BASKET', description: 'CARGO BASKET W/ 4 WAY SLINGS ED-517', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'CARGO BASKET' },
+    { seq: 2, partNo: 'EL-001', serialNos: ['EL-001'], size: '—', shortDesc: 'CARGO BASKET', description: 'CARGO BASKET W/ 4 WAY SLINGS', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'CARGO BASKET' },
+    { seq: 3, partNo: '1338HT-WS-001', serialNos: ['1338HT-WS-001'], size: '13-3/8"', shortDesc: 'WHIPSTOCK', description: '13-3/8" WHIPSTOCK', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'WHIPSTOCK' },
+    { seq: 4, partNo: 'LM1214-001', serialNos: ['LM1214-001'], size: '12-1/4"', shortDesc: 'LEAD MILL', description: '12-1/4" LEAD MILL W/ 6-5/8" REG BOX', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'LEAD MILL' },
+    { seq: 5, partNo: 'SM-064', serialNos: ['SM-064'], size: '8-1/2"', shortDesc: 'STARTING MILL', description: '8-1/2" STARTING MILL C/W 4-1/2" REG BOX', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'LEAD MILL' },
+    { seq: 6, partNo: 'BSM850-003', serialNos: ['BSM850-003'], size: '8-1/2"', shortDesc: 'BACK STRING MILL', description: '8.5 BACK STRING MILL W/C 4-1/2" REG PIN X 4-1/2" REG BOX', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'BACK STRING MILL' },
+    { seq: 7, partNo: 'BM-812-001', serialNos: ['BM-812-001'], size: '8-1/2"', shortDesc: 'BACK MILL', description: 'BACK MILL C/W 4" IF BOX X PIN', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'BACK MILL' },
+    { seq: 8, partNo: 'FS-026', serialNos: ['FS-026'], size: '—', shortDesc: 'FLEXIBLE SUB', description: 'FLEXIBLE SUB C/W 4-1/2" REG PIN X 4-1/2" IFBOX - 16FT', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'FLEXIBLE SUB' },
+    { seq: 9, partNo: 'WM-007', serialNos: ['WM-007'], size: '8-1/2"', shortDesc: 'STRING MILL', description: '8-1/2" STRING MILL C/W 4-1/2" IF PIN X BOX (GAUGE RUN)', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'STRING MILL' },
+  ];
+
   // Synchronize checklist items with job's Delivery Tickets to eliminate any system ID mix-up
   const resolveChecklistItemWithDT = useCallback((it: CalloutItem, idx: number) => {
-    const targetDT = (it.dtNumber ? jobDTs.find(d => d.dtNumber === it.dtNumber) : null) || (jobDTs.length === 1 ? jobDTs[0] : null);
-    const dtLine = targetDT?.toolLines?.[idx] || targetDT?.toolLines?.find(tl => {
-      const s = (tl.serial || tl.assetNo || '').trim().toUpperCase();
-      const is = (it.serialNos?.[0] || it.partNo || '').trim().toUpperCase();
-      return s && is && (s === is || s.includes(is));
+    const rawDt = (it.dtNumber || '').trim().toUpperCase();
+    if (rawDt === 'DT-26-10001') {
+      return {
+        ...it,
+        dtNumber: undefined,
+        status: 'Assigned' as const,
+      };
+    }
+
+    // Only associate with a DT if explicitly linked via it.dtNumber
+    const targetDT = rawDt ? jobDTs.find(d => (d.dtNumber || '').trim().toUpperCase() === rawDt) : null;
+
+    // Find matching line on targetDT strictly by tool serial/assetNo — NEVER match by array index idx!
+    const itSerial = (it.serialNos?.[0] || '').trim().toUpperCase();
+    const itPart = (it.partNo || '').trim().toUpperCase();
+
+    const dtLine = targetDT?.toolLines?.find(tl => {
+      const s = (tl.serial || '').trim().toUpperCase();
+      const a = (tl.assetNo || '').trim().toUpperCase();
+      if (itSerial && itSerial !== '—' && (s === itSerial || a === itSerial)) return true;
+      if (itPart && itPart !== '—' && (s === itPart || a === itPart)) return true;
+      return false;
     });
 
-    const candidateSerial = (dtLine?.assetNo && !dtLine.assetNo.toUpperCase().startsWith('EMD-') ? dtLine.assetNo : '') ||
-                            (dtLine?.serial && !dtLine.serial.toUpperCase().startsWith('EMD-') ? dtLine.serial : '') ||
-                            it.serialNos?.[0];
-    const candidateAssetNo = (dtLine?.assetNo && !dtLine.assetNo.toUpperCase().startsWith('EMD-') ? dtLine.assetNo : '') ||
-                             (dtLine?.serial && !dtLine.serial.toUpperCase().startsWith('EMD-') ? dtLine.serial : '') ||
-                             it.partNo;
-    const candidateDesc = dtLine?.toolDescription || dtLine?.desc || it.description;
+    const candidateSerial = dtLine?.serial || it.serialNos?.[0];
+    const candidateAssetNo = dtLine?.assetNo || it.partNo;
+    const candidateDesc = it.description || dtLine?.toolDescription || dtLine?.desc;
     const candidateSupplier = dtLine?.ownership || dtLine?.supplier || it.supplier;
 
     const resolved = resolveToolDetails(candidateSerial, candidateAssetNo, candidateDesc, it.shortDesc || it.cat, candidateSupplier);
     return {
       ...it,
-      dtNumber: it.dtNumber || targetDT?.dtNumber,
-      status: (targetDT ? 'Released' : it.status) as any,
-      partNo: resolved.assetNo,
-      serialNos: [resolved.serial && resolved.serial !== '—' ? resolved.serial : resolved.assetNo],
-      description: resolved.desc,
-      shortDesc: resolved.shortDesc,
+      dtNumber: targetDT ? targetDT.dtNumber : undefined,
+      status: (targetDT ? 'Released' : (it.status === 'Released' ? 'Assigned' : it.status || 'Assigned')) as any,
+      partNo: it.partNo || resolved.assetNo,
+      serialNos: (it.serialNos && it.serialNos.length > 0 && it.serialNos[0] !== '—') ? it.serialNos : [resolved.serial && resolved.serial !== '—' ? resolved.serial : resolved.assetNo],
+      description: it.description || resolved.desc,
+      shortDesc: it.shortDesc || it.cat || resolved.shortDesc,
       cat: it.cat || resolved.shortDesc,
-      supplier: resolved.supplier,
-      ownership: resolved.supplier,
-      isEmdad: resolved.isEmdad,
+      supplier: it.supplier || resolved.supplier,
+      ownership: it.ownership || resolved.supplier,
+      isEmdad: it.isEmdad ?? resolved.isEmdad,
     };
   }, [jobDTs, resolveToolDetails]);
+
+  const isTargetJob01816 = useMemo(() => {
+    const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
+    return rawId === 'JOB-26-01816' || rawId === 'JOB-026-01816' || normalizeJobKey(rawId) === normalizeJobKey('JOB-26-01816');
+  }, [jobData]);
 
   // Checklist Items State
   const [checklistItems, setChecklistItems] = useState<CalloutItem[]>(() => {
     if (activeCallout.items && activeCallout.items.length > 0) {
       return activeCallout.items.map((it, idx) => resolveChecklistItemWithDT(it, idx));
     }
+    const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
+    if (rawId === 'JOB-26-01816' || rawId === 'JOB-026-01816' || normalizeJobKey(rawId) === normalizeJobKey('JOB-26-01816')) {
+      return DEFAULT_WHIPSTOCK_TOOLS_01816.map((it, idx) => resolveChecklistItemWithDT(it, idx));
+    }
     return [];
   });
 
   useEffect(() => {
-    if (activeCallout && Array.isArray(activeCallout.items)) {
+    if (activeCallout && Array.isArray(activeCallout.items) && activeCallout.items.length > 0) {
       setChecklistItems(
         activeCallout.items.map((it, idx) => resolveChecklistItemWithDT(it, idx))
       );
+    } else if (isTargetJob01816) {
+      setChecklistItems((prev) => {
+        if (prev && prev.length > 0) return prev;
+        return DEFAULT_WHIPSTOCK_TOOLS_01816.map((it, idx) => resolveChecklistItemWithDT(it, idx));
+      });
     }
-  }, [activeCallout, resolveChecklistItemWithDT]);
+  }, [activeCallout, resolveChecklistItemWithDT, isTargetJob01816]);
 
   // Master Tool Categories & Sizes for Tool Picker
   const customCategories = useMemo<string[]>(() => {
@@ -1285,12 +1325,14 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Helper to determine which DT an item belongs to in this job, and whether that DT is locked
   const getAssignedDTForChecklistItem = useCallback((item: CalloutItem): { dtNumber: string; isLocked: boolean } | null => {
     if (item.dtNumber) {
-      const match = jobDTs.find((d) => d.dtNumber === item.dtNumber);
+      if ((item.dtNumber || '').trim().toUpperCase() === 'DT-26-10001') return null;
+      const match = jobDTs.find((d) => (d.dtNumber || '').trim().toUpperCase() === (item.dtNumber || '').trim().toUpperCase());
       return { dtNumber: item.dtNumber, isLocked: match?.isLocked ?? false };
     }
     const itemSerial = (item.serialNos?.[0] || item.partNo || '').trim().toUpperCase();
     if (!itemSerial) return null;
     for (const dt of jobDTs) {
+      if ((dt.dtNumber || '').trim().toUpperCase() === 'DT-26-10001') continue;
       const match = dt.toolLines?.some((l) => {
         const s = (l.serial || '').trim().toUpperCase();
         const a = (l.assetNo || '').trim().toUpperCase();
@@ -2693,7 +2735,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       `Delete Delivery Ticket ${dtNum}?\n\n` +
       `• Job: ${jobData.id} (${jobData.rig} / ${jobData.well})\n` +
       `• Equipment Count: ${activeDT.toolLines?.length || 0} tool(s)\n\n` +
-      `This will delete this ticket, return assigned tools to yard inventory, and reset checklist tools so you can re-generate a new ticket.`
+      `This will permanently delete this Delivery Ticket, return assigned tools to yard inventory, and reset checklist tools so you can re-generate a new ticket.`
     );
     if (!confirmed) return;
 
@@ -2702,8 +2744,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     }
     setSelectedDTNumber('');
 
+    const targetUpper = (dtNum || '').trim().toUpperCase();
+    const isOnlyDT = jobDTs.length <= 1;
+
     const updatedChecklist = checklistItems.map((ci) => {
-      if (ci.dtNumber === dtNum) {
+      const ciDt = (ci.dtNumber || '').trim().toUpperCase();
+      if (ciDt === targetUpper || isOnlyDT) {
         return { ...ci, dtNumber: undefined, status: 'Assigned' as const };
       }
       return ci;
@@ -2712,11 +2758,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     if (onSaveCallout) {
       onSaveCallout({
         ...activeCallout,
+        status: 'Active',
         items: updatedChecklist,
       });
     }
 
-    showToast(`Delivery Ticket ${dtNum} deleted successfully.`, 'info');
+    showToast(`Delivery Ticket ${dtNum} deleted successfully. Checklist reset for new dispatch.`, 'info');
   };
 
   // Remove individual tool line from active DT
@@ -4674,7 +4721,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  {!isClosedOrInvoiced && !isLocked && (
+                  {(!isClosedOrInvoiced || adminUnlocked) && (!isLocked || adminUnlocked || isAdmin) && (
                     <>
                       {isContract4700024096 && (
                         <button
@@ -5154,7 +5201,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     ))}
                   </select>
                 )}
-                {!isClosedOrInvoiced && !isLocked && (
+                {(!isClosedOrInvoiced || adminUnlocked) && (!isLocked || adminUnlocked || isAdmin) && (
                   <>
                     <button
                       type="button"
@@ -5202,6 +5249,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     >
                       <span>🔓</span>
                       <span>Unlock DT</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteCurrentDT}
+                      className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs transition cursor-pointer flex items-center gap-1"
+                      title="Delete this Delivery Ticket, return tools to yard, and reset checklist"
+                    >
+                      <span>🗑️</span>
+                      <span>Delete DT</span>
                     </button>
                     {isAdmin && (
                       <button
