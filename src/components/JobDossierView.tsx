@@ -1079,57 +1079,31 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       );
     };
 
-    let inv = lookupInv(rawSerial) || lookupInv(rawAssetNo);
+    // Match the tool to inventory by its serial / asset no / SystemID / OEM serial.
+    // inventoryMap registers all of those keys, so an EMD- SystemID resolves correctly.
+    // NO description-based guessing: that silently swapped in a DIFFERENT physical tool
+    // and made the same item resolve differently on the checklist vs the delivery ticket.
+    const inv = lookupInv(rawSerial) || lookupInv(rawAssetNo);
 
-    // If still not found, try searching inventory by description match
-    if (!inv && (fallbackDesc || fallbackShortDesc)) {
-      const cleanDesc = String(fallbackDesc || fallbackShortDesc || '').trim().toUpperCase();
-      inv = (Array.isArray(inventory) ? inventory : []).find((t) => {
-        const td = String(t?.desc || '').trim().toUpperCase();
-        return td && cleanDesc && (td === cleanDesc || td.includes(cleanDesc) || cleanDesc.includes(td));
-      });
-    }
-
-    // Priority 1: Genuine inventory Asset Number (never EMD- if a physical assetNo exists)
-    let assetNo = '';
+    // ASSET NUMBER: always the real Asset No from the inventory record.
+    // EMD- is the system-assigned SystemID (internal only) and must never be shown as an asset number.
     const invAsset = String(inv?.assetNo || '').trim();
     const rawAsset = String(rawAssetNo || '').trim();
-    const invOem = String(inv?.oemSerial || '').trim();
     const invSerial = String(inv?.serial || '').trim();
     const rawSer = String(rawSerial || '').trim();
+    const isSystemId = (v: string) => v.toUpperCase().startsWith('EMD-');
 
-    if (invAsset && !invAsset.toUpperCase().startsWith('EMD-')) {
-      assetNo = invAsset;
-    } else if (rawAsset && !rawAsset.toUpperCase().startsWith('EMD-')) {
-      assetNo = rawAsset;
-    } else if (invOem && !invOem.toUpperCase().startsWith('EMD-')) {
-      assetNo = invOem;
-    } else if (invSerial && !invSerial.toUpperCase().startsWith('EMD-')) {
-      assetNo = invSerial;
-    } else if (rawSer && !rawSer.toUpperCase().startsWith('EMD-')) {
+    let assetNo = '';
+    if (invAsset) {
+      assetNo = invAsset;                     // the real Asset No from inventory
+    } else if (rawAsset && !isSystemId(rawAsset)) {
+      assetNo = rawAsset;                     // already a real asset number on the record
+    } else if (rawSer && !isSystemId(rawSer)) {
       assetNo = rawSer;
-    } else if (inv && inv.isEmdad === false) {
-      assetNo = String(inv.assetNo || inv.serial || inv.oemSerial || rawAssetNo || rawSerial || '').trim();
     } else {
-      // Check inventory by description to find real physical asset number
-      const descToSearch = String(fallbackDesc || inv?.desc || '').trim().toUpperCase();
-      if (descToSearch) {
-        const matchByDesc = (Array.isArray(inventory) ? inventory : []).find((t) => {
-          const td = String(t?.desc || '').trim().toUpperCase();
-          const tAsset = String(t?.assetNo || '').trim().toUpperCase();
-          return (td === descToSearch || (td && descToSearch && (td.includes(descToSearch) || descToSearch.includes(td)))) &&
-            tAsset && !tAsset.startsWith('EMD-');
-        });
-        if (matchByDesc && matchByDesc.assetNo) {
-          assetNo = String(matchByDesc.assetNo).trim();
-        }
-      }
-      if (!assetNo) {
-        assetNo = (invAsset && !invAsset.toUpperCase().startsWith('EMD-') ? invAsset : '') ||
-                  (rawAsset && !rawAsset.toUpperCase().startsWith('EMD-') ? rawAsset : '') ||
-                  (rawSer && !rawSer.toUpperCase().startsWith('EMD-') ? rawSer : '') ||
-                  invAsset || rawAsset || rawSer || '—';
-      }
+      // Unmatched reference (phantom / historical tool no longer in inventory).
+      // Show what is stored rather than inventing a different tool - this record needs data correction.
+      assetNo = rawAsset || rawSer || '—';
     }
 
     // Priority 2: Genuine Serial Number
@@ -1188,7 +1162,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
     const isEmdad = inv ? Boolean(inv.isEmdad) : (!supplier || String(supplier).trim().toUpperCase() === 'EMDAD');
 
-    return { inv, assetNo, serial, desc, shortDesc, supplier, ownership: supplier, isEmdad };
+    const size = String(inv?.size || '').trim();
+    return { inv, assetNo, serial, size, desc, shortDesc, supplier, ownership: supplier, isEmdad };
   }, [inventoryMap, inventory]);
 
   // Default whipstock checklist tools for Job-026-01816
