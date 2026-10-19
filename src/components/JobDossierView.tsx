@@ -677,6 +677,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return (Array.isArray(dtBatches) ? dtBatches : []).filter((b) => {
       if (!b) return false;
       const id = String(b.id || '').toUpperCase();
+      const num = String(b.dtNumber || '').toUpperCase();
       if (
         id.startsWith('DT-AUTO') ||
         id.startsWith('DT-CLS') ||
