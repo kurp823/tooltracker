@@ -5,6 +5,7 @@ import {
   findBestMatchingOption,
   ToolHoleSectionOption,
 } from './contractRateResolver';
+import { getJobUtilizationRecords, ToolUtilizationRecord } from './jobUtilizationData';
 
 /**
  * Standard fixed conversion rate applied by EMDAD for UAE tax invoices
@@ -245,11 +246,26 @@ export function generateInvoicePackageForJob(
 
   const dateOfSupply = options?.dateOfSupply || mobDateFormatted;
 
-  const derivedDT = `DT-0${job.id.replace(/[^0-9]/g, '').slice(-4) || '0001'}`;
-  const derivedRT = `RT-0${job.id.replace(/[^0-9]/g, '').slice(-4) || '0001'}`;
+  // A job that already carries a legal (final) invoice number has already been
+  // billed to the client - its figures must come only from real/archived
+  // records from this point on and must never be silently regenerated or
+  // overwritten with fabricated placeholders.
+  const isLocked = Boolean(job.legalInvoiceNumber && job.legalInvoiceNumber.trim() && job.legalInvoiceNumber.trim() !== '—');
 
-  const deliveryTicketRefs = dtRefs.length > 0 ? dtRefs.join(', ') : derivedDT;
-  const returnLoadingNoteNo = rtRefs.length > 0 ? rtRefs.join(', ') : derivedRT;
+  // Real archived tool/utilization history for this job (actual DT/RT/tool
+  // details previously recorded), used only when no live DT/RT batch is
+  // matched. This is real data, never a guess.
+  const historicalRecords: ToolUtilizationRecord[] = getJobUtilizationRecords(job.id || job.jobNumber);
+  const historicalDtRefs = Array.from(new Set(historicalRecords.map((r) => r.dt).filter(Boolean)));
+
+  // NOTE: previously this fabricated a DT-0xxxx/RT-0xxxx ticket number out of
+  // the job ID digits whenever no ticket matched - that invented a document
+  // number that doesn't correspond to any real signed ticket. Never do that:
+  // show the real refs if found, otherwise say plainly that none were found.
+  const deliveryTicketRefs = dtRefs.length > 0
+    ? dtRefs.join(', ')
+    : (historicalDtRefs.length > 0 ? historicalDtRefs.join(', ') : 'No DT on record');
+  const returnLoadingNoteNo = rtRefs.length > 0 ? rtRefs.join(', ') : 'No RT on record';
 
   // Derive Client Details
   let customerName = 'ADNOC OFFSHORE (EX-ADMA-OPCO)';
@@ -503,59 +519,48 @@ export function generateInvoicePackageForJob(
         });
       });
     });
-  } else {
-    // Generate tailored lines matching the specific job's attributes
+  } else if (historicalRecords.length > 0) {
+    // No live DT/RT batch matched this job, but real archived tool/utilization
+    // history exists for it (previously invoiced/recorded data) - use that
+    // instead of inventing a generic tool assembly.
     let itemSeq = 1;
-    const numTools = Math.max(2, job.dtToolsCount || 3);
-
-    // Standard fishing tool items matching rig assembly
-    const defaultAssembly = [
-      { desc: '5-3/4" FS OVERSHOT W/ 3-1/2" IF BOX', prefix: 'OS534', operRate: 0, standbyRate: 32.84, ref: 'A.4.1', isOper: false },
-      { desc: '4-3/4" LOGAN SUPER FISHING JAR W/ 3-1/2" IF', prefix: 'SPFJ434', operRate: 0, standbyRate: 33.88, ref: 'A.4.8', isOper: false },
-      { desc: '4-3/4" OD FISHING BUMPER SUB W/ 3-1/2" IF', prefix: 'FBS434', operRate: 0, standbyRate: 20.74, ref: 'A.4.7', isOper: false },
-      { desc: '5" JUNK SUB W/ 3-1/2" REG PIN X BOX', prefix: 'JS5', operRate: 6.91, standbyRate: 3.46, ref: 'A.4.22', isOper: true },
-      { desc: 'BIT SUB W/ 3-1/2" IF BOX X 3-1/2" REG BOX', prefix: 'BS312', operRate: 2.76, standbyRate: 1.38, ref: 'A.4.21', isOper: true },
-      { desc: '4-3/4" OD COARSE THREAD SAFETY JOINT', prefix: 'SJ434', operRate: 0, standbyRate: 6.91, ref: 'A.4.26', isOper: false },
-    ];
-
-    for (let i = 0; i < numTools; i++) {
-      const template = defaultAssembly[i % defaultAssembly.length];
-      const serial = `${template.prefix}-${job.id.replace(/[^0-9]/g, '').slice(-3) || '101'}-${i + 1}`;
-      const isOper = template.isOper;
-      const operDays = isOper ? 2 : 0;
-      const uncappedStandby = Math.max(0, rentalDays - operDays);
-      let toolStandbyDays = uncappedStandby;
-      if (isAdnocOnshore) {
-        toolStandbyDays = Math.min(uncappedStandby, 6);
-      } else if (isAdnocDrilling) {
-        toolStandbyDays = Math.min(uncappedStandby, 10);
-      }
-
-      const operTotalUSD = Math.round(operDays * template.operRate * 100) / 100;
-      const standbyTotalUSD = Math.round(toolStandbyDays * template.standbyRate * 100) / 100;
+    historicalRecords.forEach((rec) => {
+      const operDays = rec.operDays || 0;
+      const sbDays = rec.sbDays || 0;
+      const operRate = rec.operRate || 0;
+      const sbRate = rec.sbRate || 0;
+      const operTotalUSD = Math.round(operDays * operRate * 100) / 100;
+      const standbyTotalUSD = Math.round(sbDays * sbRate * 100) / 100;
       const totalChargesUSD = Math.round((operTotalUSD + standbyTotalUSD) * 100) / 100;
 
       lines.push({
         itemNo: itemSeq++,
-        serialNumber: serial,
-        toolDescription: template.desc,
+        serialNumber: rec.serial || '—',
+        toolDescription: rec.desc || 'TOOL (FROM ARCHIVED JOB RECORD)',
         qty: 1,
-        deliveryTicketNo: deliveryTicketRefs,
-        deliveryDate: mobDateFormatted,
-        returnDate: demobDateFormatted,
+        deliveryTicketNo: rec.dt || deliveryTicketRefs,
+        deliveryDate: rec.delDate ? formatJobDisplayDate(rec.delDate) : mobDateFormatted,
+        returnDate: rec.retDate ? formatJobDisplayDate(rec.retDate) : demobDateFormatted,
         rentalDays,
         rgtNo: returnLoadingNoteNo,
-        contractRefOper: template.ref,
-        contractRefStandby: template.ref,
+        contractRefOper: 'ARCHIVED RECORD',
+        contractRefStandby: 'ARCHIVED RECORD',
         operDays,
-        operRateUSD: template.operRate,
-        standbyDays: toolStandbyDays,
-        standbyRateUSD: template.standbyRate,
+        operRateUSD: operRate,
+        standbyDays: sbDays,
+        standbyRateUSD: sbRate,
         operTotalUSD,
         standbyTotalUSD,
         totalChargesUSD,
       });
-    }
+    });
+  } else {
+    // No live DT/RT batch and no archived utilization history matched this
+    // job - there is nothing real to show. Previously this point generated a
+    // fictional assembly of generic fishing tools with fabricated serial
+    // numbers and rates; that is never done now. `lines` stays empty and
+    // `noMatchedRecords` (below) tells the UI to say so plainly instead of
+    // printing an invoice with invented tools.
   }
 
   // Roll up values
@@ -599,19 +604,21 @@ export function generateInvoicePackageForJob(
   const operNotes = `OPERATIONAL DAYS = ${operDays} DAYS AS PER RIG SIGN-OFF`;
   const operDaysSummary = `${operDays} Operational Days as per Rig Sign-off`;
 
-  // Build verification package
-  const dtList = dtRefs.length > 0 ? dtRefs : [derivedDT];
-  const rtList = rtRefs.length > 0 ? rtRefs : [derivedRT];
+  // Build verification package - only ever from real refs (live or
+  // archived); an empty list here means no real ticket was found, which the
+  // UI shows plainly rather than inventing one.
+  const dtList = dtRefs.length > 0 ? dtRefs : historicalDtRefs;
+  const rtList = rtRefs.length > 0 ? rtRefs : [];
 
   const verificationPackage = {
     deliveryTickets: dtList.map((ticketNo, idx) => ({
       ticketNo,
       date: formatJobDisplayDate(jobDTs[idx]?.dispatchDate || jobDTs[idx]?.rmDate || mobDateRaw),
-      toolsCount: jobDTs[idx]?.toolLines?.length || Math.max(1, lines.length - 1),
+      toolsCount: jobDTs[idx]?.toolLines?.length || lines.length,
       description: `Mobilization of downhole fishing assembly to Rig ${job.rig || 'AD-63'}`,
-      signedBy: jobDTs[idx]?.signedDocName || 'Rig Superintendent Verified',
+      signedBy: jobDTs[idx]?.signedDocName || (jobDTs[idx] ? 'Rig Superintendent Verified' : 'Not Verified (Archived Record)'),
     })),
-    totalToolsMobilized: Math.max(1, lines.filter((l) => !l.serialNumber.includes('SUBCTR') && !l.toolDescription.toLowerCase().includes('engineer')).length),
+    totalToolsMobilized: lines.filter((l) => !l.serialNumber.includes('SUBCTR') && !l.toolDescription.toLowerCase().includes('engineer')).length,
     totalCrewMobilized: lines.some((l) => l.serialNumber.includes('SUBCTR') || l.toolDescription.toLowerCase().includes('engineer')) ? 1 : 0,
     mobManifest: {
       manifestRef: `MNF-${(job.rig || 'RIG').replace(/[^a-zA-Z0-9]/g, '')}-${job.id.replace(/[^0-9]/g, '').slice(-4) || '2025'}`,
@@ -625,7 +632,7 @@ export function generateInvoicePackageForJob(
     receivingTickets: rtList.map((ticketNo, idx) => ({
       ticketNo,
       date: formatJobDisplayDate(jobRTs[idx]?.rtDate || demobDateRaw),
-      toolsReturned: jobRTs[idx]?.toolLines?.length || Math.max(1, lines.length - 1),
+      toolsReturned: jobRTs[idx]?.toolLines?.length || 0,
       backloadStatus: 'Complete Demobilization',
       routedTo: 'Checked into Inspection Bay',
     })),
@@ -728,6 +735,11 @@ export function generateInvoicePackageForJob(
     deliveryTicketRefs,
     returnLoadingNoteNo,
     lines,
+    noMatchedRecords: lines.length === 0,
+    dataSource: (jobDTs.length > 0 && jobDTs.some((dt) => dt.toolLines && dt.toolLines.length > 0))
+      ? 'live'
+      : (historicalRecords.length > 0 ? 'historical' : 'none'),
+    isLocked,
     crewChargeUSD,
     crewDays: 4,
     crewDailyRateUSD: 850.00,

@@ -732,6 +732,17 @@ export interface DraftInvoicePackageData {
   deliveryTicketRefs: string; // e.g. "DT-02171, DT-02311"
   returnLoadingNoteNo: string; // e.g. "RT-02214"
   lines: CalculationTicketLine[];
+  // true when no real DT/RT or archived utilization records were found for
+  // this job (lines is empty) - the UI must show this plainly, never fill
+  // the gap with invented tools/ticket numbers.
+  noMatchedRecords?: boolean;
+  // where `lines` came from: 'live' DT/RT batches, 'historical' archived
+  // utilization records, or 'none' when nothing real was found.
+  dataSource?: 'live' | 'historical' | 'none';
+  // true when the job already carries a legal/final invoice number - it has
+  // already been billed, so the UI should treat this package as locked
+  // (read-only) rather than letting it be re-finalized.
+  isLocked?: boolean;
   crewChargeUSD: number;
   crewDays: number;
   crewDailyRateUSD: number;
