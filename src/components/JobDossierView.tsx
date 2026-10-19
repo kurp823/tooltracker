@@ -2217,8 +2217,25 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     });
     const newItems: CalloutItem[] = newlySelectedTools.map((t, idx) => {
       const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier, t.ownership);
-      const exactAssetNo = resolved.assetNo;
-      const exactSerial = resolved.serial;
+
+      // Compute the physical (non-EMD) display asset number directly from inventory fields,
+      // mirroring the same priority logic used in the tool-picker table column rendering.
+      const _tAsset  = String(t.assetNo   || '').trim();
+      const _tSerial = String(t.serial     || '').trim();
+      const _tOem    = String(t.oemSerial  || '').trim();
+      const _isEmd   = (v: string) => !v || v.toUpperCase().startsWith('EMD-');
+
+      const exactAssetNo: string =
+        (!_isEmd(_tAsset)  ? _tAsset  : '') ||
+        (!_isEmd(_tOem)    ? _tOem    : '') ||
+        (!_isEmd(_tSerial) ? _tSerial : '') ||
+        _tAsset || _tSerial || resolved.assetNo;
+
+      const exactSerial: string =
+        (!_isEmd(_tSerial) ? _tSerial : '') ||
+        (!_isEmd(_tAsset)  ? _tAsset  : '') ||
+        (!_isEmd(_tOem)    ? _tOem    : '') ||
+        _tSerial || _tAsset || resolved.serial;
       const exactDesc = resolved.desc;
       const exactShortDesc = resolved.shortDesc;
       const exactSize = t.size || resolved.inv?.size || '—';
