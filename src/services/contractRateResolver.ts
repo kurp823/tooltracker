@@ -193,14 +193,28 @@ export function getContractRateOptionsForTool(
   const matchedRates: ContractRateItem[] = [];
   const genericRates: ContractRateItem[] = [];
 
-  for (const r of ratesList) {
+  // An exact category match (tool.category === rate.category, case/spacing
+  // insensitive) is unambiguous and always correct - prefer it over the
+  // fuzzy description/synonym matching below, which can match the wrong
+  // rate line (or none at all, silently falling back to a $0 rate) whenever
+  // a tool's free-text description doesn't happen to contain the right
+  // words. This is reliable exactly when the inventory item's Category
+  // field and the contract rate sheet's Category column use the same exact
+  // category names - see the Contract Pricing Template for keeping them in
+  // sync.
+  const toolCategoryNorm = normalizeString(tool.category || '');
+  const exactCategoryRates = toolCategoryNorm
+    ? ratesList.filter((r) => normalizeString(r.category || '') === toolCategoryNorm)
+    : [];
+
+  for (const r of (exactCategoryRates.length > 0 ? exactCategoryRates : ratesList)) {
     const rCat = normalizeString(r.category || '');
     const rShort = normalizeString(r.shortDesc || '');
     const rDim = parseHoleDimension(r.size);
 
-    let catMatched = false;
-    if (rCat && (toolDesc.includes(rCat) || rCat.includes(toolDesc))) catMatched = true;
-    if (rShort && (toolDesc.includes(rShort) || rShort.includes(toolDesc))) catMatched = true;
+    let catMatched = exactCategoryRates.length > 0;
+    if (!catMatched && rCat && (toolDesc.includes(rCat) || rCat.includes(toolDesc))) catMatched = true;
+    if (!catMatched && rShort && (toolDesc.includes(rShort) || rShort.includes(toolDesc))) catMatched = true;
 
     // Check synonyms
     if (!catMatched) {
