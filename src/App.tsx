@@ -533,10 +533,12 @@ export const App: React.FC = () => {
         const num = String(b?.dtNumber || '').trim().toUpperCase();
         const id = String(b?.id || '').trim().toUpperCase();
         return (
-          num !== 'DT-26-10001' &&
-          id !== 'DT-26-10001' &&
-          num !== 'DT-26-100001' &&
-          id !== 'DT-26-100001'
+          !num.includes('10000') &&
+          !id.includes('10000') &&
+          !num.includes('10001') &&
+          !id.includes('10001') &&
+          !num.includes('10002') &&
+          !id.includes('10002')
         );
       })
     );
@@ -546,21 +548,16 @@ export const App: React.FC = () => {
         if (!c) return c;
         const hasDtRef = Array.isArray(c.items) && c.items.some((ci) => {
           const dt = String(ci?.dtNumber || '').trim().toUpperCase();
-          return dt === 'DT-26-10001' || dt === 'DT-26-100001';
+          return dt.includes('10000') || dt.includes('10001') || dt.includes('10002');
         });
-
         if (hasDtRef) {
           return {
             ...c,
-            items: (Array.isArray(c.items) ? c.items : []).map((ci) => {
-              if (!ci) return ci;
+            status: 'Approved',
+            items: c.items.map((ci) => {
               const dt = String(ci?.dtNumber || '').trim().toUpperCase();
-              if (dt === 'DT-26-10001' || dt === 'DT-26-100001') {
-                return {
-                  ...ci,
-                  dtNumber: undefined,
-                  status: 'Assigned' as const,
-                };
+              if (dt.includes('10000') || dt.includes('10001') || dt.includes('10002')) {
+                return { ...ci, dtNumber: undefined, status: 'Approved' };
               }
               return ci;
             }),

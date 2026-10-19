@@ -434,6 +434,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [jobData?.legalInvoiceNumber, jobData?.invoiceNumber, jobData?.status]);
 
   const { canEdit: canEditJobs, isReadOnly } = useModulePermission(user, 'jobs');
+  const { canEdit: canEditDT } = useModulePermission(user, 'dt');
   const isAdmin = user?.role === 'Admin';
   const isJobInvoicedOrFinished = Boolean(isJobInvoicedOrSubmitted);
 
@@ -446,6 +447,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const isClosedOrInvoiced = isJobInvoicedOrFinished && !adminUnlocked;
   const isJobLocked = isClosedOrInvoiced;
   const isLocked = (!canEditJobs && !isAdmin) || isJobLocked;
+  // Delivery ticket editing permission: requires jobs or dt editing rights, and unlocked status
+  const canUserEditDT = (canEditJobs || canEditDT || isAdmin) && !isClosedOrInvoiced;
 
   // Resizable columns & custom columns for Checklist table
   const checklistCustomCols = useCustomColumns('dossier_checklist');
@@ -683,10 +686,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         id.startsWith('DT-CLS') ||
         num.startsWith('DT-CLS') ||
         num.startsWith('DT-AUTO') ||
-        num === 'DT-26-10001' ||
-        id === 'DT-26-10001' ||
-        num === 'DT-26-100001' ||
-        id === 'DT-26-100001'
+        num.includes('10000') ||
+        id.includes('10000') ||
+        num.includes('10001') ||
+        id.includes('10001') ||
+        num.includes('10002') ||
+        id.includes('10002')
       ) {
         return false;
       }
@@ -1079,10 +1084,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       );
     };
 
-    let inv = lookupInv(rawSerial) || lookupInv(rawAssetNo);
+    const rawAsset = String(rawAssetNo || '').trim();
+    const rawSer = String(rawSerial || '').trim();
+    const hasExplicitIdentity = Boolean(
+      (rawAsset && !rawAsset.toUpperCase().startsWith('EMD-') && rawAsset !== '—') ||
+      (rawSer && !rawSer.toUpperCase().startsWith('EMD-') && rawSer !== '—')
+    );
 
-    // If still not found, try searching inventory by description match
-    if (!inv && (fallbackDesc || fallbackShortDesc)) {
+    let inv = lookupInv(rawSerial) || lookupInv(rawAssetNo);
+    const matchedByKey = Boolean(inv);
+
+    // If still not found, and NO explicit serial or asset was provided, try searching inventory by description match
+    if (!inv && !hasExplicitIdentity && (fallbackDesc || fallbackShortDesc)) {
       const cleanDesc = String(fallbackDesc || fallbackShortDesc || '').trim().toUpperCase();
       inv = (Array.isArray(inventory) ? inventory : []).find((t) => {
         const td = String(t?.desc || '').trim().toUpperCase();
@@ -1093,57 +1106,37 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     // Priority 1: Genuine inventory Asset Number (never EMD- if a physical assetNo exists)
     let assetNo = '';
     const invAsset = String(inv?.assetNo || '').trim();
-    const rawAsset = String(rawAssetNo || '').trim();
     const invOem = String(inv?.oemSerial || '').trim();
     const invSerial = String(inv?.serial || '').trim();
-    const rawSer = String(rawSerial || '').trim();
 
-    if (invAsset && !invAsset.toUpperCase().startsWith('EMD-')) {
-      assetNo = invAsset;
-    } else if (rawAsset && !rawAsset.toUpperCase().startsWith('EMD-')) {
+    if (rawAsset && !rawAsset.toUpperCase().startsWith('EMD-') && rawAsset !== '—') {
       assetNo = rawAsset;
-    } else if (invOem && !invOem.toUpperCase().startsWith('EMD-')) {
+    } else if (matchedByKey && invAsset && !invAsset.toUpperCase().startsWith('EMD-')) {
+      assetNo = invAsset;
+    } else if (matchedByKey && invOem && !invOem.toUpperCase().startsWith('EMD-')) {
       assetNo = invOem;
-    } else if (invSerial && !invSerial.toUpperCase().startsWith('EMD-')) {
-      assetNo = invSerial;
-    } else if (rawSer && !rawSer.toUpperCase().startsWith('EMD-')) {
+    } else if (rawSer && !rawSer.toUpperCase().startsWith('EMD-') && rawSer !== '—') {
       assetNo = rawSer;
-    } else if (inv && inv.isEmdad === false) {
-      assetNo = String(inv.assetNo || inv.serial || inv.oemSerial || rawAssetNo || rawSerial || '').trim();
+    } else if (matchedByKey && invSerial && !invSerial.toUpperCase().startsWith('EMD-')) {
+      assetNo = invSerial;
+    } else if (inv && inv.isEmdad === false && matchedByKey) {
+      assetNo = String(inv.assetNo || inv.serial || inv.oemSerial || rawAsset || rawSer || '').trim();
     } else {
-      // Check inventory by description to find real physical asset number
-      const descToSearch = String(fallbackDesc || inv?.desc || '').trim().toUpperCase();
-      if (descToSearch) {
-        const matchByDesc = (Array.isArray(inventory) ? inventory : []).find((t) => {
-          const td = String(t?.desc || '').trim().toUpperCase();
-          const tAsset = String(t?.assetNo || '').trim().toUpperCase();
-          return (td === descToSearch || (td && descToSearch && (td.includes(descToSearch) || descToSearch.includes(td)))) &&
-            tAsset && !tAsset.startsWith('EMD-');
-        });
-        if (matchByDesc && matchByDesc.assetNo) {
-          assetNo = String(matchByDesc.assetNo).trim();
-        }
-      }
-      if (!assetNo) {
-        assetNo = (invAsset && !invAsset.toUpperCase().startsWith('EMD-') ? invAsset : '') ||
-                  (rawAsset && !rawAsset.toUpperCase().startsWith('EMD-') ? rawAsset : '') ||
-                  (rawSer && !rawSer.toUpperCase().startsWith('EMD-') ? rawSer : '') ||
-                  invAsset || rawAsset || rawSer || '—';
-      }
+      assetNo = rawAsset || rawSer || (matchedByKey ? (invAsset || invSerial) : '') || '—';
     }
 
     // Priority 2: Genuine Serial Number
     let serial = '';
-    if (invSerial && !invSerial.toUpperCase().startsWith('EMD-')) {
-      serial = invSerial;
-    } else if (rawSer && !rawSer.toUpperCase().startsWith('EMD-')) {
+    if (rawSer && !rawSer.toUpperCase().startsWith('EMD-') && rawSer !== '—') {
       serial = rawSer;
-    } else if (inv?.id && String(inv.id).trim() && !String(inv.id).trim().toUpperCase().startsWith('EMD-')) {
-      serial = String(inv.id).trim();
-    } else if (invSerial) {
+    } else if (matchedByKey && invSerial && !invSerial.toUpperCase().startsWith('EMD-')) {
       serial = invSerial;
+    } else if (rawAsset && !rawAsset.toUpperCase().startsWith('EMD-') && rawAsset !== '—') {
+      serial = rawAsset;
     } else if (rawSer) {
       serial = rawSer;
+    } else if (matchedByKey && invSerial) {
+      serial = invSerial;
     } else {
       serial = assetNo || '—';
     }
@@ -1155,16 +1148,16 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const fbShort = String(fallbackShortDesc || '').trim();
     const invShort = String(inv?.shortDesc || '').trim();
 
-    if (invDesc) {
+    if (fbDesc) {
+      desc = fbDesc;
+    } else if (invDesc) {
       desc = invDesc;
-    } else if (fbDesc && fbDesc.toUpperCase() !== fbShort.toUpperCase()) {
-      desc = fbDesc;
-    } else if (fbDesc) {
-      desc = fbDesc;
+    } else if (fbShort) {
+      desc = fbShort;
     } else if (invShort) {
       desc = invShort;
     } else {
-      desc = fallbackShortDesc || 'Downhole Tool';
+      desc = 'Downhole Tool';
     }
 
     // Priority 4: Clean Tool Category / Short Description
@@ -1846,22 +1839,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const getDTField = (dt: DTBatch | null, field: string): string => {
     if (!dt) return '';
     let val = (dt as any)[field];
-    if (!val && typeof window !== 'undefined' && dt.dtNumber) {
+    if ((val === undefined || val === null) && typeof window !== 'undefined' && dt.dtNumber) {
       try {
         const savedMeta = JSON.parse(localStorage.getItem(`emdad_dt_meta_${dt.dtNumber}`) || '{}');
-        val = savedMeta[field];
+        if (savedMeta[field] !== undefined && savedMeta[field] !== null) {
+          val = savedMeta[field];
+        }
       } catch {}
     }
-    if (!val) {
-      if (field === 'deliveredTo') return 'ESNAD JETTY';
-      if (field === 'vesselBoat' || field === 'msvName') return 'ZAKHER STAR';
-      if (field === 'transport') return 'EMDAD';
-      if (field === 'vehicleNo' || field === 'vehicleVesselNo' || field === 'vesselNo') return '54912';
-      if (field === 'driverName') return 'LUQMAN KHAN';
-      if (field === 'contactNo') return '+971565256707';
-      if (field === 'designation') return 'WORKSHOP COORDINATOR';
-    }
-    return val || '';
+    return val !== undefined && val !== null ? String(val) : '';
   };
 
   const handleUpdateDTField = (field: string, value: string) => {
@@ -2542,23 +2528,35 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       rig: jobData.rig,
       well: jobData.well,
       contract: jobData.contractNo || jobData.contract,
-      dispatchedBy: user?.name || 'Operations',
+      dispatchedBy: user?.name || '',
+      designation: '',
+      deliveredTo: '',
+      vesselBoat: '',
+      msvName: '',
+      transport: '',
+      vehicleNo: '',
+      vehicleVesselNo: '',
+      driverName: '',
+      contactNo: '',
       recipient: `${jobData.rig} Toolpusher`,
       notes: '',
       isLocked: false,
       toolLines: toolsToMobilize.map((ci, idx) => {
         const resolved = resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.shortDesc || ci.cat, ci.supplier);
+        const finalAssetNo = String(ci.partNo || resolved.assetNo || '').trim();
+        const finalSerial = String(ci.serialNos?.[0] || resolved.serial || finalAssetNo || '').trim();
+        const finalDesc = String(ci.description || resolved.desc || ci.shortDesc || '').trim();
         return {
           id: idx + 1,
           itemNo: idx + 1,
-          serial: resolved.serial,
-          assetNo: resolved.assetNo,
-          shortDesc: resolved.shortDesc,
-          desc: resolved.desc,
+          serial: finalSerial,
+          assetNo: finalAssetNo,
+          shortDesc: ci.cat || ci.shortDesc || resolved.shortDesc,
+          desc: finalDesc,
           size: ci.size || resolved.inv?.size || '—',
           status: 'OnRig',
-          ownership: resolved.supplier,
-          supplier: resolved.supplier,
+          ownership: ci.supplier || resolved.supplier,
+          supplier: ci.supplier || resolved.supplier,
           isEmdad: resolved.isEmdad,
           qty: ci.qty || 1,
           remarks: '',
@@ -5521,20 +5519,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         return (
                           <tr key={idx} className="hover:bg-blue-50/50 h-7 leading-none">
                             <td className="py-1 px-2 whitespace-nowrap text-center font-bold text-slate-600">{idx + 1}</td>
-                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900" title={resolved.assetNo}>
+                            <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-slate-900" title={t.assetNo || resolved.assetNo}>
                               {adminUnlocked ? (
                                 <input
                                   type="text"
-                                  defaultValue={resolved.assetNo}
+                                  defaultValue={t.assetNo || resolved.assetNo}
                                   onBlur={(e) => handleUpdateDTLineAssetNo(idx, e.target.value)}
                                   className="bg-amber-50 border border-amber-300 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-slate-900 w-32 focus:ring-1 focus:ring-blue-500"
                                   title="Admin Edit: Edit Asset No"
                                 />
                               ) : (
-                                resolved.assetNo
+                                t.assetNo || resolved.assetNo
                               )}
                             </td>
-                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={resolved.desc}>{resolved.desc}</td>
+                            <td className="py-1 px-2 whitespace-nowrap truncate max-w-[340px] font-medium text-slate-800" title={t.desc || resolved.desc}>{t.desc || resolved.desc}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-center font-bold">{t.qty || 1}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{formatDateDD_MM_YYYY(effectiveDT.dispatchDate)}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-blue-700">{jobData.id}</td>
@@ -5649,8 +5647,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       type="text"
                       value={getDTField(effectiveDT, 'dispatchedBy') || effectiveDT.dispatchedBy || ''}
                       onChange={(e) => handleUpdateDTField('dispatchedBy', e.target.value)}
-                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
-                      placeholder="e.g. Operations / Name"
+                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
+                      placeholder="e.g. Operations / Full Name"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                     />
                   </div>
@@ -5660,8 +5658,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       type="text"
                       value={getDTField(effectiveDT, 'designation')}
                       onChange={(e) => handleUpdateDTField('designation', e.target.value)}
-                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
-                      placeholder="e.g. WORKSHOP COORDINATOR"
+                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
+                      placeholder="e.g. Workshop Coordinator / Engineer"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                     />
                   </div>
@@ -5682,8 +5680,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       type="text"
                       value={getDTField(effectiveDT, 'deliveredTo')}
                       onChange={(e) => handleUpdateDTField('deliveredTo', e.target.value)}
-                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
-                      placeholder="e.g. ESNAD JETTY / YARD 08"
+                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
+                      placeholder="e.g. Esnad Jetty / Yard 08"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                     />
                   </div>
@@ -5693,8 +5691,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       type="text"
                       value={getDTField(effectiveDT, 'vesselBoat') || getDTField(effectiveDT, 'msvName')}
                       onChange={(e) => handleUpdateDTField('vesselBoat', e.target.value)}
-                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
-                      placeholder="e.g. ZAKHER STAR / MARSOL"
+                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
+                      placeholder="e.g. Zakher Star / Marsol"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                     />
                   </div>
@@ -5704,8 +5702,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       type="text"
                       value={getDTField(effectiveDT, 'transport')}
                       onChange={(e) => handleUpdateDTField('transport', e.target.value)}
-                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
-                      placeholder="e.g. EMDAD"
+                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
+                      placeholder="e.g. Emdad Logistics"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                     />
                   </div>
@@ -5722,7 +5720,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       type="text"
                       value={getDTField(effectiveDT, 'vehicleNo') || getDTField(effectiveDT, 'vehicleVesselNo')}
                       onChange={(e) => handleUpdateDTField('vehicleNo', e.target.value)}
-                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
+                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
                       placeholder="e.g. 54912 / 70136 AD"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100 font-mono"
                     />
@@ -5733,7 +5731,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       type="text"
                       value={getDTField(effectiveDT, 'driverName')}
                       onChange={(e) => handleUpdateDTField('driverName', e.target.value)}
-                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
+                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
                       placeholder="e.g. Driver Full Name"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
                     />
@@ -5744,8 +5742,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       type="text"
                       value={getDTField(effectiveDT, 'contactNo')}
                       onChange={(e) => handleUpdateDTField('contactNo', e.target.value)}
-                      disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
-                      placeholder="e.g. +971 50..."
+                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
+                      placeholder="e.g. +971 50 123 4567"
                       className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs font-mono disabled:bg-slate-100"
                     />
                   </div>

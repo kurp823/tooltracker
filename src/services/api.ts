@@ -1566,10 +1566,12 @@ export function reconcileJobsDTRTAndInventory(
       !id.startsWith('DT-CLS') &&
       !num.startsWith('DT-CLS') &&
       !num.startsWith('DT-AUTO') &&
-      num !== 'DT-26-10001' &&
-      id !== 'DT-26-10001' &&
-      num !== 'DT-26-100001' &&
-      id !== 'DT-26-100001'
+      !num.includes('10000') &&
+      !id.includes('10000') &&
+      !num.includes('10001') &&
+      !id.includes('10001') &&
+      !num.includes('10002') &&
+      !id.includes('10002')
     );
   });
 
@@ -2972,7 +2974,7 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
   const dtList: any[] = (rawDtList || []).filter((b: any) => {
     const id = String(b?.id || '').toUpperCase();
     const num = String(b?.dtNumber || '').toUpperCase();
-    return num !== 'DT-26-10001' && id !== 'DT-26-10001' && num !== 'DT-26-100001' && id !== 'DT-26-100001';
+    return !num.includes('10000') && !id.includes('10000') && !num.includes('10001') && !id.includes('10001') && !num.includes('10002') && !id.includes('10002');
   });
 
   const rtList: any[] =

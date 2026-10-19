@@ -489,22 +489,15 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
 
   const getDTField = (b: DTBatch, field: string): string => {
     let val = (b as any)[field];
-    if (!val && typeof window !== 'undefined' && b.dtNumber) {
+    if ((val === undefined || val === null) && typeof window !== 'undefined' && b.dtNumber) {
       try {
         const savedMeta = JSON.parse(localStorage.getItem(`emdad_dt_meta_${b.dtNumber}`) || '{}');
-        val = savedMeta[field];
+        if (savedMeta[field] !== undefined && savedMeta[field] !== null) {
+          val = savedMeta[field];
+        }
       } catch {}
     }
-    if (!val) {
-      if (field === 'deliveredTo') return 'ESNAD JETTY';
-      if (field === 'vesselBoat' || field === 'msvName') return 'ZAKHER STAR';
-      if (field === 'transport') return 'EMDAD';
-      if (field === 'vehicleNo' || field === 'vehicleVesselNo' || field === 'vesselNo') return '54912';
-      if (field === 'driverName') return 'LUQMAN KHAN';
-      if (field === 'contactNo') return '+971565256707';
-      if (field === 'designation') return 'WORKSHOP COORDINATOR';
-    }
-    return val || '';
+    return val !== undefined && val !== null ? String(val) : '';
   };
 
   const handlePrintDT = (b: DTBatch) => {
