@@ -534,71 +534,27 @@ export const App: React.FC = () => {
     setCallouts((prev) =>
       (Array.isArray(prev) ? prev : []).map((c) => {
         if (!c) return c;
-        const jId = String(c.jobId || (c as any).jobNumber || '').trim().toUpperCase();
-        const isTargetJob =
-          jId === 'JOB-26-01816' ||
-          jId === 'JOB-026-01816' ||
-          (jId ? normalizeJobKey(jId) === normalizeJobKey('JOB-26-01816') : false);
         const hasDtRef = Array.isArray(c.items) && c.items.some(
           (ci) => String(ci?.dtNumber || '').trim().toUpperCase() === 'DT-26-10001'
         );
 
-        if (isTargetJob || hasDtRef) {
-          const mappedItems = (Array.isArray(c.items) ? c.items : []).map((ci) => {
-            if (!ci) return ci;
-            if (
-              String(ci?.dtNumber || '').trim().toUpperCase() === 'DT-26-10001' ||
-              (isTargetJob && ci.status === 'Released')
-            ) {
-              return {
-                ...ci,
-                dtNumber: undefined,
-                status: 'Assigned' as const,
-              };
-            }
-            return ci;
-          });
-
-          let finalItems = mappedItems;
-          if (isTargetJob) {
-            const seen = new Set<string>();
-            finalItems = mappedItems.filter((ci) => {
-              const k = String(ci.partNo || ci.serialNos?.[0] || ci.description || '').trim().toUpperCase();
-              if (seen.has(k)) return false;
-              seen.add(k);
-              return true;
-            });
-          }
-
+        if (hasDtRef) {
           return {
             ...c,
-            status: 'Active' as const,
-            items: finalItems,
+            items: (Array.isArray(c.items) ? c.items : []).map((ci) => {
+              if (!ci) return ci;
+              if (String(ci?.dtNumber || '').trim().toUpperCase() === 'DT-26-10001') {
+                return {
+                  ...ci,
+                  dtNumber: undefined,
+                  status: 'Assigned' as const,
+                };
+              }
+              return ci;
+            }),
           };
         }
         return c;
-      })
-    );
-
-    setInventory((prev) =>
-      (Array.isArray(prev) ? prev : []).map((tool) => {
-        if (!tool) return tool;
-        const jId = String(tool.currentJobId || '').trim().toUpperCase();
-        const isTargetJob =
-          jId === 'JOB-26-01816' ||
-          jId === 'JOB-026-01816' ||
-          (jId ? normalizeJobKey(jId) === normalizeJobKey('JOB-26-01816') : false);
-        if (isTargetJob && tool.status === 'On Rig') {
-          return {
-            ...tool,
-            status: 'Good' as const,
-            location: 'Emdad Base',
-            currentJobId: null,
-            currentRig: null,
-            rig: undefined,
-          };
-        }
-        return tool;
       })
     );
   }, []);

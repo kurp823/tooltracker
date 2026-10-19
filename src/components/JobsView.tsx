@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { DrillingJob, Callout, DTBatch, RTBatch, User, JobLifecycleStatus } from '../types';
 import {
   JobStageKey,
@@ -250,48 +250,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   const [selectedClientFilter, setSelectedClientFilter] = useState<string>('all');
   const [density, setDensity] = useState<'compact' | 'comfortable'>('compact');
   const [selectedJobDetail, setSelectedJobDetail] = useState<DrillingJob | null>(null);
-  const [dossierJob, setDossierJobState] = useState<DrillingJob | null>(() => {
-    try {
-      const savedJobId = sessionStorage.getItem('emdad_active_dossier_job_id');
-      if (savedJobId && Array.isArray(jobs)) {
-        const found = jobs.find(
-          (j) =>
-            String(j.id || '').toUpperCase() === savedJobId.toUpperCase() ||
-            String(j.jobNumber || '').toUpperCase() === savedJobId.toUpperCase()
-        );
-        if (found) return found;
-      }
-    } catch {}
-    return null;
-  });
-
-  const setDossierJob = React.useCallback((job: DrillingJob | null) => {
-    setDossierJobState(job);
-    try {
-      if (job?.id) {
-        sessionStorage.setItem('emdad_active_dossier_job_id', job.id);
-      } else {
-        sessionStorage.removeItem('emdad_active_dossier_job_id');
-      }
-    } catch {}
-  }, []);
-
-  // Sync dossierJob with live jobs list if jobs update or reload
-  React.useEffect(() => {
-    try {
-      const savedJobId = sessionStorage.getItem('emdad_active_dossier_job_id');
-      if (savedJobId && Array.isArray(jobs) && jobs.length > 0) {
-        const found = jobs.find(
-          (j) =>
-            String(j.id || '').toUpperCase() === savedJobId.toUpperCase() ||
-            String(j.jobNumber || '').toUpperCase() === savedJobId.toUpperCase()
-        );
-        if (found && (!dossierJob || dossierJob.id !== found.id)) {
-          setDossierJobState(found);
-        }
-      }
-    } catch {}
-  }, [jobs, dossierJob]);
+  const [dossierJob, setDossierJob] = useState<DrillingJob | null>(null);
   const [selectedToolsJobId, setSelectedToolsJobId] = useState<string | null>(null);
 
   // Sorting State

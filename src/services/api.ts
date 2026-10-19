@@ -2831,20 +2831,17 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
       ? secondaryRes.callouts
       : INITIAL_CALLOUTS;
 
-  // Purge DT-26-10001 from callouts and reset items on JOB-26-01816
+  // Purge DT-26-10001 from callouts if present
   calloutsList = (Array.isArray(calloutsList) ? calloutsList : []).map((c: any) => {
     if (!c) return c;
-    const jId = String(c?.jobId || c?.jobNumber || '').trim().toUpperCase();
-    const isTargetJob = jId === 'JOB-26-01816' || jId === 'JOB-026-01816' || (jId ? normalizeJobKey(jId) === normalizeJobKey('JOB-26-01816') : false);
     const hasTargetDt = Array.isArray(c?.items) && c.items.some((it: any) => String(it?.dtNumber || '').trim().toUpperCase() === 'DT-26-10001');
 
-    if (isTargetJob || hasTargetDt) {
+    if (hasTargetDt) {
       return {
         ...c,
-        status: 'Active',
         items: (Array.isArray(c.items) ? c.items : []).map((it: any) => {
           if (!it) return it;
-          if (String(it?.dtNumber || '').trim().toUpperCase() === 'DT-26-10001' || (isTargetJob && it?.status === 'Released')) {
+          if (String(it?.dtNumber || '').trim().toUpperCase() === 'DT-26-10001') {
             return { ...it, dtNumber: undefined, status: 'Assigned' };
           }
           return it;

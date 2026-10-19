@@ -355,23 +355,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   customCategories: propCustomCategories,
   customSizes: propCustomSizes,
 }) => {
-  // Current active top tab - restored across browser refreshes
-  const [activeTab, setActiveTabState] = useState<DossierTabKey>(() => {
-    try {
-      const saved = sessionStorage.getItem(`emdad_active_dossier_tab_${jobData?.id}`);
-      if (saved) return saved as DossierTabKey;
-    } catch {}
-    return 'job-header';
-  });
-
-  const setActiveTab = useCallback((t: DossierTabKey) => {
-    setActiveTabState(t);
-    try {
-      if (jobData?.id) {
-        sessionStorage.setItem(`emdad_active_dossier_tab_${jobData.id}`, t);
-      }
-    } catch {}
-  }, [jobData?.id]);
+  // Current active top tab
+  const [activeTab, setActiveTab] = useState<DossierTabKey>('job-header');
 
   // Technical Details sub-tab
   const [techSubTab, setTechSubTab] = useState<'fishing' | 'whipstock' | 'rentals'>('fishing');
@@ -1202,18 +1187,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [inventoryMap, inventory]);
 
   // Default whipstock checklist tools for Job-026-01816
-  const DEFAULT_WHIPSTOCK_TOOLS_01816: CalloutItem[] = [
-    { seq: 1, partNo: 'EW-004', serialNos: ['EW-004'], size: '—', shortDesc: 'CARGO BASKET', description: 'CARGO BASKET W/ 4 WAY SLINGS ED-517', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'CARGO BASKET' },
-    { seq: 2, partNo: 'EL-001', serialNos: ['EL-001'], size: '—', shortDesc: 'CARGO BASKET', description: 'CARGO BASKET W/ 4 WAY SLINGS', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'CARGO BASKET' },
-    { seq: 3, partNo: '1338HT-WS-001', serialNos: ['1338HT-WS-001'], size: '13-3/8"', shortDesc: 'WHIPSTOCK', description: '13-3/8" WHIPSTOCK', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'WHIPSTOCK' },
-    { seq: 4, partNo: 'LM1214-001', serialNos: ['LM1214-001'], size: '12-1/4"', shortDesc: 'LEAD MILL', description: '12-1/4" LEAD MILL W/ 6-5/8" REG BOX', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'LEAD MILL' },
-    { seq: 5, partNo: 'SM-064', serialNos: ['SM-064'], size: '8-1/2"', shortDesc: 'STARTING MILL', description: '8-1/2" STARTING MILL C/W 4-1/2" REG BOX', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'LEAD MILL' },
-    { seq: 6, partNo: 'BSM850-003', serialNos: ['BSM850-003'], size: '8-1/2"', shortDesc: 'BACK STRING MILL', description: '8.5 BACK STRING MILL W/C 4-1/2" REG PIN X 4-1/2" REG BOX', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'BACK STRING MILL' },
-    { seq: 7, partNo: 'BM-812-001', serialNos: ['BM-812-001'], size: '8-1/2"', shortDesc: 'BACK MILL', description: 'BACK MILL C/W 4" IF BOX X PIN', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'BACK MILL' },
-    { seq: 8, partNo: 'FS-026', serialNos: ['FS-026'], size: '—', shortDesc: 'FLEXIBLE SUB', description: 'FLEXIBLE SUB C/W 4-1/2" REG PIN X 4-1/2" IFBOX - 16FT', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'FLEXIBLE SUB' },
-    { seq: 9, partNo: 'WM-007', serialNos: ['WM-007'], size: '8-1/2"', shortDesc: 'STRING MILL', description: '8-1/2" STRING MILL C/W 4-1/2" IF PIN X BOX (GAUGE RUN)', qty: 1, assigned: 1, status: 'Assigned', supplier: 'EMDAD', ownership: 'EMDAD', isEmdad: true, cat: 'STRING MILL' },
-  ];
-
   // Synchronize checklist items with job's Delivery Tickets to eliminate any system ID mix-up
   const resolveChecklistItemWithDT = useCallback((it: CalloutItem, idx: number) => {
     if (!it) return it;
@@ -1263,18 +1236,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     };
   }, [jobDTs, resolveToolDetails]);
 
-  const isTargetJob01816 = useMemo(() => {
-    const rawId = String(jobData?.id || jobData?.jobNumber || '').trim().toUpperCase();
-    return rawId === 'JOB-26-01816' || rawId === 'JOB-026-01816' || (rawId ? normalizeJobKey(rawId) === normalizeJobKey('JOB-26-01816') : false);
-  }, [jobData]);
-
   // Checklist Items State
   const [checklistItems, setChecklistItems] = useState<CalloutItem[]>(() => {
     if (activeCallout?.items && activeCallout.items.length > 0) {
       return activeCallout.items.filter(Boolean).map((it, idx) => resolveChecklistItemWithDT(it, idx));
-    }
-    if (isTargetJob01816) {
-      return DEFAULT_WHIPSTOCK_TOOLS_01816.map((it, idx) => resolveChecklistItemWithDT(it, idx));
     }
     return [];
   });
@@ -2485,7 +2450,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         return;
       }
     }
-    const updated = checklistItems.filter((item) => item.seq !== seq);
+    const updated = checklistItems
+      .filter((item) => item.seq !== seq)
+      .map((item, idx) => ({ ...item, seq: idx + 1 }));
     setChecklistItems(updated);
     setSelectedChecklistSeqs((prev) => prev.filter((s) => s !== seq));
     const calloutToSave = ({
@@ -5288,22 +5255,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <span>📝</span>
                       <span>Draft Preview (Not Dispatched)</span>
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const confirmed = window.confirm(
-                          'Reset draft checklist tools for this job back to default whipstock tools (9 items)?'
-                        );
-                        if (!confirmed) return;
-                        setChecklistItems(DEFAULT_WHIPSTOCK_TOOLS_01816);
-                        showToast('Checklist tools reset to standard whipstock package (9 items).', 'success');
-                      }}
-                      className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs transition cursor-pointer flex items-center gap-1"
-                      title="Reset draft checklist tools"
-                    >
-                      <span>🗑️</span>
-                      <span>Reset Draft Checklist</span>
-                    </button>
                   </>
                 ) : (activeDT?.isLocked || isClosedOrInvoiced) && !adminUnlocked ? (
                   <>
