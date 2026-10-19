@@ -370,7 +370,13 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
             lineNo: lineSeq++,
             dtNumber: dt.dtNumber,
             deliveryDate: dt.dispatchDate || dt.rmDate || (currentJob.mobDate || `${curYM}-01`),
-            assetNumber: tl.assetNo || toolInv?.assetNo || tl.serial,
+            // Real inventory Asset No wins over a stored EMD- SystemID (see
+            // JobDossierView/DeliveryTicketsView for the same rule, confirmed via SQL:
+            // AssetNo = real asset number, SystemID (EMD-) = internal, never shown).
+            assetNumber: (toolInv?.assetNo && !toolInv.assetNo.toUpperCase().startsWith('EMD-') ? toolInv.assetNo : '') ||
+                         (tl.assetNo && !tl.assetNo.toUpperCase().startsWith('EMD-') ? tl.assetNo : '') ||
+                         (tl.serial && !tl.serial.toUpperCase().startsWith('EMD-') ? tl.serial : '') ||
+                         toolInv?.assetNo || tl.assetNo || tl.serial || '—',
             description: tl.desc || toolInv?.desc || `${tl.size || ''} ${tl.shortDesc || ''}`.trim() || 'Downhole Tool',
             quantity: 1,
             status: isReturned ? 'Returned' : (tl.status === 'OnRig' ? 'On Rig' : 'New'),
