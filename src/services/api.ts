@@ -143,7 +143,27 @@ function normalizeInventoryItem(row: any): any {
 function isLegalCandidate(c: string): boolean {
   if (!c) return false;
   const s = String(c).trim().toUpperCase();
-  if (!s || s === '—' || s === '-' || s === 'PENDING' || s === 'NULL' || s === 'UNDEFINED' || s === 'NIL' || s.startsWith('ERP') || s.startsWith('DFT') || s.startsWith('DRAFT')) return false;
+  if (
+    !s ||
+    s === '—' ||
+    s === '-' ||
+    s === 'PENDING' ||
+    s === 'NULL' ||
+    s === 'UNDEFINED' ||
+    s === 'NIL' ||
+    s === 'N/A' ||
+    s === 'NA' ||
+    s === 'NONE' ||
+    s === 'NO' ||
+    s === 'TBD' ||
+    s === 'NOT INVOICED' ||
+    s === 'OPEN' ||
+    s.startsWith('ERP') ||
+    s.startsWith('DFT') ||
+    s.startsWith('DRAFT')
+  ) {
+    return false;
+  }
   if (/^\d+$/.test(s)) return false;
   return /[A-Z]/.test(s);
 }
@@ -264,7 +284,6 @@ function normalizeJob(row: any): any {
     String(row.LegalNumber || row.legalNumber || '').trim(),
     String(row.LegalInvoiceNo || row.legalInvoiceNo || '').trim(),
     String(row.LegalInvoice || row.legalInvoice || '').trim(),
-    String(row.ClientRef || row.clientRef || '').trim(),
     String(master?.legalInvoiceNumber || '').trim(),
   ];
 
@@ -377,7 +396,7 @@ function normalizeJob(row: any): any {
     tools: [],
     operatingDays: 0,
     standbyDays: 0,
-    isLocked: Boolean(hasLegal || row.LegalInvoiceNo || row.legalInvoiceNo),
+    isLocked: Boolean(legalInvoiceNumber && isLegalCandidate(legalInvoiceNumber)),
     invoiceNumber: legalInvoiceNumber || draftInvoiceNumber || row.LegalInvoiceNo || row.EmdadInvoiceNo || '',
     legalInvoiceNumber,
     draftInvoiceNumber,

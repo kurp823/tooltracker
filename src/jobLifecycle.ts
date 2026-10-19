@@ -114,6 +114,13 @@ export function isLegalInvoiceNumber(inv?: string | null): boolean {
     s === 'NULL' ||
     s === 'UNDEFINED' ||
     s === 'NIL' ||
+    s === 'N/A' ||
+    s === 'NA' ||
+    s === 'NONE' ||
+    s === 'NO' ||
+    s === 'TBD' ||
+    s === 'NOT INVOICED' ||
+    s === 'OPEN' ||
     s.startsWith('ERP') ||
     s.startsWith('DFT') ||
     s.startsWith('DRAFT')

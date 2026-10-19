@@ -26,6 +26,7 @@ import {
 } from '../services/contractRateResolver';
 import { EMDAD_LOGO_BASE64, EmdadLogo } from '../constants/branding';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
+import { isLegalInvoiceNumber } from '../jobLifecycle';
 import {
   generateDeliveryTicketHtml,
   generateDispatchChecklistHtml,
@@ -422,29 +423,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     });
   }, [initialJob]);
 
-  // LOCKED STATE RULE: If legally invoiced, draft invoiced, or submitted to billing, job is strictly read-only!
-  // Only Admin can edit (with audited mode banner)
+  // LOCKED STATE RULE: Only authentic legal invoices (FSH, FR, WHP, INV, CN, DN) or closed state lock a job.
+  // Draft invoices, internal ERP numbers, and active operational stages (SES, In Progress) NEVER lock the job.
   const isJobInvoicedOrSubmitted = useMemo(() => {
-    const legal = String(jobData?.legalInvoiceNumber || jobData?.invoiceNumber || '').trim();
-    const draft = String(jobData?.draftInvoiceNumber || '').trim();
-    const hasLegal = Boolean(legal && legal !== '—' && legal !== '-');
-    const hasDraft = Boolean(draft && draft !== '—' && draft !== '-');
-    const stage = String(jobData?.status || '').toLowerCase();
-    const isFinishedStage =
-      stage.includes('invoiced') ||
-      stage.includes('completed') ||
-      stage.includes('submitted to billing') ||
-      stage.includes('ses') ||
-      stage.includes('closed');
-    return hasLegal || hasDraft || isFinishedStage;
-  }, [jobData]);
+    const legal = String(jobData?.legalInvoiceNumber || '').trim();
+    if (isLegalInvoiceNumber(legal)) return true;
+    if (jobData?.invoiceNumber && isLegalInvoiceNumber(jobData.invoiceNumber)) return true;
+    const stage = String(jobData?.status || '').toLowerCase().trim();
+    return stage === 'closed' || stage === 'final invoiced';
+  }, [jobData?.legalInvoiceNumber, jobData?.invoiceNumber, jobData?.status]);
 
   const { canEdit: canEditJobs, isReadOnly } = useModulePermission(user, 'jobs');
   const isAdmin = user?.role === 'Admin';
-  const isJobInvoicedOrFinished = Boolean(
-    isJobInvoicedOrSubmitted ||
-    (jobData.legalInvoiceNumber && jobData.legalInvoiceNumber !== '—' && jobData.legalInvoiceNumber !== '-')
-  );
+  const isJobInvoicedOrFinished = Boolean(isJobInvoicedOrSubmitted);
 
   // Admin Re-open override state (strictly available only to Admin users)
   const [adminUnlocked, setAdminUnlocked] = useState(false);
@@ -5262,7 +5253,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <span>Draft Preview (Not Dispatched)</span>
                     </span>
                   </>
-                ) : (activeDT?.isLocked || isClosedOrInvoiced) && !adminUnlocked ? (
+                ) : Boolean(activeDT?.isLocked) && !adminUnlocked ? (
                   <>
                     <span className="bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs px-3 py-1 rounded flex items-center gap-1 shadow-2xs">
                       <span>🔒</span>
