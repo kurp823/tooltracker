@@ -1554,8 +1554,7 @@ export function reconcileJobsDTRTAndInventory(
   // 1. Purge any synthetic dummy tickets (DT-CLS, DT-AUTO, RT-CLS, RT-AUTO)
   dtBatches = (dtBatches || []).filter((b: any) => {
     const id = String(b?.id || '').toUpperCase();
-    const num = String(b?.dtNumber || '').toUpperCase();
-    return !id.startsWith('DT-AUTO') && !id.startsWith('DT-CLS') && !num.startsWith('DT-CLS') && !num.startsWith('DT-AUTO') && num !== 'DT-26-10001' && id !== 'DT-26-10001';
+    return !id.startsWith('DT-AUTO') && !id.startsWith('DT-CLS') && !num.startsWith('DT-CLS') && !num.startsWith('DT-AUTO') && !num.startsWith('DT-26-1000') && !id.startsWith('DT-26-1000') && num !== 'DT-26-100001' && id !== 'DT-26-100001';
   });
 
   rtBatches = (rtBatches || []).filter((b: any) => {
@@ -2848,7 +2847,7 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
   const dtList: any[] = (primaryRes.data?.dtBatches || []).filter((b: any) => {
     const id = String(b?.id || '').toUpperCase();
     const num = String(b?.dtNumber || '').toUpperCase();
-    return num !== 'DT-26-10001' && id !== 'DT-26-10001';
+    return !num.startsWith('DT-26-1000') && !id.startsWith('DT-26-1000') && num !== 'DT-26-100001' && id !== 'DT-26-100001';
   });
   const rtList: any[] = primaryRes.data?.rtBatches || [];
 

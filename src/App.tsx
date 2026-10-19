@@ -519,36 +519,44 @@ export const App: React.FC = () => {
     }
   }, [currentUser]);
 
-  // Proactively purge DT-26-10001 and reset checklist on JOB-26-01816 so user can cleanly redo the process
+  // Proactively purge legacy test DTs (DT-26-1000X series) so user can cleanly redo the process
   useEffect(() => {
-    try {
-      localStorage.removeItem('emdad_dt_notes_DT-26-10001');
-      localStorage.removeItem('emdad_dt_meta_DT-26-10001');
-    } catch {}
-
-    deleteDeliveryTicketApi('DT-26-10001').catch(() => {});
+    ['DT-26-10000', 'DT-26-10001', 'DT-26-10002', 'DT-26-100001'].forEach((t) => {
+      try {
+        localStorage.removeItem(`emdad_dt_notes_${t}`);
+        localStorage.removeItem(`emdad_dt_meta_${t}`);
+      } catch {}
+      deleteDeliveryTicketApi(t).catch(() => {});
+    });
 
     setDtBatches((prev) =>
-      (Array.isArray(prev) ? prev : []).filter(
-        (b) =>
-          String(b?.dtNumber || '').trim().toUpperCase() !== 'DT-26-10001' &&
-          String(b?.id || '').trim().toUpperCase() !== 'DT-26-10001'
-      )
+      (Array.isArray(prev) ? prev : []).filter((b) => {
+        const num = String(b?.dtNumber || '').trim().toUpperCase();
+        const id = String(b?.id || '').trim().toUpperCase();
+        return (
+          !num.startsWith('DT-26-1000') &&
+          !id.startsWith('DT-26-1000') &&
+          num !== 'DT-26-100001' &&
+          id !== 'DT-26-100001'
+        );
+      })
     );
 
     setCallouts((prev) =>
       (Array.isArray(prev) ? prev : []).map((c) => {
         if (!c) return c;
-        const hasDtRef = Array.isArray(c.items) && c.items.some(
-          (ci) => String(ci?.dtNumber || '').trim().toUpperCase() === 'DT-26-10001'
-        );
+        const hasDtRef = Array.isArray(c.items) && c.items.some((ci) => {
+          const dt = String(ci?.dtNumber || '').trim().toUpperCase();
+          return dt.startsWith('DT-26-1000') || dt === 'DT-26-100001';
+        });
 
         if (hasDtRef) {
           return {
             ...c,
             items: (Array.isArray(c.items) ? c.items : []).map((ci) => {
               if (!ci) return ci;
-              if (String(ci?.dtNumber || '').trim().toUpperCase() === 'DT-26-10001') {
+              const dt = String(ci?.dtNumber || '').trim().toUpperCase();
+              if (dt.startsWith('DT-26-1000') || dt === 'DT-26-100001') {
                 return {
                   ...ci,
                   dtNumber: undefined,

@@ -677,8 +677,16 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return (Array.isArray(dtBatches) ? dtBatches : []).filter((b) => {
       if (!b) return false;
       const id = String(b.id || '').toUpperCase();
-      const num = String(b.dtNumber || '').toUpperCase();
-      if (id.startsWith('DT-AUTO') || id.startsWith('DT-CLS') || num.startsWith('DT-CLS') || num.startsWith('DT-AUTO') || num === 'DT-26-10001' || id === 'DT-26-10001') {
+      if (
+        id.startsWith('DT-AUTO') ||
+        id.startsWith('DT-CLS') ||
+        num.startsWith('DT-CLS') ||
+        num.startsWith('DT-AUTO') ||
+        num.startsWith('DT-26-1000') ||
+        id.startsWith('DT-26-1000') ||
+        num === 'DT-26-100001' ||
+        id === 'DT-26-100001'
+      ) {
         return false;
       }
       const bJob = String(b.jobId || (b as any)?.jobNumber || '').trim().toUpperCase();
@@ -1187,7 +1195,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const resolveChecklistItemWithDT = useCallback((it: CalloutItem, idx: number) => {
     if (!it) return it;
     const rawDt = String(it?.dtNumber || '').trim().toUpperCase();
-    if (rawDt === 'DT-26-10001') {
+    if (rawDt.startsWith('DT-26-1000') || rawDt === 'DT-26-100001') {
       return {
         ...it,
         dtNumber: undefined,
@@ -1325,14 +1333,16 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Helper to determine which DT an item belongs to in this job, and whether that DT is locked
   const getAssignedDTForChecklistItem = useCallback((item: CalloutItem): { dtNumber: string; isLocked: boolean } | null => {
     if (item.dtNumber) {
-      if ((item.dtNumber || '').trim().toUpperCase() === 'DT-26-10001') return null;
-      const match = jobDTs.find((d) => (d.dtNumber || '').trim().toUpperCase() === (item.dtNumber || '').trim().toUpperCase());
+      const itUpper = (item.dtNumber || '').trim().toUpperCase();
+      if (itUpper.startsWith('DT-26-1000') || itUpper === 'DT-26-100001') return null;
+      const match = jobDTs.find((d) => (d.dtNumber || '').trim().toUpperCase() === itUpper);
       return { dtNumber: item.dtNumber, isLocked: match?.isLocked ?? false };
     }
     const itemSerial = (item.serialNos?.[0] || item.partNo || '').trim().toUpperCase();
     if (!itemSerial) return null;
     for (const dt of jobDTs) {
-      if ((dt.dtNumber || '').trim().toUpperCase() === 'DT-26-10001') continue;
+      const dtUpper = (dt.dtNumber || '').trim().toUpperCase();
+      if (dtUpper.startsWith('DT-26-1000') || dtUpper === 'DT-26-100001') continue;
       const match = dt.toolLines?.some((l) => {
         const s = (l.serial || '').trim().toUpperCase();
         const a = (l.assetNo || '').trim().toUpperCase();
@@ -5277,15 +5287,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <span>🔓</span>
                       <span>Unlock DT</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleDeleteCurrentDT}
-                      className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs transition cursor-pointer flex items-center gap-1"
-                      title="Delete this Delivery Ticket, return tools to yard, and reset checklist"
-                    >
-                      <span>🗑️</span>
-                      <span>Delete DT</span>
-                    </button>
+                    {(canEditJobs || isAdmin) && (
+                      <button
+                        type="button"
+                        onClick={handleDeleteCurrentDT}
+                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs transition cursor-pointer flex items-center gap-1"
+                        title="Delete this Delivery Ticket, return tools to yard, and reset checklist"
+                      >
+                        <span>🗑️</span>
+                        <span>Delete DT</span>
+                      </button>
+                    )}
                     {isAdmin && (
                       <button
                         type="button"
@@ -5313,15 +5325,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <span>🔄</span>
                       <span>Sync from Checklist</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleDeleteCurrentDT}
-                      className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs transition cursor-pointer flex items-center gap-1"
-                      title="Delete this Delivery Ticket and return tools to yard"
-                    >
-                      <span>🗑️</span>
-                      <span>Delete DT</span>
-                    </button>
+                    {(canEditJobs || isAdmin) && (
+                      <button
+                        type="button"
+                        onClick={handleDeleteCurrentDT}
+                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs transition cursor-pointer flex items-center gap-1"
+                        title="Delete this Delivery Ticket and return tools to yard"
+                      >
+                        <span>🗑️</span>
+                        <span>Delete DT</span>
+                      </button>
+                    )}
                     {(!isClosedOrInvoiced || adminUnlocked) && (!isLocked || adminUnlocked) && (
                       <button
                         type="button"
