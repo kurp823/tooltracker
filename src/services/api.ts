@@ -616,6 +616,31 @@ export function cleanDateStr(d: any): string {
 }
 
 /**
+ * Parses any date format (DD-MM-YYYY, DD/MM/YYYY, ISO, timestamps) into numeric milliseconds for reliable temporal comparison
+ */
+export function parseDateToTimestamp(d: any): number {
+  if (d === null || d === undefined || d === '') return 0;
+  if (typeof d === 'number') return d;
+  const s = String(d).trim();
+  if (!s || s === '—' || s === '-' || s === 'null' || s === 'undefined') return 0;
+
+  // DD-MM-YYYY or DD/MM/YYYY
+  const dmy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmy) {
+    const day = parseInt(dmy[1], 10);
+    const month = parseInt(dmy[2], 10) - 1;
+    const year = parseInt(dmy[3], 10);
+    if (year <= 1900 || year === 1970) return 0;
+    return new Date(Date.UTC(year, month, day)).getTime();
+  }
+
+  const cleaned = cleanDateStr(s);
+  if (!cleaned) return 0;
+  const t = new Date(cleaned).getTime();
+  return isNaN(t) ? 0 : t;
+}
+
+/**
  * Normalizes a single row from tbl_DeliveryTicketLines / tbl_DTLines into DTLine
  */
 export function normalizeDTLine(row: any): any {
@@ -869,7 +894,16 @@ export function normalizeDTBatch(row: any): any {
     dispatchedBy: String(row.DispatchedBy || row.dispatchedBy || row.PreparedBy || row.preparedBy || row.CreatedBy || row.createdBy || 'Operations'),
     recipient: String(row.Recipient || row.recipient || row.ReceivedBy || row.receivedBy || row.Consignee || row.consignee || ''),
     notes: String(row.Notes || row.notes || row.Remarks || row.remarks || row.Description || row.description || ''),
-    isLocked: row.isLocked !== false && row.IsLocked !== false,
+    isLocked: Boolean(
+      row.isLocked === true ||
+      row.IsLocked === true ||
+      row.isLocked === 1 ||
+      row.IsLocked === 1 ||
+      row.isLocked === 'true' ||
+      row.IsLocked === 'true' ||
+      row.isLocked === '1' ||
+      row.IsLocked === '1'
+    ),
     lockedBy: row.lockedBy || row.LockedBy || null,
     lockedDate: cleanDateStr(row.lockedDate || row.LockedDate || null),
     isSigned: Boolean(row.isSigned || row.IsSigned || row.signedDocUrl || row.SignedDocUrl),
@@ -1215,6 +1249,18 @@ export function normalizeRTBatch(row: any): any {
     receivedBy: String(row.ReceivedBy || row.receivedBy || row.Inspector || row.inspector || row.QCInspector || row.qcInspector || '').trim(),
     condition: String(row.Condition || row.condition || row.Notes || row.notes || ''),
     notes: String(row.Notes || row.notes || ''),
+    isLocked: Boolean(
+      row.isLocked === true ||
+      row.IsLocked === true ||
+      row.isLocked === 1 ||
+      row.IsLocked === 1 ||
+      row.isLocked === 'true' ||
+      row.IsLocked === 'true' ||
+      row.isLocked === '1' ||
+      row.IsLocked === '1'
+    ),
+    lockedBy: row.lockedBy || row.LockedBy || null,
+    lockedDate: cleanDateStr(row.lockedDate || row.LockedDate || null),
     isSigned: Boolean(row.isSigned || row.IsSigned || row.signedDocUrl || row.SignedDocUrl),
     signedDocUrl: row.signedDocUrl || row.SignedDocUrl || '',
     signedDocName: row.signedDocName || row.SignedDocName || '',
@@ -1583,42 +1629,64 @@ export function reconcileJobsDTRTAndInventory(
 
   // 2. Link Inventory with DT and RT ledger (Request 4)
   if (inventory && Array.isArray(inventory) && inventory.length > 0) {
-    const toolLatestDT = new Map<string, { dt: any; date: string; rig: string; jobId: string }>();
-    const toolLatestRT = new Map<string, { rt: any; date: string; routedTo: string }>();
+    const toolLatestDT = new Map<string, { dt: any; date: string; time: number; rig: string; jobId: string }>();
+    const toolLatestRT = new Map<string, { rt: any; date: string; time: number; routedTo: string }>();
 
     dtBatches.forEach((dt) => {
-      const dtDate = String(dt.dispatchDate || dt.rmDate || '2023-01-01');
+      // Only consider genuinely dispatched and locked DTs for physical yard inventory movement
+      const isDispatched = Boolean(
+        dt.isLocked === true ||
+        dt.isLocked === 1 ||
+        String(dt.isLocked) === 'true' ||
+        String(dt.isLocked) === '1'
+      );
+      if (!isDispatched) return;
+
+      const rawDtDate = String(dt.dispatchDate || dt.rmDate || '');
+      const dtTime = parseDateToTimestamp(rawDtDate) || 1672531200000; // default 2023-01-01
+      const entry = { dt, date: rawDtDate, time: dtTime, rig: dt.rig || 'Rig', jobId: dt.jobId };
+
+      const registerDtKey = (k: string) => {
+        if (!k) return;
+        const prev = toolLatestDT.get(k);
+        if (!prev || dtTime >= prev.time) toolLatestDT.set(k, entry);
+        const stripped = k.replace(/^EMD-?/i, '');
+        if (stripped && stripped !== k) {
+          const prevS = toolLatestDT.get(stripped);
+          if (!prevS || dtTime >= prevS.time) toolLatestDT.set(stripped, entry);
+        }
+      };
+
       (dt.toolLines || []).forEach((tl: any) => {
         const serialKey = String(tl.serial || '').trim().toUpperCase();
         const assetKey = String(tl.assetNo || '').trim().toUpperCase();
-        const entry = { dt, date: dtDate, rig: dt.rig || 'Rig', jobId: dt.jobId };
-
-        if (serialKey) {
-          const prev = toolLatestDT.get(serialKey);
-          if (!prev || dtDate >= prev.date) toolLatestDT.set(serialKey, entry);
-        }
-        if (assetKey && assetKey !== serialKey) {
-          const prev = toolLatestDT.get(assetKey);
-          if (!prev || dtDate >= prev.date) toolLatestDT.set(assetKey, entry);
-        }
+        if (serialKey) registerDtKey(serialKey);
+        if (assetKey) registerDtKey(assetKey);
       });
     });
 
     rtBatches.forEach((rt) => {
-      const rtDate = String(rt.rtDate || rt.backloadRmDate || '2023-01-01');
+      const rawRtDate = String(rt.rtDate || rt.backloadRmDate || '');
+      const rtTime = parseDateToTimestamp(rawRtDate) || 1672531200000;
+
       (rt.toolLines || []).forEach((tl: any) => {
         const serialKey = String(tl.serial || '').trim().toUpperCase();
         const assetKey = String(tl.assetNo || '').trim().toUpperCase();
-        const entry = { rt, date: rtDate, routedTo: tl.routedTo || 'Emdad Base' };
+        const entry = { rt, date: rawRtDate, time: rtTime, routedTo: tl.routedTo || 'Emdad Base' };
 
-        if (serialKey) {
-          const prev = toolLatestRT.get(serialKey);
-          if (!prev || rtDate >= prev.date) toolLatestRT.set(serialKey, entry);
-        }
-        if (assetKey && assetKey !== serialKey) {
-          const prev = toolLatestRT.get(assetKey);
-          if (!prev || rtDate >= prev.date) toolLatestRT.set(assetKey, entry);
-        }
+        const registerRtKey = (k: string) => {
+          if (!k) return;
+          const prev = toolLatestRT.get(k);
+          if (!prev || rtTime >= prev.time) toolLatestRT.set(k, entry);
+          const stripped = k.replace(/^EMD-?/i, '');
+          if (stripped && stripped !== k) {
+            const prevS = toolLatestRT.get(stripped);
+            if (!prevS || rtTime >= prevS.time) toolLatestRT.set(stripped, entry);
+          }
+        };
+
+        if (serialKey) registerRtKey(serialKey);
+        if (assetKey) registerRtKey(assetKey);
       });
     });
 
@@ -1626,15 +1694,26 @@ export function reconcileJobsDTRTAndInventory(
       const sKey = String(tool.serial || '').trim().toUpperCase();
       const aKey = String(tool.assetNo || '').trim().toUpperCase();
       const idKey = String(tool.id || '').trim().toUpperCase();
+      const sStrip = sKey.replace(/^EMD-?/i, '');
+      const aStrip = aKey.replace(/^EMD-?/i, '');
 
-      const latestDT = toolLatestDT.get(sKey) || (aKey ? toolLatestDT.get(aKey) : undefined) || (idKey ? toolLatestDT.get(idKey) : undefined);
-      const latestRT = toolLatestRT.get(sKey) || (aKey ? toolLatestRT.get(aKey) : undefined) || (idKey ? toolLatestRT.get(idKey) : undefined);
+      const latestDT = toolLatestDT.get(sKey) ||
+        (aKey ? toolLatestDT.get(aKey) : undefined) ||
+        (sStrip ? toolLatestDT.get(sStrip) : undefined) ||
+        (aStrip ? toolLatestDT.get(aStrip) : undefined) ||
+        (idKey ? toolLatestDT.get(idKey) : undefined);
+
+      const latestRT = toolLatestRT.get(sKey) ||
+        (aKey ? toolLatestRT.get(aKey) : undefined) ||
+        (sStrip ? toolLatestRT.get(sStrip) : undefined) ||
+        (aStrip ? toolLatestRT.get(aStrip) : undefined) ||
+        (idKey ? toolLatestRT.get(idKey) : undefined);
 
       if (latestDT) {
-        const isReturned = latestRT && latestRT.date >= latestDT.date;
+        const isReturned = Boolean(latestRT && latestRT.time >= latestDT.time);
         if (!isReturned) {
           tool.status = 'On Rig';
-          const rigName = latestDT.rig.trim();
+          const rigName = (latestDT.rig || '').trim();
           tool.location = rigName ? (rigName.toLowerCase().startsWith('rig') ? rigName : `Rig ${rigName}`) : 'On Rig';
           tool.rig = rigName;
           tool.currentJobId = latestDT.jobId;
@@ -1655,6 +1734,15 @@ export function reconcileJobsDTRTAndInventory(
             tool.currentJobId = null;
             tool.currentRig = null;
           }
+        }
+      } else {
+        // If tool was marked 'On Rig' but has no active dispatched DT, reset to base
+        if (tool.status === 'On Rig') {
+          tool.status = 'Good';
+          tool.location = 'Emdad Base';
+          tool.currentJobId = null;
+          tool.currentRig = null;
+          tool.rig = undefined;
         }
       }
     });
@@ -3194,9 +3282,17 @@ export async function saveDeliveryTicketApi(dtBatch: any): Promise<{ success: bo
   return executeResilientSave('savedeliveryticket', { batch: cleaned, dtBatch: cleaned, payload: cleaned }, 'Delivery Ticket');
 }
 
+export async function deleteDeliveryTicketApi(dtNumberOrId: string): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  return executeResilientSave('deletedeliveryticket', { dtNumber: dtNumberOrId, id: dtNumberOrId }, 'Delete Delivery Ticket');
+}
+
 export async function saveReceivingTicketApi(rtBatch: any): Promise<{ success: boolean; queued?: boolean; message: string }> {
   const cleaned = cleanRTBatchForSql(rtBatch);
   return executeResilientSave('savereceivingticket', { batch: cleaned, rtBatch: cleaned, payload: cleaned }, 'Receiving Ticket');
+}
+
+export async function deleteReceivingTicketApi(rtNumberOrId: string): Promise<{ success: boolean; queued?: boolean; message: string }> {
+  return executeResilientSave('deletereceivingticket', { rtNumber: rtNumberOrId, id: rtNumberOrId }, 'Delete Receiving Ticket');
 }
 
 export async function saveDailyFieldLogsApi(logs: Array<{

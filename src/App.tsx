@@ -38,7 +38,9 @@ import {
   saveMaintenanceApi,
   saveJobApi,
   saveDeliveryTicketApi,
+  deleteDeliveryTicketApi,
   saveReceivingTicketApi,
+  deleteReceivingTicketApi,
   saveInventoryApi,
   saveContractRatesApi,
   flushOfflineOutbox,
@@ -920,7 +922,12 @@ export const App: React.FC = () => {
 
   // DT Batch Actions
   const handleSaveDTBatch = (batch: DTBatch) => {
-    const isActuallyLocked = batch.isLocked === true;
+    const isActuallyLocked = Boolean(
+      batch.isLocked === true ||
+      batch.isLocked === 1 ||
+      String(batch.isLocked) === 'true' ||
+      String(batch.isLocked) === '1'
+    );
     const finalizedBatch: DTBatch = {
       ...batch,
       isLocked: isActuallyLocked,
@@ -935,28 +942,58 @@ export const App: React.FC = () => {
       if (!r.success) showToast(r.message, 'error');
     });
 
-    // Update tool statuses in inventory to 'On Rig'
-    const dispatchedSerials = batch.toolLines.map((t) => t.serial);
-    const updatedDispatchedTools: ToolItem[] = [];
-    setInventory((prev) =>
-      prev.map((tool) => {
-        if (dispatchedSerials.includes(tool.serial)) {
-          const updated: ToolItem = {
-            ...tool,
-            status: 'On Rig',
-            location: 'On Rig',
-            currentJobId: batch.jobId,
-          };
-          updatedDispatchedTools.push(updated);
-          return updated;
+    // Update tool statuses in inventory: only set to 'On Rig' if the DT is genuinely dispatched & locked!
+    if (isActuallyLocked) {
+      const dispatchedSerials = new Set<string>();
+      (batch.toolLines || []).forEach((t) => {
+        const s = (t.serial || '').trim().toUpperCase();
+        const a = (t.assetNo || '').trim().toUpperCase();
+        if (s) {
+          dispatchedSerials.add(s);
+          dispatchedSerials.add(s.replace(/^EMD-?/i, ''));
         }
-        return tool;
-      })
-    );
-    // Cascade to Azure SQL so all users see tool is on rig
-    updatedDispatchedTools.forEach((tool) => {
-      saveInventoryApi(tool);
-    });
+        if (a) {
+          dispatchedSerials.add(a);
+          dispatchedSerials.add(a.replace(/^EMD-?/i, ''));
+        }
+      });
+
+      const rigName = (batch.rig || '').trim();
+      const rigLoc = rigName ? (rigName.toLowerCase().startsWith('rig') ? rigName : `Rig ${rigName}`) : 'On Rig';
+
+      const updatedDispatchedTools: ToolItem[] = [];
+      setInventory((prev) =>
+        prev.map((tool) => {
+          const s = (tool.serial || '').trim().toUpperCase();
+          const a = (tool.assetNo || '').trim().toUpperCase();
+          const sStrip = s.replace(/^EMD-?/i, '');
+          const aStrip = a.replace(/^EMD-?/i, '');
+
+          const isDispatched = dispatchedSerials.has(s) ||
+            dispatchedSerials.has(a) ||
+            dispatchedSerials.has(sStrip) ||
+            dispatchedSerials.has(aStrip);
+
+          if (isDispatched) {
+            const updated: ToolItem = {
+              ...tool,
+              status: 'On Rig',
+              location: rigLoc,
+              rig: rigName,
+              currentRig: rigName,
+              currentJobId: batch.jobId,
+            };
+            updatedDispatchedTools.push(updated);
+            return updated;
+          }
+          return tool;
+        })
+      );
+      // Cascade to Azure SQL so all users see tool is on rig
+      updatedDispatchedTools.forEach((tool) => {
+        saveInventoryApi(tool);
+      });
+    }
 
     // If job has linked callout, check if all items are dispatched and mark Closed/Mobilized
     const job = jobs.find((j) => j.id === batch.jobId);
@@ -985,14 +1022,121 @@ export const App: React.FC = () => {
     saveDeliveryTicketApi(updatedBatch).then((r) => {
       if (!r.success) showToast(r.message, 'error');
     });
-    broadcastSync();
+
+    const isLocked = Boolean(
+      updatedBatch.isLocked === true ||
+      updatedBatch.isLocked === 1 ||
+      String(updatedBatch.isLocked) === 'true' ||
+      String(updatedBatch.isLocked) === '1'
+    );
+
+    // If DT was unlocked, revert tools on this DT to 'Good' / 'Emdad Base'
+    if (!isLocked) {
+      const lineKeys = new Set<string>();
+      (updatedBatch.toolLines || []).forEach((t) => {
+        const s = (t.serial || '').trim().toUpperCase();
+        const a = (t.assetNo || '').trim().toUpperCase();
+        if (s) {
+          lineKeys.add(s);
+          lineKeys.add(s.replace(/^EMD-?/i, ''));
+        }
+        if (a) {
+          lineKeys.add(a);
+          lineKeys.add(a.replace(/^EMD-?/i, ''));
+        }
+      });
+
+      const updatedTools: ToolItem[] = [];
+      setInventory((prev) =>
+        prev.map((tool) => {
+          const s = (tool.serial || '').trim().toUpperCase();
+          const a = (tool.assetNo || '').trim().toUpperCase();
+          const sStrip = s.replace(/^EMD-?/i, '');
+          const aStrip = a.replace(/^EMD-?/i, '');
+
+          if (lineKeys.has(s) || lineKeys.has(a) || lineKeys.has(sStrip) || lineKeys.has(aStrip)) {
+            const updated: ToolItem = {
+              ...tool,
+              status: 'Good',
+              location: 'Emdad Base',
+              rig: undefined,
+              currentRig: undefined,
+              currentJobId: null,
+            };
+            updatedTools.push(updated);
+            return updated;
+          }
+          return tool;
+        })
+      );
+      updatedTools.forEach((tool) => {
+        saveInventoryApi(tool);
+      });
+    } else {
+      // If DT is locked, ensure tools are marked 'On Rig'
+      const lineKeys = new Set<string>();
+      (updatedBatch.toolLines || []).forEach((t) => {
+        const s = (t.serial || '').trim().toUpperCase();
+        const a = (t.assetNo || '').trim().toUpperCase();
+        if (s) {
+          lineKeys.add(s);
+          lineKeys.add(s.replace(/^EMD-?/i, ''));
+        }
+        if (a) {
+          lineKeys.add(a);
+          lineKeys.add(a.replace(/^EMD-?/i, ''));
+        }
+      });
+      const rigName = (updatedBatch.rig || '').trim();
+      const rigLoc = rigName ? (rigName.toLowerCase().startsWith('rig') ? rigName : `Rig ${rigName}`) : 'On Rig';
+
+      const updatedTools: ToolItem[] = [];
+      setInventory((prev) =>
+        prev.map((tool) => {
+          const s = (tool.serial || '').trim().toUpperCase();
+          const a = (tool.assetNo || '').trim().toUpperCase();
+          const sStrip = s.replace(/^EMD-?/i, '');
+          const aStrip = a.replace(/^EMD-?/i, '');
+
+          if (lineKeys.has(s) || lineKeys.has(a) || lineKeys.has(sStrip) || lineKeys.has(aStrip)) {
+            const updated: ToolItem = {
+              ...tool,
+              status: 'On Rig',
+              location: rigLoc,
+              rig: rigName,
+              currentRig: rigName,
+              currentJobId: updatedBatch.jobId,
+            };
+            updatedTools.push(updated);
+            return updated;
+          }
+          return tool;
+        })
+      );
+      updatedTools.forEach((tool) => {
+        saveInventoryApi(tool);
+      });
+    }
 
     if (addedTools && addedTools.length > 0) {
-      const addedSerials = new Set(addedTools.map((t) => t.serial));
+      const addedKeys = new Set<string>();
+      addedTools.forEach((t) => {
+        const s = (t.serial || '').trim().toUpperCase();
+        const a = (t.assetNo || '').trim().toUpperCase();
+        if (s) { addedKeys.add(s); addedKeys.add(s.replace(/^EMD-?/i, '')); }
+        if (a) { addedKeys.add(a); addedKeys.add(a.replace(/^EMD-?/i, '')); }
+      });
+      const rigName = (updatedBatch.rig || '').trim();
+      const rigLoc = rigName ? (rigName.toLowerCase().startsWith('rig') ? rigName : `Rig ${rigName}`) : 'On Rig';
+
       setInventory((prev) =>
         prev.map((t) => {
-          if (addedSerials.has(t.serial)) {
-            const updated: ToolItem = { ...t, status: 'On Rig', location: 'On Rig', currentJobId: updatedBatch.jobId };
+          const s = (t.serial || '').trim().toUpperCase();
+          const a = (t.assetNo || '').trim().toUpperCase();
+          if (addedKeys.has(s) || addedKeys.has(a) || addedKeys.has(s.replace(/^EMD-?/i, '')) || addedKeys.has(a.replace(/^EMD-?/i, ''))) {
+            const updated: ToolItem = isLocked
+              ? { ...t, status: 'On Rig', location: rigLoc, rig: rigName, currentRig: rigName, currentJobId: updatedBatch.jobId }
+              : { ...t, status: 'Good', location: 'Emdad Base', currentJobId: null };
             saveInventoryApi(updated);
             return updated;
           }
@@ -1002,11 +1146,19 @@ export const App: React.FC = () => {
     }
 
     if (removedTools && removedTools.length > 0) {
-      const removedSerials = new Set(removedTools.map((t) => t.serial));
+      const removedKeys = new Set<string>();
+      removedTools.forEach((t) => {
+        const s = (t.serial || '').trim().toUpperCase();
+        const a = (t.assetNo || '').trim().toUpperCase();
+        if (s) { removedKeys.add(s); removedKeys.add(s.replace(/^EMD-?/i, '')); }
+        if (a) { removedKeys.add(a); removedKeys.add(a.replace(/^EMD-?/i, '')); }
+      });
       setInventory((prev) =>
         prev.map((t) => {
-          if (removedSerials.has(t.serial)) {
-            const updated: ToolItem = { ...t, status: 'Good', location: 'Emdad Base', currentJobId: null };
+          const s = (t.serial || '').trim().toUpperCase();
+          const a = (t.assetNo || '').trim().toUpperCase();
+          if (removedKeys.has(s) || removedKeys.has(a) || removedKeys.has(s.replace(/^EMD-?/i, '')) || removedKeys.has(a.replace(/^EMD-?/i, ''))) {
+            const updated: ToolItem = { ...t, status: 'Good', location: 'Emdad Base', currentJobId: null, currentRig: null };
             saveInventoryApi(updated);
             return updated;
           }
@@ -1015,7 +1167,75 @@ export const App: React.FC = () => {
       );
     }
 
+    broadcastSync();
     showToast(`Delivery Ticket ${updatedBatch.dtNumber} updated successfully.`, 'success');
+  };
+
+  const handleDeleteDTBatch = (dtNumber: string) => {
+    const dt = dtBatches.find((b) => b.dtNumber === dtNumber || b.id === dtNumber);
+    if (!dt) return;
+
+    setDtBatches((prev) => prev.filter((b) => b.dtNumber !== dtNumber && b.id !== dtNumber));
+    deleteDeliveryTicketApi(dtNumber).catch(() => {});
+
+    // Revert tool statuses in inventory to 'Good' / 'Emdad Base'
+    const lineSerials = new Set<string>();
+    (dt.toolLines || []).forEach((t) => {
+      const s = (t.serial || '').trim().toUpperCase();
+      const a = (t.assetNo || '').trim().toUpperCase();
+      if (s) {
+        lineSerials.add(s);
+        lineSerials.add(s.replace(/^EMD-?/i, ''));
+      }
+      if (a) {
+        lineSerials.add(a);
+        lineSerials.add(a.replace(/^EMD-?/i, ''));
+      }
+    });
+
+    setInventory((prev) =>
+      prev.map((tool) => {
+        const s = (tool.serial || '').trim().toUpperCase();
+        const a = (tool.assetNo || '').trim().toUpperCase();
+        const sStrip = s.replace(/^EMD-?/i, '');
+        const aStrip = a.replace(/^EMD-?/i, '');
+        if (lineSerials.has(s) || lineSerials.has(a) || lineSerials.has(sStrip) || lineSerials.has(aStrip)) {
+          const updated: ToolItem = {
+            ...tool,
+            status: 'Good',
+            location: 'Emdad Base',
+            currentJobId: null,
+            currentRig: null,
+            rig: undefined,
+          };
+          saveInventoryApi(updated).catch(() => {});
+          return updated;
+        }
+        return tool;
+      })
+    );
+
+    // Clear dtNumber in linked callouts/checklists
+    setCallouts((prev) =>
+      prev.map((c) => {
+        if (c.jobId === dt.jobId || (c as any).jobNumber === dt.jobId) {
+          return {
+            ...c,
+            status: 'Active',
+            items: (c.items || []).map((ci) => {
+              if (ci.dtNumber === dt.dtNumber) {
+                return { ...ci, dtNumber: undefined, status: 'Assigned' as const };
+              }
+              return ci;
+            }),
+          };
+        }
+        return c;
+      })
+    );
+
+    broadcastSync();
+    showToast(`Delivery Ticket ${dtNumber} deleted and tools returned to yard inventory.`, 'success');
   };
 
   // RT Batch Actions (Backload receiving)
@@ -1921,6 +2141,7 @@ export const App: React.FC = () => {
               }}
               onSaveDTBatch={handleSaveDTBatch}
               onUpdateDTBatch={handleUpdateDTBatch}
+              onDeleteDTBatch={handleDeleteDTBatch}
               onSaveRTBatch={handleSaveRTBatch}
               onUpdateRTBatch={handleUpdateRTBatch}
               onSaveCallout={handleSaveCallout}

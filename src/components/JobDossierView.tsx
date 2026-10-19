@@ -63,6 +63,7 @@ interface JobDossierViewProps {
   onRefresh?: () => void;
   onSaveDTBatch: (batch: DTBatch) => void;
   onUpdateDTBatch?: (batch: DTBatch, addedTools?: ToolItem[], removedTools?: ToolItem[]) => void;
+  onDeleteDTBatch?: (dtNumber: string) => void;
   onSaveRTBatch: (batch: RTBatch) => void;
   onUpdateRTBatch?: (batch: RTBatch) => void;
   onSaveCallout?: (callout: Callout) => void;
@@ -342,6 +343,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   onRefresh,
   onSaveDTBatch,
   onUpdateDTBatch,
+  onDeleteDTBatch,
   onSaveRTBatch,
   onUpdateRTBatch,
   onSaveCallout,
@@ -1744,7 +1746,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [effectiveDT?.id, effectiveDT?.dtNumber, effectiveDT?.notes]);
 
   const handleSaveDTNotes = (silent = false) => {
-    const targetDT = effectiveDT;
+    // Only persist if an active DT exists. Never auto-create a DT from saving notes!
+    const targetDT = activeDT;
     if (!targetDT) return;
     const trimmed = dtNotesInput.trim();
     const updated: DTBatch = {
@@ -1756,7 +1759,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         localStorage.setItem(`emdad_dt_notes_${targetDT.dtNumber}`, trimmed);
       } catch {}
     }
-    if (activeDT && onUpdateDTBatch) {
+    if (onUpdateDTBatch) {
       onUpdateDTBatch(updated);
     } else {
       onSaveDTBatch(updated);
@@ -1789,7 +1792,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   };
 
   const handleUpdateDTField = (field: string, value: string) => {
-    const targetDT = effectiveDT;
+    // Only persist if an active DT exists. Never auto-create a DT from modifying metadata fields!
+    const targetDT = activeDT;
     if (!targetDT) return;
     const updated: DTBatch = {
       ...targetDT,
@@ -1813,7 +1817,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         localStorage.setItem(`emdad_dt_meta_${targetDT.dtNumber}`, JSON.stringify(savedMeta));
       } catch {}
     }
-    if (activeDT && onUpdateDTBatch) {
+    if (onUpdateDTBatch) {
       onUpdateDTBatch(updated);
     } else {
       onSaveDTBatch(updated);
@@ -2576,6 +2580,170 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     showToast(`Delivery Ticket ${updatedBatch.dtNumber} confirmed and locked in normal position.`, 'success');
   };
 
+  // Explicit Unlock Delivery Ticket
+  const handleUnlockDT = () => {
+    if (!activeDT) return;
+    const confirmed = window.confirm(
+      `Unlock Delivery Ticket ${activeDT.dtNumber} for editing?\n\n` +
+      `• Job: ${jobData.id}\n` +
+      `• Rig: ${jobData.rig} / Well: ${jobData.well}\n\n` +
+      `This will unlock this Delivery Ticket so you can correct tool serials, remove duplicate lines, or re-sync from checklist.`
+    );
+    if (!confirmed) return;
+
+    const unlockedBatch: DTBatch = {
+      ...activeDT,
+      isLocked: false,
+      lockedBy: undefined,
+      lockedDate: undefined,
+    };
+
+    if (onUpdateDTBatch) {
+      onUpdateDTBatch(unlockedBatch);
+    } else {
+      onSaveDTBatch(unlockedBatch);
+    }
+    setAdminUnlocked(true);
+    showToast(`Delivery Ticket ${activeDT.dtNumber} unlocked for editing.`, 'info');
+  };
+
+  // Re-sync tools on Delivery Ticket directly from Checklist
+  const handleSyncToolsFromChecklist = () => {
+    if (!activeDT) return;
+    if (checklistItems.length === 0) {
+      showToast('No tools in Checklist to sync. Please add tools in the Checklist tab first.', 'error');
+      return;
+    }
+    const confirmed = window.confirm(
+      `Sync Delivery Ticket ${activeDT.dtNumber} with the ${checklistItems.length} tool(s) currently in Checklist?\n\n` +
+      `This will replace the tools currently on this ticket with your actual checklist tools.`
+    );
+    if (!confirmed) return;
+
+    // Deduplicate checklist items by serial / assetNo
+    const seenKeys = new Set<string>();
+    const deduplicatedChecklist = checklistItems.filter((ci) => {
+      const s = String(ci.serialNos?.[0] || ci.partNo || '').trim().toUpperCase();
+      if (!s) return true;
+      if (seenKeys.has(s)) return false;
+      seenKeys.add(s);
+      return true;
+    });
+
+    const syncedTools = deduplicatedChecklist.map((ci, idx) => {
+      const resolved = resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.shortDesc || ci.cat, ci.supplier);
+      return {
+        id: idx + 1,
+        itemNo: idx + 1,
+        serial: resolved.serial,
+        assetNo: resolved.assetNo,
+        shortDesc: resolved.shortDesc,
+        desc: resolved.desc,
+        size: ci.size || resolved.inv?.size || '—',
+        status: 'OnRig' as const,
+        ownership: resolved.supplier,
+        supplier: resolved.supplier,
+        isEmdad: resolved.isEmdad,
+        qty: ci.qty || 1,
+        remarks: '',
+        allocatedRig: ci.allocatedRig || jobData.rig || '',
+        allocatedWell: ci.allocatedWell || jobData.well || '',
+        clientDtNo: ci.clientDtNo || '',
+      };
+    });
+
+    const updatedBatch: DTBatch = {
+      ...activeDT,
+      toolLines: syncedTools,
+    };
+
+    if (onUpdateDTBatch) {
+      onUpdateDTBatch(updatedBatch);
+    } else {
+      onSaveDTBatch(updatedBatch);
+    }
+
+    const updatedChecklist = checklistItems.map((ci) => ({
+      ...ci,
+      dtNumber: activeDT.dtNumber,
+      status: 'Released' as const,
+    }));
+    setChecklistItems(updatedChecklist);
+    if (onSaveCallout) {
+      onSaveCallout({
+        ...activeCallout,
+        items: updatedChecklist,
+      });
+    }
+
+    showToast(`Updated Delivery Ticket ${activeDT.dtNumber} with ${syncedTools.length} tool(s) from Checklist.`, 'success');
+  };
+
+  // Delete Delivery Ticket
+  const handleDeleteCurrentDT = () => {
+    if (!activeDT) return;
+    const dtNum = activeDT.dtNumber;
+    const confirmed = window.confirm(
+      `Delete Delivery Ticket ${dtNum}?\n\n` +
+      `• Job: ${jobData.id} (${jobData.rig} / ${jobData.well})\n` +
+      `• Equipment Count: ${activeDT.toolLines?.length || 0} tool(s)\n\n` +
+      `This will delete this ticket, return assigned tools to yard inventory, and reset checklist tools so you can re-generate a new ticket.`
+    );
+    if (!confirmed) return;
+
+    if (onDeleteDTBatch) {
+      onDeleteDTBatch(dtNum);
+    }
+    setSelectedDTNumber('');
+
+    const updatedChecklist = checklistItems.map((ci) => {
+      if (ci.dtNumber === dtNum) {
+        return { ...ci, dtNumber: undefined, status: 'Assigned' as const };
+      }
+      return ci;
+    });
+    setChecklistItems(updatedChecklist);
+    if (onSaveCallout) {
+      onSaveCallout({
+        ...activeCallout,
+        items: updatedChecklist,
+      });
+    }
+
+    showToast(`Delivery Ticket ${dtNum} deleted successfully.`, 'info');
+  };
+
+  // Remove individual tool line from active DT
+  const handleRemoveToolLineFromDT = (lineIndex: number) => {
+    if (!activeDT) return;
+    const targetLine = activeDT.toolLines[lineIndex];
+    const updatedLines = activeDT.toolLines.filter((_, i) => i !== lineIndex);
+    const updatedDT: DTBatch = {
+      ...activeDT,
+      toolLines: updatedLines,
+    };
+
+    if (onUpdateDTBatch) {
+      onUpdateDTBatch(updatedDT, undefined, targetLine ? [{ serial: targetLine.serial, assetNo: targetLine.assetNo } as any] : undefined);
+    } else {
+      onSaveDTBatch(updatedDT);
+    }
+
+    if (targetLine?.serial) {
+      const s = targetLine.serial.trim().toUpperCase();
+      const updatedChecklist = checklistItems.map((ci) => {
+        const cSerial = (ci.serialNos?.[0] || ci.partNo || '').trim().toUpperCase();
+        if (cSerial === s && ci.dtNumber === activeDT.dtNumber) {
+          return { ...ci, dtNumber: undefined, status: 'Assigned' as const };
+        }
+        return ci;
+      });
+      setChecklistItems(updatedChecklist);
+    }
+
+    showToast(`Removed tool line #${lineIndex + 1} from Delivery Ticket ${activeDT.dtNumber}.`, 'info');
+  };
+
   // Transfer checked tools from Lower DT to Upper RT
   const handleMoveToolsToRT = () => {
     if (isClosedOrInvoiced || isLocked) {
@@ -3325,11 +3493,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
     setIsSaving(true);
     try {
-      // 0. Persist active notes across individual tickets
-      if (effectiveDT && (!effectiveDT.isLocked || adminUnlocked) && dtNotesInput !== undefined) {
+      // 0. Persist active notes across individual tickets ONLY if active ticket genuinely exists
+      if (activeDT && (!activeDT.isLocked || adminUnlocked) && dtNotesInput !== undefined) {
         handleSaveDTNotes(true);
       }
-      if (effectiveRT && (!effectiveRT.isLocked || adminUnlocked) && rtNotesInput !== undefined) {
+      if (activeRT && (!activeRT.isLocked || adminUnlocked) && rtNotesInput !== undefined) {
         handleSaveRTNotes(true);
       }
 
@@ -4959,13 +5127,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         {/* TAB 5: DELIVERY TICKET HEADER / RENTAL TICKET */}
         {activeTab === 'delivery-tickets' && (
           <div className="space-y-3">
-            {/* Header: Clean Dropdown for DT selection instead of multi-row badges */}
+            {/* Header: Clean Dropdown for DT selection */}
             <div className="flex flex-wrap items-center justify-between border-b border-slate-300 pb-2 gap-2">
               <div className="flex items-center gap-2">
                 <label className="text-xs font-bold text-slate-700 whitespace-nowrap">Select Delivery Ticket:</label>
                 {jobDTs.length === 0 ? (
                   <span className="text-xs font-mono font-bold text-blue-900 bg-blue-50 border border-blue-200 rounded px-2.5 py-1">
-                    {effectiveDT.dtNumber} (Draft Manifest)
+                    {effectiveDT.dtNumber} (Draft Manifest - Not Dispatched)
                   </span>
                 ) : (
                   <select
@@ -4975,7 +5143,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   >
                     {jobDTs.map((dt) => (
                       <option key={dt.dtNumber} value={dt.dtNumber}>
-                        {dt.dtNumber} — {dt.toolLines?.length || 0} tool(s) ({formatDateDD_MM_YYYY(dt.dispatchDate)})
+                        {dt.dtNumber} — {dt.toolLines?.length || 0} tool(s) ({formatDateDD_MM_YYYY(dt.dispatchDate)}) {dt.isLocked ? '🔒 Dispatched' : '🔓 Draft'}
                       </option>
                     ))}
                   </select>
@@ -5009,35 +5177,73 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {(effectiveDT.isLocked || isClosedOrInvoiced) && !adminUnlocked ? (
+                {jobDTs.length === 0 ? (
+                  <span className="bg-amber-50 text-amber-900 border border-amber-300 font-bold text-xs px-2.5 py-1 rounded flex items-center gap-1 shadow-2xs">
+                    <span>📝</span>
+                    <span>Draft Preview (Not Dispatched)</span>
+                  </span>
+                ) : (activeDT?.isLocked || isClosedOrInvoiced) && !adminUnlocked ? (
                   <>
                     <span className="bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs px-3 py-1 rounded flex items-center gap-1 shadow-2xs">
                       <span>🔒</span>
                       <span>Dispatched &amp; Locked (Shipped to Rig)</span>
                     </span>
+                    <button
+                      type="button"
+                      onClick={handleUnlockDT}
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs cursor-pointer flex items-center gap-1 transition"
+                      title="Unlock this Delivery Ticket to edit equipment, remove duplicates, or re-sync from checklist"
+                    >
+                      <span>🔓</span>
+                      <span>Unlock DT</span>
+                    </button>
                     {isAdmin && (
                       <button
                         type="button"
                         onClick={() => setIsReopenModalOpen(true)}
-                        className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs cursor-pointer flex items-center gap-1 transition"
-                        title="Admin Override: Unlock this Delivery Ticket and Checklist for corrections"
+                        className="bg-slate-600 hover:bg-slate-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs cursor-pointer flex items-center gap-1 transition"
+                        title="Admin Override: Unlock entire dossier"
                       >
-                        <span>🔓</span>
-                        <span>Unlock DT (Admin)</span>
+                        <span>⚙️</span>
+                        <span>Full Admin Unlock</span>
                       </button>
                     )}
                   </>
                 ) : (
-                  (!isClosedOrInvoiced || adminUnlocked) && (!isLocked || adminUnlocked) && (
+                  <>
+                    <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-xs px-2.5 py-1 rounded flex items-center gap-1 shadow-2xs">
+                      <span>🔓</span>
+                      <span>Draft / Unlocked (In Yard)</span>
+                    </span>
                     <button
                       type="button"
-                      onClick={handleConfirmAndLockDT}
-                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                      onClick={handleSyncToolsFromChecklist}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs transition cursor-pointer flex items-center gap-1"
+                      title="Replace equipment on this DT with tools currently in Checklist"
                     >
-                      <span>🚚</span>
-                      <span>{adminUnlocked ? 'Confirm Corrections & Lock DT' : 'Confirm Dispatch & Lock DT (Ship to Rig)'}</span>
+                      <span>🔄</span>
+                      <span>Sync from Checklist</span>
                     </button>
-                  )
+                    <button
+                      type="button"
+                      onClick={handleDeleteCurrentDT}
+                      className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs transition cursor-pointer flex items-center gap-1"
+                      title="Delete this Delivery Ticket and return tools to yard"
+                    >
+                      <span>🗑️</span>
+                      <span>Delete DT</span>
+                    </button>
+                    {(!isClosedOrInvoiced || adminUnlocked) && (!isLocked || adminUnlocked) && (
+                      <button
+                        type="button"
+                        onClick={handleConfirmAndLockDT}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span>🚚</span>
+                        <span>{adminUnlocked ? 'Confirm Corrections & Lock DT' : 'Confirm Dispatch & Lock DT (Ship to Rig)'}</span>
+                      </button>
+                    )}
+                  </>
                 )}
                 <button
                   type="button"
@@ -5060,6 +5266,29 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
             {/* Rental Ticket Form / Details */}
             <div className="space-y-3">
+              {jobDTs.length === 0 && (
+                <div className="bg-amber-50 border border-amber-300 rounded p-3 text-xs flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-amber-700 text-lg">⚠️</span>
+                    <div>
+                      <strong className="text-amber-900 font-bold">Delivery Ticket Not Generated Yet:</strong>
+                      <span className="text-amber-800 ml-1">
+                        Equipment is currently in yard (Emdad Base). The lines below are a draft preview. To dispatch equipment to Rig {jobData.rig}, select your checklist tools and click &quot;Generate DT from Checklist&quot;.
+                      </span>
+                    </div>
+                  </div>
+                  {pendingChecklistItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleGenerateDTFromChecklist}
+                      className="bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs px-3.5 py-1.5 rounded shadow-xs whitespace-nowrap cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>🚚</span>
+                      <span>Generate DT from Checklist</span>
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="bg-[#f0f5fb] border border-[#b8cce0] rounded p-3 text-xs">
                 <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-2">
                   <h3 className="font-bold text-blue-900 text-sm">Rental Ticket / Delivery Manifest</h3>
@@ -5131,6 +5360,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           <th className="p-1.5 bg-amber-50 text-amber-950 font-bold border-l border-amber-200">Well</th>
                           <th className="p-1.5 bg-amber-50 text-amber-950 font-bold border-l border-amber-200">Client DT # 🏷️</th>
                         </>
+                      )}
+                      {activeDT && (!activeDT.isLocked || adminUnlocked) && (
+                        <th className="p-1.5 text-center w-14 bg-slate-100 border-l border-slate-200 text-slate-700">Action</th>
                       )}
                     </tr>
                   </thead>
@@ -5259,20 +5491,32 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                                     }}
                                     disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
                                     className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-mono text-indigo-900 font-bold w-28 focus:ring-1 focus:ring-blue-500 placeholder:font-sans placeholder:font-normal"
-                                  />
+                                   />
                                 </td>
                               </>
+                            )}
+                            {activeDT && (!activeDT.isLocked || adminUnlocked) && (
+                              <td className="py-1 px-2 whitespace-nowrap text-center border-l border-slate-200">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveToolLineFromDT(idx)}
+                                  className="text-red-600 hover:text-red-800 font-bold text-xs hover:bg-red-50 p-1 rounded cursor-pointer transition"
+                                  title={`Remove ${resolved.assetNo || t.serial} from this Delivery Ticket`}
+                                >
+                                  🗑️
+                                </button>
+                              </td>
                             )}
                           </tr>
                         );
                       })
                     ) : (
                       <tr>
-                        <td colSpan={isContract4700024096 ? 13 : 10} className="p-6 text-center text-slate-500 font-medium bg-slate-50">
+                        <td colSpan={isContract4700024096 ? (activeDT && (!activeDT.isLocked || adminUnlocked) ? 14 : 13) : (activeDT && (!activeDT.isLocked || adminUnlocked) ? 11 : 10)} className="p-6 text-center text-slate-500 font-medium bg-slate-50">
                           No tools added to Delivery Ticket yet.
                           {!isClosedOrInvoiced && !isLocked && (
                             <span>
-                              {' '}Select tools in the <button type="button" onClick={() => setActiveTab('checklist')} className="text-blue-700 underline font-bold cursor-pointer">Checklistheader</button> tab and click &quot;Generate DT from Checklist&quot;, or click <button type="button" onClick={handleCreateNewDTInJob} className="text-emerald-700 underline font-bold cursor-pointer">+ New DT</button> to add tools.
+                              {' '}Select tools in the <button type="button" onClick={() => setActiveTab('checklist')} className="text-blue-700 underline font-bold cursor-pointer">Checklist</button> tab and click &quot;Generate DT from Checklist&quot;, or click <button type="button" onClick={handleCreateNewDTInJob} className="text-emerald-700 underline font-bold cursor-pointer">+ New DT</button> to add tools.
                             </span>
                           )}
                         </td>

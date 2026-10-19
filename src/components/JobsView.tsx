@@ -66,6 +66,7 @@ interface JobsViewProps {
   onBatchUpdateJobs?: (jobs: DrillingJob[]) => void;
   onSaveDTBatch?: (batch: DTBatch) => void;
   onUpdateDTBatch?: (batch: DTBatch, addedTools?: ToolItem[], removedTools?: ToolItem[]) => void;
+  onDeleteDTBatch?: (dtNumber: string) => void;
   onSaveRTBatch?: (batch: RTBatch) => void;
   onUpdateRTBatch?: (batch: RTBatch) => void;
   onSaveCallout?: (callout: Callout) => void;
@@ -226,6 +227,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   onBatchUpdateJobs,
   onSaveDTBatch,
   onUpdateDTBatch,
+  onDeleteDTBatch,
   onSaveRTBatch,
   onUpdateRTBatch,
   onSaveCallout,
@@ -2229,6 +2231,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                 onRefresh={onRefresh}
                 onSaveDTBatch={onSaveDTBatch || (() => {})}
                 onUpdateDTBatch={onUpdateDTBatch}
+                onDeleteDTBatch={onDeleteDTBatch}
                 onSaveRTBatch={onSaveRTBatch || (() => {})}
                 onUpdateRTBatch={onUpdateRTBatch}
                 onSaveCallout={onSaveCallout}
