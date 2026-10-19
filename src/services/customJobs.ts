@@ -1,13 +1,16 @@
 import { DrillingJob } from '../types';
 import { loadDatasetFromCache, saveDatasetToCache } from './dbCache';
-import { normalizeJobKey, resolveJobClient, cleanDateValue } from './api';
+import { normalizeJobKey, resolveJobClient, cleanDateValue, formatStandardJobId } from './api';
 
 const CUSTOM_JOBS_KEY = 'emdad_custom_jobs';
 
 export function cleanJobRecord(j: DrillingJob): DrillingJob {
+  const stdId = formatStandardJobId(j.id || (j as any).jobNumber);
   const resolvedClient = resolveJobClient(j.client, j.contract, undefined, j.rig);
   return {
     ...j,
+    id: stdId || j.id,
+    jobNumber: stdId || j.jobNumber || j.id,
     client: resolvedClient || j.client || 'ADNOC DRILLING COMPANY P.J.S.C.',
     mobDate: cleanDateValue(j.mobDate),
     demobDate: cleanDateValue(j.demobDate),

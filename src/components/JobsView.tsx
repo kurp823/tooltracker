@@ -16,7 +16,7 @@ import { JobToolsListView } from './JobToolsListView';
 import { SearchableSelect } from './SearchableSelect';
 import { ToolItem, ContractRecord, InspectionRecord, SubDivision } from '../types';
 import { isInvalidOrPlaceholderDate } from '../utils';
-import { resolveJobClient } from '../services/api';
+import { resolveJobClient, formatStandardJobId } from '../services/api';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 import { useResizableColumns, ResizerHandle, useCustomColumns } from '../services/customColumnService';
 import { resolveContractSubDivision } from '../services/customContracts';
@@ -191,10 +191,11 @@ export const getJobEndDate = (job: DrillingJob, rtBatches?: RTBatch[]): string =
 // Normalize keys to allow exact cross-matching (e.g. Job-023-00002 <-> 023-00002)
 const normalizeJobKey = (str?: string): string => {
   if (!str) return '';
-  return str
+  const s = str
     .trim()
     .toUpperCase()
     .replace(/^JOB[-_]?/i, '');
+  return s.replace(/^0(\d{2}-)/, '$1');
 };
 
 // Natural sequential sorter for Job IDs (handles Job-023-00001, Job-023-00002-1, JOB-26-00001)
@@ -392,14 +393,17 @@ export const JobsView: React.FC<JobsViewProps> = ({
     }
   };
 
-  // Filter out any dummy test jobs and resolve accurate client name
+  // Filter out any dummy test jobs and resolve accurate client name & standard Job ID format
   const validJobs = useMemo(() => {
     return jobs
       .filter((j) => j && j.id && !j.id.toUpperCase().includes('TEST') && !j.id.toUpperCase().includes('DUMMY'))
       .map((j) => {
+        const stdId = formatStandardJobId(j.id);
         const resolvedClient = resolveJobClient(j.client, j.contract, undefined, j.rig);
         return {
           ...j,
+          id: stdId || j.id,
+          jobNumber: stdId || j.jobNumber || j.id,
           client: resolvedClient || j.client || 'ADNOC DRILLING COMPANY P.J.S.C.',
         };
       });

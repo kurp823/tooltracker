@@ -206,13 +206,21 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   const nextDtNumber = useMemo(() => {
     const curYr = new Date().getFullYear().toString().slice(-2);
     const dtNums = dtBatches
+      .filter((b) => {
+        const s = String(b.dtNumber || '').toUpperCase();
+        return !s.includes('10001') && !s.includes('100001') && !s.includes('10002');
+      })
       .map((b) => {
-        const m = b.dtNumber.match(/^DT-\d+-(\d+)$/);
+        const m = (b.dtNumber || '').match(/^DT-(?:\d+-)?(\d+)$/i);
         return m ? parseInt(m[1], 10) : 0;
       })
-      .filter((n) => !isNaN(n));
-    const nextSeq = dtNums.length > 0 ? Math.max(...dtNums) + 1 : 1;
-    return `DT-${curYr}-${String(nextSeq).padStart(5, '0')}`;
+      .filter((n) => !isNaN(n) && n > 0 && n < 10000);
+    const nextSeq = dtNums.length > 0 ? Math.max(...dtNums) + 1 : 2393;
+    let seq = nextSeq;
+    while (dtBatches.some((b) => String(b.dtNumber || '').toUpperCase() === `DT-${curYr}-${String(seq).padStart(5, '0')}`)) {
+      seq++;
+    }
+    return `DT-${curYr}-${String(seq).padStart(5, '0')}`;
   }, [dtBatches]);
 
   const activeJobs = useMemo(() => {

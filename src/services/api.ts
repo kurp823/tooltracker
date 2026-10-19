@@ -17,24 +17,37 @@ import {
 } from '../data/initialData';
 import { addToOutbox, flushOutbox, getOutboxCount } from './outboxQueue';
 
+export function formatStandardJobId(id?: string): string {
+  if (!id) return '';
+  const s = String(id).trim();
+  // Standardize JOB-026-XXXXX, Job-026-XXXXX, or job-026-XXXXX -> JOB-26-XXXXX (no zero in front of 26)
+  const withoutZeroYear = s.replace(/^JOB-?0(\d{2})-/i, 'JOB-$1-');
+  return withoutZeroYear.replace(/^job-/i, 'JOB-');
+}
+
 export const normalizeJobKey = (str?: string): string => {
   if (!str) return '';
-  return str
+  const s = str
     .trim()
     .toUpperCase()
     .replace(/^JOB[-_]?/i, '');
+  return s.replace(/^0(\d{2}-)/, '$1');
 };
 
 const MASTER_JOBS_MAP = new Map<string, any>();
 MASTER_JOBS.forEach((j) => {
+  const stdId = formatStandardJobId(j.id);
+  const stdNum = formatStandardJobId((j as any).jobNumber);
   if (j.id) {
     const raw = String(j.id).trim().toUpperCase();
     MASTER_JOBS_MAP.set(raw, j);
+    if (stdId) MASTER_JOBS_MAP.set(stdId.toUpperCase(), j);
     MASTER_JOBS_MAP.set(normalizeJobKey(j.id), j);
   }
   if ((j as any).jobNumber) {
     const raw = String((j as any).jobNumber).trim().toUpperCase();
     MASTER_JOBS_MAP.set(raw, j);
+    if (stdNum) MASTER_JOBS_MAP.set(stdNum.toUpperCase(), j);
     MASTER_JOBS_MAP.set(normalizeJobKey((j as any).jobNumber), j);
   }
 });
@@ -274,9 +287,10 @@ export function resolveJobClient(
 }
 
 function normalizeJob(row: any): any {
-  const jId = row.JobID || row.jobId || row.jobNumber || row.ID || row.id || '';
-  const key = String(jId).trim().toUpperCase();
-  const master = MASTER_JOBS_MAP.get(key) || MASTER_JOBS_MAP.get(normalizeJobKey(jId));
+  const rawId = row.JobID || row.jobId || row.jobNumber || row.ID || row.id || '';
+  const jId = formatStandardJobId(rawId);
+  const key = String(rawId).trim().toUpperCase();
+  const master = MASTER_JOBS_MAP.get(jId.toUpperCase()) || MASTER_JOBS_MAP.get(key) || MASTER_JOBS_MAP.get(normalizeJobKey(rawId));
 
   // 1. Resolve Legal Invoice Number / Credit Note:
   const legalCandidates = [
@@ -880,7 +894,7 @@ export function normalizeDTBatch(row: any): any {
   return {
     id: String(row.DTBatchID || row.dtBatchId || row.id || row.ID || row.dtNumber || row.DTNumber || ''),
     dtNumber: String(row.DTNumber || row.dtNumber || row.TicketNumber || row.ticketNumber || row.id || ''),
-    jobId: String(row.JobID || row.jobId || row.JobNumber || row.jobNumber || row.JobNo || row.jobNo || row.Job || row.job || ''),
+    jobId: formatStandardJobId(String(row.JobID || row.jobId || row.JobNumber || row.jobNumber || row.JobNo || row.jobNo || row.Job || row.job || '')),
     rmDate: rawDate,
     rmRef: String(row.RMRef || row.rmRef || row.RefNo || row.refNo || row.ManifestRef || row.manifestRef || row.ManifestNo || row.manifestNo || row.Reference || row.reference || ''),
     dispatchDate: rawDate,
@@ -1250,7 +1264,7 @@ export function normalizeRTBatch(row: any): any {
   return {
     id: String(row.RTBatchID || row.rtBatchId || row.id || row.ID || rtNum),
     rtNumber: rtNum,
-    jobId: String(row.JobID || row.jobId || row.JobNumber || row.jobNumber || row.JobNo || row.jobNo || ''),
+    jobId: formatStandardJobId(String(row.JobID || row.jobId || row.JobNumber || row.jobNumber || row.JobNo || row.jobNo || '')),
     rtDate: effectiveRtDate,
     receivingDate: effectiveRtDate,
     emdadSignDate: cleanDateStr(row.emdadSignDate || row.EmdadSignDate || ''),

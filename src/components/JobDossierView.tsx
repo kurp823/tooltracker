@@ -1607,17 +1607,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const draftDT = useMemo<DTBatch>(() => {
     const curYr = new Date().getFullYear().toString().slice(-2);
     const existingSeqs = dtBatches
-      .map((b) => {
-        const m = (b.dtNumber || '').match(/\d+$/);
-        return m ? parseInt(m[0], 10) : 0;
+      .filter((b) => {
+        const s = String(b.dtNumber || '').toUpperCase();
+        return !s.includes('10001') && !s.includes('100001') && !s.includes('10002');
       })
-      .filter((n) => !isNaN(n));
-    let nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2120 + jobDTs.length;
-    if (nextSeq <= 10001) nextSeq = 10002;
-    while (dtBatches.some((b) => String(b.dtNumber || '').toUpperCase() === `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`)) {
+      .map((b) => {
+        const m = (b.dtNumber || '').match(/^DT-(?:\d+-)?(\d+)$/i);
+        return m ? parseInt(m[1], 10) : 0;
+      })
+      .filter((n) => !isNaN(n) && n > 0 && n < 10000);
+    let nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2393;
+    while (dtBatches.some((b) => String(b.dtNumber || '').toUpperCase() === `DT-${curYr}-${String(nextSeq).padStart(5, '0')}`)) {
       nextSeq++;
     }
-    const nextDTNum = `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`;
+    const nextDTNum = `DT-${curYr}-${String(nextSeq).padStart(5, '0')}`;
     const dispatchDateStr = formatDateDD_MM_YYYY(jobData.mobDate || new Date().toISOString());
 
     const tools: any[] = (checklistItems && checklistItems.length > 0)
@@ -1716,17 +1719,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     }
     const curYr = new Date().getFullYear().toString().slice(-2);
     const existingSeqs = dtBatches
-      .map((b) => {
-        const m = (b.dtNumber || '').match(/\d+$/);
-        return m ? parseInt(m[0], 10) : 0;
+      .filter((b) => {
+        const s = String(b.dtNumber || '').toUpperCase();
+        return !s.includes('10001') && !s.includes('100001') && !s.includes('10002');
       })
-      .filter((n) => !isNaN(n));
-    let nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2120 + jobDTs.length;
-    if (nextSeq <= 10001) nextSeq = 10002;
-    while (dtBatches.some((b) => String(b.dtNumber || '').toUpperCase() === `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`)) {
+      .map((b) => {
+        const m = (b.dtNumber || '').match(/^DT-(?:\d+-)?(\d+)$/i);
+        return m ? parseInt(m[1], 10) : 0;
+      })
+      .filter((n) => !isNaN(n) && n > 0 && n < 10000);
+    let nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2393;
+    while (dtBatches.some((b) => String(b.dtNumber || '').toUpperCase() === `DT-${curYr}-${String(nextSeq).padStart(5, '0')}`)) {
       nextSeq++;
     }
-    const nextDTNum = `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`;
+    const nextDTNum = `DT-${curYr}-${String(nextSeq).padStart(5, '0')}`;
     const dispatchDateStr = formatDateDD_MM_YYYY(jobData.mobDate || new Date().toISOString());
 
     const toolsToInclude: any[] = checklistItems.length > 0
@@ -2498,17 +2504,20 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
     const curYr = new Date().getFullYear().toString().slice(-2);
     const existingSeqs = dtBatches
+      .filter((b) => {
+        const s = String(b.dtNumber || '').toUpperCase();
+        return !s.includes('10001') && !s.includes('100001') && !s.includes('10002');
+      })
       .map((b) => {
-        const m = b.dtNumber.match(/^DT-\d+-(\d+)$/);
+        const m = (b.dtNumber || '').match(/^DT-(?:\d+-)?(\d+)$/i);
         return m ? parseInt(m[1], 10) : 0;
       })
-      .filter((n) => !isNaN(n));
-    let nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2120 + jobDTs.length;
-    if (nextSeq <= 10001) nextSeq = 10002;
-    while (dtBatches.some((b) => String(b.dtNumber || '').toUpperCase() === `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`)) {
+      .filter((n) => !isNaN(n) && n > 0 && n < 10000);
+    let nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 2393;
+    while (dtBatches.some((b) => String(b.dtNumber || '').toUpperCase() === `DT-${curYr}-${String(nextSeq).padStart(5, '0')}`)) {
       nextSeq++;
     }
-    const nextDTNum = `DT-${curYr}-${String(nextSeq).padStart(4, '0')}`;
+    const nextDTNum = `DT-${curYr}-${String(nextSeq).padStart(5, '0')}`;
 
     const newDT: DTBatch = {
       id: `DTB-${Date.now()}`,
