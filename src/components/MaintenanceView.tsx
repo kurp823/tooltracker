@@ -184,7 +184,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   const [completeNotes, setCompleteNotes] = useState('');
 
   const nextWoNumber = useMemo(() => {
-    const curYr = new Date().getFullYear().toString().slice(-2);
+    const curYr = new Date().getFullYear().toString().slice(-3);
     const mntNums = maintenance
       .map((m) => {
         const match = m.woNumber.match(/^WO-MNT-\d+-(\d+)$/);
@@ -253,7 +253,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
     const tool = inventory.find((t) => t.id === selectedToolId);
     if (!tool) return;
 
-    const curYr = new Date().getFullYear().toString().slice(-2);
+    const curYr = new Date().getFullYear().toString().slice(-3);
     const mntNums = maintenance
       .map((m) => {
         const match = m.woNumber.match(/^WO-MNT-\d+-(\d+)$/);

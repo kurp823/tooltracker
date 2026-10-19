@@ -196,7 +196,7 @@ export const InvoicingView: React.FC<InvoicingViewProps> = ({
     if (!currentJob) return 'DFT-26-001';
     if (currentJob.draftInvoiceNumber) return currentJob.draftInvoiceNumber;
     const cleanNum = (currentJob.id || currentJob.jobNumber || '').replace(/^[A-Za-z_-]+/, '');
-    const curYear = new Date().getFullYear().toString().slice(-2);
+    const curYear = new Date().getFullYear().toString().slice(-3);
     return `DFT-${cleanNum}-${curYear}`;
   }, [currentJob]);
 

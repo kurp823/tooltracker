@@ -54,7 +54,7 @@ export const InvoiceConfirmationModal: React.FC<InvoiceConfirmationModalProps> =
 
   useEffect(() => {
     if (isOpen) {
-      const curYr = new Date().getFullYear().toString().slice(-2);
+      const curYr = new Date().getFullYear().toString().slice(-3);
       const randomSeq = Math.floor(1000 + Math.random() * 9000);
       
       const defaultDraft =
