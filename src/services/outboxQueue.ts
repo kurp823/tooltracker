@@ -195,7 +195,21 @@ export async function flushOutbox(
 
     console.info(`[Outbox] Flushing ${queue.length} pending queued items to Azure SQL...`);
 
+    const MAX_OUTBOX_ATTEMPTS = 8;
     for (const item of queue) {
+      if ((item.attempts || 0) >= MAX_OUTBOX_ATTEMPTS) {
+        // Stop retrying an item that has failed too many times (e.g. a permanently
+        // rejected request). Move it to a dead-letter list so it no longer loops forever.
+        try {
+          const dead = JSON.parse(localStorage.getItem('emdad_outbox_deadletter') || '[]');
+          dead.push({ ...item, deadLetteredAt: Date.now() });
+          localStorage.setItem('emdad_outbox_deadletter', JSON.stringify(dead));
+        } catch {}
+        await removeFromOutbox(item.id);
+        errors++;
+        console.warn(`[Outbox] Dead-lettered '${item.action}' (${item.id}) after ${item.attempts} failed attempts`);
+        continue;
+      }
       try {
         const res = await sender(item.action, item.payload);
         if (res !== null && res !== false) {
