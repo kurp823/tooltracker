@@ -59,6 +59,8 @@ interface JobsViewProps {
   inventory?: ToolItem[];
   contracts?: ContractRecord[];
   inspections?: InspectionRecord[];
+  customCategories?: string[];
+  customSizes?: string[];
   onSaveJob: (job: DrillingJob) => void;
   onRefresh?: () => void;
   onDispatchJob: (jobId: string) => void;
@@ -238,6 +240,8 @@ export const JobsView: React.FC<JobsViewProps> = ({
   onOpenNewJobModal,
   selectedCalloutForNewJob,
   onOpenJobToolsList,
+  customCategories,
+  customSizes,
 }) => {
   const { canEdit, isReadOnly } = useModulePermission(user, 'jobs');
   const [tab, setTab] = useState<'all' | JobStageKey>('all');
@@ -2224,6 +2228,8 @@ export const JobsView: React.FC<JobsViewProps> = ({
                 inventory={inventory || []}
                 contracts={contracts || []}
                 inspections={inspections || []}
+                customCategories={customCategories}
+                customSizes={customSizes}
                 onSaveJob={(updated) => {
                   onSaveJob(updated);
                   setDossierJob(updated);

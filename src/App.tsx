@@ -439,14 +439,48 @@ export const App: React.FC = () => {
     ];
   });
 
+  // Master Unified Categories across all screens (Inventory, Tool Categories & Sizes, Job File, PO, etc.)
+  const allMasterCategories = useMemo(() => {
+    const set = new Set<string>();
+    customCategories.forEach((c) => {
+      const s = typeof c === 'string' ? c.trim().toUpperCase() : String(c || '').trim().toUpperCase();
+      if (s) set.add(s);
+    });
+    inventory.forEach((t) => {
+      const c1 = (t.shortDesc || '').trim().toUpperCase();
+      const c2 = ((t as any).category || '').trim().toUpperCase();
+      if (c1) set.add(c1);
+      if (c2) set.add(c2);
+    });
+    return Array.from(set).sort();
+  }, [inventory, customCategories]);
+
+  // Master Unified Standard Sizes across all screens
+  const allMasterSizes = useMemo(() => {
+    const set = new Set<string>();
+    customSizes.forEach((s) => {
+      const str = typeof s === 'string' ? s.trim() : String(s || '').trim();
+      if (str) set.add(str);
+    });
+    inventory.forEach((t) => {
+      const s = (t.size || '').trim();
+      if (s && s !== '—' && s !== '-') set.add(s);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [inventory, customSizes]);
+
   const handleUpdateCustomCategories = (cats: string[]) => {
     setCustomCategories(cats);
-    localStorage.setItem('emdad_custom_categories', JSON.stringify(cats));
+    try {
+      localStorage.setItem('emdad_custom_categories', JSON.stringify(cats));
+    } catch {}
   };
 
   const handleUpdateCustomSizes = (sizesList: string[]) => {
     setCustomSizes(sizesList);
-    localStorage.setItem('emdad_custom_sizes', JSON.stringify(sizesList));
+    try {
+      localStorage.setItem('emdad_custom_sizes', JSON.stringify(sizesList));
+    } catch {}
   };
 
   // LocalStorage Persistence
@@ -2000,6 +2034,13 @@ export const App: React.FC = () => {
           user={currentUser}
           activeView={activeView}
           onNavigate={(view) => {
+            if (view === 'tool-history') {
+              // Reset tool history filter so opening from sidebar shows all fleet tools instead of stuck on past tool
+              setPreSelectedSerialForToolHistory(null);
+              try {
+                sessionStorage.removeItem('emdad_selected_serial_history');
+              } catch {}
+            }
             setActiveView(view);
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
@@ -2062,8 +2103,8 @@ export const App: React.FC = () => {
             <InventoryView
               user={currentUser}
               inventory={inventory}
-              categories={customCategories}
-              sizes={customSizes}
+              categories={allMasterCategories}
+              sizes={allMasterSizes}
               onSaveInventory={handleSaveInventory}
               onAddTool={handleAddTool}
               onUpdateTool={handleUpdateTool}
@@ -2081,8 +2122,8 @@ export const App: React.FC = () => {
             <CategoriesSizesView
               user={currentUser}
               inventory={inventory}
-              categories={customCategories}
-              sizes={customSizes}
+              categories={allMasterCategories}
+              sizes={allMasterSizes}
               onUpdateCategories={handleUpdateCustomCategories}
               onUpdateSizes={handleUpdateCustomSizes}
               showToast={showToast}
@@ -2118,6 +2159,8 @@ export const App: React.FC = () => {
               inventory={inventory}
               contracts={contracts}
               inspections={inspections}
+              customCategories={allMasterCategories}
+              customSizes={allMasterSizes}
               onSaveJob={handleSaveJob}
               onDispatchJob={handleDispatchJob}
               onReceiveJob={(jobId) => {
@@ -2216,6 +2259,16 @@ export const App: React.FC = () => {
               dtBatches={dtBatches}
               rtBatches={rtBatches}
               preSelectedSerial={preSelectedSerialForToolHistory}
+              onSelectTool={(serial) => {
+                setPreSelectedSerialForToolHistory(serial || null);
+                try {
+                  if (serial) {
+                    sessionStorage.setItem('emdad_selected_serial_history', serial);
+                  } else {
+                    sessionStorage.removeItem('emdad_selected_serial_history');
+                  }
+                } catch {}
+              }}
               onNavigate={(mod) => {
                 setActiveView(mod as ViewKey);
                 window.scrollTo({ top: 0, behavior: 'smooth' });

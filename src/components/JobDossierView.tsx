@@ -59,6 +59,8 @@ interface JobDossierViewProps {
   inventory: ToolItem[];
   contracts?: ContractRecord[];
   inspections?: InspectionRecord[];
+  customCategories?: string[];
+  customSizes?: string[];
   onSaveJob: (job: DrillingJob) => void;
   onRefresh?: () => void;
   onSaveDTBatch: (batch: DTBatch) => void;
@@ -350,6 +352,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   onBackToRegister,
   onNavigateToInvoicing,
   showToast,
+  customCategories: propCustomCategories,
+  customSizes: propCustomSizes,
 }) => {
   // Current active top tab
   const [activeTab, setActiveTab] = useState<DossierTabKey>('job-header');
@@ -1205,7 +1209,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [activeCallout, resolveChecklistItemWithDT]);
 
   // Master Tool Categories & Sizes for Tool Picker
-  const [customCategories] = useState<string[]>(() => {
+  const customCategories = useMemo<string[]>(() => {
+    if (propCustomCategories && propCustomCategories.length > 0) return propCustomCategories;
     const s = localStorage.getItem('emdad_custom_categories');
     if (s) {
       try {
@@ -1233,9 +1238,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       'STABILIZER',
       'WHIPSTOCK',
     ];
-  });
+  }, [propCustomCategories]);
 
-  const [customSizes] = useState<string[]>(() => {
+  const customSizes = useMemo<string[]>(() => {
+    if (propCustomSizes && propCustomSizes.length > 0) return propCustomSizes;
     const s = localStorage.getItem('emdad_custom_sizes');
     if (s) {
       try {
@@ -1246,7 +1252,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       } catch {}
     }
     return ['3-1/2"', '4-3/4"', '5-3/4"', '6"', '6-1/2"', '6-3/4"', '8"', '8-1/8"', '8-1/2"', '9-1/2"', '11-3/4"', '12-1/4"', '17-1/2"', '26"'];
-  });
+  }, [propCustomSizes]);
 
   // Tool Selection Modal (itemsselect) State
   const [isToolSelectOpen, setIsToolSelectOpen] = useState(false);

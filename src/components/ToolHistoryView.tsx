@@ -12,6 +12,7 @@ interface ToolHistoryViewProps {
   dtBatches: DTBatch[];
   rtBatches: RTBatch[];
   preSelectedSerial?: string | null;
+  onSelectTool?: (serial: string | null) => void;
   onNavigate?: (view: any, param?: string) => void;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
   onRefresh?: () => void;
@@ -23,39 +24,70 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
   dtBatches,
   rtBatches,
   preSelectedSerial,
+  onSelectTool,
   showToast,
   onRefresh,
 }) => {
-  // Precompute deployment occurrences per tool serial
+  // Precompute deployment occurrences per tool serial and asset number
   const toolDeploymentCounts = useMemo(() => {
     const counts = new Map<string, number>();
     dtBatches.forEach((dt) => {
       (dt.toolLines || []).forEach((line) => {
-        const s = (line.serial || line.assetNo || '').trim().toUpperCase();
-        if (s) counts.set(s, (counts.get(s) || 0) + 1);
+        const s = (line.serial || '').trim().toUpperCase();
+        const a = (line.assetNo || '').trim().toUpperCase();
+        if (s) {
+          counts.set(s, (counts.get(s) || 0) + 1);
+          counts.set(s.replace(/^EMD-?/i, ''), (counts.get(s.replace(/^EMD-?/i, '')) || 0) + 1);
+        }
+        if (a) {
+          counts.set(a, (counts.get(a) || 0) + 1);
+          counts.set(a.replace(/^EMD-?/i, ''), (counts.get(a.replace(/^EMD-?/i, '')) || 0) + 1);
+        }
       });
     });
     return counts;
   }, [dtBatches]);
 
-  // Sort inventory: Natural alphanumeric order by Serial Number / Asset No
+  // Inventory fast lookup by serial and asset number (with and without EMD- prefix)
+  const inventoryLookup = useMemo(() => {
+    const map = new Map<string, ToolItem>();
+    inventory.forEach((t) => {
+      const s = (t.serial || '').trim().toUpperCase();
+      const a = (t.assetNo || '').trim().toUpperCase();
+      if (s) {
+        map.set(s, t);
+        map.set(s.replace(/^EMD-?/i, ''), t);
+      }
+      if (a) {
+        map.set(a, t);
+        map.set(a.replace(/^EMD-?/i, ''), t);
+      }
+    });
+    return map;
+  }, [inventory]);
+
+  // Sort inventory: Natural alphanumeric order by Asset No, fallback to Serial Number
   const sortedInventory = useMemo(() => {
     return [...inventory].sort((a, b) => {
-      const aSerial = (a.serial || a.assetNo || '').trim();
-      const bSerial = (b.serial || b.assetNo || '').trim();
-      return aSerial.localeCompare(bSerial, undefined, { numeric: true, sensitivity: 'base' });
+      const aKey = (a.assetNo || a.serial || '').trim();
+      const bKey = (b.assetNo || b.serial || '').trim();
+      return aKey.localeCompare(bKey, undefined, { numeric: true, sensitivity: 'base' });
     });
   }, [inventory]);
 
   const toolSelectOptions = useMemo(() => {
     return sortedInventory.map((t) => {
-      const s = (t.serial || t.assetNo || '').trim();
-      const count = toolDeploymentCounts.get(s.toUpperCase()) || 0;
+      const asset = (t.assetNo || '').trim();
+      const serial = (t.serial || '').trim();
+      const primary = asset || serial;
+      const count =
+        (serial ? toolDeploymentCounts.get(serial.toUpperCase()) || 0 : 0) ||
+        (asset ? toolDeploymentCounts.get(asset.toUpperCase()) || 0 : 0);
       const desc = t.shortDesc || t.desc || (t as any).description || '';
       const sizeStr = t.size ? ` (${t.size})` : '';
       return {
-        value: t.serial || s,
-        label: s,
+        value: serial || asset,
+        label: asset && serial && asset !== serial ? `${asset} (${serial})` : primary,
         subLabel: `${desc}${sizeStr}`.trim(),
         count: `${count} Runs`,
       };
@@ -64,6 +96,13 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
 
   // Default selected tool: preSelectedSerial or empty ("-- All Tools --")
   const [selectedSerial, setSelectedSerial] = useState<string>(preSelectedSerial || '');
+
+  const handleSelectTool = (val: string) => {
+    setSelectedSerial(val);
+    if (onSelectTool) {
+      onSelectTool(val ? val : null);
+    }
+  };
 
   // Table filters & pagination
   const [tableSearchFilter, setTableSearchFilter] = useState('');
@@ -87,10 +126,8 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
 
   // Update selected tool if preSelectedSerial changes externally
   useEffect(() => {
-    if (preSelectedSerial) {
-      setSelectedSerial(preSelectedSerial);
-      setCurrentPage(1);
-    }
+    setSelectedSerial(preSelectedSerial || '');
+    setCurrentPage(1);
   }, [preSelectedSerial]);
 
   // Reset page when tool selection or search changes
@@ -98,16 +135,19 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
     setCurrentPage(1);
   }, [selectedSerial, tableSearchFilter, remarkFilter]);
 
-  // Currently selected tool master record
+  // Currently selected tool master record (matches serial, assetNo, with or without EMD- prefix)
   const currentTool = useMemo(() => {
     if (!selectedSerial) return null;
     const clean = selectedSerial.trim().toUpperCase();
+    const cleanStrip = clean.replace(/^EMD-?/i, '');
     return (
-      inventory.find(
-        (t) =>
-          t.serial.trim().toUpperCase() === clean ||
-          (t.assetNo && t.assetNo.trim().toUpperCase() === clean)
-      ) || null
+      inventory.find((t) => {
+        const s = (t.serial || '').trim().toUpperCase();
+        const a = (t.assetNo || '').trim().toUpperCase();
+        const sStrip = s.replace(/^EMD-?/i, '');
+        const aStrip = a.replace(/^EMD-?/i, '');
+        return s === clean || a === clean || (cleanStrip && (sStrip === cleanStrip || aStrip === cleanStrip));
+      }) || null
     );
   }, [selectedSerial, inventory]);
 
@@ -129,7 +169,24 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
 
   // Build movement records: if a tool is selected, show that tool's history; if empty, show all tool movements
   const historyRows = useMemo(() => {
-    const target = selectedSerial ? selectedSerial.trim().toUpperCase() : '';
+    // Collect all valid keys for the target tool
+    const targetKeys = new Set<string>();
+    if (currentTool) {
+      const s = (currentTool.serial || '').trim().toUpperCase();
+      const a = (currentTool.assetNo || '').trim().toUpperCase();
+      if (s) {
+        targetKeys.add(s);
+        targetKeys.add(s.replace(/^EMD-?/i, ''));
+      }
+      if (a) {
+        targetKeys.add(a);
+        targetKeys.add(a.replace(/^EMD-?/i, ''));
+      }
+    } else if (selectedSerial) {
+      const s = selectedSerial.trim().toUpperCase();
+      targetKeys.add(s);
+      targetKeys.add(s.replace(/^EMD-?/i, ''));
+    }
 
     // Map all RT tool lines
     const rtLinesByTicket = new Map<
@@ -139,37 +196,68 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
 
     rtBatches.forEach((rt) => {
       (rt.toolLines || []).forEach((rtl) => {
-        const lineSerial = (rtl.serial || rtl.assetNo || '').trim().toUpperCase();
-        if (!target || lineSerial === target) {
-          const key = `${lineSerial}_${rt.rtNumber.trim().toUpperCase()}`;
-          const effDate = rt.rtDate || rt.backloadRmDate || rt.loadingNoteDate || rt.lNoteDate || (rtl as any).rtDate || (rtl as any).dateIn || (rtl as any).Date_In || (rtl as any).returnDate || '';
-          rtLinesByTicket.set(key, {
-            rtNumber: rt.rtNumber,
-            rtDate: effDate,
-            used: Boolean(rtl.used),
-            condition: rtl.condition,
-          });
+        const lineSerial = (rtl.serial || '').trim().toUpperCase();
+        const lineAsset = (rtl.assetNo || '').trim().toUpperCase();
+        const effDate = rt.rtDate || rt.backloadRmDate || rt.loadingNoteDate || rt.lNoteDate || (rtl as any).rtDate || (rtl as any).dateIn || (rtl as any).Date_In || (rtl as any).returnDate || '';
+        const entry = {
+          rtNumber: rt.rtNumber,
+          rtDate: effDate,
+          used: Boolean(rtl.used),
+          condition: rtl.condition,
+        };
+
+        const registerRtKey = (k: string) => {
+          if (!k) return;
+          rtLinesByTicket.set(`${k}_${rt.rtNumber.trim().toUpperCase()}`, entry);
           const normJob = normalizeJobKey(rt.jobId || rt.jobNumber || '');
           if (normJob) {
-            rtLinesByTicket.set(`${lineSerial}_JOB_${normJob}`, {
-              rtNumber: rt.rtNumber,
-              rtDate: effDate,
-              used: Boolean(rtl.used),
-              condition: rtl.condition,
-            });
+            rtLinesByTicket.set(`${k}_JOB_${normJob}`, entry);
           }
+        };
+
+        if (lineSerial) {
+          registerRtKey(lineSerial);
+          registerRtKey(lineSerial.replace(/^EMD-?/i, ''));
+        }
+        if (lineAsset) {
+          registerRtKey(lineAsset);
+          registerRtKey(lineAsset.replace(/^EMD-?/i, ''));
         }
       });
     });
 
-    const rows: JobToolReconRow[] = [];
+    const rows: (JobToolReconRow & { assetNo?: string; serial?: string })[] = [];
 
     // Find all DTs that included this tool (or all tools if empty)
     dtBatches.forEach((dt) => {
       const lines = dt.toolLines || [];
       lines.forEach((line, idx) => {
-        const lineSerial = (line.serial || line.assetNo || '').trim().toUpperCase();
-        if (target && lineSerial !== target) return;
+        const lineSerial = (line.serial || '').trim().toUpperCase();
+        const lineAsset = (line.assetNo || '').trim().toUpperCase();
+        const lineSerialStrip = lineSerial.replace(/^EMD-?/i, '');
+        const lineAssetStrip = lineAsset.replace(/^EMD-?/i, '');
+
+        const matchedInv = inventoryLookup.get(lineSerial) ||
+          inventoryLookup.get(lineAsset) ||
+          inventoryLookup.get(lineSerialStrip) ||
+          inventoryLookup.get(lineAssetStrip);
+
+        const effectiveAssetNo = line.assetNo || matchedInv?.assetNo || '';
+        const effectiveSerial = line.serial || matchedInv?.serial || '';
+
+        // If target specified, verify match across serial, assetNo, and stripped variants
+        if (targetKeys.size > 0) {
+          const invS = (matchedInv?.serial || '').trim().toUpperCase();
+          const invA = (matchedInv?.assetNo || '').trim().toUpperCase();
+          const isMatch =
+            (lineSerial && targetKeys.has(lineSerial)) ||
+            (lineAsset && targetKeys.has(lineAsset)) ||
+            (lineSerialStrip && targetKeys.has(lineSerialStrip)) ||
+            (lineAssetStrip && targetKeys.has(lineAssetStrip)) ||
+            (invS && targetKeys.has(invS)) ||
+            (invA && targetKeys.has(invA));
+          if (!isMatch) return;
+        }
 
         const jobKey = (dt.jobId || dt.jobNumber || '').trim().toUpperCase();
         const normJob = normalizeJobKey(jobKey);
@@ -179,7 +267,12 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
         let retDate = '';
         let remark: 'Used' | 'Not Used' | 'On Rig' = 'On Rig';
 
-        const matchedByJob = rtLinesByTicket.get(`${lineSerial}_JOB_${normJob}`);
+        const matchedByJob =
+          rtLinesByTicket.get(`${lineSerial}_JOB_${normJob}`) ||
+          rtLinesByTicket.get(`${lineAsset}_JOB_${normJob}`) ||
+          rtLinesByTicket.get(`${lineSerialStrip}_JOB_${normJob}`) ||
+          rtLinesByTicket.get(`${lineAssetStrip}_JOB_${normJob}`);
+
         if (matchedByJob) {
           retNum = matchedByJob.rtNumber;
           retDate = matchedByJob.rtDate;
@@ -189,27 +282,32 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
           remark = line.used ? 'Used' : 'Not Used';
         }
 
+        // Show Asset Number primarily; fallback to Serial Number
+        const displayPartNum = effectiveAssetNo || effectiveSerial || '—';
+
         rows.push({
           jobNum: linkedJob?.id || dt.jobId || dt.jobNumber || '—',
           deliveryTicketNum: dt.dtNumber,
           deliveryDate: dt.deliveryDate || dt.rmDate || '',
           sNo: idx + 1,
-          partNum: line.serial || line.assetNo || (target || '—'),
-          partDescription: line.desc || line.shortDesc || (target === lineSerial && currentTool?.desc) || 'Drilling Tool',
+          partNum: displayPartNum,
+          assetNo: effectiveAssetNo,
+          serial: effectiveSerial,
+          partDescription: line.desc || line.shortDesc || matchedInv?.desc || matchedInv?.shortDesc || currentTool?.desc || 'Drilling Tool',
           returnTicketNum: retNum,
           returnDate: retDate,
           remark,
           rigNum: linkedJob?.rig || dt.rig || '—',
           wellNumber: linkedJob?.well || dt.well || '—',
-          toolType: line.shortDesc,
-          size: line.size,
+          toolType: line.shortDesc || matchedInv?.shortDesc,
+          size: line.size || matchedInv?.size,
         });
       });
     });
 
     // Sort most recent delivery date first
     return rows.sort((a, b) => (b.deliveryDate || '').localeCompare(a.deliveryDate || ''));
-  }, [selectedSerial, dtBatches, rtBatches, jobsMap, currentTool]);
+  }, [selectedSerial, dtBatches, rtBatches, jobsMap, currentTool, inventoryLookup]);
 
   // Filtered rows
   const filteredRows = useMemo(() => {
@@ -255,7 +353,8 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
       DeliveryTicketNum: r.deliveryTicketNum,
       DeliveryDate: formatDateDDMMYYYY(r.deliveryDate) || r.deliveryDate,
       'S.No': r.sNo,
-      PartNum: r.partNum,
+      'Asset No / PartNum': r.partNum,
+      'Serial No': (r as any).serial || '',
       PartDescription: r.partDescription,
       ReturnTicketNum: r.returnTicketNum || '—',
       ReturnDate: formatDateDDMMYYYY(r.returnDate) || r.returnDate || '—',
@@ -329,7 +428,7 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setSelectedSerial('');
+                  handleSelectTool('');
                   setRemarkFilter('All');
                   setTableSearchFilter('');
                   setIsActionMenuOpen(false);
@@ -351,17 +450,17 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
           {/* Tool Dropdown Selector with clear button */}
           <div className="flex items-center gap-2 flex-1 min-w-[320px]">
             <label className="text-xs font-bold text-slate-700 shrink-0">
-              Select Tool (PartNum / Serial):
+              Select Tool (Asset / Serial):
             </label>
 
             <div className="flex-1 max-w-xl">
               <SearchableSelect
                 options={toolSelectOptions}
                 value={selectedSerial}
-                onChange={(val) => setSelectedSerial(val)}
+                onChange={handleSelectTool}
                 allOptionLabel="-- All Tools (Show All Fleet Movements) --"
                 allOptionValue=""
-                searchPlaceholder="Type serial, tool description, or size (e.g. 11648, JAR, 8)..."
+                searchPlaceholder="Type asset no, serial, description, or size (e.g. 1338HT-WS-001, EMD-1566, JAR)..."
                 buttonClassName="w-full h-8 font-mono font-bold bg-slate-50 border-slate-300"
                 dropdownClassName="min-w-[360px] max-w-[560px]"
               />
@@ -415,15 +514,23 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
             {currentTool ? (
               <>
                 <div>
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">SERIAL / PARTNUM</span>
-                  <span className="font-mono font-bold text-amber-300 text-sm">{selectedSerial}</span>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">ASSET NUMBER</span>
+                  <span className="font-mono font-bold text-amber-300 text-sm">
+                    {currentTool.assetNo || currentTool.serial}
+                  </span>
                 </div>
+                {currentTool.serial && currentTool.serial !== currentTool.assetNo && (
+                  <div>
+                    <span className="text-[10px] text-slate-400 block uppercase font-bold">SERIAL NO</span>
+                    <span className="font-mono font-bold text-slate-200 text-sm">{currentTool.serial}</span>
+                  </div>
+                )}
                 <div>
                   <span className="text-[10px] text-slate-400 block uppercase font-bold">TOOL DESCRIPTION</span>
                   <span className="font-semibold text-slate-100">{currentTool.shortDesc || 'Downhole Tool'}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">SIZE & OWNERSHIP</span>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">SIZE &amp; OWNERSHIP</span>
                   <span className="font-semibold text-slate-100">
                     {currentTool.size || '—'} · {currentTool.ownership || 'EMDAD'}
                   </span>
@@ -469,7 +576,7 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
           </div>
           <div className="text-slate-500 font-mono text-[11px]">
             {selectedSerial
-              ? `Chronological audit for tool ${selectedSerial}`
+              ? `Chronological audit for tool ${currentTool?.assetNo || selectedSerial}`
               : 'Chronological audit across all fleet equipment'}
           </div>
         </div>
@@ -482,7 +589,7 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
                 <th className="px-3 py-2 font-mono">DeliveryTicketNum</th>
                 <th className="px-3 py-2 font-mono">DeliveryDate</th>
                 <th className="px-3 py-2 text-center w-12 font-mono">S.No</th>
-                <th className="px-3 py-2 font-mono">PartNum</th>
+                <th className="px-3 py-2 font-mono">Asset No / PartNum</th>
                 <th className="px-3 py-2">PartDescription</th>
                 <th className="px-3 py-2 font-mono">ReturnTicketNum</th>
                 <th className="px-3 py-2 font-mono">ReturnDate</th>
@@ -501,14 +608,14 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
                       </div>
                       <div className="text-xs text-slate-500">
                         {selectedSerial
-                          ? `Tool ${selectedSerial} has not been dispatched on any Delivery Tickets yet.`
+                          ? `Tool ${currentTool?.assetNo || selectedSerial} has not been dispatched on any Delivery Tickets yet.`
                           : 'Try clearing the search or status filters.'}
                       </div>
                       {selectedSerial && (
                         <div className="pt-2">
                           <button
                             type="button"
-                            onClick={() => setSelectedSerial('')}
+                            onClick={() => handleSelectTool('')}
                             className="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-xs cursor-pointer transition"
                           >
                             Show All Tools (All Fleet Movements)
@@ -531,8 +638,11 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
                       {formatDateDDMMYYYY(r.deliveryDate) || r.deliveryDate || '—'}
                     </td>
                     <td className="px-3 py-2 text-center font-mono text-slate-500">{r.sNo}</td>
-                    <td className="px-3 py-2 font-mono font-bold text-slate-900 whitespace-nowrap">
-                      {r.partNum}
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <div className="font-mono font-bold text-slate-900">{r.partNum}</div>
+                      {(r as any).serial && (r as any).serial !== r.partNum && (
+                        <div className="text-[10px] font-mono text-slate-500">SN: {(r as any).serial}</div>
+                      )}
                     </td>
                     <td className="px-3 py-2 font-medium text-slate-800 max-w-sm truncate" title={r.partDescription}>
                       {r.partDescription}
