@@ -80,6 +80,18 @@ export class ErrorBoundary extends React.Component<Props, State> {
               >
                 Reload Page
               </button>
+              <button
+                onClick={() => {
+                  try {
+                    sessionStorage.clear();
+                    localStorage.clear();
+                  } catch {}
+                  window.location.reload();
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded transition shadow-sm cursor-pointer"
+              >
+                Clear Cache &amp; Reload
+              </button>
             </div>
           </div>
         </div>

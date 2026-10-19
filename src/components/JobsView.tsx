@@ -85,7 +85,7 @@ interface JobsViewProps {
 // Returns '—' for empty, invalid, or 1900/1970 placeholder dates
 export const formatJobDate = (dateStr?: string | null): string => {
   if (!dateStr || isInvalidOrPlaceholderDate(dateStr)) return '—';
-  const clean = dateStr.trim();
+  const clean = String(dateStr).trim();
   if (clean === '' || clean === '—' || clean === '-') return '—';
 
   // If already DD-MMM-YYYY (4 digits year)

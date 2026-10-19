@@ -424,11 +424,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // LOCKED STATE RULE: If legally invoiced, draft invoiced, or submitted to billing, job is strictly read-only!
   // Only Admin can edit (with audited mode banner)
   const isJobInvoicedOrSubmitted = useMemo(() => {
-    const legal = (jobData.legalInvoiceNumber || jobData.invoiceNumber || '').trim();
-    const draft = (jobData.draftInvoiceNumber || '').trim();
+    const legal = String(jobData?.legalInvoiceNumber || jobData?.invoiceNumber || '').trim();
+    const draft = String(jobData?.draftInvoiceNumber || '').trim();
     const hasLegal = Boolean(legal && legal !== '—' && legal !== '-');
     const hasDraft = Boolean(draft && draft !== '—' && draft !== '-');
-    const stage = (jobData.status || '').toLowerCase();
+    const stage = String(jobData?.status || '').toLowerCase();
     const isFinishedStage =
       stage.includes('invoiced') ||
       stage.includes('completed') ||
@@ -571,7 +571,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Helper to remove any Performance Bank Guarantee (PBG) notes or values from contract strings
   const cleanContractName = (raw?: string | null) => {
     if (!raw) return '';
-    let s = raw.trim();
+    let s = String(raw).trim();
     s = s.replace(/PBG\s*[:\-].*$/i, '');
     s = s.replace(/\(AED\s+[\d,\.]+\s*-\s*OPEN\s+ENDED\)/gi, '');
     s = s.replace(/\(AED\s+[\d,\.]+.*?\)/gi, '');
@@ -583,10 +583,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Prevent legal invoice number or draft invoice number from ever duplicating as operational ticket number
   const isInvoiceRef = (val?: string | null) => {
     if (!val) return false;
-    const v = val.trim().toUpperCase();
-    const legal = (jobData.legalInvoiceNumber || '').trim().toUpperCase();
-    const draft = (jobData.draftInvoiceNumber || '').trim().toUpperCase();
-    const inv = (jobData.invoiceNumber || '').trim().toUpperCase();
+    const v = String(val).trim().toUpperCase();
+    const legal = String(jobData?.legalInvoiceNumber || '').trim().toUpperCase();
+    const draft = String(jobData?.draftInvoiceNumber || '').trim().toUpperCase();
+    const inv = String(jobData?.invoiceNumber || '').trim().toUpperCase();
     if (legal && v === legal) return true;
     if (draft && v === draft) return true;
     if (inv && v === inv) return true;
@@ -596,67 +596,78 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   const sanitizeTicketNumber = (val?: string | null) => {
     if (!val || isInvoiceRef(val)) return '';
-    return val.trim();
+    return String(val).trim();
   };
 
   // Dynamic distinct Clients & Contracts pulled from real database records
   const clientOptions = useMemo(() => {
     const set = new Set<string>();
-    if (jobData.client && jobData.client.trim()) set.add(jobData.client.trim().toUpperCase());
-    jobs.forEach((j) => {
-      if (j.client && j.client.trim()) set.add(j.client.trim().toUpperCase());
+    const curClient = String(jobData?.client || '').trim().toUpperCase();
+    if (curClient) set.add(curClient);
+    (Array.isArray(jobs) ? jobs : []).forEach((j) => {
+      const s = String(j?.client || '').trim().toUpperCase();
+      if (s) set.add(s);
     });
-    contracts.forEach((c) => {
-      if ((c as any).clientName && (c as any).clientName.trim()) set.add((c as any).clientName.trim().toUpperCase());
-      if (c.client && c.client.trim()) set.add(c.client.trim().toUpperCase());
+    (Array.isArray(contracts) ? contracts : []).forEach((c) => {
+      const c1 = String((c as any)?.clientName || '').trim().toUpperCase();
+      const c2 = String(c?.client || '').trim().toUpperCase();
+      if (c1) set.add(c1);
+      if (c2) set.add(c2);
     });
-    dtBatches.forEach((d) => {
-      if ((d as any).client && (d as any).client.trim()) set.add((d as any).client.trim().toUpperCase());
+    (Array.isArray(dtBatches) ? dtBatches : []).forEach((d) => {
+      const s = String((d as any)?.client || d?.client || '').trim().toUpperCase();
+      if (s) set.add(s);
     });
-    rtBatches.forEach((r) => {
-      if ((r as any).client && (r as any).client.trim()) set.add((r as any).client.trim().toUpperCase());
+    (Array.isArray(rtBatches) ? rtBatches : []).forEach((r) => {
+      const s = String((r as any)?.client || r?.client || '').trim().toUpperCase();
+      if (s) set.add(s);
     });
-    callouts.forEach((c) => {
-      if (c.client && c.client.trim()) set.add(c.client.trim().toUpperCase());
+    (Array.isArray(callouts) ? callouts : []).forEach((c) => {
+      const s = String(c?.client || '').trim().toUpperCase();
+      if (s) set.add(s);
     });
     ['ADNOC ONSHORE', 'ADNOC OFFSHORE', 'ADNOC DRILLING', 'SNOC', 'SCHLUMBERGER', 'BAKER HUGHES', 'HALLIBURTON', 'WEATHERFORD'].forEach((c) => set.add(c));
     return Array.from(set).sort();
-  }, [jobs, contracts, dtBatches, rtBatches, callouts, jobData.client]);
+  }, [jobs, contracts, dtBatches, rtBatches, callouts, jobData?.client]);
 
   const contractOptions = useMemo(() => {
     const map = new Map<string, string>(); // Name -> Contract No
-    if (jobData.contract && jobData.contract.trim()) {
-      const cleanCurrent = cleanContractName(jobData.contract);
-      if (cleanCurrent) map.set(cleanCurrent, jobData.contractNo || '');
+    const curContract = String(jobData?.contract || '').trim();
+    if (curContract) {
+      const cleanCurrent = cleanContractName(curContract);
+      if (cleanCurrent) map.set(cleanCurrent, String(jobData?.contractNo || ''));
     }
-    contracts.forEach((c) => {
-      let name = c.name || c.shortDesc || (c as any).title || (c as any).contractName || '';
+    (Array.isArray(contracts) ? contracts : []).forEach((c) => {
+      let name = String(c?.name || c?.shortDesc || (c as any)?.title || (c as any)?.contractName || '');
       name = cleanContractName(name);
-      if (!name && c.description) {
-        name = cleanContractName(c.description);
+      if (!name && c?.description) {
+        name = cleanContractName(String(c.description));
       }
-      const no = (c.contractNo || (c as any).contractNumber || '').trim();
+      const no = String(c?.contractNo || (c as any)?.contractNumber || '').trim();
       if (!name) name = no;
       if (name) {
         map.set(name, no || map.get(name) || '');
       }
     });
-    jobs.forEach((j) => {
-      if (j.contract && j.contract.trim()) {
-        const clean = cleanContractName(j.contract);
-        if (clean) map.set(clean, j.contractNo || '');
+    (Array.isArray(jobs) ? jobs : []).forEach((j) => {
+      const cName = String(j?.contract || '').trim();
+      if (cName) {
+        const clean = cleanContractName(cName);
+        if (clean) map.set(clean, String(j?.contractNo || ''));
       }
     });
-    dtBatches.forEach((d) => {
-      if (d.contract && d.contract.trim()) {
-        const clean = cleanContractName(d.contract);
-        if (clean) map.set(clean, d.contract.trim());
+    (Array.isArray(dtBatches) ? dtBatches : []).forEach((d) => {
+      const cName = String(d?.contract || '').trim();
+      if (cName) {
+        const clean = cleanContractName(cName);
+        if (clean) map.set(clean, cName);
       }
     });
-    callouts.forEach((c) => {
-      if (c.contract && c.contract.trim()) {
-        const clean = cleanContractName(c.contract);
-        if (clean) map.set(clean, c.projectNo || '');
+    (Array.isArray(callouts) ? callouts : []).forEach((c) => {
+      const cName = String(c?.contract || '').trim();
+      if (cName) {
+        const clean = cleanContractName(cName);
+        if (clean) map.set(clean, String(c?.projectNo || ''));
       }
     });
     if (!map.has('ADNOC ONSHORE - RENTALS')) map.set('ADNOC ONSHORE - RENTALS', '4700023861');
@@ -667,18 +678,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Related real data for this specific job from live database
   const jobDTs = useMemo(() => {
-    const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
-    const normId = normalizeJobKey(jobData.id || jobData.jobNumber);
+    const rawId = String(jobData?.id || jobData?.jobNumber || '').trim().toUpperCase();
+    const normId = normalizeJobKey(jobData?.id || jobData?.jobNumber);
     if (!rawId && !normId) return [];
 
-    return dtBatches.filter((b) => {
+    return (Array.isArray(dtBatches) ? dtBatches : []).filter((b) => {
+      if (!b) return false;
       const id = String(b.id || '').toUpperCase();
       const num = String(b.dtNumber || '').toUpperCase();
       if (id.startsWith('DT-AUTO') || id.startsWith('DT-CLS') || num.startsWith('DT-CLS') || num.startsWith('DT-AUTO') || num === 'DT-26-10001' || id === 'DT-26-10001') {
         return false;
       }
-      const bJob = (b.jobId || (b as any).jobNumber || '').trim().toUpperCase();
-      const bNorm = normalizeJobKey(b.jobId || (b as any).jobNumber);
+      const bJob = String(b.jobId || (b as any)?.jobNumber || '').trim().toUpperCase();
+      const bNorm = normalizeJobKey(b.jobId || (b as any)?.jobNumber);
       if (bJob && rawId && bJob === rawId) return true;
       if (bNorm && normId && bNorm === normId) return true;
       return false;
@@ -686,8 +698,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [dtBatches, jobData]);
 
   const jobRTs = useMemo(() => {
-    const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
-    const normId = normalizeJobKey(jobData.id || jobData.jobNumber);
+    const rawId = String(jobData?.id || jobData?.jobNumber || '').trim().toUpperCase();
+    const normId = normalizeJobKey(jobData?.id || jobData?.jobNumber);
     if (!rawId && !normId) return [];
 
     // 1. Collect all explicit RT references from this job's DT lines
@@ -695,23 +707,24 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     jobDTs.forEach((dt) => {
       const dtDate = dt.dispatchDate || dt.rmDate;
       (dt.toolLines || []).forEach((tl: any) => {
-        const ref = (tl.rtBatchId || tl.returnedRtNumber || (tl as any).rgtNo || '').trim().toUpperCase();
-        const retDate = tl.returnDate || tl.dateIn || (tl as any).Date_In;
+        const ref = String(tl?.rtBatchId || tl?.returnedRtNumber || (tl as any)?.rgtNo || '').trim().toUpperCase();
+        const retDate = tl?.returnDate || tl?.dateIn || (tl as any)?.Date_In;
         if (ref && ref !== '—' && ref !== '-' && !ref.startsWith('RT-AUTO') && !ref.startsWith('RT-CLS') && (!retDate || !dtDate || retDate >= dtDate)) {
           jobReferencedRTs.add(ref);
         }
       });
     });
 
-    const matched = rtBatches.filter((b) => {
+    const matched = (Array.isArray(rtBatches) ? rtBatches : []).filter((b) => {
+      if (!b) return false;
       const id = String(b.id || '').toUpperCase();
       const num = String(b.rtNumber || '').toUpperCase();
       if (id.startsWith('RT-AUTO') || id.startsWith('RT-CLS') || num.startsWith('RT-CLS') || num.startsWith('RT-AUTO')) {
         return false;
       }
-      const bJob = (b.jobId || (b as any).jobNumber || '').trim().toUpperCase();
-      const bNorm = normalizeJobKey(b.jobId || (b as any).jobNumber);
-      const bNum = (b.rtNumber || b.id || '').trim().toUpperCase();
+      const bJob = String(b.jobId || (b as any)?.jobNumber || '').trim().toUpperCase();
+      const bNorm = normalizeJobKey(b.jobId || (b as any)?.jobNumber);
+      const bNum = String(b.rtNumber || b.id || '').trim().toUpperCase();
 
       if (bJob && rawId && bJob === rawId) return true;
       if (bNorm && normId && bNorm === normId) return true;
@@ -725,7 +738,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     // Deduplicate by rtNumber or id
     const seen = new Set<string>();
     return matched.filter((rt) => {
-      const key = (rt.rtNumber || rt.id).trim().toUpperCase();
+      const key = String(rt?.rtNumber || rt?.id || '').trim().toUpperCase();
       if (!key || seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -733,16 +746,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [rtBatches, jobData, jobDTs]);
 
   const jobCallouts = useMemo(() => {
-    const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
-    const normId = normalizeJobKey(jobData.id || jobData.jobNumber);
-    const calIdFromJob = (jobData.calloutId || '').trim().toUpperCase();
-    const normCalFromJob = normalizeJobKey(jobData.calloutId);
+    const rawId = String(jobData?.id || jobData?.jobNumber || '').trim().toUpperCase();
+    const normId = normalizeJobKey(jobData?.id || jobData?.jobNumber);
+    const calIdFromJob = String(jobData?.calloutId || '').trim().toUpperCase();
+    const normCalFromJob = normalizeJobKey(jobData?.calloutId);
 
-    return callouts.filter((c) => {
-      const cId = (c.id || (c as any).calloutNumber || '').trim().toUpperCase();
-      const cNormId = normalizeJobKey(c.id || (c as any).calloutNumber);
-      const cJob = (c.jobId || (c as any).jobNumber || '').trim().toUpperCase();
-      const cNorm = normalizeJobKey(c.jobId || (c as any).jobNumber);
+    return (Array.isArray(callouts) ? callouts : []).filter((c) => {
+      if (!c) return false;
+      const cId = String(c.id || (c as any)?.calloutNumber || '').trim().toUpperCase();
+      const cNormId = normalizeJobKey(c.id || (c as any)?.calloutNumber);
+      const cJob = String(c.jobId || (c as any)?.jobNumber || '').trim().toUpperCase();
+      const cNorm = normalizeJobKey(c.jobId || (c as any)?.jobNumber);
       if (rawId && cJob && cJob === rawId) return true;
       if (normId && cNorm && normId === cNorm) return true;
       if (calIdFromJob && (cId === calIdFromJob || cNormId === normCalFromJob)) return true;
@@ -1012,7 +1026,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const map = new Map<string, ToolItem>();
     const registerKey = (key: string | undefined | null, tool: ToolItem) => {
       if (!key) return;
-      const clean = key.trim().toUpperCase();
+      const clean = String(key).trim().toUpperCase();
       if (!clean) return;
       map.set(clean, tool);
       // Strip EMD- prefix (e.g. EMD-6384 -> 6384)
@@ -1048,9 +1062,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     rawSupplier?: string,
     rawOwnership?: string
   ) => {
-    const lookupInv = (key?: string) => {
+    const lookupInv = (key?: any) => {
       if (!key) return undefined;
-      const k = key.trim().toUpperCase();
+      const k = String(key).trim().toUpperCase();
       if (!k) return undefined;
       return (
         inventoryMap.get(k) ||
@@ -1064,96 +1078,110 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
     // If still not found, try searching inventory by description match
     if (!inv && (fallbackDesc || fallbackShortDesc)) {
-      const cleanDesc = (fallbackDesc || fallbackShortDesc || '').trim().toUpperCase();
-      inv = inventory.find((t) => {
-        const td = (t.desc || '').trim().toUpperCase();
+      const cleanDesc = String(fallbackDesc || fallbackShortDesc || '').trim().toUpperCase();
+      inv = (Array.isArray(inventory) ? inventory : []).find((t) => {
+        const td = String(t?.desc || '').trim().toUpperCase();
         return td && cleanDesc && (td === cleanDesc || td.includes(cleanDesc) || cleanDesc.includes(td));
       });
     }
 
     // Priority 1: Genuine inventory Asset Number (never EMD- if a physical assetNo exists)
     let assetNo = '';
-    if (inv?.assetNo && inv.assetNo.trim() && !inv.assetNo.trim().toUpperCase().startsWith('EMD-')) {
-      assetNo = inv.assetNo.trim();
-    } else if (rawAssetNo && rawAssetNo.trim() && !rawAssetNo.trim().toUpperCase().startsWith('EMD-')) {
-      assetNo = rawAssetNo.trim();
-    } else if (inv?.oemSerial && inv.oemSerial.trim() && !inv.oemSerial.trim().toUpperCase().startsWith('EMD-')) {
-      assetNo = inv.oemSerial.trim();
-    } else if (inv?.serial && inv.serial.trim() && !inv.serial.trim().toUpperCase().startsWith('EMD-')) {
-      assetNo = inv.serial.trim();
-    } else if (rawSerial && rawSerial.trim() && !rawSerial.trim().toUpperCase().startsWith('EMD-')) {
-      assetNo = rawSerial.trim();
+    const invAsset = String(inv?.assetNo || '').trim();
+    const rawAsset = String(rawAssetNo || '').trim();
+    const invOem = String(inv?.oemSerial || '').trim();
+    const invSerial = String(inv?.serial || '').trim();
+    const rawSer = String(rawSerial || '').trim();
+
+    if (invAsset && !invAsset.toUpperCase().startsWith('EMD-')) {
+      assetNo = invAsset;
+    } else if (rawAsset && !rawAsset.toUpperCase().startsWith('EMD-')) {
+      assetNo = rawAsset;
+    } else if (invOem && !invOem.toUpperCase().startsWith('EMD-')) {
+      assetNo = invOem;
+    } else if (invSerial && !invSerial.toUpperCase().startsWith('EMD-')) {
+      assetNo = invSerial;
+    } else if (rawSer && !rawSer.toUpperCase().startsWith('EMD-')) {
+      assetNo = rawSer;
     } else if (inv && inv.isEmdad === false) {
-      assetNo = (inv.assetNo || inv.serial || inv.oemSerial || rawAssetNo || rawSerial || '').trim();
+      assetNo = String(inv.assetNo || inv.serial || inv.oemSerial || rawAssetNo || rawSerial || '').trim();
     } else {
       // Check inventory by description to find real physical asset number
-      const descToSearch = (fallbackDesc || inv?.desc || '').trim().toUpperCase();
+      const descToSearch = String(fallbackDesc || inv?.desc || '').trim().toUpperCase();
       if (descToSearch) {
-        const matchByDesc = inventory.find((t) => {
-          const td = (t.desc || '').trim().toUpperCase();
+        const matchByDesc = (Array.isArray(inventory) ? inventory : []).find((t) => {
+          const td = String(t?.desc || '').trim().toUpperCase();
+          const tAsset = String(t?.assetNo || '').trim().toUpperCase();
           return (td === descToSearch || (td && descToSearch && (td.includes(descToSearch) || descToSearch.includes(td)))) &&
-            t.assetNo && !t.assetNo.trim().toUpperCase().startsWith('EMD-');
+            tAsset && !tAsset.startsWith('EMD-');
         });
         if (matchByDesc && matchByDesc.assetNo) {
-          assetNo = matchByDesc.assetNo.trim();
+          assetNo = String(matchByDesc.assetNo).trim();
         }
       }
       if (!assetNo) {
-        assetNo = (inv?.assetNo && !inv.assetNo.toUpperCase().startsWith('EMD-') ? inv.assetNo : '') ||
-                  (rawAssetNo && !rawAssetNo.toUpperCase().startsWith('EMD-') ? rawAssetNo : '') ||
-                  (rawSerial && !rawSerial.toUpperCase().startsWith('EMD-') ? rawSerial : '') ||
-                  inv?.assetNo || rawAssetNo || rawSerial || '—';
+        assetNo = (invAsset && !invAsset.toUpperCase().startsWith('EMD-') ? invAsset : '') ||
+                  (rawAsset && !rawAsset.toUpperCase().startsWith('EMD-') ? rawAsset : '') ||
+                  (rawSer && !rawSer.toUpperCase().startsWith('EMD-') ? rawSer : '') ||
+                  invAsset || rawAsset || rawSer || '—';
       }
     }
 
     // Priority 2: Genuine Serial Number
     let serial = '';
-    if (inv?.serial && inv.serial.trim() && !inv.serial.trim().toUpperCase().startsWith('EMD-')) {
-      serial = inv.serial.trim();
-    } else if (rawSerial && rawSerial.trim() && !rawSerial.trim().toUpperCase().startsWith('EMD-')) {
-      serial = rawSerial.trim();
+    if (invSerial && !invSerial.toUpperCase().startsWith('EMD-')) {
+      serial = invSerial;
+    } else if (rawSer && !rawSer.toUpperCase().startsWith('EMD-')) {
+      serial = rawSer;
     } else if (inv?.id && String(inv.id).trim() && !String(inv.id).trim().toUpperCase().startsWith('EMD-')) {
       serial = String(inv.id).trim();
-    } else if (inv?.serial && inv.serial.trim()) {
-      serial = inv.serial.trim();
-    } else if (rawSerial && rawSerial.trim()) {
-      serial = rawSerial.trim();
+    } else if (invSerial) {
+      serial = invSerial;
+    } else if (rawSer) {
+      serial = rawSer;
     } else {
       serial = assetNo || '—';
     }
 
     // Priority 3: Genuine Technical Description (never bare tool type if technical description is available)
     let desc = '';
-    if (inv?.desc && inv.desc.trim()) {
-      desc = inv.desc.trim();
-    } else if (fallbackDesc && fallbackDesc.trim() && fallbackDesc.trim().toUpperCase() !== (fallbackShortDesc || '').trim().toUpperCase()) {
-      desc = fallbackDesc.trim();
-    } else if (fallbackDesc && fallbackDesc.trim()) {
-      desc = fallbackDesc.trim();
-    } else if (inv?.shortDesc && inv.shortDesc.trim()) {
-      desc = inv.shortDesc.trim();
+    const invDesc = String(inv?.desc || '').trim();
+    const fbDesc = String(fallbackDesc || '').trim();
+    const fbShort = String(fallbackShortDesc || '').trim();
+    const invShort = String(inv?.shortDesc || '').trim();
+
+    if (invDesc) {
+      desc = invDesc;
+    } else if (fbDesc && fbDesc.toUpperCase() !== fbShort.toUpperCase()) {
+      desc = fbDesc;
+    } else if (fbDesc) {
+      desc = fbDesc;
+    } else if (invShort) {
+      desc = invShort;
     } else {
       desc = fallbackShortDesc || 'Downhole Tool';
     }
 
     // Priority 4: Clean Tool Category / Short Description
-    const shortDesc = (inv?.shortDesc && inv.shortDesc.trim()) || fallbackShortDesc || extractToolType(desc, fallbackShortDesc) || 'Downhole Tool';
+    const shortDesc = invShort || fallbackShortDesc || extractToolType(desc, fallbackShortDesc) || 'Downhole Tool';
 
     // Priority 5: Third-Party Supplier & Ownership Resolution (live inventory updates ALWAYS reflect immediately!)
+    const invSup = String(inv?.supplier || '').trim();
+    const invOwn = String(inv?.ownership || '').trim();
     const supplier = (
-      (inv?.supplier && inv.supplier.trim().toUpperCase() !== 'EMDAD' ? inv.supplier.trim() : '') ||
-      (inv?.ownership && inv.ownership.trim().toUpperCase() !== 'EMDAD' ? inv.ownership.trim() : '') ||
-      (inv && inv.isEmdad === false ? (inv.ownership || inv.supplier || 'Sub-Contractor') : '') ||
-      (rawSupplier && rawSupplier.trim().toUpperCase() !== 'EMDAD' ? rawSupplier.trim() : '') ||
-      (rawOwnership && rawOwnership.trim().toUpperCase() !== 'EMDAD' ? rawOwnership.trim() : '') ||
-      inv?.supplier ||
-      inv?.ownership ||
-      rawSupplier ||
-      rawOwnership ||
+      (invSup && invSup.toUpperCase() !== 'EMDAD' ? invSup : '') ||
+      (invOwn && invOwn.toUpperCase() !== 'EMDAD' ? invOwn : '') ||
+      (inv && inv.isEmdad === false ? String(inv.ownership || inv.supplier || 'Sub-Contractor').trim() : '') ||
+      (rawSupplier && String(rawSupplier).trim().toUpperCase() !== 'EMDAD' ? String(rawSupplier).trim() : '') ||
+      (rawOwnership && String(rawOwnership).trim().toUpperCase() !== 'EMDAD' ? String(rawOwnership).trim() : '') ||
+      String(inv?.supplier || '') ||
+      String(inv?.ownership || '') ||
+      String(rawSupplier || '') ||
+      String(rawOwnership || '') ||
       'EMDAD'
     );
 
-    const isEmdad = inv ? Boolean(inv.isEmdad) : (!supplier || supplier.trim().toUpperCase() === 'EMDAD');
+    const isEmdad = inv ? Boolean(inv.isEmdad) : (!supplier || String(supplier).trim().toUpperCase() === 'EMDAD');
 
     return { inv, assetNo, serial, desc, shortDesc, supplier, ownership: supplier, isEmdad };
   }, [inventoryMap, inventory]);
@@ -1173,7 +1201,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Synchronize checklist items with job's Delivery Tickets to eliminate any system ID mix-up
   const resolveChecklistItemWithDT = useCallback((it: CalloutItem, idx: number) => {
-    const rawDt = (it.dtNumber || '').trim().toUpperCase();
+    if (!it) return it;
+    const rawDt = String(it?.dtNumber || '').trim().toUpperCase();
     if (rawDt === 'DT-26-10001') {
       return {
         ...it,
@@ -1183,26 +1212,27 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     }
 
     // Only associate with a DT if explicitly linked via it.dtNumber
-    const targetDT = rawDt ? jobDTs.find(d => (d.dtNumber || '').trim().toUpperCase() === rawDt) : null;
+    const targetDT = rawDt ? jobDTs.find(d => String(d?.dtNumber || '').trim().toUpperCase() === rawDt) : null;
 
     // Find matching line on targetDT strictly by tool serial/assetNo — NEVER match by array index idx!
-    const itSerial = (it.serialNos?.[0] || '').trim().toUpperCase();
-    const itPart = (it.partNo || '').trim().toUpperCase();
+    const itSerial = String(it?.serialNos?.[0] || '').trim().toUpperCase();
+    const itPart = String(it?.partNo || '').trim().toUpperCase();
 
     const dtLine = targetDT?.toolLines?.find(tl => {
-      const s = (tl.serial || '').trim().toUpperCase();
-      const a = (tl.assetNo || '').trim().toUpperCase();
+      if (!tl) return false;
+      const s = String(tl.serial || '').trim().toUpperCase();
+      const a = String(tl.assetNo || '').trim().toUpperCase();
       if (itSerial && itSerial !== '—' && (s === itSerial || a === itSerial)) return true;
       if (itPart && itPart !== '—' && (s === itPart || a === itPart)) return true;
       return false;
     });
 
-    const candidateSerial = dtLine?.serial || it.serialNos?.[0];
-    const candidateAssetNo = dtLine?.assetNo || it.partNo;
-    const candidateDesc = it.description || dtLine?.toolDescription || dtLine?.desc;
-    const candidateSupplier = dtLine?.ownership || dtLine?.supplier || it.supplier;
+    const candidateSerial = dtLine?.serial || it?.serialNos?.[0];
+    const candidateAssetNo = dtLine?.assetNo || it?.partNo;
+    const candidateDesc = it?.description || dtLine?.toolDescription || dtLine?.desc;
+    const candidateSupplier = dtLine?.ownership || dtLine?.supplier || it?.supplier;
 
-    const resolved = resolveToolDetails(candidateSerial, candidateAssetNo, candidateDesc, it.shortDesc || it.cat, candidateSupplier);
+    const resolved = resolveToolDetails(candidateSerial, candidateAssetNo, candidateDesc, it?.shortDesc || it?.cat, candidateSupplier);
     return {
       ...it,
       dtNumber: targetDT ? targetDT.dtNumber : undefined,
@@ -1219,17 +1249,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [jobDTs, resolveToolDetails]);
 
   const isTargetJob01816 = useMemo(() => {
-    const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
-    return rawId === 'JOB-26-01816' || rawId === 'JOB-026-01816' || normalizeJobKey(rawId) === normalizeJobKey('JOB-26-01816');
+    const rawId = String(jobData?.id || jobData?.jobNumber || '').trim().toUpperCase();
+    return rawId === 'JOB-26-01816' || rawId === 'JOB-026-01816' || (rawId ? normalizeJobKey(rawId) === normalizeJobKey('JOB-26-01816') : false);
   }, [jobData]);
 
   // Checklist Items State
   const [checklistItems, setChecklistItems] = useState<CalloutItem[]>(() => {
-    if (activeCallout.items && activeCallout.items.length > 0) {
-      return activeCallout.items.map((it, idx) => resolveChecklistItemWithDT(it, idx));
+    if (activeCallout?.items && activeCallout.items.length > 0) {
+      return activeCallout.items.filter(Boolean).map((it, idx) => resolveChecklistItemWithDT(it, idx));
     }
-    const rawId = (jobData.id || jobData.jobNumber || '').trim().toUpperCase();
-    if (rawId === 'JOB-26-01816' || rawId === 'JOB-026-01816' || normalizeJobKey(rawId) === normalizeJobKey('JOB-26-01816')) {
+    const rawId = String(jobData?.id || jobData?.jobNumber || '').trim().toUpperCase();
+    if (rawId === 'JOB-26-01816' || rawId === 'JOB-026-01816' || (rawId && normalizeJobKey(rawId) === normalizeJobKey('JOB-26-01816'))) {
       return DEFAULT_WHIPSTOCK_TOOLS_01816.map((it, idx) => resolveChecklistItemWithDT(it, idx));
     }
     return [];
@@ -1238,7 +1268,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   useEffect(() => {
     if (activeCallout && Array.isArray(activeCallout.items) && activeCallout.items.length > 0) {
       setChecklistItems(
-        activeCallout.items.map((it, idx) => resolveChecklistItemWithDT(it, idx))
+        activeCallout.items.filter(Boolean).map((it, idx) => resolveChecklistItemWithDT(it, idx))
       );
     } else if (isTargetJob01816) {
       setChecklistItems((prev) => {

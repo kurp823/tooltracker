@@ -443,13 +443,15 @@ export const App: React.FC = () => {
   // Master Unified Categories across all screens (Inventory, Tool Categories & Sizes, Job File, PO, etc.)
   const allMasterCategories = useMemo(() => {
     const set = new Set<string>();
-    customCategories.forEach((c) => {
-      const s = typeof c === 'string' ? c.trim().toUpperCase() : String(c || '').trim().toUpperCase();
+    (Array.isArray(customCategories) ? customCategories : []).forEach((c) => {
+      const s = typeof c === 'string' ? c.trim().toUpperCase() : (c ? String((c as any).categoryName || (c as any).name || c).trim().toUpperCase() : '');
       if (s) set.add(s);
     });
-    inventory.forEach((t) => {
-      const c1 = (t.shortDesc || '').trim().toUpperCase();
-      const c2 = ((t as any).category || '').trim().toUpperCase();
+    (Array.isArray(inventory) ? inventory : []).forEach((t) => {
+      if (!t) return;
+      const c1 = typeof t.shortDesc === 'string' ? t.shortDesc.trim().toUpperCase() : (t.shortDesc ? String(t.shortDesc).trim().toUpperCase() : '');
+      const rawCat = (t as any).category;
+      const c2 = typeof rawCat === 'string' ? rawCat.trim().toUpperCase() : (rawCat ? String(rawCat?.categoryName || rawCat?.name || rawCat).trim().toUpperCase() : '');
       if (c1) set.add(c1);
       if (c2) set.add(c2);
     });
@@ -459,12 +461,13 @@ export const App: React.FC = () => {
   // Master Unified Standard Sizes across all screens
   const allMasterSizes = useMemo(() => {
     const set = new Set<string>();
-    customSizes.forEach((s) => {
-      const str = typeof s === 'string' ? s.trim() : String(s || '').trim();
+    (Array.isArray(customSizes) ? customSizes : []).forEach((s) => {
+      const str = typeof s === 'string' ? s.trim() : (s ? String((s as any).sizeString || (s as any).name || (s as any).size || s).trim() : '');
       if (str) set.add(str);
     });
-    inventory.forEach((t) => {
-      const s = (t.size || '').trim();
+    (Array.isArray(inventory) ? inventory : []).forEach((t) => {
+      if (!t) return;
+      const s = typeof t.size === 'string' ? t.size.trim() : (t.size ? String(t.size).trim() : '');
       if (s && s !== '—' && s !== '-') set.add(s);
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
@@ -521,31 +524,33 @@ export const App: React.FC = () => {
     deleteDeliveryTicketApi('DT-26-10001').catch(() => {});
 
     setDtBatches((prev) =>
-      prev.filter(
+      (Array.isArray(prev) ? prev : []).filter(
         (b) =>
-          (b.dtNumber || '').trim().toUpperCase() !== 'DT-26-10001' &&
-          (b.id || '').trim().toUpperCase() !== 'DT-26-10001'
+          String(b?.dtNumber || '').trim().toUpperCase() !== 'DT-26-10001' &&
+          String(b?.id || '').trim().toUpperCase() !== 'DT-26-10001'
       )
     );
 
     setCallouts((prev) =>
-      prev.map((c) => {
-        const jId = (c.jobId || (c as any).jobNumber || '').trim().toUpperCase();
+      (Array.isArray(prev) ? prev : []).map((c) => {
+        if (!c) return c;
+        const jId = String(c.jobId || (c as any).jobNumber || '').trim().toUpperCase();
         const isTargetJob =
           jId === 'JOB-26-01816' ||
           jId === 'JOB-026-01816' ||
-          normalizeJobKey(jId) === normalizeJobKey('JOB-26-01816');
-        const hasDtRef = (c.items || []).some(
-          (ci) => (ci.dtNumber || '').trim().toUpperCase() === 'DT-26-10001'
+          (jId ? normalizeJobKey(jId) === normalizeJobKey('JOB-26-01816') : false);
+        const hasDtRef = Array.isArray(c.items) && c.items.some(
+          (ci) => String(ci?.dtNumber || '').trim().toUpperCase() === 'DT-26-10001'
         );
 
         if (isTargetJob || hasDtRef) {
           return {
             ...c,
             status: 'Active' as const,
-            items: (c.items || []).map((ci) => {
+            items: (Array.isArray(c.items) ? c.items : []).map((ci) => {
+              if (!ci) return ci;
               if (
-                (ci.dtNumber || '').trim().toUpperCase() === 'DT-26-10001' ||
+                String(ci?.dtNumber || '').trim().toUpperCase() === 'DT-26-10001' ||
                 (isTargetJob && ci.status === 'Released')
               ) {
                 return {
@@ -563,12 +568,13 @@ export const App: React.FC = () => {
     );
 
     setInventory((prev) =>
-      prev.map((tool) => {
-        const jId = (tool.currentJobId || '').trim().toUpperCase();
+      (Array.isArray(prev) ? prev : []).map((tool) => {
+        if (!tool) return tool;
+        const jId = String(tool.currentJobId || '').trim().toUpperCase();
         const isTargetJob =
           jId === 'JOB-26-01816' ||
           jId === 'JOB-026-01816' ||
-          normalizeJobKey(jId) === normalizeJobKey('JOB-26-01816');
+          (jId ? normalizeJobKey(jId) === normalizeJobKey('JOB-26-01816') : false);
         if (isTargetJob && tool.status === 'On Rig') {
           return {
             ...tool,
@@ -614,10 +620,10 @@ export const App: React.FC = () => {
 
         const res = await fetchAllModulesLive();
         if (res.success && res.data) {
-          const cleanDtBatches = (res.data.dtBatches || []).filter(
+          const cleanDtBatches = (Array.isArray(res.data.dtBatches) ? res.data.dtBatches : []).filter(
             (b: any) =>
-              (b.dtNumber || '').trim().toUpperCase() !== 'DT-26-10001' &&
-              (b.id || '').trim().toUpperCase() !== 'DT-26-10001'
+              String(b?.dtNumber || '').trim().toUpperCase() !== 'DT-26-10001' &&
+              String(b?.id || '').trim().toUpperCase() !== 'DT-26-10001'
           );
           setInventory(res.data.inventory);
           setJobs(res.data.jobs);
@@ -1344,20 +1350,22 @@ export const App: React.FC = () => {
 
     // Clear dtNumber in linked callouts/checklists
     setCallouts((prev) =>
-      prev.map((c) => {
-        const jId = (c.jobId || (c as any).jobNumber || '').trim().toUpperCase();
-        const dtJob = (dt?.jobId || '').trim().toUpperCase();
-        const isJobMatch = dtJob ? (jId === dtJob || normalizeJobKey(jId) === normalizeJobKey(dtJob)) : false;
-        const hasDt = (c.items || []).some(
-          (ci) => (ci.dtNumber || '').trim().toUpperCase() === targetUpper
+      (Array.isArray(prev) ? prev : []).map((c) => {
+        if (!c) return c;
+        const jId = String(c?.jobId || (c as any)?.jobNumber || '').trim().toUpperCase();
+        const dtJob = String(dt?.jobId || '').trim().toUpperCase();
+        const isJobMatch = dtJob ? (jId === dtJob || (jId ? normalizeJobKey(jId) === normalizeJobKey(dtJob) : false)) : false;
+        const hasDt = Array.isArray(c?.items) && c.items.some(
+          (ci) => String(ci?.dtNumber || '').trim().toUpperCase() === targetUpper
         );
 
         if (isJobMatch || hasDt) {
           return {
             ...c,
             status: 'Active',
-            items: (c.items || []).map((ci) => {
-              if ((ci.dtNumber || '').trim().toUpperCase() === targetUpper || isJobMatch) {
+            items: (Array.isArray(c?.items) ? c.items : []).map((ci) => {
+              if (!ci) return ci;
+              if (String(ci?.dtNumber || '').trim().toUpperCase() === targetUpper || isJobMatch) {
                 return { ...ci, dtNumber: undefined, status: 'Assigned' as const };
               }
               return ci;
@@ -2034,10 +2042,11 @@ export const App: React.FC = () => {
   // Completed jobs detection (legal invoice numbers starting with FSH, FR, WHP)
   const completedJobIdSet = useMemo(() => {
     const set = new Set<string>();
-    jobs.forEach((j) => {
-      const isLegal = (num?: string) => {
+    (Array.isArray(jobs) ? jobs : []).forEach((j) => {
+      if (!j) return;
+      const isLegal = (num?: any) => {
         if (!num) return false;
-        const s = num.trim().toUpperCase();
+        const s = String(num).trim().toUpperCase();
         return s.startsWith('FSH') || s.startsWith('FR') || s.startsWith('WHP');
       };
       if (isLegal(j.legalInvoiceNumber) || isLegal(j.invoiceNumber)) {
@@ -2049,15 +2058,17 @@ export const App: React.FC = () => {
   }, [jobs]);
 
   // Active counts for badges
-  const pendingCalloutsCount = callouts.filter((c) => c.status === 'Pending').length;
+  const pendingCalloutsCount = (Array.isArray(callouts) ? callouts : []).filter((c) => c && c.status === 'Pending').length;
 
   // Pending signed DTs for active jobs only
-  const pendingSignedDTsCount = dtBatches.filter((b) => {
+  const pendingSignedDTsCount = (Array.isArray(dtBatches) ? dtBatches : []).filter((b) => {
+    if (!b) return false;
     const isJobCompleted = b.jobId && completedJobIdSet.has(String(b.jobId).trim().toUpperCase());
     return !isJobCompleted && !b.isSigned && !b.signedDocUrl;
   }).length;
 
-  const onRigToolsCount = inventory.filter((t) => {
+  const onRigToolsCount = (Array.isArray(inventory) ? inventory : []).filter((t) => {
+    if (!t) return false;
     if ((t.location !== 'On Rig' && t.status !== 'On Rig') || t.status === 'Removed') return false;
     if (t.currentJobId && completedJobIdSet.has(String(t.currentJobId).trim().toUpperCase())) return false;
     return true;
