@@ -2457,31 +2457,106 @@ export async function flushOfflineOutbox(): Promise<{ processed: number; remaini
  * 2. If all retries fail (offline, VPN down, Azure outage), enqueues to persistent IndexedDB Outbox.
  * 3. Returns a clear status so the UI knows if it saved live or queued for automatic sync.
  */
+interface SaveAttemptResult {
+  ok: boolean;
+  permanent: boolean;
+  status?: number;
+  data?: any;
+  error?: string;
+}
+
+/**
+ * Posts a write action and reports WHY it failed, so the save path can tell a
+ * permanent server rejection (4xx) apart from a transient network/offline failure.
+ */
+async function postActionWithStatus(action: string, body: Record<string, any> = {}): Promise<SaveAttemptResult> {
+  const endpoint = getApiEndpoint();
+  const apiKey = getApiKey();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  };
+  if (apiKey) headers['x-functions-key'] = apiKey;
+
+  let url = endpoint;
+  try {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    const fullBase = url.startsWith('http') ? url : `${origin}${url.startsWith('/') ? '' : '/'}${url}`;
+    const urlObj = new URL(fullBase);
+    urlObj.searchParams.set('action', action);
+    urlObj.searchParams.set('env', 'live');
+    urlObj.searchParams.set('_t', String(Date.now()));
+    if (apiKey && !urlObj.searchParams.has('code')) urlObj.searchParams.set('code', apiKey);
+    url = endpoint.startsWith('http') ? urlObj.toString() : `${urlObj.pathname}${urlObj.search}`;
+  } catch {
+    url = `${endpoint}?action=${action}&env=live&_t=${Date.now()}${apiKey ? `&code=${encodeURIComponent(apiKey)}` : ''}`;
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action, env: 'live', ...body }),
+    });
+    if (!res.ok) {
+      // 4xx (except 408 Request Timeout / 429 Too Many Requests) are permanent:
+      // the request itself is bad, so retrying or queuing will never succeed.
+      const permanent = res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429;
+      return { ok: false, permanent, status: res.status, error: `HTTP ${res.status}` };
+    }
+    const json = await res.json().catch(() => null);
+    if (json && json.success === false) {
+      return { ok: false, permanent: true, status: res.status, error: json.error || 'Server rejected the request' };
+    }
+    return { ok: true, permanent: false, status: res.status, data: json && json.data !== undefined ? json.data : json };
+  } catch (e: any) {
+    // Network error / connection reset / offline / Azure cold-start timeout -> transient, safe to retry or queue.
+    return { ok: false, permanent: false, error: e?.message || 'Network error' };
+  }
+}
+
+/**
+ * Universal resilient save wrapper (integrity-fixed):
+ * - Retries only TRANSIENT failures (offline / connection reset / cold start).
+ * - On a PERMANENT (4xx) server rejection, stops immediately and reports failure,
+ *   instead of falsely reporting success and queuing a request that can never succeed.
+ * - Only genuine transient failures are queued to the offline outbox.
+ */
 async function executeResilientSave(
   action: string,
   payload: any,
   entityLabel: string
 ): Promise<{ success: boolean; queued?: boolean; message: string }> {
-  try {
-    const res = await fetchWithRetry(action, payload, 3);
-    if (res !== null && res !== false) {
+  let last: SaveAttemptResult | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    last = await postActionWithStatus(action, payload);
+    if (last.ok) {
       return { success: true, message: `${entityLabel} saved to Azure SQL` };
     }
-  } catch (err: any) {
-    console.warn(`[Save] ${entityLabel} direct save attempt failed:`, err?.message || err);
+    if (last.permanent) {
+      console.warn(`[Save] ${entityLabel} rejected by server (${last.status}): ${last.error}`);
+      return {
+        success: false,
+        message: `${entityLabel} was NOT saved - the server rejected it (${last.error}). Please review the entry and try again.`,
+      };
+    }
+    if (attempt < 2) await sleep(1000 * Math.pow(3, attempt)); // 1s, 3s
   }
 
+  // Only transient failures reach here (offline / connection reset / Azure asleep).
   try {
     await addToOutbox(action, payload);
     return {
       success: true,
       queued: true,
-      message: `${entityLabel} saved offline. Queued for automatic sync to Azure SQL.`,
+      message: `${entityLabel} could not reach Azure SQL right now and was queued for automatic sync. It is NOT yet confirmed saved to the database.`,
     };
   } catch (queueErr: any) {
     return {
       success: false,
-      message: `Failed to save ${entityLabel} to Azure SQL or offline queue.`,
+      message: `Failed to save ${entityLabel} to Azure SQL or the offline queue.`,
     };
   }
 }
