@@ -2027,12 +2027,24 @@ export async function fetchLiveDatabaseData(): Promise<{
 
       if (hasAnySuccess) {
         if (jobs && jobs.length > 0) {
-          const existingKeys = new Set(jobs.map((j: any) => String(j.id).trim().toUpperCase()));
+          const existingKeys = new Set<string>();
+          jobs.forEach((j: any) => {
+            const raw = String(j.id || '').trim().toUpperCase();
+            if (raw) existingKeys.add(raw);
+            const std = formatStandardJobId(j.id).toUpperCase();
+            if (std) existingKeys.add(std);
+            const norm = normalizeJobKey(j.id);
+            if (norm) existingKeys.add(norm);
+          });
           MASTER_JOBS.forEach((mj) => {
-            const k = String(mj.id || '').trim().toUpperCase();
-            if (k && !existingKeys.has(k)) {
-              jobs!.push({ ...mj });
-              existingKeys.add(k);
+            const rawK = String(mj.id || '').trim().toUpperCase();
+            const stdK = formatStandardJobId(mj.id).toUpperCase();
+            const normK = normalizeJobKey(mj.id);
+            if (!existingKeys.has(rawK) && !existingKeys.has(stdK) && !existingKeys.has(normK)) {
+              jobs!.push(normalizeJob(mj));
+              existingKeys.add(rawK);
+              existingKeys.add(stdK);
+              existingKeys.add(normK);
             }
           });
         }
@@ -2221,12 +2233,24 @@ export async function fetchLiveDatabaseData(): Promise<{
 
           // Merge any master jobs from user's list that might not be in Azure SQL
           if (parsedJobs.length > 0) {
-            const existingKeys = new Set(parsedJobs.map((j: any) => String(j.id).trim().toUpperCase()));
+            const existingKeys = new Set<string>();
+            parsedJobs.forEach((j: any) => {
+              const raw = String(j.id || '').trim().toUpperCase();
+              if (raw) existingKeys.add(raw);
+              const std = formatStandardJobId(j.id).toUpperCase();
+              if (std) existingKeys.add(std);
+              const norm = normalizeJobKey(j.id);
+              if (norm) existingKeys.add(norm);
+            });
             MASTER_JOBS.forEach((mj) => {
-              const k = String(mj.id || '').trim().toUpperCase();
-              if (k && !existingKeys.has(k)) {
-                parsedJobs.push({ ...mj });
-                existingKeys.add(k);
+              const rawK = String(mj.id || '').trim().toUpperCase();
+              const stdK = formatStandardJobId(mj.id).toUpperCase();
+              const normK = normalizeJobKey(mj.id);
+              if (!existingKeys.has(rawK) && !existingKeys.has(stdK) && !existingKeys.has(normK)) {
+                parsedJobs.push(normalizeJob(mj));
+                existingKeys.add(rawK);
+                existingKeys.add(stdK);
+                existingKeys.add(normK);
               }
             });
           }

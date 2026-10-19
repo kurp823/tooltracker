@@ -385,8 +385,9 @@ export const JobsView: React.FC<JobsViewProps> = ({
   };
 
   const handleSortToggle = (field: 'id' | 'client' | 'rig' | 'startDate' | 'endDate' | 'dtTools' | 'rtTools' | 'toolsOnRig' | 'stage' | 'stageDays' | 'value') => {
+    setCurrentPage(1);
     if (sortField === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortField(field);
       setSortOrder('asc');
@@ -395,18 +396,27 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
   // Filter out any dummy test jobs and resolve accurate client name & standard Job ID format
   const validJobs = useMemo(() => {
-    return jobs
+    const seen = new Set<string>();
+    const unique: DrillingJob[] = [];
+
+    jobs
       .filter((j) => j && j.id && !j.id.toUpperCase().includes('TEST') && !j.id.toUpperCase().includes('DUMMY'))
-      .map((j) => {
+      .forEach((j) => {
         const stdId = formatStandardJobId(j.id);
+        const normKey = normalizeJobKey(stdId || j.id);
+        if (!normKey || seen.has(normKey)) return;
+        seen.add(normKey);
+
         const resolvedClient = resolveJobClient(j.client, j.contract, undefined, j.rig);
-        return {
+        unique.push({
           ...j,
           id: stdId || j.id,
           jobNumber: stdId || j.jobNumber || j.id,
           client: resolvedClient || j.client || 'ADNOC DRILLING COMPANY P.J.S.C.',
-        };
+        });
       });
+
+    return unique;
   }, [jobs]);
 
   // Distinct rigs for quick filter dropdown with natural numeric collation
@@ -518,11 +528,17 @@ export const JobsView: React.FC<JobsViewProps> = ({
     return list.sort((a, b) => {
       let comparison = 0;
       if (sortField === 'id') {
-        comparison = (a.id || '').localeCompare(b.id || '', undefined, { numeric: true, sensitivity: 'base' });
+        const seqA = extractJobSeq(a.id);
+        const seqB = extractJobSeq(b.id);
+        if (seqA !== seqB) {
+          comparison = seqA - seqB;
+        } else {
+          comparison = (a.id || '').localeCompare(b.id || '', undefined, { numeric: true, sensitivity: 'base' });
+        }
       } else if (sortField === 'client') {
         comparison = (a.client || '').localeCompare(b.client || '');
       } else if (sortField === 'rig') {
-        comparison = (a.rig || '').localeCompare(b.rig || '');
+        comparison = (a.rig || '').localeCompare(b.rig || '', undefined, { numeric: true, sensitivity: 'base' });
       } else if (sortField === 'startDate') {
         const aSt = getJobStats(a.id);
         const bSt = getJobStats(b.id);
@@ -567,6 +583,14 @@ export const JobsView: React.FC<JobsViewProps> = ({
         const getVal = (j: DrillingJob) => j.invoiceAmount || (typeof j.cost === 'number' ? j.cost : parseFloat(String(j.cost || '').replace(/[^0-9.-]/g, '')) || 0);
         comparison = getVal(a) - getVal(b);
       }
+
+      // Tie-breaker: sort by ID natural sequence so order is always deterministic
+      if (comparison === 0 && sortField !== 'id') {
+        const seqA = extractJobSeq(a.id);
+        const seqB = extractJobSeq(b.id);
+        comparison = seqA - seqB;
+      }
+
       return sortOrder === 'desc' ? -comparison : comparison;
     });
   }, [validJobs, tab, search, selectedRigFilter, selectedClientFilter, sortField, sortOrder, jobToolStats]);
