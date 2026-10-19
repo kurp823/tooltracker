@@ -15,6 +15,7 @@ import {
   SubDivision,
 } from '../types';
 import { saveCustomJob } from '../services/customJobs';
+import { saveCustomCallout } from '../services/customCallouts';
 import { resolveContractSubDivision } from '../services/customContracts';
 import { saveJobToolHoleSectionApi, extractToolType, saveDailyFieldLogsApi, fetchDailyFieldLogsApi } from '../services/api';
 import {
@@ -990,9 +991,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   // Active callout object - Guaranteed to link to this jobData.id
   const activeCallout = useMemo(() => {
-    const foundWithItems = jobCallouts.find((c) => c.items && c.items.length > 0);
-    const foundById = jobCallouts.find((c) => c.id === selectedCalloutId);
-    const found = (selectedCalloutId && selectedCalloutId !== 'NEW' && foundById) ? foundById : (foundWithItems || jobCallouts[0]);
+    const foundById = (selectedCalloutId && selectedCalloutId !== 'NEW')
+      ? jobCallouts.find((c) => c.id === selectedCalloutId)
+      : null;
+    const foundByJobCalloutId = jobData.calloutId
+      ? jobCallouts.find((c) => c.id === jobData.calloutId)
+      : null;
+    const found = foundById || foundByJobCalloutId || jobCallouts[0];
     if (found) {
       const safeTicket = sanitizeTicketNumber(found.ticketNo) || sanitizeTicketNumber((found as any).calloutNumber) || sanitizeTicketNumber(jobData.clientRef);
       return {
@@ -2461,6 +2466,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       jobNumber: jobData.id,
       items: updated,
     } as unknown) as Callout;
+    saveCustomCallout(calloutToSave);
     if (onSaveCallout) {
       onSaveCallout(calloutToSave);
     }

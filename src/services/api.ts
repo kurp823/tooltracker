@@ -7,6 +7,7 @@ import { MASTER_JOBS } from '../data/masterJobs';
 import { saveCustomTool, loadCustomTools, mergeInventoryWithCustomTools } from './customTools';
 import { saveCustomJob, loadCustomJobs, mergeJobsWithCustomJobs } from './customJobs';
 import { loadCustomContracts, mergeContractsWithCustom } from './customContracts';
+import { saveCustomCallout, loadCustomCallouts, mergeCalloutsWithCustom } from './customCallouts';
 import {
   INITIAL_CONTRACTS,
   INITIAL_CALLOUTS,
@@ -2850,6 +2851,7 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
     }
     return c;
   });
+  calloutsList = mergeCalloutsWithCustom(calloutsList, loadCustomCallouts());
 
   const gatePassesList: any[] =
     secondaryRes.gatePasses && secondaryRes.gatePasses.length > 0
@@ -2919,6 +2921,7 @@ export async function saveCalloutApi(callout: any): Promise<{ success: boolean; 
     remarks: notesVal,
     Remarks: notesVal,
   };
+  saveCustomCallout(enrichedCallout);
   return executeResilientSave('savecallout', { callout: enrichedCallout, Callout: enrichedCallout, payload: enrichedCallout }, 'Callout');
 }
 

@@ -69,6 +69,11 @@ import {
   mergeContractsWithCustom,
   normalizeContractKey,
 } from './services/customContracts';
+import {
+  loadCustomCallouts,
+  saveCustomCallout,
+  mergeCalloutsWithCustom,
+} from './services/customCallouts';
 import { MASTER_JOBS } from './data/masterJobs';
 import { Toast, ToastNotification } from './components/Toast';
 import { Header } from './components/Header';
@@ -599,7 +604,7 @@ export const App: React.FC = () => {
           setDtBatches(cleanDtBatches);
           setRtBatches(res.data.rtBatches);
           setContracts(res.data.contracts);
-          setCallouts(res.data.callouts);
+          setCallouts(mergeCalloutsWithCustom(res.data.callouts));
           setGatePasses(res.data.gatePasses);
           setInspections(res.data.inspections);
           setMaintenance(res.data.maintenance);
@@ -666,6 +671,8 @@ export const App: React.FC = () => {
         if (cached.dtBatches && cached.dtBatches.length > 0) setDtBatches(cached.dtBatches);
         if (cached.rtBatches && cached.rtBatches.length > 0) setRtBatches(cached.rtBatches);
         if (cached.contracts && cached.contracts.length > 0) setContracts(mergeContractsWithCustom(cached.contracts));
+        const customCallouts = loadCustomCallouts();
+        if (customCallouts.length > 0) setCallouts((prev) => mergeCalloutsWithCustom(prev, customCallouts));
         setDbStatus((prev) => ({
           ...prev,
           isConnected: true,
@@ -936,6 +943,7 @@ export const App: React.FC = () => {
   };
 
   const handleSaveCallout = (saved: Callout) => {
+    saveCustomCallout(saved);
     setCallouts((prev) => {
       const exists = prev.some((c) => c.id === saved.id);
       return exists ? prev.map((c) => (c.id === saved.id ? saved : c)) : [saved, ...prev];
