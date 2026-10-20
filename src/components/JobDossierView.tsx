@@ -701,13 +701,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         id.startsWith('DT-AUTO') ||
         id.startsWith('DT-CLS') ||
         num.startsWith('DT-CLS') ||
-        num.startsWith('DT-AUTO') ||
-        num.includes('10000') ||
-        id.includes('10000') ||
-        num.includes('10001') ||
-        id.includes('10001') ||
-        num.includes('10002') ||
-        id.includes('10002')
+        num.startsWith('DT-AUTO')
       ) {
         return false;
       }
@@ -1190,13 +1184,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const resolveChecklistItemWithDT = useCallback((it: CalloutItem, idx: number) => {
     if (!it) return it;
     const rawDt = String(it?.dtNumber || '').trim().toUpperCase();
-    if (rawDt === 'DT-26-10001' || rawDt === 'DT-26-100001') {
-      return {
-        ...it,
-        dtNumber: undefined,
-        status: 'Assigned' as const,
-      };
-    }
 
     // Only associate with a DT if explicitly linked via it.dtNumber
     const targetDT = rawDt ? jobDTs.find(d => String(d?.dtNumber || '').trim().toUpperCase() === rawDt) : null;
@@ -1332,7 +1319,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const getAssignedDTForChecklistItem = useCallback((item: CalloutItem): { dtNumber: string; isLocked: boolean } | null => {
     if (item.dtNumber) {
       const itUpper = (item.dtNumber || '').trim().toUpperCase();
-      if (itUpper === 'DT-26-10001' || itUpper === 'DT-26-100001') return null;
       const match = jobDTs.find((d) => (d.dtNumber || '').trim().toUpperCase() === itUpper);
       return { dtNumber: item.dtNumber, isLocked: match?.isLocked ?? false };
     }
@@ -1340,7 +1326,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     if (!itemSerial) return null;
     for (const dt of jobDTs) {
       const dtUpper = (dt.dtNumber || '').trim().toUpperCase();
-      if (dtUpper === 'DT-26-10001' || dtUpper === 'DT-26-100001') continue;
       const match = dt.toolLines?.some((l) => {
         const s = (l.serial || '').trim().toUpperCase();
         const a = (l.assetNo || '').trim().toUpperCase();
@@ -1613,7 +1598,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [jobDTs, selectedDTNumber]);
 
   const draftDT = useMemo<DTBatch>(() => {
-    const curYr = new Date().getFullYear().toString().slice(-3);
+    const curYr = new Date().getFullYear().toString().slice(-2);
     const existingSeqs = dtBatches
       .filter((b) => {
         const s = String(b.dtNumber || '').toUpperCase();
@@ -1689,7 +1674,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   }, [jobRTs, selectedRTNumber]);
 
   const draftRT = useMemo<RTBatch>(() => {
-    const curYr = new Date().getFullYear().toString().slice(-3);
+    const curYr = new Date().getFullYear().toString().slice(-2);
     const rtNums = rtBatches
       .map((b) => {
         const m = (b.rtNumber || '').match(/^RT-\d+-(\d+)$/);
@@ -1725,7 +1710,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       showToast('Cannot create delivery ticket: this job is invoiced and locked.', 'error');
       return;
     }
-    const curYr = new Date().getFullYear().toString().slice(-3);
+    const curYr = new Date().getFullYear().toString().slice(-2);
     const existingSeqs = dtBatches
       .filter((b) => {
         const s = String(b.dtNumber || '').toUpperCase();
@@ -2004,7 +1989,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       showToast('Cannot create return ticket: this job is invoiced and locked.', 'error');
       return;
     }
-    const curYr = new Date().getFullYear().toString().slice(-3);
+    const curYr = new Date().getFullYear().toString().slice(-2);
     const rtNums = rtBatches
       .map((b) => {
         const m = b.rtNumber.match(/^RT-\d+-(\d+)$/);
@@ -2525,7 +2510,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     );
     if (!confirmed) return;
 
-    const curYr = new Date().getFullYear().toString().slice(-3);
+    const curYr = new Date().getFullYear().toString().slice(-2);
     const existingSeqs = dtBatches
       .filter((b) => {
         const s = String(b.dtNumber || '').toUpperCase();
@@ -2875,7 +2860,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     let targetRT = activeRT;
     if (!targetRT) {
       // Automatically create a new RT batch for this job
-      const curYr = new Date().getFullYear().toString().slice(-3);
+      const curYr = new Date().getFullYear().toString().slice(-2);
       const rtNums = rtBatches
         .map((b) => {
           const m = b.rtNumber.match(/^RT-\d+-(\d+)$/);

@@ -623,7 +623,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
       return;
     }
 
-    const curYr = new Date().getFullYear().toString().slice(-3);
+    const curYr = new Date().getFullYear().toString().slice(-2);
     const jobNums = jobs
       .map((j) => {
         const m = j.id.match(/\d+$/);

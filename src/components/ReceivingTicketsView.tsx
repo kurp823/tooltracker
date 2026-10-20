@@ -179,7 +179,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
 
   // Next RT Number Generator
   const nextRtNumber = useMemo(() => {
-    const curYr = new Date().getFullYear().toString().slice(-3);
+    const curYr = new Date().getFullYear().toString().slice(-2);
     const rtNums = rtBatches
       .map((b) => {
         const m = b.rtNumber.match(/^RT-\d+-(\d+)$/);
