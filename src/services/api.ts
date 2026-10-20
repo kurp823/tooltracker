@@ -20,6 +20,11 @@ import {
 } from '../data/initialData';
 import { addToOutbox, flushOutbox, getOutboxCount } from './outboxQueue';
 
+// Job ID aliases: redirect known placeholder/wrong IDs to the correct canonical ID
+const JOB_ID_ALIASES: Record<string, string> = {
+  'JOB-UNK-00001': 'JOB-23-00266',
+};
+
 export function formatStandardJobId(id?: string): string {
   if (!id) return '';
   const s = String(id).trim();
@@ -28,7 +33,8 @@ export function formatStandardJobId(id?: string): string {
   const bare = s.replace(/^JOB[-_\s]?/i, '');
   // Strip leading 0 before 2 digits and dash (e.g. 026-XXXXX -> 26-XXXXX)
   const normalizedYear = bare.replace(/^0(\d{2}-)/, '$1');
-  return `JOB-${normalizedYear}`;
+  const result = `JOB-${normalizedYear}`;
+  return JOB_ID_ALIASES[result.toUpperCase()] ?? result;
 }
 
 export const normalizeJobKey = (str?: string): string => {
@@ -210,6 +216,25 @@ export function cleanDateValue(val: any): string {
   return str;
 }
 
+/**
+ * Normalises known client name variants to their canonical form.
+ * Fixes typos and deduplicates entries that appear under multiple spellings.
+ */
+function normalizeRawClientName(name: string): string {
+  const u = name.toUpperCase().trim();
+  // Typo fix: CHRUCHILL → CHURCHILL
+  if (u === 'CHRUCHILL / CORETRAX') return 'CHURCHILL / CORETRAX';
+  // BUNDUQ (short form) → full legal name
+  if (u === 'BUNDUQ') return 'BUNDUQ COMPANY LIMITED';
+  // HALLIBURTON - UAE → Halliburton Worldwide Limited (used in contracts)
+  if (u === 'HALLIBURTON - UAE') return 'HALLIBURTON WORLDWIDE LIMITED';
+  // HALLIBURTON - INDIA → same group
+  if (u === 'HALLIBUTON - INDIA' || u === 'HALLIBURTON - INDIA') return 'HALLIBURTON WORLDWIDE LIMITED';
+  // GIS / General Integrated Services variants → canonical GIS - UAE
+  if (u.startsWith('GENERAL INTEGRATED')) return 'GIS - UAE';
+  return name;
+}
+
 export function resolveJobClient(
   rawClient?: string | null,
   contractRef?: string | null,
@@ -234,17 +259,17 @@ export function resolveJobClient(
   // 1. Resolve from Contract / Project Reference or raw client if it holds a contract code
   const proj = String(contractRef || rawClient || '').toUpperCase().trim();
   if (proj.includes('444558')) return 'ADNOC OFFSHORE';
-  if (proj.includes('4700012465')) return 'ADNOC ONSHORE';
+  if (proj.includes('4700012465')) return 'ADNOC ONSHORE - RENTALS';
   if (proj.includes('4700016147')) return 'ADNOC SOUR GAS';
   if (proj.includes('4700018368')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
   if (proj.includes('4700023373')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
-  if (proj.includes('4700023861')) return 'ADNOC ONSHORE';
+  if (proj.includes('4700023861')) return 'ADNOC ONSHORE - RENTALS';
   if (proj.includes('4700024096')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
   if (proj.includes('4700024608')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
   if (proj.includes('4700015149')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
-  if (proj.includes('16358.13') || proj.includes('16358')) return 'ADNOC ONSHORE';
-  if (proj.includes('16119.01') || proj.includes('16119')) return 'ADNOC ONSHORE';
-  if (proj.includes('4700012347')) return 'ADNOC ONSHORE';
+  if (proj.includes('16358.13') || proj.includes('16358')) return 'ADNOC ONSHORE - FISHING';
+  if (proj.includes('16119.01') || proj.includes('16119')) return 'ADNOC ONSHORE - RENTALS';
+  if (proj.includes('4700012347')) return 'ADNOC ONSHORE - RENTALS';
   if (proj.includes('DVP-2023-K-016') || proj.includes('BUNDUQ')) return 'BUNDUQ COMPANY LIMITED';
   if (proj.includes('TW-') || proj.includes('TURNWELL')) return 'TURNWELL INDUSTRIES LLC';
   if (proj.includes('ALB/') || proj.includes('COSMO')) return 'COSMO E&P ALBAHRIYA LIMITED';
@@ -274,12 +299,12 @@ export function resolveJobClient(
     masterClient.toUpperCase() !== 'CLIENT' &&
     masterClient.trim() !== ''
   ) {
-    return masterClient.trim();
+    return normalizeRawClientName(masterClient.trim());
   }
 
   // 3. If we have a specific non-placeholder client from input, use it
   if (!isGeneric) {
-    return c;
+    return normalizeRawClientName(c);
   }
 
   // 4. Resolve from Rig if rig gives a clue
