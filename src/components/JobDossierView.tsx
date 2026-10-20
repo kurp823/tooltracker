@@ -1329,14 +1329,22 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       const match = jobDTs.find((d) => (d.dtNumber || '').trim().toUpperCase() === itUpper);
       return { dtNumber: item.dtNumber, isLocked: match?.isLocked ?? false };
     }
-    const itemSerial = (item.serialNos?.[0] || item.partNo || '').trim().toUpperCase();
-    if (!itemSerial) return null;
+    // Build a set of candidate identifiers for this checklist item.
+    // We must check BOTH serialNos[0] AND partNo independently because the serialNos[0]
+    // may be an internal EMD- number (e.g. "EMD-0001") that doesn't appear in the DT tool line,
+    // while partNo holds the real asset number (e.g. "SM850-017") that DOES appear.
+    const candidates = new Set<string>();
+    if (item.serialNos?.[0]) candidates.add(item.serialNos[0].trim().toUpperCase());
+    if (item.partNo)         candidates.add(item.partNo.trim().toUpperCase());
+    candidates.delete('');
+    candidates.delete('—');
+    if (candidates.size === 0) return null;
+
     for (const dt of jobDTs) {
-      const dtUpper = (dt.dtNumber || '').trim().toUpperCase();
       const match = dt.toolLines?.some((l) => {
-        const s = (l.serial || '').trim().toUpperCase();
+        const s = (l.serial  || '').trim().toUpperCase();
         const a = (l.assetNo || '').trim().toUpperCase();
-        return s === itemSerial || a === itemSerial;
+        return (s && candidates.has(s)) || (a && candidates.has(a));
       });
       if (match) {
         return { dtNumber: dt.dtNumber, isLocked: dt.isLocked ?? false };
@@ -1621,7 +1629,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       nextSeq++;
     }
     const nextDTNum = `DT-${curYr}-${String(nextSeq).padStart(5, '0')}`;
-    const dispatchDateStr = formatDateDD_MM_YYYY(jobData.mobDate || new Date().toISOString());
+    // Use YYYY-MM-DD (ISO) format — <input type="date"> requires this exact format.
+    const dispatchDateStr = toInputDateFormat(jobData.mobDate) || new Date().toISOString().split('T')[0];
 
     const tools: any[] = (checklistItems && checklistItems.length > 0)
       ? checklistItems.map((ci, idx) => {
@@ -1733,23 +1742,28 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       nextSeq++;
     }
     const nextDTNum = `DT-${curYr}-${String(nextSeq).padStart(5, '0')}`;
-    const dispatchDateStr = formatDateDD_MM_YYYY(jobData.mobDate || new Date().toISOString());
+    // Use YYYY-MM-DD (ISO) format — <input type="date"> requires this exact format.
+    const dispatchDateStr = toInputDateFormat(jobData.mobDate) || new Date().toISOString().split('T')[0];
 
     const toolsToInclude: any[] = checklistItems.length > 0
-      ? checklistItems.map((ci, idx) => ({
-          id: idx + 1,
-          itemNo: idx + 1,
-          serial: ci.serialNos?.[0] || ci.partNo || `TOOL-${idx + 1}`,
-          assetNo: ci.partNo || ci.serialNos?.[0] || '',
-          shortDesc: ci.cat || ci.shortDesc || 'Downhole Tool',
-          desc: ci.description || ci.shortDesc || '',
-          size: ci.size || '—',
-          status: 'OnRig' as const,
-          ownership: ci.supplier || 'EMDAD',
-          isEmdad: (ci.supplier || '').toUpperCase().includes('EMDAD'),
-          qty: ci.qty || 1,
-          remarks: 'Mobilized',
-        }))
+      ? checklistItems.map((ci, idx) => {
+          const resolved = resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.cat || ci.shortDesc, ci.supplier);
+          return {
+            id: idx + 1,
+            itemNo: idx + 1,
+            serial: resolved.serial,
+            assetNo: getCleanAssetNo(ci.partNo, resolved.assetNo, ci.serialNos?.[0], resolved.serial),
+            shortDesc: ci.cat || ci.shortDesc || resolved.shortDesc,
+            desc: ci.description || resolved.desc,
+            size: ci.size || resolved.inv?.size || '—',
+            status: 'OnRig' as const,
+            ownership: resolved.supplier,
+            supplier: resolved.supplier,
+            isEmdad: resolved.isEmdad,
+            qty: ci.qty || 1,
+            remarks: 'Mobilized',
+          };
+        })
       : [];
 
     const newDT: DTBatch = {
@@ -1847,8 +1861,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   };
 
   const handleUpdateDTField = (field: string, value: string) => {
-    // Only persist if an active DT exists. Never auto-create a DT from modifying metadata fields!
-    const targetDT = activeDT;
+    // Use effectiveDT (activeDT || draftDT) so footer/header fields are editable
+    // even before the DT has been formally selected in the dropdown.
+    const targetDT = activeDT || draftDT;
     if (!targetDT) return;
     const updated: DTBatch = {
       ...targetDT,
@@ -2539,10 +2554,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       dtNumber: nextDTNum,
       jobId: jobData.id,
       jobNumber: jobData.id,
-      rmDate: formatDateDD_MM_YYYY(new Date().toISOString()),
+      rmDate: new Date().toISOString().split('T')[0],        // YYYY-MM-DD — required by <input type="date">
       rmRef: `MR-${jobData.id.slice(-4) || '881'}`,
-      dispatchDate: formatDateDD_MM_YYYY(new Date().toISOString()),
-      deliveryDate: formatDateDD_MM_YYYY(new Date().toISOString()),
+      dispatchDate: new Date().toISOString().split('T')[0],  // YYYY-MM-DD
+      deliveryDate: new Date().toISOString().split('T')[0],  // YYYY-MM-DD
       rig: jobData.rig,
       well: jobData.well,
       contract: jobData.contractNo || jobData.contract,
@@ -2659,7 +2674,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       isLocked: true,
       lockedBy: user?.name || 'Operations',
       lockedDate: new Date().toISOString(),
-      dispatchDate: targetDT.dispatchDate || formatDateDD_MM_YYYY(new Date().toISOString()),
+      dispatchDate: targetDT.dispatchDate || new Date().toISOString().split('T')[0],
     };
 
     if (activeDT && onUpdateDTBatch) {

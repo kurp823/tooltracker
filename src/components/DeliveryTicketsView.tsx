@@ -1439,7 +1439,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                         <h3 className="font-bold text-base tracking-wide text-white">
                           Delivery Ticket: <span className="text-amber-400 font-mono">{selectedDTDetail.dtNumber}</span>
                         </h3>
-                        {selectedDTDetail.isLocked !== false ? (
+                        {selectedDTDetail.isLocked === true ? (
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/50">
                             ✓ Dispatched &amp; Finalized
                           </span>
@@ -1488,8 +1488,16 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
 
             {/* Scrollable Body */}
             {(() => {
-              const isDTLocked = selectedDTDetail.isLocked !== false;
+              const isDTLocked = selectedDTDetail.isLocked === true;
               const modalContract = getDisplayContract(selectedDTDetail);
+              // Convert stored date (may be DD-MM-YYYY from older records) → YYYY-MM-DD for <input type="date">
+              const toInputDate = (d: string | undefined): string => {
+                if (!d) return '';
+                if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;            // already YYYY-MM-DD
+                const m = d.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+                if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+                return '';
+              };
               // ADNOC Drilling pool contract gate — all AD Ticket No UI is conditional on this
               const isAdnocPool = modalContract === '4700024096';
               return (
@@ -1521,7 +1529,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                       ) : (
                         <input
                           type="date"
-                          value={selectedDTDetail.rmDate || ''}
+                          value={toInputDate(selectedDTDetail.rmDate)}
                           onChange={(e) => {
                             if (!onUpdateDTBatch) return;
                             onUpdateDTBatch({

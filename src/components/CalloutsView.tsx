@@ -331,7 +331,7 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
     const initialMap: Record<number, ToolItem[]> = {};
     cal.items.forEach((it, idx) => {
       const tools = (it.serialNos || [])
-        .map((s) => inventory.find((t) => t.serial === s))
+        .map((s) => inventory.find((t) => (t.serial || '').trim().toUpperCase() === (s || '').trim().toUpperCase()))
         .filter((t): t is ToolItem => Boolean(t));
       initialMap[idx] = tools;
     });

@@ -319,7 +319,7 @@ export const ContractsView: React.FC<ContractsViewProps> = ({
       }
     } else {
       const newC: ContractRecord = {
-        id: String(contracts.length + 1),
+        id: String(Math.max(0, ...contracts.map((c) => parseInt(c.id) || 0)) + 1),
         contractNo: contractNo.trim(),
         contractRef: (contractRef || contractNo).trim(),
         subDivision: subDivision,
