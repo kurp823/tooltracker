@@ -267,9 +267,9 @@ export function resolveJobClient(
   if (proj.includes('4700024096')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
   if (proj.includes('4700024608')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
   if (proj.includes('4700015149')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
-  if (proj.includes('16358.13') || proj.includes('16358')) return 'ADNOC ONSHORE - FISHING';
+  if (proj.includes('16358.13') || proj.includes('16358') || proj.includes('4700004348')) return 'ADNOC ONSHORE - FISHING';
   if (proj.includes('16119.01') || proj.includes('16119')) return 'ADNOC ONSHORE - MACHINING';
-  if (proj.includes('4700012347')) return 'ADNOC ONSHORE - FISHING';
+  if (proj.includes('4700012347')) return 'ADNOC ONSHORE - TRIAL';
   if (proj.includes('DVP-2023-K-016') || proj.includes('BUNDUQ')) return 'BUNDUQ COMPANY LIMITED';
   if (proj.includes('TW-') || proj.includes('TURNWELL')) return 'TURNWELL INDUSTRIES LLC';
   if (proj.includes('ALB/') || proj.includes('COSMO')) return 'COSMO E&P ALBAHRIYA LIMITED';
