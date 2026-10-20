@@ -1354,7 +1354,9 @@ export const App: React.FC = () => {
             status: 'Active',
             items: (Array.isArray(c?.items) ? c.items : []).map((ci) => {
               if (!ci) return ci;
-              if (String(ci?.dtNumber || '').trim().toUpperCase() === targetUpper || isJobMatch) {
+              // Only clear dtNumber on items specifically assigned to the deleted DT.
+              // Do NOT use isJobMatch here — that would wipe assignments to OTHER DTs on the same job.
+              if (String(ci?.dtNumber || '').trim().toUpperCase() === targetUpper) {
                 return { ...ci, dtNumber: undefined, status: 'Assigned' as const };
               }
               return ci;
@@ -1379,20 +1381,39 @@ export const App: React.FC = () => {
 
   // RT Batch Actions (Backload receiving)
   const handleSaveRTBatch = (batch: RTBatch) => {
-    setRtBatches((prev) => [batch, ...prev]);
+    // Dedup: if same RT already exists (by id or rtNumber), update in place instead of prepending a duplicate.
+    setRtBatches((prev) => {
+      const exists = prev.some(
+        (b) =>
+          (b.id && batch.id && b.id === batch.id) ||
+          (b.rtNumber && batch.rtNumber && b.rtNumber === batch.rtNumber)
+      );
+      return exists
+        ? prev.map((b) => (b.id === batch.id || b.rtNumber === batch.rtNumber ? batch : b))
+        : [batch, ...prev];
+    });
     saveReceivingTicketApi(batch).then((r) => {
       if (!r.success) showToast(r.message, 'error');
     });
 
     // Update DT line statuses from OnRig to Returned
-    const returnedSerials = batch.toolLines.map((t) => t.serial);
+    // Normalize to uppercase strings; filter out blank/undefined serials so they don't cross-match.
+    const returnedSerials = new Set<string>(
+      batch.toolLines
+        .map((t) => (t.serial || '').trim().toUpperCase())
+        .filter(Boolean)
+    );
     const affectedDtBatches: DTBatch[] = [];
     setDtBatches((prev) =>
       prev.map((dt) => {
-        const hasReturnedLine = dt.toolLines.some((line) => returnedSerials.includes(line.serial));
+        const hasReturnedLine = dt.toolLines.some((line) =>
+          returnedSerials.has((line.serial || '').trim().toUpperCase())
+        );
         const updatedLines = dt.toolLines.map((line) => {
-          if (returnedSerials.includes(line.serial)) {
-            const rtLine = batch.toolLines.find((l) => l.serial === line.serial);
+          if (returnedSerials.has((line.serial || '').trim().toUpperCase())) {
+            const rtLine = batch.toolLines.find(
+              (l) => (l.serial || '').trim().toUpperCase() === (line.serial || '').trim().toUpperCase()
+            );
             return {
               ...line,
               status: 'Returned' as const,
@@ -1429,7 +1450,8 @@ export const App: React.FC = () => {
       (l) => l.used && l.condition !== 'LIH' && l.routedTo !== 'Lost in Hole'
     );
     const newInspections: InspectionRecord[] = usedLines.map((line) => {
-      const invItem = inventory.find((t) => t.serial === line.serial);
+      const lineSerial = (line.serial || '').trim().toUpperCase();
+      const invItem = inventory.find((t) => (t.serial || '').trim().toUpperCase() === lineSerial);
       const woNum = `WO-INS-${curYr}-${String(nextInsSeq++).padStart(5, '0')}`;
       return {
         id: `INS-${Date.now()}-${Math.random().toString(36).slice(-4)}`,
@@ -1462,7 +1484,11 @@ export const App: React.FC = () => {
     const updatedRtTools: ToolItem[] = [];
     setInventory((prev) =>
       prev.map((tool) => {
-        const line = batch.toolLines.find((l) => l.serial === tool.serial);
+        // Case-insensitive serial lookup so "EMD-1234" and "emd-1234" both match.
+        const toolSerial = (tool.serial || '').trim().toUpperCase();
+        const line = batch.toolLines.find(
+          (l) => (l.serial || '').trim().toUpperCase() === toolSerial
+        );
         if (!line) return tool;
 
         const isLih = line.condition === 'LIH' || line.routedTo === 'Lost in Hole';
@@ -1513,11 +1539,14 @@ export const App: React.FC = () => {
     });
 
     // Cascade RT tool condition changes to Inventory
-    const lineMap = new Map((updatedBatch.toolLines || []).map((l) => [l.serial, l]));
+    // Build map with normalized uppercase keys so case variants ("EMD-1234" vs "emd-1234") resolve correctly.
+    const lineMap = new Map(
+      (updatedBatch.toolLines || []).map((l) => [(l.serial || '').trim().toUpperCase(), l])
+    );
     const updatedTools: ToolItem[] = [];
     setInventory((prev) =>
       prev.map((tool) => {
-        const line = lineMap.get(tool.serial);
+        const line = lineMap.get((tool.serial || '').trim().toUpperCase());
         if (!line) return tool;
 
         const isLih = line.condition === 'LIH' || line.routedTo === 'Lost in Hole';
