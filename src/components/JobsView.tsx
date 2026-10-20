@@ -1348,7 +1348,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
       {/* Main High-Density Jobs Data Grid */}
       <div className="bg-white border border-slate-200 rounded-md shadow-xs overflow-hidden w-full">
-        <div className="overflow-x-auto w-full max-h-[68vh] relative">
+        <div className="overflow-auto w-full max-h-[68vh] relative">
           <table className="w-full text-left text-xs border-collapse">
             <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 border-b border-slate-200 text-[11px] font-bold select-none uppercase tracking-wider">
               <tr>
