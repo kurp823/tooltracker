@@ -5081,7 +5081,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       const displayCondition = latestItemIns?.status ? latestItemIns.status.toUpperCase() : (item.comments || 'ACCEPTED');
 
                       return (
-                        <tr key={i} className="hover:bg-blue-50/50 h-7 leading-none">
+                        <tr key={i} className={`${assignedDT?.isLocked ? 'bg-slate-100 text-slate-400' : 'hover:bg-blue-50/50'} h-7 leading-none`}>
                           {/* Selection Checkbox */}
                           <td className="py-1 px-2 whitespace-nowrap text-center">
                             {assignedDT?.isLocked && !adminUnlocked ? (
@@ -5274,11 +5274,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         type="button"
                         onClick={handleGenerateDTFromChecklist}
                         className="bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs px-3 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
-                        title="Transfer reserved checklist tools directly into a new Delivery Ticket"
+                        title="Create a new Delivery Ticket from selected checklist tools and dispatch to rig"
                       >
                         <span>🚚</span>
                         <span>
-                          Generate DT from Checklist
+                          Create DT from Selected ✓ Tools
                           {selectedPendingCount > 0 ? ` (${selectedPendingCount} Selected)` : ` (${pendingChecklistItems.length} Pending)`}
                         </span>
                       </button>
@@ -5398,7 +5398,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <div>
                       <strong className="text-amber-900 font-bold">Delivery Ticket Not Generated Yet:</strong>
                       <span className="text-amber-800 ml-1">
-                        Equipment is currently in yard (Emdad Base). The lines below are a draft preview. To dispatch equipment to Rig {jobData.rig}, select your checklist tools and click &quot;Generate DT from Checklist&quot;.
+                        Equipment is currently in yard (Emdad Base). The lines below are a draft preview. To dispatch equipment to Rig {jobData.rig}, select your checklist tools and click &quot;Create DT from Selected ✓ Tools&quot;.
                       </span>
                     </div>
                   </div>
@@ -5409,7 +5409,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       className="bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs px-3.5 py-1.5 rounded shadow-xs whitespace-nowrap cursor-pointer flex items-center gap-1.5"
                     >
                       <span>🚚</span>
-                      <span>Generate DT from Checklist</span>
+                      <span>Create DT from Selected ✓ Tools</span>
                     </button>
                   )}
                 </div>
@@ -5654,7 +5654,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           No tools added to Delivery Ticket yet.
                           {!isClosedOrInvoiced && !isLocked && (
                             <span>
-                              {' '}Select tools in the <button type="button" onClick={() => setActiveTab('checklist')} className="text-blue-700 underline font-bold cursor-pointer">Checklist</button> tab and click &quot;Generate DT from Checklist&quot;, or click <button type="button" onClick={handleCreateNewDTInJob} className="text-emerald-700 underline font-bold cursor-pointer">+ New DT</button> to add tools.
+                              {' '}Select tools in the <button type="button" onClick={() => setActiveTab('checklist')} className="text-blue-700 underline font-bold cursor-pointer">Checklist</button> tab and click &quot;Create DT from Selected ✓ Tools&quot;, or click <button type="button" onClick={handleCreateNewDTInJob} className="text-emerald-700 underline font-bold cursor-pointer">+ New DT</button> to add tools.
                             </span>
                           )}
                         </td>

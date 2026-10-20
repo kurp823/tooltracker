@@ -55,7 +55,7 @@ export interface ToolItem {
   desc: string;        // Full technical description
   qty: number;
   location: string;    // Emdad Base, On Rig, Inspection Bay, Workshop, Returned to Supplier
-  status: 'Good' | 'Repair' | 'Inspection' | 'Redress' | 'Removed' | 'On Rig' | 'Lost in Hole' | 'Scrapped' | string;
+  status: 'Good' | 'Reserved' | 'Repair' | 'Inspection' | 'Redress' | 'Removed' | 'On Rig' | 'Lost in Hole' | 'Scrapped' | string;
   ownership: string;   // EMDAD, MOTORMAX, EPIS, ELITE, SALTIRE, FLOW TOOLS, etc.
   isEmdad: boolean;
   oemSerial?: string;
@@ -77,6 +77,10 @@ export interface ToolItem {
   supplierCurrency?: string;              // AED / USD
   rentalStartDate?: string | null;        // Delivery/custody start date
   rentalEndDate?: string | null;          // Off-hire / return date
+  // Tool Reservation (set when tool is ticked into a job checklist)
+  reservedForJob?: string;               // e.g. "JOB-26-01839"
+  reservedForRig?: string;               // e.g. "AD-117"
+  reservedForWell?: string;              // e.g. "BB-543"
 }
 
 export interface CalloutItem {

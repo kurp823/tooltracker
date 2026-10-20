@@ -118,6 +118,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             Available / Good
           </span>
         );
+      case 'Reserved':
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+            🟡 Reserved
+          </span>
+        );
       case 'Repair':
         return (
           <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
@@ -993,6 +999,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         {t.rig && !isRigInLoc && (
                           <span className="block text-[10px] text-amber-800 font-semibold font-mono">
                             Rig: {t.rig}
+                          </span>
+                        )}
+                        {t.reservedForJob && (
+                          <span className="block text-[10px] text-amber-800 font-bold font-mono mt-0.5">
+                            Reserved → {t.reservedForJob}{t.reservedForRig ? ` / ${t.reservedForRig}` : ''}
                           </span>
                         )}
                       </td>
