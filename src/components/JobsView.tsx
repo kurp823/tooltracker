@@ -175,6 +175,7 @@ export const getJobStartDate = (job: DrillingJob, dtBatches?: DTBatch[]): string
 export const getJobEndDate = (job: DrillingJob, rtBatches?: RTBatch[]): string => {
   if (rtBatches && rtBatches.length > 0) {
     const valid = rtBatches
+      .filter((rt) => rt.toolLines && rt.toolLines.length > 0)
       .map((rt) => {
         const raw = rt.rtDate || rt.backloadRmDate || rt.loadingNoteDate || rt.lNoteDate || (rt as any).Date_In || (rt as any).dateIn;
         return { raw, ms: parseDateToMs(raw) };
@@ -1350,13 +1351,13 @@ export const JobsView: React.FC<JobsViewProps> = ({
       <div className="bg-white border border-slate-200 rounded-md shadow-xs overflow-hidden w-full">
         <div className="overflow-x-auto w-full max-h-[68vh] relative">
           <table className="w-full text-left text-xs border-collapse">
-            <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 border-b border-slate-200 text-[11px] font-bold select-none uppercase tracking-wider">
+            <thead className="sticky top-0 bg-slate-100 text-slate-700 border-b border-slate-200 text-[11px] font-bold select-none uppercase tracking-wider">
               <tr>
                 {/* 1. Job # */}
                 <th
                   onClick={() => handleSortToggle('id')}
                   style={{ width: jobsResizer.widths.id || 130 }}
-                  className="sticky left-0 z-30 bg-slate-100 px-3 py-2 cursor-pointer hover:bg-slate-200 whitespace-nowrap border-r border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)] relative"
+                  className="sticky left-0 top-0 z-40 bg-slate-100 px-3 py-2 cursor-pointer hover:bg-slate-200 whitespace-nowrap border-r border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)] relative"
                 >
                   <div className="flex items-center gap-1">
                     <span>Job #</span>
