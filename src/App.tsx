@@ -1416,7 +1416,7 @@ export const App: React.FC = () => {
     });
 
     // Update tool statuses & create inspection records for USED tools
-    const curYr = new Date().getFullYear().toString().slice(-3);
+    const curYr = new Date().getFullYear().toString().slice(-2);
     let nextInsSeq =
       inspections
         .map((i) => {
@@ -1750,7 +1750,7 @@ export const App: React.FC = () => {
     const mnt = maintenance.find((m) => m.id === mId);
     if (!mnt) return;
 
-    const curYr = new Date().getFullYear().toString().slice(-3);
+    const curYr = new Date().getFullYear().toString().slice(-2);
     let nextInsSeq =
       inspections
         .map((i) => {
@@ -1834,7 +1834,7 @@ export const App: React.FC = () => {
     });
 
     if (destination === 'QC') {
-      const curYr = new Date().getFullYear().toString().slice(-3);
+      const curYr = new Date().getFullYear().toString().slice(-2);
       let nextInsSeq =
         inspections
           .map((i) => {

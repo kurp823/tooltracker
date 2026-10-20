@@ -85,7 +85,7 @@ export const InspectionView: React.FC<InspectionViewProps> = ({
     let newMntWO: MaintenanceRecord | undefined;
 
     if (result === 'Fail') {
-      const curYr = new Date().getFullYear().toString().slice(-3);
+      const curYr = new Date().getFullYear().toString().slice(-2);
       const mntNums = maintenance
         .map((m) => {
           const match = m.woNumber.match(/^WO-MNT-\d+-(\d+)$/);

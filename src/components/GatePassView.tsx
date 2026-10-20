@@ -38,7 +38,7 @@ export const GatePassView: React.FC<GatePassViewProps> = ({
 
   // Next GP Number
   const nextGpNumber = useMemo(() => {
-    const curYr = new Date().getFullYear().toString().slice(-3);
+    const curYr = new Date().getFullYear().toString().slice(-2);
     const gpNums = gatePasses
       .map((g) => {
         const m = g.gpNumber.match(/^GP-\d+-(\d+)$/);

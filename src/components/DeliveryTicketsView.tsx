@@ -204,7 +204,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
 
   // Next DT Number
   const nextDtNumber = useMemo(() => {
-    const curYr = new Date().getFullYear().toString().slice(-3);
+    const curYr = new Date().getFullYear().toString().slice(-2);
     const dtNums = dtBatches
       .filter((b) => {
         const s = String(b.dtNumber || '').toUpperCase();
