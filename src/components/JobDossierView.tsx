@@ -51,6 +51,12 @@ import {
   deleteCrewPersonnel,
 } from '../services/crewPersonnelService';
 import { DTFooterSection } from './DTFooterSection';
+import {
+  CalloutHeaderForm,
+  RTHeaderForm,
+  ChecklistRowInputCells,
+  DTToolLineInputCells,
+} from './JobDossierFormParts';
 
 interface JobDossierViewProps {
   job: DrillingJob;
@@ -4857,81 +4863,29 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </div>
               </div>
 
-              {/* Checklist Field Grid - Editable inputs for new checklist header */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] bg-white p-2 rounded border border-slate-200">
-                <div className="flex items-center gap-1">
-                  <span className="font-bold text-slate-600 w-16">Callout No:</span>
-                  <input
-                    type="text"
-                    value={activeCallout.id || ''}
-                    disabled={isClosedOrInvoiced || isLocked}
-                    onChange={(e) => handleUpdateCalloutHeader('id', e.target.value)}
-                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-blue-900 w-28 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                  />
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="font-bold text-slate-600 w-16">Req Date:</span>
-                  <input
-                    type="text"
-                    value={activeCallout.reqDate || ''}
-                    disabled={isClosedOrInvoiced || isLocked}
-                    placeholder="DD-MM-YYYY"
-                    onChange={(e) => handleUpdateCalloutHeader('reqDate', e.target.value)}
-                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono w-28 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                  />
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="font-bold text-slate-600 w-16">Project No:</span>
-                  <input
-                    type="text"
-                    value={activeCallout.projectNo || jobData.contractNo || ''}
-                    disabled={isClosedOrInvoiced || isLocked}
-                    onChange={(e) => handleUpdateCalloutHeader('projectNo', e.target.value)}
-                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono w-28 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                  />
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="font-bold text-slate-600 w-16">PO Number:</span>
-                  <input
-                    type="text"
-                    value={activeCallout.poNumber || jobData.poNumber || ''}
-                    disabled={isClosedOrInvoiced || isLocked}
-                    onChange={(e) => handleUpdateCalloutHeader('poNumber', e.target.value)}
-                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-mono w-28 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                  />
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="font-bold text-slate-600 w-16">Rig / Well:</span>
-                  <span className="font-bold text-slate-800 font-mono">{jobData.rig} / {jobData.well}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="font-bold text-slate-600 w-16">Email Ref:</span>
-                  <input
-                    type="text"
-                    value={activeCallout.emailRef || ''}
-                    disabled={isClosedOrInvoiced || isLocked}
-                    placeholder="Client authorization / email"
-                    onChange={(e) => handleUpdateCalloutHeader('emailRef', e.target.value)}
-                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs w-36 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                  />
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="font-bold text-slate-600 w-16">Status:</span>
-                  <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
-                    automatedChecklistStatus.includes('Closed')
-                      ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                      : automatedChecklistStatus.includes('Dispatched')
-                      ? 'bg-slate-100 text-slate-700 border-slate-300'
-                      : automatedChecklistStatus.includes('Delivery Ticket')
-                      ? 'bg-blue-50 text-blue-800 border-blue-200'
-                      : automatedChecklistStatus.includes('In Progress')
-                      ? 'bg-slate-50 text-slate-700 border-slate-200'
-                      : 'bg-slate-100 text-slate-800 border-slate-300'
-                  }`}>
-                    {automatedChecklistStatus}
-                  </span>
-                </div>
-              </div>
+              {/* Checklist Field Grid - memoized to prevent cascade re-renders on typing */}
+              <CalloutHeaderForm
+                calloutId={activeCallout.id || ''}
+                reqDate={activeCallout.reqDate || ''}
+                projectNo={activeCallout.projectNo || jobData.contractNo || ''}
+                poNumber={activeCallout.poNumber || jobData.poNumber || ''}
+                emailRef={activeCallout.emailRef || ''}
+                rigWellDisplay={`${jobData.rig} / ${jobData.well}`}
+                disabled={isClosedOrInvoiced || isLocked}
+                statusText={automatedChecklistStatus}
+                statusClassName={
+                  automatedChecklistStatus.includes('Closed')
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                    : automatedChecklistStatus.includes('Dispatched')
+                    ? 'bg-slate-100 text-slate-700 border-slate-300'
+                    : automatedChecklistStatus.includes('Delivery Ticket')
+                    ? 'bg-blue-50 text-blue-800 border-blue-200'
+                    : automatedChecklistStatus.includes('In Progress')
+                    ? 'bg-slate-50 text-slate-700 border-slate-200'
+                    : 'bg-slate-100 text-slate-800 border-slate-300'
+                }
+                onFieldChange={handleUpdateCalloutHeader}
+              />
             </div>
 
             {/* Checklist Table */}
@@ -5127,43 +5081,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={displayCondition}>{displayCondition}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={resolved.shortDesc}>{resolved.shortDesc}</td>
 
-                          {/* Rig Allocation & Client DT Cells for Contract 4700024096 */}
+                          {/* Rig Allocation & Client DT Cells — memoized per row */}
                           {isContract4700024096 && (
-                            <>
-                              <td className="py-0.5 px-1 whitespace-nowrap border-l border-amber-100">
-                                <select
-                                  value={item.allocatedRig || jobData.rig || ''}
-                                  onChange={(e) => handleUpdateChecklistItemField(item.seq, 'allocatedRig', e.target.value)}
-                                  disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
-                                  className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-bold text-slate-800 w-28 focus:ring-1 focus:ring-blue-500"
-                                >
-                                  <option value="">Select Rig...</option>
-                                  {adnocRigOptions.map((r) => (
-                                    <option key={r} value={r}>{r}</option>
-                                  ))}
-                                </select>
-                              </td>
-                              <td className="py-0.5 px-1 whitespace-nowrap border-l border-amber-100">
-                                <input
-                                  type="text"
-                                  value={item.allocatedWell ?? (item.allocatedRig ? (item.allocatedWell || '') : (jobData.well || ''))}
-                                  placeholder="Well Name"
-                                  onChange={(e) => handleUpdateChecklistItemField(item.seq, 'allocatedWell', e.target.value)}
-                                  disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
-                                  className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-medium text-slate-800 w-20 focus:ring-1 focus:ring-blue-500"
-                                />
-                              </td>
-                              <td className="py-0.5 px-1 whitespace-nowrap border-l border-amber-100">
-                                <input
-                                  type="text"
-                                  value={item.clientDtNo || ''}
-                                  placeholder="Client DT #"
-                                  onChange={(e) => handleUpdateChecklistItemField(item.seq, 'clientDtNo', e.target.value)}
-                                  disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
-                                  className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-mono text-indigo-900 font-bold w-28 focus:ring-1 focus:ring-blue-500 placeholder:font-sans placeholder:font-normal"
-                                />
-                              </td>
-                            </>
+                            <ChecklistRowInputCells
+                              seq={item.seq}
+                              allocatedRig={item.allocatedRig || jobData.rig || ''}
+                              allocatedWell={item.allocatedWell ?? (item.allocatedRig ? (item.allocatedWell || '') : (jobData.well || ''))}
+                              clientDtNo={item.clientDtNo || ''}
+                              disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
+                              rigOptions={adnocRigOptions}
+                              onFieldChange={handleUpdateChecklistItemField}
+                            />
                           )}
 
                           {/* Mobilization / DT Status: Light grey for locked, light slate for pending (no purple, no amber) */}
@@ -5572,67 +5500,31 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             <td className="py-1 px-2 whitespace-nowrap text-slate-700 font-medium">{resolved.supplier}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-slate-600 text-[11px] font-medium">{resolved.shortDesc}</td>
 
-                            {/* Rig Allocation & Client DT Cells for Contract 4700024096 */}
+                            {/* DT tool-line per-row inputs — memoized so only changed row re-renders */}
                             {isContract4700024096 && (
-                              <>
-                                <td className="py-0.5 px-1 whitespace-nowrap border-l border-amber-100">
-                                  <select
-                                    value={t.allocatedRig || effectiveDT.rig || jobData.rig || ''}
-                                    onChange={(e) => {
-                                      const newRig = e.target.value;
-                                      const updatedToolLines = (effectiveDT.toolLines || []).map((tl, i) =>
-                                        i === idx ? { ...tl, allocatedRig: newRig } : tl
-                                      );
-                                      const updatedBatch = { ...effectiveDT, toolLines: updatedToolLines };
-                                      if (onUpdateDTBatch) onUpdateDTBatch(updatedBatch);
-                                      else onSaveDTBatch(updatedBatch);
-                                    }}
-                                    disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
-                                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-bold text-slate-800 w-28 focus:ring-1 focus:ring-blue-500"
-                                  >
-                                    <option value="">Select Rig...</option>
-                                    {adnocRigOptions.map((r) => (
-                                      <option key={r} value={r}>{r}</option>
-                                    ))}
-                                  </select>
-                                </td>
-                                <td className="py-0.5 px-1 whitespace-nowrap border-l border-amber-100">
-                                  <input
-                                    type="text"
-                                    value={t.allocatedWell ?? (t.allocatedRig ? (t.allocatedWell || '') : (effectiveDT.well || jobData.well || ''))}
-                                    placeholder="Well Name"
-                                    onChange={(e) => {
-                                      const newWell = e.target.value;
-                                      const updatedToolLines = (effectiveDT.toolLines || []).map((tl, i) =>
-                                        i === idx ? { ...tl, allocatedWell: newWell } : tl
-                                      );
-                                      const updatedBatch = { ...effectiveDT, toolLines: updatedToolLines };
-                                      if (onUpdateDTBatch) onUpdateDTBatch(updatedBatch);
-                                      else onSaveDTBatch(updatedBatch);
-                                    }}
-                                    disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
-                                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-medium text-slate-800 w-20 focus:ring-1 focus:ring-blue-500"
-                                  />
-                                </td>
-                                <td className="py-0.5 px-1 whitespace-nowrap border-l border-amber-100">
-                                  <input
-                                    type="text"
-                                    value={t.clientDtNo || ''}
-                                    placeholder="Client DT #"
-                                    onChange={(e) => {
-                                      const newClientDt = e.target.value;
-                                      const updatedToolLines = (effectiveDT.toolLines || []).map((tl, i) =>
-                                        i === idx ? { ...tl, clientDtNo: newClientDt } : tl
-                                      );
-                                      const updatedBatch = { ...effectiveDT, toolLines: updatedToolLines };
-                                      if (onUpdateDTBatch) onUpdateDTBatch(updatedBatch);
-                                      else onSaveDTBatch(updatedBatch);
-                                    }}
-                                    disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
-                                    className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-mono text-indigo-900 font-bold w-28 focus:ring-1 focus:ring-blue-500 placeholder:font-sans placeholder:font-normal"
-                                   />
-                                </td>
-                              </>
+                              <DTToolLineInputCells
+                                idx={idx}
+                                allocatedRig={t.allocatedRig || effectiveDT.rig || jobData.rig || ''}
+                                allocatedWell={t.allocatedWell ?? (t.allocatedRig ? (t.allocatedWell || '') : (effectiveDT.well || jobData.well || ''))}
+                                clientDtNo={t.clientDtNo || ''}
+                                disabled={(isClosedOrInvoiced || isLocked) && !adminUnlocked}
+                                rigOptions={adnocRigOptions}
+                                onRigChange={(i, newRig) => {
+                                  const lines = (effectiveDT.toolLines || []).map((tl, j) => j === i ? { ...tl, allocatedRig: newRig } : tl);
+                                  const batch = { ...effectiveDT, toolLines: lines };
+                                  if (onUpdateDTBatch) onUpdateDTBatch(batch); else onSaveDTBatch(batch);
+                                }}
+                                onWellChange={(i, newWell) => {
+                                  const lines = (effectiveDT.toolLines || []).map((tl, j) => j === i ? { ...tl, allocatedWell: newWell } : tl);
+                                  const batch = { ...effectiveDT, toolLines: lines };
+                                  if (onUpdateDTBatch) onUpdateDTBatch(batch); else onSaveDTBatch(batch);
+                                }}
+                                onClientDtChange={(i, newClientDt) => {
+                                  const lines = (effectiveDT.toolLines || []).map((tl, j) => j === i ? { ...tl, clientDtNo: newClientDt } : tl);
+                                  const batch = { ...effectiveDT, toolLines: lines };
+                                  if (onUpdateDTBatch) onUpdateDTBatch(batch); else onSaveDTBatch(batch);
+                                }}
+                              />
                             )}
                             {activeDT && (!activeDT.isLocked || adminUnlocked) && (
                               <td className="py-1 px-2 whitespace-nowrap text-center border-l border-slate-200">
@@ -5808,74 +5700,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <span className="font-bold text-slate-600 block mb-0.5">Rig / Well:</span>
                   <span className="font-mono font-bold text-blue-900">{jobData.rig} / {jobData.well}</span>
                 </div>
-                <div>
-                  <span className="font-bold text-slate-600 block mb-0.5">Date:</span>
-                  {isClosedOrInvoiced || isLocked ? (
-                    <span className="font-mono font-bold text-slate-900">{resolveRtDate(effectiveRT)}</span>
-                  ) : (
-                    <input
-                      type="date"
-                      value={toInputDateFormat(effectiveRT.rtDate || effectiveRT.backloadRmDate || jobData.demobDate)}
-                      onChange={(e) => handleUpdateRTHeaderField('rtDate', e.target.value)}
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-full cursor-pointer focus:border-blue-500 focus:outline-none"
-                    />
-                  )}
-                </div>
-                <div>
-                  <span className="font-bold text-slate-600 block mb-0.5">Shipped Via:</span>
-                  {isClosedOrInvoiced || isLocked ? (
-                    <span className="text-slate-800">{resolveRtCarrier(effectiveRT)}</span>
-                  ) : (
-                    <input
-                      type="text"
-                      placeholder="Shipped Via (Carrier)"
-                      value={effectiveRT.carrier || effectiveRT.shippedVia || ''}
-                      onChange={(e) => handleUpdateRTHeaderField('carrier', e.target.value)}
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs text-slate-800 w-full focus:border-blue-500 focus:outline-none"
-                    />
-                  )}
-                </div>
-                <div>
-                  <span className="font-bold text-slate-600 block mb-0.5">L/Note Date:</span>
-                  {isClosedOrInvoiced || isLocked ? (
-                    <span className="font-mono text-slate-800">{resolveRtLoadingNoteDate(effectiveRT)}</span>
-                  ) : (
-                    <input
-                      type="date"
-                      value={toInputDateFormat(effectiveRT.loadingNoteDate || effectiveRT.lNoteDate)}
-                      onChange={(e) => handleUpdateRTHeaderField('loadingNoteDate', e.target.value)}
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-mono text-slate-800 w-full cursor-pointer focus:border-blue-500 focus:outline-none"
-                    />
-                  )}
-                </div>
-                <div>
-                  <span className="font-bold text-slate-600 block mb-0.5">L/Note No:</span>
-                  {isClosedOrInvoiced || isLocked ? (
-                    <span className="font-mono font-bold text-slate-900">{resolveRtLoadingNoteNo(effectiveRT)}</span>
-                  ) : (
-                    <input
-                      type="text"
-                      placeholder="Loading Note No"
-                      value={effectiveRT.loadingNoteNo || effectiveRT.lNoteNo || ''}
-                      onChange={(e) => handleUpdateRTHeaderField('loadingNoteNo', e.target.value)}
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 w-full focus:border-blue-500 focus:outline-none"
-                    />
-                  )}
-                </div>
-                <div>
-                  <span className="font-bold text-slate-600 block mb-0.5">Received By:</span>
-                  {isClosedOrInvoiced || isLocked ? (
-                    <span className="font-medium text-slate-800">{effectiveRT.receivedBy || '—'}</span>
-                  ) : (
-                    <input
-                      type="text"
-                      placeholder="Received By (Name / Lead)"
-                      value={effectiveRT.receivedBy || ''}
-                      onChange={(e) => handleUpdateRTHeaderField('receivedBy', e.target.value)}
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs text-slate-800 w-full focus:border-blue-500 focus:outline-none"
-                    />
-                  )}
-                </div>
+                {/* RT header input fields — memoized to prevent cascade re-renders on typing */}
+                <RTHeaderForm
+                  isEditable={!(isClosedOrInvoiced || isLocked)}
+                  editDate={toInputDateFormat(effectiveRT.rtDate || effectiveRT.backloadRmDate || jobData.demobDate)}
+                  editCarrier={effectiveRT.carrier || effectiveRT.shippedVia || ''}
+                  editLoadingNoteDate={toInputDateFormat(effectiveRT.loadingNoteDate || effectiveRT.lNoteDate)}
+                  editLoadingNoteNo={effectiveRT.loadingNoteNo || effectiveRT.lNoteNo || ''}
+                  editReceivedBy={effectiveRT.receivedBy || ''}
+                  displayDate={resolveRtDate(effectiveRT)}
+                  displayCarrier={resolveRtCarrier(effectiveRT)}
+                  displayLoadingNoteDate={resolveRtLoadingNoteDate(effectiveRT)}
+                  displayLoadingNoteNo={resolveRtLoadingNoteNo(effectiveRT)}
+                  displayReceivedBy={effectiveRT.receivedBy || '—'}
+                  onFieldChange={handleUpdateRTHeaderField}
+                />
               </div>
             </div>
 
