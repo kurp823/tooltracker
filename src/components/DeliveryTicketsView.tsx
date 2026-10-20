@@ -184,6 +184,10 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   const [adminUnlockRemark, setAdminUnlockRemark] = useState('');
   const [unlockError, setUnlockError] = useState('');
 
+  // AD Ticket No inline edit state (ADNOC Drilling pool contract 4700024096 only)
+  const [clientDtNoEdits, setClientDtNoEdits] = useState<Record<string, string>>({});
+  useEffect(() => { setClientDtNoEdits({}); }, [selectedDTId]);
+
   // Editing state for an unsealed DT
   const [editingDTId, setEditingDTId] = useState<string | null>(null);
   const [addExtraToolSearch, setAddExtraToolSearch] = useState('');
@@ -445,6 +449,32 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
       onUpdateDTBatch(sealedBatch);
     }
     setEditingDTId(null);
+  };
+
+  // Save AD Ticket No on a DT line; auto-locks the batch when any value is entered
+  // Gated: only called when contract === '4700024096'
+  const handleSaveClientDtNo = (batch: DTBatch, lineIdx: number, value: string) => {
+    const trimmed = value.trim();
+    const updatedLines = (batch.toolLines || []).map((line, i) =>
+      i === lineIdx ? { ...line, clientDtNo: trimmed } : line
+    );
+    const hasAnyAdTicket = updatedLines.some((l) => l.clientDtNo?.trim());
+    const today = new Date().toISOString().split('T')[0];
+    const updated: DTBatch = {
+      ...batch,
+      toolLines: updatedLines,
+      ...(hasAnyAdTicket && !batch.isLocked
+        ? {
+            isLocked: true,
+            lockedBy: user?.name || 'System',
+            lockedDate: today,
+            notes: batch.notes
+              ? `${batch.notes}\n[Auto-locked ${today} — AD Ticket No entered by ${user?.name || 'Ops'}]`
+              : `[Auto-locked ${today} — AD Ticket No entered by ${user?.name || 'Ops'}]`,
+          }
+        : {}),
+    };
+    if (onUpdateDTBatch) onUpdateDTBatch(updated);
   };
 
   // Add tool to unlocked DT
@@ -1468,6 +1498,8 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                 if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
                 return '';
               };
+              // ADNOC Drilling pool contract gate — all AD Ticket No UI is conditional on this
+              const isAdnocPool = modalContract === '4700024096';
               return (
                 <div className="p-5 space-y-4 overflow-y-auto text-xs">
                   {/* Top Metadata Cards */}
@@ -1657,6 +1689,10 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                             <th className="px-3 py-2">Description</th>
                             <th className="px-3 py-2">Owner</th>
                             <th className="px-3 py-2 text-center">Status</th>
+                            {/* AD Ticket No column — ADNOC Drilling pool contract 4700024096 only */}
+                            {isAdnocPool && (
+                              <th className="px-3 py-2 text-center whitespace-nowrap">AD Ticket No</th>
+                            )}
                             {!isDTLocked && user?.role === 'Admin' && (
                               <th className="px-3 py-2 text-center w-28">Action</th>
                             )}
@@ -1689,7 +1725,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                             if (filteredModalTools.length === 0) {
                               return (
                                 <tr>
-                                  <td colSpan={!isDTLocked && user?.role === 'Admin' ? 9 : 8} className="p-8 text-center text-slate-400 font-medium">
+                                  <td colSpan={(!isDTLocked && user?.role === 'Admin' ? 9 : 8) + (isAdnocPool ? 1 : 0)} className="p-8 text-center text-slate-400 font-medium">
                                     {allTools.length === 0
                                       ? 'No tool lines recorded for this delivery ticket.'
                                       : 'No tools match your search filter.'}
@@ -1765,6 +1801,33 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                                       {isOnRig ? 'On Rig' : 'Returned'}
                                     </span>
                                   </td>
+                                  {/* AD Ticket No cell — ADNOC Drilling pool contract 4700024096 only */}
+                                  {isAdnocPool && (
+                                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                                      {isDTLocked ? (
+                                        <span className="font-mono text-[11px] text-slate-700">{t.clientDtNo || '—'}</span>
+                                      ) : (
+                                        <input
+                                          type="text"
+                                          value={clientDtNoEdits[t.serial] ?? (t.clientDtNo || '')}
+                                          onChange={(e) =>
+                                            setClientDtNoEdits((prev) => ({ ...prev, [t.serial]: e.target.value }))
+                                          }
+                                          onBlur={(e) => {
+                                            const val = e.target.value;
+                                            if (val !== (t.clientDtNo || '')) {
+                                              handleSaveClientDtNo(selectedDTDetail, i, val);
+                                            }
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                          }}
+                                          placeholder="Enter AD DT#"
+                                          className="w-28 px-2 py-1 rounded border border-slate-300 text-[11px] font-mono bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                        />
+                                      )}
+                                    </td>
+                                  )}
                                   {!isDTLocked && user?.role === 'Admin' && (
                                     <td className="px-3 py-2 text-center whitespace-nowrap">
                                       <button
