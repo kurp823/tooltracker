@@ -1409,7 +1409,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                         <h3 className="font-bold text-base tracking-wide text-white">
                           Delivery Ticket: <span className="text-amber-400 font-mono">{selectedDTDetail.dtNumber}</span>
                         </h3>
-                        {selectedDTDetail.isLocked !== false ? (
+                        {selectedDTDetail.isLocked === true ? (
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/50">
                             ✓ Dispatched &amp; Finalized
                           </span>
@@ -1458,7 +1458,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
 
             {/* Scrollable Body */}
             {(() => {
-              const isDTLocked = selectedDTDetail.isLocked !== false;
+              const isDTLocked = selectedDTDetail.isLocked === true;
               const modalContract = getDisplayContract(selectedDTDetail);
               // Convert stored date (may be DD-MM-YYYY from older records) → YYYY-MM-DD for <input type="date">
               const toInputDate = (d: string | undefined): string => {
