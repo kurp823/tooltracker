@@ -50,6 +50,7 @@ import {
   updateCrewPersonnel,
   deleteCrewPersonnel,
 } from '../services/crewPersonnelService';
+import { DTFooterSection } from './DTFooterSection';
 
 interface JobDossierViewProps {
   job: DrillingJob;
@@ -5664,121 +5665,22 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </table>
               </div>
 
-              {/* Bottom Logistics fields - Balanced 3-column layout without 'Ready to Go' */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs bg-[#f8fafc] p-3 rounded border border-slate-200">
-                {/* Column 1: Dispatch Authority */}
-                <div className="space-y-1.5 bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
-                  <div className="font-bold text-slate-700 border-b pb-1 text-[11px] uppercase tracking-wider text-blue-900">
-                    1. Warehouse &amp; Operations Dispatch
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-600">Dispatched By:</span>
-                    <input
-                      type="text"
-                      value={getDTField(effectiveDT, 'dispatchedBy') || effectiveDT.dispatchedBy || ''}
-                      onChange={(e) => handleUpdateDTField('dispatchedBy', e.target.value)}
-                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
-                      placeholder="e.g. Operations / Full Name"
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-600">Designation:</span>
-                    <input
-                      type="text"
-                      value={getDTField(effectiveDT, 'designation')}
-                      onChange={(e) => handleUpdateDTField('designation', e.target.value)}
-                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
-                      placeholder="e.g. Workshop Coordinator / Engineer"
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-600">Dispatch Date:</span>
-                    <span className="font-mono font-bold text-slate-800 text-xs">{formatDateDD_MM_YYYY(effectiveDT.dispatchDate)}</span>
-                  </div>
-                </div>
-
-                {/* Column 2: Logistics & Destination */}
-                <div className="space-y-1.5 bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
-                  <div className="font-bold text-slate-700 border-b pb-1 text-[11px] uppercase tracking-wider text-blue-900">
-                    2. Destination &amp; Marine Logistics
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-600">Delivered To:</span>
-                    <input
-                      type="text"
-                      value={getDTField(effectiveDT, 'deliveredTo')}
-                      onChange={(e) => handleUpdateDTField('deliveredTo', e.target.value)}
-                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
-                      placeholder="e.g. Esnad Jetty / Yard 08"
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-600">Vessel / Boat:</span>
-                    <input
-                      type="text"
-                      value={getDTField(effectiveDT, 'vesselBoat') || getDTField(effectiveDT, 'msvName')}
-                      onChange={(e) => handleUpdateDTField('vesselBoat', e.target.value)}
-                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
-                      placeholder="e.g. Zakher Star / Marsol"
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-600">Transport:</span>
-                    <input
-                      type="text"
-                      value={getDTField(effectiveDT, 'transport')}
-                      onChange={(e) => handleUpdateDTField('transport', e.target.value)}
-                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
-                      placeholder="e.g. Emdad Logistics"
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
-                    />
-                  </div>
-                </div>
-
-                {/* Column 3: Road Haulage & Driver */}
-                <div className="space-y-1.5 bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
-                  <div className="font-bold text-slate-700 border-b pb-1 text-[11px] uppercase tracking-wider text-blue-900">
-                    3. Haulage &amp; Driver Details
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-600">Vehicle No:</span>
-                    <input
-                      type="text"
-                      value={getDTField(effectiveDT, 'vehicleNo') || getDTField(effectiveDT, 'vehicleVesselNo')}
-                      onChange={(e) => handleUpdateDTField('vehicleNo', e.target.value)}
-                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
-                      placeholder="e.g. 54912 / 70136 AD"
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100 font-mono"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-600">Driver Name:</span>
-                    <input
-                      type="text"
-                      value={getDTField(effectiveDT, 'driverName')}
-                      onChange={(e) => handleUpdateDTField('driverName', e.target.value)}
-                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
-                      placeholder="e.g. Driver Full Name"
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs disabled:bg-slate-100"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-600">Contact No:</span>
-                    <input
-                      type="text"
-                      value={getDTField(effectiveDT, 'contactNo')}
-                      onChange={(e) => handleUpdateDTField('contactNo', e.target.value)}
-                      disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
-                      placeholder="e.g. +971 50 123 4567"
-                      className="bg-white border border-slate-300 rounded px-2 py-0.5 w-40 text-xs font-mono disabled:bg-slate-100"
-                    />
-                  </div>
-                </div>
-              </div>
+              {/* Bottom Logistics fields — memoized to prevent cascade re-renders on typing */}
+              <DTFooterSection
+                fields={{
+                  dispatchedBy: getDTField(effectiveDT, 'dispatchedBy') || effectiveDT.dispatchedBy || '',
+                  designation:  getDTField(effectiveDT, 'designation'),
+                  deliveredTo:  getDTField(effectiveDT, 'deliveredTo'),
+                  vesselBoat:   getDTField(effectiveDT, 'vesselBoat') || getDTField(effectiveDT, 'msvName'),
+                  transport:    getDTField(effectiveDT, 'transport'),
+                  vehicleNo:    getDTField(effectiveDT, 'vehicleNo') || getDTField(effectiveDT, 'vehicleVesselNo'),
+                  driverName:   getDTField(effectiveDT, 'driverName'),
+                  contactNo:    getDTField(effectiveDT, 'contactNo'),
+                }}
+                disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
+                dispatchDate={formatDateDD_MM_YYYY(effectiveDT.dispatchDate)}
+                onFieldChange={(field, value) => handleUpdateDTField(field, value)}
+              />
 
               {/* Delivery Ticket Notes & Non-Invoiced Manifest Items (same style as Job Header) */}
               <div className="bg-white border border-[#b8cce0] rounded-md p-3 space-y-2 shadow-2xs mt-3">
