@@ -259,7 +259,7 @@ export function resolveJobClient(
   // 1. Resolve from Contract / Project Reference or raw client if it holds a contract code
   const proj = String(contractRef || rawClient || '').toUpperCase().trim();
   if (proj.includes('444558')) return 'ADNOC OFFSHORE';
-  if (proj.includes('4700012465')) return 'ADNOC ONSHORE - RENTALS';
+  if (proj.includes('4700012465')) return 'ADNOC ONSHORE - WHIPSTOCK';
   if (proj.includes('4700016147')) return 'ADNOC SOUR GAS';
   if (proj.includes('4700018368')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
   if (proj.includes('4700023373')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
@@ -268,8 +268,8 @@ export function resolveJobClient(
   if (proj.includes('4700024608')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
   if (proj.includes('4700015149')) return 'ADNOC DRILLING COMPANY P.J.S.C.';
   if (proj.includes('16358.13') || proj.includes('16358')) return 'ADNOC ONSHORE - FISHING';
-  if (proj.includes('16119.01') || proj.includes('16119')) return 'ADNOC ONSHORE - RENTALS';
-  if (proj.includes('4700012347')) return 'ADNOC ONSHORE - RENTALS';
+  if (proj.includes('16119.01') || proj.includes('16119')) return 'ADNOC ONSHORE - MACHINING';
+  if (proj.includes('4700012347')) return 'ADNOC ONSHORE - FISHING';
   if (proj.includes('DVP-2023-K-016') || proj.includes('BUNDUQ')) return 'BUNDUQ COMPANY LIMITED';
   if (proj.includes('TW-') || proj.includes('TURNWELL')) return 'TURNWELL INDUSTRIES LLC';
   if (proj.includes('ALB/') || proj.includes('COSMO')) return 'COSMO E&P ALBAHRIYA LIMITED';
