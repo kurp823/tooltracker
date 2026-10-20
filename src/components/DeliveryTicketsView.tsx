@@ -1592,7 +1592,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                           </button>
                         )
                       ) : (
-                        user?.role === 'Admin' && (
+                        canEdit && (
                           <div className="flex items-center gap-1.5">
                             <button
                               type="button"
@@ -1615,7 +1615,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                   </div>
 
                   {/* Tool Picker from Base Stock (when unlocked and admin toggles picking) */}
-                  {!isDTLocked && editingDTId === selectedDTDetail.id && user?.role === 'Admin' && (
+                  {!isDTLocked && editingDTId === selectedDTDetail.id && canEdit && (
                     <div className="p-3.5 bg-amber-50/80 border border-amber-300 rounded-lg space-y-2.5 animate-in fade-in duration-150">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="font-bold text-xs text-amber-950 flex items-center gap-1.5">
@@ -1693,7 +1693,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                             {isAdnocPool && (
                               <th className="px-3 py-2 text-center whitespace-nowrap">AD Ticket No</th>
                             )}
-                            {!isDTLocked && user?.role === 'Admin' && (
+                            {!isDTLocked && canEdit && (
                               <th className="px-3 py-2 text-center w-28">Action</th>
                             )}
                           </tr>
@@ -1828,7 +1828,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                                       )}
                                     </td>
                                   )}
-                                  {!isDTLocked && user?.role === 'Admin' && (
+                                  {!isDTLocked && canEdit && (
                                     <td className="px-3 py-2 text-center whitespace-nowrap">
                                       <button
                                         type="button"
