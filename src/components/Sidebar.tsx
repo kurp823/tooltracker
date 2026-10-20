@@ -103,6 +103,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ],
     },
     {
+      id: 'workshop',
+      title: 'Workshop Handling',
+      icon: '🏭',
+      items: [
+        {
+          id: 'callouts',
+          label: 'Rig Callouts',
+          icon: '📣',
+          badge: pendingCalloutsCount > 0 ? pendingCalloutsCount : null,
+          badgeColor: 'bg-amber-400 text-amber-950',
+        },
+        { id: 'dt', label: 'Delivery Tickets', icon: '🚚' },
+        { id: 'rt', label: 'Receiving Tickets', icon: '📥' },
+      ],
+    },
+    {
       id: 'maintenance',
       title: 'Maintenance & QC Module',
       icon: '🔬',

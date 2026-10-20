@@ -1483,8 +1483,24 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                       <span className="font-mono text-slate-700 text-xs">{selectedDTDetail.rmRef || '—'}</span>
                     </div>
                     <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                      <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Dispatch Date</span>
-                      <span className="font-mono text-slate-700 text-xs">{selectedDTDetail.rmDate || '—'}</span>
+                      <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Dispatch / Delivery Date</span>
+                      {isDTLocked ? (
+                        <span className="font-mono text-slate-700 text-xs">{selectedDTDetail.rmDate || '—'}</span>
+                      ) : (
+                        <input
+                          type="date"
+                          value={selectedDTDetail.rmDate || ''}
+                          onChange={(e) => {
+                            if (!onUpdateDTBatch) return;
+                            onUpdateDTBatch({
+                              ...selectedDTDetail,
+                              rmDate: e.target.value,
+                              dispatchDate: e.target.value,
+                            });
+                          }}
+                          className="mt-0.5 w-full bg-white border border-blue-300 rounded px-1.5 py-0.5 text-xs font-mono text-slate-800 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      )}
                     </div>
                     <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                       <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider">Dispatched By</span>
