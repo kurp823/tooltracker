@@ -1460,6 +1460,14 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
             {(() => {
               const isDTLocked = selectedDTDetail.isLocked !== false;
               const modalContract = getDisplayContract(selectedDTDetail);
+              // Convert stored date (may be DD-MM-YYYY from older records) → YYYY-MM-DD for <input type="date">
+              const toInputDate = (d: string | undefined): string => {
+                if (!d) return '';
+                if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;            // already YYYY-MM-DD
+                const m = d.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+                if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+                return '';
+              };
               return (
                 <div className="p-5 space-y-4 overflow-y-auto text-xs">
                   {/* Top Metadata Cards */}
@@ -1489,7 +1497,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                       ) : (
                         <input
                           type="date"
-                          value={selectedDTDetail.rmDate || ''}
+                          value={toInputDate(selectedDTDetail.rmDate)}
                           onChange={(e) => {
                             if (!onUpdateDTBatch) return;
                             onUpdateDTBatch({
