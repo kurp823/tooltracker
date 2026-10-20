@@ -432,6 +432,9 @@ export interface RTBatch {
   condition?: string;
   notes?: string;
   isLocked?: boolean;
+  lockedBy?: string;
+  lockedDate?: string;
+  adManifestNo?: string;
   recipient?: string;
   // Document attachments (supports multiple attachments and combined documents)
   signedDocUrl?: string;

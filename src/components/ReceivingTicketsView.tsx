@@ -259,6 +259,19 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
   const [newReceivedBy, setNewReceivedBy] = useState(user?.name || 'QC Inspector');
   const [newCondition, setNewCondition] = useState('');
   const [newNotes, setNewNotes] = useState('');
+  // AD Manifest No for new RT (ADNOC Drilling pool contract 4700024096 only)
+  const [newRTAdManifestNo, setNewRTAdManifestNo] = useState('');
+
+  // ADNOC RT lock/unlock state (contract 4700024096 only)
+  const [unlockTargetRT, setUnlockTargetRT] = useState<RTBatch | null>(null);
+  const [adminUnlockRemarkRT, setAdminUnlockRemarkRT] = useState('');
+  const [unlockErrorRT, setUnlockErrorRT] = useState('');
+
+  // Inline edit state for AD Manifest No in detail modal
+  const [adManifestNoEdit, setAdManifestNoEdit] = useState('');
+  useEffect(() => {
+    setAdManifestNoEdit(selectedRTDetail?.adManifestNo || '');
+  }, [selectedRTDetail?.id]);
 
   // Receiving Ticket Detail Notes editor state (same like Job header)
   const [rtEditNotes, setRtEditNotes] = useState('');
@@ -280,6 +293,59 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
       onSaveRTBatch(updated);
     }
     setSelectedRTDetail(updated);
+  };
+
+  // Save AD Manifest No and auto-lock the RT batch (ADNOC 4700024096 only)
+  const handleSaveAdManifestNo = (batch: RTBatch, value: string) => {
+    const trimmed = value.trim();
+    const today = new Date().toISOString().split('T')[0];
+    const updated: RTBatch = {
+      ...batch,
+      adManifestNo: trimmed,
+      ...(trimmed && !batch.isLocked
+        ? {
+            isLocked: true,
+            lockedBy: user?.name || 'System',
+            lockedDate: today,
+            notes: batch.notes
+              ? `${batch.notes}\n[Auto-locked ${today} — AD Manifest No entered by ${user?.name || 'Ops'}]`
+              : `[Auto-locked ${today} — AD Manifest No entered by ${user?.name || 'Ops'}]`,
+          }
+        : {}),
+    };
+    if (onUpdateRTBatch) {
+      onUpdateRTBatch(updated);
+    } else {
+      onSaveRTBatch(updated);
+    }
+    setSelectedRTDetail(updated);
+  };
+
+  // Admin unlock for ADNOC RT (requires mandatory remark, logs to notes)
+  const handleConfirmAdminUnlockRT = () => {
+    if (!unlockTargetRT) return;
+    if (!adminUnlockRemarkRT.trim()) {
+      setUnlockErrorRT('Unlock reason is required.');
+      return;
+    }
+    const today = new Date().toISOString().split('T')[0];
+    const auditLine = `[Unlocked ${today} by ${user?.name || 'Admin'}: ${adminUnlockRemarkRT.trim()}]`;
+    const updated: RTBatch = {
+      ...unlockTargetRT,
+      isLocked: false,
+      lockedBy: undefined,
+      lockedDate: undefined,
+      notes: unlockTargetRT.notes ? `${unlockTargetRT.notes}\n${auditLine}` : auditLine,
+    };
+    if (onUpdateRTBatch) {
+      onUpdateRTBatch(updated);
+    } else {
+      onSaveRTBatch(updated);
+    }
+    if (selectedRTDetail?.id === unlockTargetRT.id) setSelectedRTDetail(updated);
+    setUnlockTargetRT(null);
+    setAdminUnlockRemarkRT('');
+    setUnlockErrorRT('');
   };
 
   // Expand state for On-Rig rows in tab 'onrig'
@@ -361,6 +427,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
     setNewReceivedBy(user?.name || 'QC Inspector');
     setNewCondition('');
     setNewNotes('');
+    setNewRTAdManifestNo('');
     setIsCreateModalOpen(true);
   };
 
@@ -408,6 +475,19 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
       };
     });
 
+    const today = new Date().toISOString().split('T')[0];
+    const adManifestTrimmed = newRTAdManifestNo.trim();
+    const autoLockFields = isAdnocPoolModal && adManifestTrimmed
+      ? {
+          isLocked: true,
+          lockedBy: user?.name || 'System',
+          lockedDate: today,
+          notes: newNotes.trim()
+            ? `${newNotes.trim()}\n[Auto-locked ${today} — AD Manifest No entered by ${user?.name || 'Ops'}]`
+            : `[Auto-locked ${today} — AD Manifest No entered by ${user?.name || 'Ops'}]`,
+        }
+      : {};
+
     const newRT: RTBatch = {
       id: `RTB-${Date.now()}`,
       rtNumber: newRtNumber.trim() || nextRtNumber,
@@ -421,12 +501,15 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
       toolLines: lines,
       condition: newCondition.trim(),
       notes: newNotes.trim(),
+      ...(isAdnocPoolModal && adManifestTrimmed ? { adManifestNo: adManifestTrimmed } : {}),
+      ...autoLockFields,
     };
 
     onSaveRTBatch(newRT);
     setIsCreateModalOpen(false);
     setSelectedRigKey('');
     setCheckedSerialMap({});
+    setNewRTAdManifestNo('');
     setTab('all'); // Switch to All Tickets view
     setSelectedRTDetail(newRT); // Open the detail modal for immediate confirmation
   };
@@ -469,6 +552,30 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
   const activeModalRigGroup = useMemo(() => {
     return rigGroups.find((g) => g.key === selectedRigKey) || null;
   }, [rigGroups, selectedRigKey]);
+
+  // ADNOC Drilling pool contract gate (contract 4700024096)
+  const ADNOC_POOL_CONTRACT = '4700024096';
+
+  // True when the RT creation modal is for the ADNOC pool contract
+  const isAdnocPoolModal = useMemo(() => {
+    if (!activeModalRigGroup) return false;
+    const grpContract = String(activeModalRigGroup.contract || '').trim();
+    const grpJob = jobs.find((j) => j.id === activeModalRigGroup.jobId || j.jobNumber === activeModalRigGroup.jobId);
+    if (grpContract === ADNOC_POOL_CONTRACT) return true;
+    if (grpJob) {
+      const directContract = String(grpJob.contract || '').trim();
+      if (directContract === ADNOC_POOL_CONTRACT) return true;
+      const resolvedC = contracts.find((c: any) => String(c.id || '').trim() === directContract || String(c.contractNo || '').trim() === directContract);
+      if (resolvedC?.contractNo === ADNOC_POOL_CONTRACT) return true;
+    }
+    return false;
+  }, [activeModalRigGroup, jobs, contracts]);
+
+  // True when the RT detail modal is for the ADNOC pool contract
+  const isAdnocPoolRT = useMemo(() => {
+    if (!selectedRTDetail) return false;
+    return getDisplayContract(selectedRTDetail) === ADNOC_POOL_CONTRACT;
+  }, [selectedRTDetail, getDisplayContract]);
 
   return (
     <div className="space-y-3">
@@ -1155,6 +1262,22 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                 </div>
               </div>
 
+              {/* AD Manifest No — ADNOC Drilling pool contract 4700024096 only */}
+              {isAdnocPoolModal && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-1.5">
+                  <label className="block font-bold text-amber-900 text-xs uppercase tracking-wider">
+                    AD Manifest No <span className="text-amber-600 font-normal normal-case">(ADNOC Drilling — Optional: enter to auto-lock RT)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newRTAdManifestNo}
+                    onChange={(e) => setNewRTAdManifestNo(e.target.value)}
+                    placeholder="e.g. AD-MAN-2024-0051"
+                    className="w-full sm:w-72 bg-white border border-amber-300 rounded px-2.5 py-1.5 font-mono font-bold text-slate-900 outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
                   Return Condition &amp; QC Inspection Remarks
@@ -1288,6 +1411,61 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                   <span className="font-mono text-slate-700 text-xs">{resolveRTBackloadDate(selectedRTDetail)}</span>
                 </div>
               </div>
+
+              {/* AD Manifest No control — ADNOC Drilling pool contract 4700024096 only */}
+              {isAdnocPoolRT && (() => {
+                const isRTLocked = selectedRTDetail.isLocked === true;
+                return (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex flex-wrap items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <span className="block text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">AD Manifest No</span>
+                      {isRTLocked ? (
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono font-bold text-slate-900 text-sm">
+                            {selectedRTDetail.adManifestNo || <span className="text-slate-400 italic font-normal">Not entered</span>}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">🔒 Locked</span>
+                          {selectedRTDetail.lockedBy && (
+                            <span className="text-[11px] text-slate-500">
+                              by {selectedRTDetail.lockedBy}{selectedRTDetail.lockedDate ? ` on ${selectedRTDetail.lockedDate}` : ''}
+                            </span>
+                          )}
+                          {user?.role === 'Admin' && (
+                            <button
+                              type="button"
+                              onClick={() => setUnlockTargetRT(selectedRTDetail)}
+                              className="px-2.5 py-1 rounded text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200 cursor-pointer transition"
+                            >
+                              🔓 Admin Unlock
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={adManifestNoEdit}
+                            onChange={(e) => setAdManifestNoEdit(e.target.value)}
+                            placeholder="Enter AD Manifest No to lock RT"
+                            className="w-64 px-2.5 py-1.5 rounded border border-amber-300 font-mono font-bold text-sm bg-white focus:outline-none focus:ring-1 focus:ring-amber-400"
+                          />
+                          <button
+                            type="button"
+                            disabled={!adManifestNoEdit.trim()}
+                            onClick={() => handleSaveAdManifestNo(selectedRTDetail, adManifestNoEdit)}
+                            className="px-3 py-1.5 rounded text-[11px] font-bold bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 cursor-pointer transition"
+                          >
+                            Save &amp; Lock
+                          </button>
+                          {selectedRTDetail.adManifestNo && (
+                            <span className="text-[11px] text-slate-500 font-mono">Current: {selectedRTDetail.adManifestNo}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Tools Manifest */}
               <div className="space-y-2">
@@ -1433,6 +1611,55 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                 className="px-4 py-1.5 rounded-lg bg-[#1a3055] text-white font-bold hover:bg-[#24426d] cursor-pointer transition shadow-2xs"
               >
                 Close Window
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Unlock Modal — ADNOC RT (contract 4700024096 only) */}
+      {unlockTargetRT && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4 no-print">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-md p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between">
+              <h3 className="font-extrabold text-sm text-[#1a3055]">🔓 Admin Unlock — RT {unlockTargetRT.rtNumber}</h3>
+              <button
+                type="button"
+                onClick={() => { setUnlockTargetRT(null); setAdminUnlockRemarkRT(''); setUnlockErrorRT(''); }}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 text-lg font-bold cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+            <p className="text-xs text-slate-600">
+              This RT is locked with AD Manifest No <strong className="font-mono">{unlockTargetRT.adManifestNo || '—'}</strong>.
+              Unlocking it allows editing. A mandatory reason is required and will be logged to the RT notes.
+            </p>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Unlock Reason <span className="text-rose-500">*</span></label>
+              <textarea
+                rows={3}
+                value={adminUnlockRemarkRT}
+                onChange={(e) => { setAdminUnlockRemarkRT(e.target.value); setUnlockErrorRT(''); }}
+                placeholder="e.g. Correcting AD Manifest No — typo in original entry..."
+                className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-amber-400"
+              />
+              {unlockErrorRT && <p className="text-xs text-rose-600 mt-1">{unlockErrorRT}</p>}
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => { setUnlockTargetRT(null); setAdminUnlockRemarkRT(''); setUnlockErrorRT(''); }}
+                className="px-3 py-1.5 rounded bg-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-300 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAdminUnlockRT}
+                className="px-3 py-1.5 rounded bg-amber-600 text-white font-bold text-xs hover:bg-amber-700 cursor-pointer"
+              >
+                Confirm Unlock
               </button>
             </div>
           </div>
