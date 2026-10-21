@@ -415,33 +415,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return () => window.removeEventListener('dropdown_options_updated', handleUpdate);
   }, []);
 
-  // Job Header state with resilient notes persistence across tab switches and live re-fetches
-  const [jobData, setJobData] = useState<DrillingJob>(() => {
-    const jId = initialJob?.id || (initialJob as any)?.jobNumber || '';
-    let initialNotes = initialJob?.notes || '';
-    if (!initialNotes && jId && typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem(`emdad_job_notes_${jId}`);
-        if (cached) initialNotes = cached;
-      } catch {}
-    }
-    return { ...initialJob, notes: initialNotes };
-  });
+  // Job Header state — reads directly from the server record, no localStorage shadow copy.
+  const [jobData, setJobData] = useState<DrillingJob>(() => ({ ...initialJob, notes: initialJob?.notes || '' }));
 
   useEffect(() => {
     setJobData((prev) => {
       const jId = initialJob?.id || (initialJob as any)?.jobNumber || '';
       let notesToKeep = initialJob?.notes || '';
-      // If server returned empty notes, preserve user's typed in-memory notes or cached draft
-      if (!notesToKeep) {
-        if (prev && (prev.id === jId || normalizeJobKey(prev.id) === normalizeJobKey(jId)) && prev.notes) {
-          notesToKeep = prev.notes;
-        } else if (jId && typeof window !== 'undefined') {
-          try {
-            const cached = localStorage.getItem(`emdad_job_notes_${jId}`);
-            if (cached) notesToKeep = cached;
-          } catch {}
-        }
+      // If server returned empty notes, preserve the user's in-flight typed notes
+      // (a re-render racing an unsaved edit) — never a localStorage draft.
+      if (!notesToKeep && prev && (prev.id === jId || normalizeJobKey(prev.id) === normalizeJobKey(jId)) && prev.notes) {
+        notesToKeep = prev.notes;
       }
       return {
         ...initialJob,
@@ -1921,35 +1905,13 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     showToast(`Delivery Ticket ${newDT.dtNumber} created for Job ${jobData.id}.`, 'success');
   };
 
-  // Delivery Ticket & Return Ticket Notes states (saved per individual shipment)
-  const [dtNotesInput, setDtNotesInput] = useState(() => {
-    let initNotes = effectiveDT?.notes || '';
-    const dtNum = effectiveDT?.dtNumber;
-    if (!initNotes && dtNum && typeof window !== 'undefined') {
-      try {
-        const local = localStorage.getItem(`emdad_dt_notes_${dtNum}`);
-        if (local) initNotes = local;
-      } catch {}
-    }
-    return initNotes;
-  });
+  // Delivery Ticket & Return Ticket Notes states — reflect the stored record only,
+  // no localStorage shadow copy. An unsaved edit is lost on refresh, same as every
+  // other field here; that's the honest behavior, not a bug.
+  const [dtNotesInput, setDtNotesInput] = useState(() => effectiveDT?.notes || '');
 
   useEffect(() => {
-    if (effectiveDT) {
-      setDtNotesInput((prev) => {
-        if (effectiveDT.notes) return effectiveDT.notes;
-        const dtNum = effectiveDT.dtNumber;
-        if (!prev && dtNum && typeof window !== 'undefined') {
-          try {
-            const local = localStorage.getItem(`emdad_dt_notes_${dtNum}`);
-            if (local) return local;
-          } catch {}
-        }
-        return prev || '';
-      });
-    } else {
-      setDtNotesInput('');
-    }
+    setDtNotesInput(effectiveDT?.notes || '');
   }, [effectiveDT?.id, effectiveDT?.dtNumber]);
   // Note: effectiveDT?.notes intentionally NOT in deps — resets editor mid-typing on any re-render.
 
@@ -1962,11 +1924,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       ...targetDT,
       notes: trimmed,
     };
-    if (targetDT.dtNumber && typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(`emdad_dt_notes_${targetDT.dtNumber}`, trimmed);
-      } catch {}
-    }
     if (onUpdateDTBatch) {
       onUpdateDTBatch(updated);
     } else {
@@ -1980,15 +1937,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
 
   const getDTField = (dt: DTBatch | null, field: string): string => {
     if (!dt) return '';
-    let val = (dt as any)[field];
-    if ((val === undefined || val === null) && typeof window !== 'undefined' && dt.dtNumber) {
-      try {
-        const savedMeta = JSON.parse(localStorage.getItem(`emdad_dt_meta_${dt.dtNumber}`) || '{}');
-        if (savedMeta[field] !== undefined && savedMeta[field] !== null) {
-          val = savedMeta[field];
-        }
-      } catch {}
-    }
+    const val = (dt as any)[field];
     return val !== undefined && val !== null ? String(val) : '';
   };
 
@@ -2007,18 +1956,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       (updated as any).vehicleVesselNo = value;
       (updated as any).vesselNo = value;
     }
-    if (targetDT.dtNumber && typeof window !== 'undefined') {
-      try {
-        const savedMeta = JSON.parse(localStorage.getItem(`emdad_dt_meta_${targetDT.dtNumber}`) || '{}');
-        savedMeta[field] = value;
-        if (field === 'vesselBoat') savedMeta.msvName = value;
-        if (field === 'vehicleNo') {
-          savedMeta.vehicleVesselNo = value;
-          savedMeta.vesselNo = value;
-        }
-        localStorage.setItem(`emdad_dt_meta_${targetDT.dtNumber}`, JSON.stringify(savedMeta));
-      } catch {}
-    }
     if (onUpdateDTBatch) {
       onUpdateDTBatch(updated);
     } else {
@@ -2027,34 +1964,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     }
   };
 
-  const [rtNotesInput, setRtNotesInput] = useState(() => {
-    let initNotes = effectiveRT?.notes || '';
-    const rtNum = effectiveRT?.rtNumber;
-    if (!initNotes && rtNum && typeof window !== 'undefined') {
-      try {
-        const local = localStorage.getItem(`emdad_rt_notes_${rtNum}`);
-        if (local) initNotes = local;
-      } catch {}
-    }
-    return initNotes;
-  });
+  // Reflects the stored record only — no localStorage shadow copy (same reasoning as DT notes above).
+  const [rtNotesInput, setRtNotesInput] = useState(() => effectiveRT?.notes || '');
 
   useEffect(() => {
-    if (effectiveRT) {
-      setRtNotesInput((prev) => {
-        if (effectiveRT.notes) return effectiveRT.notes;
-        const rtNum = effectiveRT.rtNumber;
-        if (!prev && rtNum && typeof window !== 'undefined') {
-          try {
-            const local = localStorage.getItem(`emdad_rt_notes_${rtNum}`);
-            if (local) return local;
-          } catch {}
-        }
-        return prev || '';
-      });
-    } else {
-      setRtNotesInput('');
-    }
+    setRtNotesInput(effectiveRT?.notes || '');
   }, [effectiveRT?.id, effectiveRT?.rtNumber]);
   // Note: effectiveRT?.notes intentionally NOT in deps — resets editor mid-typing on any re-render.
 
@@ -2066,11 +1980,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       ...targetRT,
       notes: trimmed,
     };
-    if (targetRT.rtNumber && typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(`emdad_rt_notes_${targetRT.rtNumber}`, trimmed);
-      } catch {}
-    }
     if (activeRT && onUpdateRTBatch) {
       onUpdateRTBatch(updated);
     } else {
@@ -3804,11 +3713,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         utilizationStatuses: customUtilStatuses,
       };
 
-      if (jId && typeof window !== 'undefined') {
-        try {
-          if (updatedJob.notes) localStorage.setItem(`emdad_job_notes_${jId}`, updatedJob.notes);
-        } catch {}
-      }
       saveCustomJob(updatedJob);
 
       // 1. Persist local cache of utilization statuses
@@ -4350,15 +4254,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 value={jobData.notes || ''}
                 disabled={isLocked}
                 onChange={(e) => {
-                  const val = e.target.value;
-                  const updated = { ...jobData, notes: val };
-                  setJobData(updated);
-                  const jId = jobData.id || (jobData as any).jobNumber;
-                  if (jId && typeof window !== 'undefined') {
-                    try {
-                      localStorage.setItem(`emdad_job_notes_${jId}`, val);
-                    } catch {}
-                  }
+                  setJobData({ ...jobData, notes: e.target.value });
                 }}
                 onBlur={() => {
                   if (!isLocked) {
@@ -4372,14 +4268,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             </div>
             {!isLocked && (
               <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleSaveJobHeader}
-                  className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>💾</span>
-                  <span>Save Job Notes</span>
-                </button>
+                <span className="text-[10px] text-slate-500 italic">Saves automatically when you click away from this field.</span>
               </div>
             )}
 
@@ -5786,15 +5675,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   rows={4}
                   value={dtNotesInput}
                   disabled={isClosedOrInvoiced || isLocked || (effectiveDT.isLocked && !adminUnlocked)}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setDtNotesInput(val);
-                    if (effectiveDT?.dtNumber && typeof window !== 'undefined') {
-                      try {
-                        localStorage.setItem(`emdad_dt_notes_${effectiveDT.dtNumber}`, val);
-                      } catch {}
-                    }
-                  }}
+                  onChange={(e) => setDtNotesInput(e.target.value)}
                   onBlur={() => {
                     if (!isClosedOrInvoiced && !isLocked && (!effectiveDT.isLocked || adminUnlocked)) {
                       handleSaveDTNotes(true);
@@ -5805,14 +5686,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 />
                 {!isClosedOrInvoiced && !isLocked && (!effectiveDT.isLocked || adminUnlocked) ? (
                   <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleSaveDTNotes()}
-                      className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
-                    >
-                      <span>💾</span>
-                      <span>Save Delivery Ticket Notes</span>
-                    </button>
+                    <span className="text-[10px] text-slate-500 italic">Saves automatically when you click away from this field.</span>
                   </div>
                 ) : (effectiveDT.isLocked && !adminUnlocked) && (
                   <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium italic">
@@ -6209,15 +6083,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     rows={4}
                     value={rtNotesInput}
                     disabled={isClosedOrInvoiced || isLocked || (Boolean(effectiveRT.isLocked) && !adminUnlocked)}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setRtNotesInput(val);
-                      if (effectiveRT?.rtNumber && typeof window !== 'undefined') {
-                        try {
-                          localStorage.setItem(`emdad_rt_notes_${effectiveRT.rtNumber}`, val);
-                        } catch {}
-                      }
-                    }}
+                    onChange={(e) => setRtNotesInput(e.target.value)}
                     onBlur={() => {
                       if (!isClosedOrInvoiced && !isLocked && (!effectiveRT.isLocked || adminUnlocked)) {
                         handleSaveRTNotes(true);
@@ -6228,14 +6094,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   />
                   {!isClosedOrInvoiced && !isLocked && (!effectiveRT.isLocked || adminUnlocked) ? (
                     <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => handleSaveRTNotes()}
-                        className="bg-[#386cb0] hover:bg-[#2c568f] text-white font-bold text-xs px-4 py-1.5 rounded shadow-sm transition cursor-pointer flex items-center gap-1.5"
-                      >
-                        <span>💾</span>
-                        <span>Save Receiving Ticket Notes</span>
-                      </button>
+                      <span className="text-[10px] text-slate-500 italic">Saves automatically when you click away from this field.</span>
                     </div>
                   ) : (effectiveRT.isLocked && !adminUnlocked) && (
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium italic">
@@ -7967,21 +7826,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {onRefresh && (
-            <button
-              type="button"
-              onClick={async () => {
-                showToast('Synchronizing Job File with Azure SQL...', 'info');
-                await onRefresh();
-                showToast('Job File synchronized with Azure SQL.', 'success');
-              }}
-              className="px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
-              title="Refresh live data from server"
-            >
-              <span>🔄</span>
-              <span>Refresh</span>
-            </button>
-          )}
+          {/* Single Refresh action for this screen lives in the top toolbar — this bar is status-only. */}
           <span className="text-[11px] text-slate-300 font-mono bg-white/5 border border-white/10 px-2.5 py-1 rounded flex items-center gap-1.5">
             <span className={`w-1.5 h-1.5 rounded-full ${isSaving ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
             <span>{isSaving ? 'Saving to Azure SQL…' : lastSavedTime ? `Synced with Azure SQL (Saved ${lastSavedTime})` : 'Synced with Azure SQL'}</span>

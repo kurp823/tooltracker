@@ -2,11 +2,17 @@
   "$schema": "https://json.schemastore.org/staticwebapp.config.json",
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/*.{png,jpg,gif,svg,css,js}"]
+    "exclude": ["/assets/*", "/*.{png,jpg,gif,svg,ico}"]
   },
   "routes": [
     {
-      "route": "/index.html",
+      "route": "/assets/*",
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
+      "route": "/*",
       "headers": {
         "Cache-Control": "no-cache, no-store, must-revalidate"
       }
