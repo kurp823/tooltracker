@@ -899,10 +899,13 @@ export const App: React.FC = () => {
       syncCustomToolsToIndexedDB(updated);
       return updated;
     });
-    saveInventoryApi(newTool).then((r) => {
-      if (!r.success) showToast(r.message, 'error');
+    saveInventoryApi({ ...newTool, _isExisting: false }).then((r) => {
+      if (r.success) {
+        showToast(`Asset ${newTool.id || newTool.serial} registered and saved to Azure SQL.`, 'success');
+      } else {
+        showToast(r.message, 'error');
+      }
     });
-    showToast(`Asset ${newTool.id || newTool.serial} registered and saved.`, 'success');
   };
 
   const handleUpdateTool = (id: string, updates: Partial<ToolItem>) => {
@@ -913,8 +916,12 @@ export const App: React.FC = () => {
         if (k === targetId) {
           const merged = { ...t, ...updates };
           saveCustomTool(merged);
-          saveInventoryApi(merged).then((r) => {
-            if (!r.success) showToast(r.message, 'error');
+          saveInventoryApi({ ...merged, _isExisting: true }).then((r) => {
+            if (r.success) {
+              showToast(`Asset ${id} updated in Azure SQL.`, 'success');
+            } else {
+              showToast(r.message, 'error');
+            }
           });
           return merged;
         }
@@ -923,7 +930,6 @@ export const App: React.FC = () => {
       syncCustomToolsToIndexedDB(updated);
       return updated;
     });
-    showToast(`Asset ${id} updated.`, 'success');
   };
 
   const handleSaveInventory = (updated: ToolItem[]) => {
@@ -950,7 +956,7 @@ export const App: React.FC = () => {
     if (changedTools.length > 0) {
       changedTools.forEach((tool) => {
         saveCustomTool(tool);
-        saveInventoryApi(tool).then((r) => {
+        saveInventoryApi({ ...tool, _isExisting: true }).then((r) => {
           if (!r.success) showToast(r.message, 'error');
         });
       });

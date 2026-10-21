@@ -24,6 +24,19 @@ interface InventoryViewProps {
   onRefresh?: () => void;
 }
 
+const toDateInputString = (val?: string | Date | null): string => {
+  if (!val) return '';
+  const s = String(val).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.split('T')[0];
+  const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmyMatch) {
+    return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+  }
+  const d = new Date(s);
+  return !isNaN(d.getTime()) && d.getFullYear() > 1900 ? d.toISOString().split('T')[0] : '';
+};
+
 export const InventoryView: React.FC<InventoryViewProps> = ({
   user,
   inventory,
@@ -179,11 +192,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [editCurrency, setEditCurrency] = useState<string>('AED');
   const [editStartDate, setEditStartDate] = useState<string>('');
   const [editEndDate, setEditEndDate] = useState<string>('');
+  const [editAddedDate, setEditAddedDate] = useState<string>('');
 
   // Form states for Add Tool
   const [newOwnershipType, setNewOwnershipType] = useState<'emdad' | 'sub'>('emdad');
   const [newSerial, setNewSerial] = useState('');
   const [newAssetNo, setNewAssetNo] = useState('');
+  const [newAddedDate, setNewAddedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [newType, setNewType] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newSize, setNewSize] = useState('');
@@ -477,7 +492,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
     const newTool: ToolItem = {
       id,
-      serial: id,
+      serial: isEmd ? (newSerial.trim() || id) : id,
       assetNo: isEmd ? newAssetNo.trim() : (newAssetNo.trim() || id),
       size: newSize.trim(),
       shortDesc: newType.trim().toUpperCase(),
@@ -488,7 +503,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       ownership,
       isEmdad: isEmd,
       supplier: ownership,
-      addedDate: new Date().toISOString().split('T')[0],
+      addedDate: newAddedDate || new Date().toISOString().split('T')[0],
       // Sub-rental details if non-EMDAD
       ...(isEmd
         ? {}
@@ -533,6 +548,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     // Reset
     setNewSerial('');
     setNewAssetNo('');
+    setNewAddedDate(new Date().toISOString().split('T')[0]);
     setNewType('');
     setNewDesc('');
     setNewSize('');
@@ -553,6 +569,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setEditingTool(t);
     setEditSerial(t.serial || '');
     setEditAssetNo(t.assetNo || '');
+    setEditAddedDate(t.addedDate ? toDateInputString(t.addedDate) : '');
     setEditShortDesc(t.shortDesc || '');
     setEditDesc(t.desc || '');
     setEditSize(t.size || '');
@@ -583,6 +600,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     const updates: Partial<ToolItem> = {
       serial: editSerial.trim() || editingToolId,
       assetNo: editAssetNo.trim() || undefined,
+      addedDate: editAddedDate || undefined,
       shortDesc: editShortDesc.trim() || 'DRILLING TOOL',
       desc: editDesc.trim(),
       size: editSize.trim(),
@@ -1347,7 +1365,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                           type="date"
                           value={newRentalStartDate}
                           onChange={(e) => setNewRentalStartDate(e.target.value)}
-                          className="w-full border rounded px-2 py-1 text-xs bg-white"
+                          className="w-full border rounded px-2 py-1 text-xs bg-white cursor-pointer"
                         />
                       </div>
                       <div>
@@ -1356,14 +1374,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                           type="date"
                           value={newRentalEndDate}
                           onChange={(e) => setNewRentalEndDate(e.target.value)}
-                          className="w-full border rounded px-2 py-1 text-xs bg-white"
+                          className="w-full border rounded px-2 py-1 text-xs bg-white cursor-pointer"
                         />
                       </div>
                     </div>
                   </div>
               </>
             ) : (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
                     <label className="block font-bold mb-1">System ID</label>
                     <input
@@ -1371,6 +1389,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       disabled
                       value={nextEmdadId}
                       className="w-full border rounded px-2.5 py-1.5 bg-slate-100 font-mono font-bold text-amber-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold mb-1">Serial No (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. SN-8821"
+                      value={newSerial}
+                      onChange={(e) => setNewSerial(e.target.value)}
+                      className="w-full border rounded px-2.5 py-1.5 font-mono"
                     />
                   </div>
                   <div>
@@ -1382,6 +1410,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       value={newAssetNo}
                       onChange={(e) => setNewAssetNo(e.target.value)}
                       className="w-full border rounded px-2.5 py-1.5 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold mb-1">Date Added / Received *</label>
+                    <input
+                      type="date"
+                      required
+                      value={newAddedDate}
+                      onChange={(e) => setNewAddedDate(e.target.value)}
+                      className="w-full border rounded px-2.5 py-1.5 font-mono text-xs bg-white cursor-pointer"
                     />
                   </div>
                 </div>
@@ -1680,7 +1718,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               </div>
 
               {/* Identification: Serial No & Asset No */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
                     Serial Number *
@@ -1704,6 +1742,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     onChange={(e) => setEditAssetNo(e.target.value)}
                     placeholder="e.g. DJ650-003, FS434-01"
                     className="w-full border rounded px-2.5 py-1.5 font-mono text-slate-800 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Date Added / In-Service Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editAddedDate}
+                    onChange={(e) => setEditAddedDate(e.target.value)}
+                    className="w-full border rounded px-2.5 py-1.5 font-mono text-xs text-slate-800 bg-white cursor-pointer"
                   />
                 </div>
               </div>

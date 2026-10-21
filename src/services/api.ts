@@ -3339,7 +3339,18 @@ export async function saveInventoryApi(tool: any): Promise<{ success: boolean; m
     console.warn('[saveInventoryApi] Could not save to custom tools store:', err);
   }
 
-  return executeResilientSave('savetool', { tool: enrichedTool, item: enrichedTool, payload: enrichedTool }, 'Tool');
+  // The Azure Function uses 'addtool' for inserts and 'updatetool' for updates
+  // Both require tool.id (which maps to tbl_Inventory.SystemID in Azure SQL)
+  const isExisting = Boolean(tool._isExisting || tool.isExisting);
+  const primaryAction = isExisting ? 'updatetool' : 'addtool';
+
+  const res = await executeResilientSave(primaryAction, { tool: enrichedTool, item: enrichedTool, payload: enrichedTool }, 'Tool');
+  if (!res.success && !isExisting) {
+    // If addtool failed (e.g. duplicate key), try updatetool as fallback
+    const updateRes = await executeResilientSave('updatetool', { tool: enrichedTool, item: enrichedTool, payload: enrichedTool }, 'Tool');
+    if (updateRes.success) return updateRes;
+  }
+  return res;
 }
 
 export async function saveJobApi(job: any): Promise<{ success: boolean; queued?: boolean; message: string }> {
@@ -3373,6 +3384,10 @@ export async function saveJobApi(job: any): Promise<{ success: boolean; queued?:
     Client: job.client,
     Contract: job.contract,
     Status: job.status,
+    MobDate: toSqlIsoDate(job.mobDate),
+    DemobDate: toSqlIsoDate(job.demobDate),
+    mobDate: toSqlIsoDate(job.mobDate),
+    demobDate: toSqlIsoDate(job.demobDate),
   };
 
   return executeResilientSave('savejob', { job: enrichedJob, Job: enrichedJob, payload: enrichedJob }, 'Job');

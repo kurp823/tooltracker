@@ -1775,13 +1775,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     // Use YYYY-MM-DD (ISO) format — <input type="date"> requires this exact format.
     const dispatchDateStr = toInputDateFormat(jobData.mobDate) || new Date().toISOString().split('T')[0];
 
-    const tools: any[] = (checklistItems && checklistItems.length > 0)
-      ? checklistItems.map((ci, idx) => ({
-          ...buildDTLineFromChecklistItem(ci, idx),
-          remarks: 'Reserved in Checklist',
-        }))
-      : [];
-
     return {
       id: `DT-DRAFT-${jobData.id}`,
       dtNumber: nextDTNum,
@@ -1798,9 +1791,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       recipient: `${jobData.rig} Toolpusher`,
       notes: '',
       isLocked: false,
-      toolLines: tools,
+      toolLines: [],
     };
-  }, [dtBatches, jobData, checklistItems, jobDTs.length, user, buildDTLineFromChecklistItem]);
+  }, [dtBatches, jobData, user]);
 
   const effectiveDT = activeDT || draftDT;
 
@@ -1874,13 +1867,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     // Use YYYY-MM-DD (ISO) format — <input type="date"> requires this exact format.
     const dispatchDateStr = toInputDateFormat(jobData.mobDate) || new Date().toISOString().split('T')[0];
 
-    const toolsToInclude: any[] = checklistItems.length > 0
-      ? checklistItems.map((ci, idx) => ({
-          ...buildDTLineFromChecklistItem(ci, idx),
-          remarks: 'Mobilized',
-        }))
-      : [];
-
     const newDT: DTBatch = {
       id: `DTB-${Date.now()}`,
       dtNumber: nextDTNum,
@@ -1897,7 +1883,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       recipient: `${jobData.rig} Toolpusher`,
       notes: '',
       isLocked: false,
-      toolLines: toolsToInclude,
+      toolLines: [],
     };
 
     onSaveDTBatch(newDT);
@@ -3019,8 +3005,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // Official EMDAD Ticket & Manifest Print Handlers
   const handlePrintDeliveryTicket = (dt?: DTBatch) => {
     const targetDT = dt || effectiveDT;
-    if (!targetDT) {
-      alert('Please select or create a Delivery Ticket first.');
+    if (!targetDT || !targetDT.toolLines || targetDT.toolLines.length === 0) {
+      alert('Cannot print Delivery Ticket: No tools mobilized on this Delivery Ticket yet. Please generate a Delivery Ticket from the Checklist first.');
       return;
     }
     const deliveredTo = getDTField(targetDT, 'deliveredTo');
@@ -4098,6 +4084,38 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     disabled={isLocked}
                     onChange={(e) => setJobData({ ...jobData, field: e.target.value })}
                     className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-medium text-slate-800 w-48 shadow-2xs focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="flex items-center">
+                  <label className="w-28 font-bold text-slate-700 text-right pr-3">Mob Date:</label>
+                  <input
+                    type="date"
+                    value={toInputDateFormat(jobData.mobDate)}
+                    disabled={isLocked}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const updated = { ...jobData, mobDate: val };
+                      setJobData(updated);
+                      if (!isLocked) onSaveJob(updated);
+                    }}
+                    className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-48 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="flex items-center">
+                  <label className="w-28 font-bold text-slate-700 text-right pr-3">Demob Date:</label>
+                  <input
+                    type="date"
+                    value={toInputDateFormat(jobData.demobDate)}
+                    disabled={isLocked}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const updated = { ...jobData, demobDate: val || undefined };
+                      setJobData(updated);
+                      if (!isLocked) onSaveJob(updated);
+                    }}
+                    className="bg-white border border-[#9fb6cf] rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-48 shadow-2xs cursor-pointer focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -5255,7 +5273,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 <label className="text-xs font-bold text-slate-700 whitespace-nowrap">Select Delivery Ticket:</label>
                 {jobDTs.length === 0 ? (
                   <span className="text-xs font-mono font-bold text-amber-900 bg-amber-50 border border-amber-300 rounded px-2.5 py-1">
-                    No DT Generated (Draft Checklist Manifest)
+                    No DT Generated Yet
                   </span>
                 ) : (
                   <select
@@ -5303,7 +5321,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <>
                     <span className="bg-amber-50 text-amber-900 border border-amber-300 font-bold text-xs px-2.5 py-1 rounded flex items-center gap-1 shadow-2xs">
                       <span>📝</span>
-                      <span>Draft Preview (Not Dispatched)</span>
+                      <span>No DT Generated Yet</span>
                     </span>
                   </>
                 ) : Boolean(activeDT?.isLocked) && !adminUnlocked ? (
@@ -5410,7 +5428,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <div>
                       <strong className="text-amber-900 font-bold">Delivery Ticket Not Generated Yet:</strong>
                       <span className="text-amber-800 ml-1">
-                        Equipment is currently in yard (Emdad Base). The lines below are a draft preview. To dispatch equipment to Rig {jobData.rig}, select your checklist tools and click &quot;Create DT from Selected ✓ Tools&quot;.
+                        Equipment is currently in yard (Emdad Base) in the Checklist. No Delivery Ticket has been generated yet. To dispatch equipment to Rig {jobData.rig}, select your checklist tools and click &quot;Create DT from Selected ✓ Tools&quot;.
                       </span>
                     </div>
                   </div>
@@ -5432,7 +5450,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <span className="text-xs font-mono">
                     Ticket No : {jobDTs.length === 0 ? (
                       <span className="text-amber-800 font-bold text-sm bg-amber-50 border border-amber-300 px-2 py-0.5 rounded">
-                        Draft Preview (Not Dispatched)
+                        No DT Generated Yet
                       </span>
                     ) : (
                       <strong className="text-red-600 font-bold text-base">{effectiveDT.dtNumber}</strong>
@@ -5471,9 +5489,29 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <span className="font-bold text-slate-600">Well:</span>{' '}
                     <span>{jobData.well}</span>
                   </div>
-                  <div>
+                  <div className="flex items-center gap-1.5">
                     <span className="font-bold text-slate-600">DateShipped:</span>{' '}
-                    <span className="font-mono font-bold">{formatDateDD_MM_YYYY(effectiveDT.dispatchDate)}</span>
+                    {(!effectiveDT.isLocked || adminUnlocked) ? (
+                      <input
+                        type="date"
+                        value={toInputDateFormat(effectiveDT.dispatchDate || effectiveDT.rmDate || jobData.mobDate)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const updated = {
+                            ...effectiveDT,
+                            dispatchDate: val,
+                            deliveryDate: val,
+                            rmDate: val,
+                          };
+                          if (onUpdateDTBatch) onUpdateDTBatch(updated);
+                          else onSaveDTBatch(updated);
+                        }}
+                        className="bg-white border border-[#9fb6cf] rounded px-1.5 py-0.5 text-xs font-mono font-bold text-slate-800 cursor-pointer shadow-2xs focus:ring-1 focus:ring-blue-500"
+                        title="Edit Dispatch / Shipped Date"
+                      />
+                    ) : (
+                      <span className="font-mono font-bold">{formatDateDD_MM_YYYY(effectiveDT.dispatchDate)}</span>
+                    )}
                   </div>
                   <div>
                     <span className="font-bold text-slate-600">RM Ref / Manifest:</span>{' '}
