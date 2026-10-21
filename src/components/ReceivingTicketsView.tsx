@@ -1549,7 +1549,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                         return (
                           <tr key={idx} className="hover:bg-slate-50 transition">
                             <td className="px-3 py-2 text-slate-400 font-mono text-[11px] text-center">{idx + 1}</td>
-                            <td className="px-3 py-2 font-mono font-bold text-amber-900">{t.assetNo || '—'}</td>
+                            <td className="px-3 py-2 font-mono font-bold text-amber-900">{invTool?.assetNo || t.assetNo || '—'}</td>
                             <td className="px-3 py-2 font-mono font-semibold text-slate-800">{displaySize}</td>
                             <td className="px-3 py-2 font-bold text-[#1a3055] whitespace-nowrap">{toolType}</td>
                             <td className="px-3 py-2 text-slate-700 text-xs">{t.shortDesc || (t as any).toolDescription || 'Downhole Tool'}</td>

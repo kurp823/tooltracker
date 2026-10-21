@@ -1782,24 +1782,10 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                               const aKey = (t.assetNo || '').trim().toUpperCase();
                               const invTool = (sKey ? inventoryMap.get(sKey) : undefined) || (aKey ? inventoryMap.get(aKey) : undefined);
                               
-                              // Resolve by serial/assetNo/SystemID/OEM serial only - NO description
-                              // guessing. A description match can silently substitute a DIFFERENT
-                              // physical tool (e.g. EMD-6380 -> an unrelated tool with similar text),
-                              // which is exactly what made the same item resolve differently on the
-                              // Checklist vs. the Delivery Ticket. If nothing resolves, show what is
-                              // stored - that record needs a data correction, not an invented match.
-                              let assetNo = '';
-                              if (invTool?.assetNo && invTool.assetNo.trim() && !invTool.assetNo.toUpperCase().startsWith('EMD-')) assetNo = invTool.assetNo.trim();
-                              else if (t.assetNo && t.assetNo.trim() && !t.assetNo.trim().toUpperCase().startsWith('EMD-')) assetNo = t.assetNo.trim();
-                              else if (invTool?.oemSerial && invTool.oemSerial.trim() && !invTool.oemSerial.toUpperCase().startsWith('EMD-')) assetNo = invTool.oemSerial.trim();
-                              else if (invTool?.serial && !invTool.serial.toUpperCase().startsWith('EMD-')) assetNo = invTool.serial;
-                              else if (t.serial && !t.serial.toUpperCase().startsWith('EMD-')) assetNo = t.serial;
-                              else {
-                                assetNo = (invTool?.assetNo && !invTool.assetNo.toUpperCase().startsWith('EMD-') ? invTool.assetNo : '') ||
-                                          (t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') ? t.assetNo : '') ||
-                                          (t.serial && !t.serial.toUpperCase().startsWith('EMD-') ? t.serial : '') ||
-                                          invTool?.assetNo || t.assetNo || t.serial || '—';
-                              }
+                              // Show AssetNo column directly — never fall back to serial/SystemID.
+                              // serial = DB SystemID (EMD-2942 etc.) and must never appear in UI.
+                              // If AssetNo is blank, the tool's DB record needs updating.
+                              const assetNo = invTool?.assetNo || t.assetNo || '—';
 
                                const displaySize = invTool?.size || (t as any).size || '—';
                               const toolType = invTool?.shortDesc?.trim() || t.shortDesc?.trim() || 'Downhole Tool';
