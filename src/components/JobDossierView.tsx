@@ -1955,6 +1955,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     } else if (field === 'vehicleNo') {
       (updated as any).vehicleVesselNo = value;
       (updated as any).vesselNo = value;
+    } else if (field === 'dispatchDate') {
+      // Keep rmDate in sync with dispatchDate (both represent the same date shipped)
+      (updated as any).rmDate = value;
     }
     if (onUpdateDTBatch) {
       onUpdateDTBatch(updated);
