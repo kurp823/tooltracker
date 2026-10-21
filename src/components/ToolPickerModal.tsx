@@ -95,7 +95,6 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
                 <thead className="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
                   <tr>
                     <th className="px-3 py-2 w-10 text-center">Select</th>
-                    <th className="px-3 py-2">Serial / System ID</th>
                     <th className="px-3 py-2">Asset No</th>
                     <th className="px-3 py-2">Description</th>
                     <th className="px-3 py-2">Ownership</th>
@@ -157,8 +156,7 @@ export const ToolPickerModal: React.FC<ToolPickerModalProps> = ({
                             className="rounded border-slate-300 text-amber-500 focus:ring-amber-400 cursor-pointer"
                           />
                         </td>
-                        <td className="px-3 py-2 font-mono font-bold text-amber-900">{t.serial}</td>
-                        <td className="px-3 py-2 font-mono text-slate-600">{t.assetNo || '—'}</td>
+                        <td className="px-3 py-2 font-mono font-bold text-amber-900">{t.assetNo || '—'}</td>
                         <td className="px-3 py-2 text-slate-700 max-w-xs truncate" title={t.desc}>
                           {t.desc}
                         </td>

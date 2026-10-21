@@ -825,7 +825,7 @@ export function normalizeDTLine(row: any): any {
     id: row.id || row.ID || row.LineID || row.lineId || row.itemNo || undefined,
     itemNo: Number(row.itemNo ?? row.ItemNo ?? row.Item_No ?? row.item_no ?? row.seq ?? row.Seq ?? row.LineNo ?? row.lineNo ?? 1),
     serial,
-    assetNo: String(row.assetNo || row.AssetNo || serial).trim(),
+    assetNo: String(row.assetNo || row.AssetNo || '').trim(), // never fall back to serial/SystemID
     size,
     shortDesc: finalShortDesc,
     desc: finalDesc,
@@ -1092,7 +1092,7 @@ export function normalizeRTLine(row: any): any {
     id: row.id || row.ID || row.LineID || row.lineId || row.itemNo || undefined,
     itemNo: Number(row.itemNo ?? row.ItemNo ?? row.Item_No ?? row.item_no ?? row.seq ?? row.Seq ?? row.LineNo ?? row.lineNo ?? 1),
     serial,
-    assetNo: String(row.assetNo || row.AssetNo || row.Asset_No || row.asset_no || serial).trim(),
+    assetNo: String(row.assetNo || row.AssetNo || row.Asset_No || row.asset_no || '').trim(), // never fall back to serial/SystemID
     shortDesc: finalShortDesc,
     desc: finalDesc,
     toolDescription: finalDesc,

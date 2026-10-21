@@ -1,3 +1,16 @@
 node_modules
 _backups
 dist
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.env
+.env.local

@@ -474,7 +474,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                           </td>
                           <td className="p-2 text-slate-600 font-mono text-[11px]">
                             {(b.toolLines || [])
-                              .map((t) => `${t.serial}`)
+                              .map((t) => t.assetNo || t.serial)
                               .join(', ') || '—'}
                           </td>
                         </tr>
@@ -524,7 +524,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                           </td>
                           <td className="p-2 text-slate-600 font-mono text-[11px]">
                             {(b.toolLines || [])
-                              .map((t) => `${t.serial}`)
+                              .map((t) => t.assetNo || t.serial)
                               .join(', ') || '—'}
                           </td>
                         </tr>

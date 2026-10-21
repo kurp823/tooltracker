@@ -469,7 +469,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                   onClick={() => handleSortToggle('serial')}
                   className="px-3 py-2 cursor-pointer hover:bg-[#24426d]"
                 >
-                  Serial / Asset {sortField === 'serial' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
+                  Asset No {sortField === 'serial' ? (sortOrder === 'desc' ? '▼' : '▲') : ''}
                 </th>
                 <th className="px-3 py-2">Size &amp; Type</th>
                 <th className="px-3 py-2">Work Scope / Issue</th>
@@ -511,10 +511,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                         {m.woNumber}
                       </td>
                       <td className="px-3 py-2 font-mono font-semibold whitespace-nowrap">
-                        {m.serial}
-                        {m.assetNo && m.assetNo !== m.serial && (
-                          <div className="text-[10px] text-slate-500">{m.assetNo}</div>
-                        )}
+                        {m.assetNo || m.serial}
                       </td>
                       <td className="px-3 py-2">
                         <div className="font-semibold text-slate-800">{m.shortDesc}</div>
