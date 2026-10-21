@@ -901,11 +901,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-slate-50 text-[#1a3055] border-b border-slate-200 font-bold select-none whitespace-nowrap">
               <tr>
-                <th style={{ width: inventoryResizer.widths.serial || 120 }} className="px-3 py-2 relative whitespace-nowrap">
-                  <span>Serial #</span>
-                  <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('serial', e)} />
-                </th>
-                <th style={{ width: inventoryResizer.widths.assetNo || 110 }} className="px-3 py-2 relative whitespace-nowrap">
+                <th style={{ width: inventoryResizer.widths.assetNo || 130 }} className="px-3 py-2 relative whitespace-nowrap">
                   <span>Asset No</span>
                   <ResizerHandle onMouseDown={(e) => inventoryResizer.startResize('assetNo', e)} />
                 </th>
@@ -984,8 +980,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
                   return (
                     <tr key={t.id} className="hover:bg-slate-50 transition">
-                      <td className="px-3 py-2 font-mono font-bold text-slate-900 whitespace-nowrap">{t.serial}</td>
-                      <td className="px-3 py-2 font-mono text-slate-500 text-[11px] whitespace-nowrap">{t.assetNo || '—'}</td>
+                      <td className="px-3 py-2 font-mono font-bold text-slate-900 whitespace-nowrap">{t.assetNo || '—'}</td>
                       <td className="px-3 py-2 font-mono text-slate-700 font-medium whitespace-nowrap">{t.size || '—'}</td>
                       <td className="px-3 py-2 font-semibold text-slate-900 whitespace-nowrap">{t.shortDesc}</td>
                       <td className="px-3 py-2 text-slate-600 text-xs min-w-[200px] max-w-sm truncate font-normal" title={t.desc}>
@@ -1619,7 +1614,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               <div>
                 <h3 className="font-bold text-sm flex items-center gap-2">
                   <span>🛠️ Edit Asset:</span>
-                  <span className="font-mono text-amber-300">{editingTool?.serial || editingToolId}</span>
+                  <span className="font-mono text-amber-300">{editingTool?.assetNo || editingTool?.serial || editingToolId}</span>
                 </h3>
                 <p className="text-[11px] text-slate-300">
                   Admin full edit: update identification, ownership, specifications, location, status, and sub-rental terms

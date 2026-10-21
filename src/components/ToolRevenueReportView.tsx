@@ -893,7 +893,7 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
                   <th className="p-2.5 text-center w-12 whitespace-nowrap">#</th>
                   <th className="p-2.5 cursor-pointer hover:bg-blue-100 whitespace-nowrap" onClick={() => handleSort('totalRevenue')}>
                     <div className="flex items-center gap-1 whitespace-nowrap">
-                      <span>Tool Serial</span>
+                      <span>Asset No</span>
                       <ArrowUpDown className="w-3 h-3 text-slate-400" />
                     </div>
                   </th>
@@ -957,7 +957,7 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
                       <tr key={tool.serial} className="hover:bg-blue-50/60 transition h-8 leading-none whitespace-nowrap">
                         <td className="py-1.5 px-2.5 text-center font-mono text-slate-400 font-bold whitespace-nowrap">{globalRank}</td>
                         <td className="py-1.5 px-2.5 whitespace-nowrap font-mono font-bold text-slate-900">
-                          {tool.serial}
+                          {tool.assetNo || tool.serial}
                         </td>
                         <td className="py-1.5 px-2.5 whitespace-nowrap max-w-xs truncate text-slate-800" title={tool.desc}>
                           {tool.desc || '—'}
@@ -1320,7 +1320,9 @@ export const ToolRevenueReportView: React.FC<ToolRevenueReportViewProps> = ({
                     ? 'FIELD SPECIALIST / ENGINEER SERVICE PROFILE'
                     : 'TOOL FINANCIAL PROFILE'}
                 </div>
-                <h3 className="text-lg font-black font-mono text-white">{selectedToolDetail.serial}</h3>
+                <h3 className="text-lg font-black font-mono text-white">
+                  {isPersonnelRecord(selectedToolDetail) ? selectedToolDetail.serial : (selectedToolDetail.assetNo || selectedToolDetail.serial)}
+                </h3>
               </div>
               <button
                 onClick={() => setSelectedToolDetail(null)}

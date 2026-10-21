@@ -6335,7 +6335,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       <th className="p-1.5 text-center w-9 min-w-[36px]">#</th>
                       <th className="p-1.5 whitespace-nowrap min-w-[110px]">DT NO</th>
                       <th className="p-1.5 whitespace-nowrap min-w-[95px]">DEL DATE</th>
-                      <th className="p-1.5 whitespace-nowrap min-w-[130px]">ASSET / SERIAL</th>
+                      <th className="p-1.5 whitespace-nowrap min-w-[130px]">ASSET NO</th>
                       <th className="p-1.5 whitespace-nowrap min-w-[220px]">DESCRIPTION</th>
                       <th className="p-1.5 text-center w-12 min-w-[48px]">QTY</th>
                       <th className="p-1.5 text-center whitespace-nowrap min-w-[80px]">STATUS</th>
@@ -6404,7 +6404,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             <td className="p-1 text-center font-mono text-slate-500">{row.rowSeq}</td>
                             <td className="p-1 font-mono text-blue-700 font-bold whitespace-nowrap">{row.dtNumber}</td>
                             <td className="p-1 font-mono whitespace-nowrap text-[10px]">{formatDateDD_MM_YYYY(row.dispatchDate)}</td>
-                            <td className="p-1 font-mono font-bold whitespace-nowrap">{row.serial || row.assetNo}</td>
+                            <td className="p-1 font-mono font-bold whitespace-nowrap">{row.assetNo || row.serial}</td>
                             <td className="p-1 truncate max-w-[220px]" title={row.desc || row.shortDesc}>{row.desc || row.shortDesc}</td>
                             <td className="p-1 text-center font-bold">{row.qty || 1}</td>
                             <td className="p-1 text-center whitespace-nowrap">
@@ -7307,7 +7307,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                         style={{ width: toolPickerResizer.widths.serial || 140 }}
                         className="py-1 px-3 whitespace-nowrap relative overflow-hidden truncate"
                       >
-                        <span>PartNo / Serial</span>
+                        <span>Asset No</span>
                         <ResizerHandle onMouseDown={(e) => toolPickerResizer.startResize('serial', e)} onDoubleClick={() => toolPickerResizer.resetColumn('serial')} />
                       </th>
                       <th
