@@ -1722,6 +1722,42 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return key ? checklistItemByToolKey.get(key) : undefined;
   }, [checklistItemByToolKey, resolveToolDetails]);
 
+  // One-time backend correction for Delivery Tickets saved before the fix that
+  // made new DTs copy their Category straight from the Checklist line. Runs
+  // once per DT (tracked in a ref so it never loops), and only writes when a
+  // line's own stored Category is blank or the generic "Downhole Tool"
+  // placeholder. After this runs, the corrected Category is permanently saved
+  // in Azure SQL — the DT table above reads it directly with no lookup, the
+  // same way the Checklist does, so there's nothing left to "sync" or
+  // "refresh" for this tool ever again.
+  const healedDTNumbersRef = React.useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!onUpdateDTBatch) return;
+    jobDTs.forEach((dt) => {
+      const dtNum = dt?.dtNumber;
+      if (!dtNum || healedDTNumbersRef.current.has(dtNum)) return;
+      healedDTNumbersRef.current.add(dtNum);
+
+      let changed = false;
+      const healedLines = (dt.toolLines || []).map((tl) => {
+        const stored = String(tl.shortDesc || '').trim();
+        const needsHeal = !stored || stored.toLowerCase() === 'downhole tool';
+        if (!needsHeal) return tl;
+        const match = getChecklistMatchForToolLine(tl);
+        const betterCat = String(match?.cat || match?.shortDesc || '').trim();
+        if (betterCat && betterCat.toLowerCase() !== 'downhole tool') {
+          changed = true;
+          return { ...tl, shortDesc: betterCat };
+        }
+        return tl;
+      });
+
+      if (changed) {
+        onUpdateDTBatch({ ...dt, toolLines: healedLines });
+      }
+    });
+  }, [jobDTs, getChecklistMatchForToolLine, onUpdateDTBatch]);
+
   const draftDT = useMemo<DTBatch>(() => {
     const curYr = new Date().getFullYear().toString().slice(-2);
     const existingSeqs = dtBatches
@@ -5060,20 +5096,19 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   ) : (
                     checklistItems.map((item, i) => {
                       const assignedDT = getAssignedDTForChecklistItem(item);
-                      const resolved = resolveToolDetails(item.serialNos?.[0], item.partNo, item.description, item.cat || item.shortDesc, item.supplier);
-                      const displayItemAssetNo =
-                        (item.partNo && !item.partNo.toUpperCase().startsWith('EMD-') && item.partNo !== '—' ? item.partNo : '') ||
-                        (resolved.assetNo && !resolved.assetNo.toUpperCase().startsWith('EMD-') && resolved.assetNo !== '—' ? resolved.assetNo : '') ||
-                        (item.serialNos?.[0] && !item.serialNos[0].toUpperCase().startsWith('EMD-') && item.serialNos[0] !== '—' ? item.serialNos[0] : '') ||
-                        (resolved.serial && !resolved.serial.toUpperCase().startsWith('EMD-') && resolved.serial !== '—' ? resolved.serial : '') ||
-                        item.partNo || resolved.assetNo || '—';
-                      const displayItemDesc = item.description || resolved.desc;
+                      // Direct read, no inventory lookup: whatever was recorded on this
+                      // checklist line (Asset No, Description, Category, Supplier) when
+                      // the tool was selected is exactly what's shown here. The backend
+                      // record is the single source of truth — nothing is re-derived at
+                      // display time.
+                      const displayItemAssetNo = item.partNo || item.serialNos?.[0] || '—';
+                      const displayItemDesc = item.description || '—';
+                      const displayItemCategory = item.cat || item.shortDesc || '—';
+                      const displayItemSupplier = item.supplier || item.ownership || 'EMDAD';
 
                       // Look up genuine inspection record if item has none or has dummy GIS-Z-
                       const itemInspections = (inspections || []).filter(
                         (ins) =>
-                          (ins.serial && resolved.serial && ins.serial.trim().toLowerCase() === resolved.serial.trim().toLowerCase()) ||
-                          (ins.serial && resolved.assetNo && ins.serial.trim().toLowerCase() === resolved.assetNo.trim().toLowerCase()) ||
                           (ins.serial && item.partNo && ins.serial.trim().toLowerCase() === item.partNo.trim().toLowerCase()) ||
                           (ins.serial && item.serialNos?.[0] && ins.serial.trim().toLowerCase() === item.serialNos[0].trim().toLowerCase())
                       );
@@ -5131,12 +5166,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           </td>
                           <td className="py-1 px-2 whitespace-nowrap truncate font-medium text-slate-800" title={displayItemDesc}>{displayItemDesc}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qty || 1}</td>
-                          <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700 truncate" title={resolved.supplier}>{resolved.supplier}</td>
+                          <td className="py-1 px-2 whitespace-nowrap font-medium text-slate-700 truncate" title={displayItemSupplier}>{displayItemSupplier}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-center font-bold truncate">{item.qtyIn || 1}</td>
                           <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-blue-700 truncate" title={displayInsNum}>{displayInsNum}</td>
                           <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600 truncate" title={displayInsDate}>{displayInsDate}</td>
                           <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={displayCondition}>{displayCondition}</td>
-                          <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={resolved.shortDesc}>{resolved.shortDesc}</td>
+                          <td className="py-1 px-2 whitespace-nowrap text-[11px] text-slate-600 truncate" title={displayItemCategory}>{displayItemCategory}</td>
 
                           {/* Rig Allocation & Client DT Cells — memoized per row */}
                           {isContract4700024096 && (
@@ -5486,22 +5521,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <tbody className="divide-y divide-slate-200">
                     {effectiveDT.toolLines && effectiveDT.toolLines.length > 0 ? (
                       effectiveDT.toolLines.map((t, idx) => {
-                        const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
-                        // Self-heal against the Checklist: if this DT line was created/
-                        // edited before the generation fix (or independently of the
-                        // checklist), its own stored Category can be stale. The checklist
-                        // item for the same tool is the source of truth — prefer it.
-                        const matchedChecklistItem = getChecklistMatchForToolLine(t);
-                        const displayDtAssetNo =
-                          (t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') && t.assetNo !== '—' ? t.assetNo : '') ||
-                          (resolved.assetNo && !resolved.assetNo.toUpperCase().startsWith('EMD-') && resolved.assetNo !== '—' ? resolved.assetNo : '') ||
-                          (t.serial && !t.serial.toUpperCase().startsWith('EMD-') && t.serial !== '—' ? t.serial : '') ||
-                          (resolved.serial && !resolved.serial.toUpperCase().startsWith('EMD-') && resolved.serial !== '—' ? resolved.serial : '') ||
-                          t.assetNo || resolved.assetNo || '—';
-                        const displayDtDesc = t.desc || resolved.desc;
-                        const displayDtCategory = matchedChecklistItem?.cat || matchedChecklistItem?.shortDesc || resolved.shortDesc;
-                        const tSerial = (resolved.serial || t.serial || '').trim().toUpperCase();
-                        const tAsset = (resolved.assetNo || t.assetNo || '').trim().toUpperCase();
+                        // Direct read, no inventory lookup: this Delivery Ticket line
+                        // already carries its own Asset No, Description, Category and
+                        // Supplier exactly as recorded when the ticket was created. The
+                        // backend record is the single source of truth — nothing is
+                        // re-derived at display time.
+                        const displayDtAssetNo = t.assetNo || t.serial || '—';
+                        const displayDtDesc = t.desc || '—';
+                        const displayDtCategory = t.shortDesc || '—';
+                        const displayDtSupplier = t.supplier || t.ownership || 'EMDAD';
+                        const tSerial = (t.serial || '').trim().toUpperCase();
+                        const tAsset = (t.assetNo || '').trim().toUpperCase();
                         const directRtRef = String((t as any).returnedRtNumber || t.rtBatchId || (t as any).rgtNo || '').trim();
 
                         const returnBatch = jobRTs.find((rt) => {
@@ -5560,7 +5590,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-blue-700">{jobData.id}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-emerald-700">{rgtNo || '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{rgtDate ? formatDateDD_MM_YYYY(rgtDate) : '—'}</td>
-                            <td className="py-1 px-2 whitespace-nowrap text-slate-700 font-medium">{resolved.supplier}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-slate-700 font-medium">{displayDtSupplier}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-slate-600 text-[11px] font-medium">{displayDtCategory}</td>
 
                             {/* DT tool-line per-row inputs — memoized so only changed row re-renders */}
@@ -5595,7 +5625,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                                   type="button"
                                   onClick={() => handleRemoveToolLineFromDT(idx)}
                                   className="text-red-600 hover:text-red-800 font-bold text-xs hover:bg-red-50 p-1 rounded cursor-pointer transition"
-                                  title={`Remove ${resolved.assetNo || t.serial} from this Delivery Ticket`}
+                                  title={`Remove ${displayDtAssetNo} from this Delivery Ticket`}
                                 >
                                   🗑️
                                 </button>
