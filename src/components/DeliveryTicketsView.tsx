@@ -184,6 +184,12 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   const [adminUnlockRemark, setAdminUnlockRemark] = useState('');
   const [unlockError, setUnlockError] = useState('');
 
+  // Dispatch Date local edit state — prevents date picker from closing on state update
+  const [dispatchDateEdit, setDispatchDateEdit] = useState(selectedDTDetail?.rmDate || '');
+  useEffect(() => {
+    setDispatchDateEdit(selectedDTDetail?.rmDate || '');
+  }, [selectedDTDetail?.id]);
+
   // AD Ticket No inline edit state (ADNOC Drilling pool contract 4700024096 only)
   const [clientDtNoEdits, setClientDtNoEdits] = useState<Record<string, string>>({});
   useEffect(() => { setClientDtNoEdits({}); }, [selectedDTId]);
@@ -1529,14 +1535,18 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                       ) : (
                         <input
                           type="date"
-                          value={toInputDate(selectedDTDetail.rmDate)}
-                          onChange={(e) => {
+                          value={dispatchDateEdit || toInputDate(selectedDTDetail.rmDate)}
+                          onChange={(e) => setDispatchDateEdit(e.target.value)}
+                          onBlur={(e) => {
                             if (!onUpdateDTBatch) return;
-                            onUpdateDTBatch({
-                              ...selectedDTDetail,
-                              rmDate: e.target.value,
-                              dispatchDate: e.target.value,
-                            });
+                            const val = e.target.value;
+                            if (val !== toInputDate(selectedDTDetail.rmDate)) {
+                              onUpdateDTBatch({
+                                ...selectedDTDetail,
+                                rmDate: val,
+                                dispatchDate: val,
+                              });
+                            }
                           }}
                           className="mt-0.5 w-full bg-white border border-blue-300 rounded px-1.5 py-0.5 text-xs font-mono text-slate-800 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
