@@ -961,7 +961,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                                     {grp.tools.map((t, idx) => (
                                       <tr key={t.serial} className="hover:bg-slate-50">
                                         <td className="px-2.5 py-1 text-slate-400 font-mono text-[11px]">{idx + 1}</td>
-                                        <td className="px-2.5 py-1 font-mono font-bold text-amber-900">{t.assetNo || '—'}</td>
+                                        <td className="px-2.5 py-1 font-mono font-bold text-amber-900">{(t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') ? t.assetNo : '') || (t.serial && !t.serial.toUpperCase().startsWith('EMD-') ? t.serial : '') || t.assetNo || t.serial || '—'}</td>
                                         <td className="px-2.5 py-1 font-mono">{t.size || '—'}</td>
                                         <td className="px-2.5 py-1 font-medium text-slate-800">{t.shortDesc}</td>
                                         <td className="px-2.5 py-1 text-slate-600">{t.ownership || 'EMDAD'}</td>
@@ -1161,7 +1161,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                                   className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
                                 />
                               </td>
-                              <td className="p-2 font-mono font-bold text-amber-900">{t.assetNo || '—'}</td>
+                              <td className="p-2 font-mono font-bold text-amber-900">{(t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') ? t.assetNo : '') || (t.serial && !t.serial.toUpperCase().startsWith('EMD-') ? t.serial : '') || t.assetNo || t.serial || '—'}</td>
                               <td className="p-2 font-mono">{t.size || '—'}</td>
                               <td className="p-2 text-slate-800">{t.shortDesc}</td>
                               <td className="p-2 text-slate-600">{t.ownership || 'EMDAD'}</td>
@@ -1549,7 +1549,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                         return (
                           <tr key={idx} className="hover:bg-slate-50 transition">
                             <td className="px-3 py-2 text-slate-400 font-mono text-[11px] text-center">{idx + 1}</td>
-                            <td className="px-3 py-2 font-mono font-bold text-amber-900">{t.assetNo || '—'}</td>
+                            <td className="px-3 py-2 font-mono font-bold text-amber-900">{(t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') ? t.assetNo : '') || (t.serial && !t.serial.toUpperCase().startsWith('EMD-') ? t.serial : '') || t.assetNo || t.serial || '—'}</td>
                             <td className="px-3 py-2 font-mono font-semibold text-slate-800">{displaySize}</td>
                             <td className="px-3 py-2 font-bold text-[#1a3055] whitespace-nowrap">{toolType}</td>
                             <td className="px-3 py-2 text-slate-700 text-xs">{t.shortDesc || (t as any).toolDescription || 'Downhole Tool'}</td>

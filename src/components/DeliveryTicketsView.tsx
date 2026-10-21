@@ -1136,7 +1136,9 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                                 {idx + 1}
                               </td>
                               <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">
-                                {tool.assetNo || '—'}
+                                {(tool.assetNo && !tool.assetNo.toUpperCase().startsWith('EMD-') ? tool.assetNo : '') ||
+                                 (tool.serial && !tool.serial.toUpperCase().startsWith('EMD-') ? tool.serial : '') ||
+                                 tool.assetNo || tool.serial || '—'}
                               </td>
                               <td className="px-2.5 py-1.5 font-mono">{tool.size}</td>
                               <td className="px-2.5 py-1.5 font-bold text-[#1a3055]">
@@ -1227,7 +1229,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                           const isInserted = checkedToolIds.includes(t.id);
                           return (
                             <tr key={t.id} className="hover:bg-slate-50">
-                              <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">{t.assetNo || '—'}</td>
+                              <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">{(t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') ? t.assetNo : '') || (t.serial && !t.serial.toUpperCase().startsWith('EMD-') ? t.serial : '') || t.assetNo || t.serial || '—'}</td>
                               <td className="px-2.5 py-1.5 font-mono">{t.size}</td>
                               <td className="px-2.5 py-1.5 font-bold text-[#1a3055]">{t.shortDesc}</td>
                               <td className="px-2.5 py-1.5 text-slate-500">{t.ownership}</td>
@@ -1368,7 +1370,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                                         }}
                                       />
                                     </td>
-                                    <td className="px-2 py-1 font-mono font-bold text-amber-900">{t.assetNo || '—'}</td>
+                                    <td className="px-2 py-1 font-mono font-bold text-amber-900">{(t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') ? t.assetNo : '') || (t.serial && !t.serial.toUpperCase().startsWith('EMD-') ? t.serial : '') || t.assetNo || t.serial || '—'}</td>
                                     <td className="px-2 py-1 font-mono">{t.size}</td>
                                     <td className="px-2 py-1 font-bold text-[#1a3055]">{t.shortDesc}</td>
                                     <td className="px-2 py-1 text-slate-500">{t.ownership}</td>
@@ -1697,7 +1699,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                               .slice(0, 15)
                               .map((tool) => (
                                 <tr key={tool.id} className="hover:bg-amber-50/50">
-                                  <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">{tool.assetNo || '—'}</td>
+                                  <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">{(tool.assetNo && !tool.assetNo.toUpperCase().startsWith('EMD-') ? tool.assetNo : '') || (tool.serial && !tool.serial.toUpperCase().startsWith('EMD-') ? tool.serial : '') || tool.assetNo || tool.serial || '—'}</td>
                                   <td className="px-2.5 py-1.5 font-mono">{tool.size}</td>
                                   <td className="px-2.5 py-1.5 font-bold text-[#1a3055]">{tool.shortDesc}</td>
                                   <td className="px-2.5 py-1.5 text-slate-600 text-xs max-w-xs truncate" title={tool.desc}>{tool.desc}</td>
