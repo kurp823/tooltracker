@@ -446,6 +446,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     });
   }, [initialJob]);
 
+  // Auto-sync with Azure SQL the moment a job file is opened.
+  // Fixes jobs that show correct tool counts / "Ongoing" status in the register
+  // (a server-side aggregate) but whose Checklist / Delivery Ticket tabs render
+  // empty here, because the in-memory jobs/dtBatches/rtBatches/callouts arrays
+  // this component was mounted with were fetched before this job's records were
+  // created or last updated. Runs once per job id, not on every re-render.
+  const autoRefreshedJobIdRef = React.useRef<string | null>(null);
+  useEffect(() => {
+    const jId = initialJob?.id || (initialJob as any)?.jobNumber || '';
+    if (!jId || !onRefresh) return;
+    if (autoRefreshedJobIdRef.current === jId) return;
+    autoRefreshedJobIdRef.current = jId;
+    Promise.resolve(onRefresh()).catch(() => {});
+  }, [initialJob?.id, onRefresh]);
+
   // LOCKED STATE RULE: Only authentic legal invoices (FSH, FR, WHP, INV, CN, DN) or closed state lock a job.
   // Draft invoices, internal ERP numbers, and active operational stages (SES, In Progress) NEVER lock the job.
   const isJobInvoicedOrSubmitted = useMemo(() => {
@@ -1163,7 +1178,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     }
 
     // Priority 4: Clean Tool Category / Short Description
-    const shortDesc = invShort || fallbackShortDesc || extractToolType(desc, fallbackShortDesc) || 'Downhole Tool';
+    // IMPORTANT: extractToolType() must run FIRST, not as a last-resort fallback.
+    // It pattern-matches the description for real tool families (STABILIZER,
+    // DRILLING JAR, STRING MILL, etc.) and only falls back to invShort /
+    // fallbackShortDesc when those are themselves clean & concise category
+    // names (<=35 chars, no connection specs). Using invShort/fallbackShortDesc
+    // directly here (as before) let a raw inventory record whose shortDesc
+    // field actually holds a full technical description (a data-entry/import
+    // artifact) leak straight into the Category column verbatim.
+    const shortDesc = extractToolType(desc, fallbackShortDesc, invShort) || 'Downhole Tool';
 
     // Priority 5: Third-Party Supplier & Ownership Resolution (live inventory updates ALWAYS reflect immediately!)
     const invSup = String(inv?.supplier || '').trim();
@@ -1199,12 +1222,28 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const itSerial = String(it?.serialNos?.[0] || '').trim().toUpperCase();
     const itPart = String(it?.partNo || '').trim().toUpperCase();
 
+    // Canonical inventory identity for this checklist item (resolves EMD- system
+    // IDs through to the same underlying tool record, whatever key format was used).
+    const itInv = resolveToolDetails(it?.serialNos?.[0], it?.partNo).inv;
+    const itInvKey = itInv ? String(itInv.id || itInv.serial || itInv.assetNo).trim().toUpperCase() : '';
+
     const dtLine = targetDT?.toolLines?.find(tl => {
       if (!tl) return false;
       const s = String(tl.serial || '').trim().toUpperCase();
       const a = String(tl.assetNo || '').trim().toUpperCase();
       if (itSerial && itSerial !== '—' && (s === itSerial || a === itSerial)) return true;
       if (itPart && itPart !== '—' && (s === itPart || a === itPart)) return true;
+      // Fallback: the checklist item may still carry a raw EMD- system ID while the
+      // DT line already shows the resolved physical asset no (or vice versa), so a
+      // plain string match above would miss the link entirely. Resolve both sides
+      // to the same underlying inventory record and match on that instead — this
+      // is what caused the same tool to show different Asset Nos on the Checklist
+      // vs the Delivery Ticket for the same job.
+      if (itInvKey) {
+        const tlInv = resolveToolDetails(tl.serial, tl.assetNo).inv;
+        const tlInvKey = tlInv ? String(tlInv.id || tlInv.serial || tlInv.assetNo).trim().toUpperCase() : '';
+        if (tlInvKey && tlInvKey === itInvKey) return true;
+      }
       return false;
     });
 
@@ -2254,7 +2293,12 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         exactAssetNo || _tSerial || resolved.serial || '—';
 
       const exactDesc = t.desc || t.shortDesc || resolved.desc;
-      const exactShortDesc = t.shortDesc || t.desc || resolved.shortDesc;
+      // resolved.shortDesc already runs extractToolType() over t.desc/t.shortDesc
+      // and only keeps the raw inventory shortDesc when it is a clean, short
+      // category name — use it directly so a tool whose inventory shortDesc
+      // field actually holds a long technical description doesn't get copied
+      // verbatim into the Checklist's Category column.
+      const exactShortDesc = resolved.shortDesc;
       const exactSize = t.size || resolved.inv?.size || '—';
       const exactSupplier = t.supplier || t.ownership || resolved.supplier;
 
