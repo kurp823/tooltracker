@@ -1695,6 +1695,33 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     };
   }, [resolveToolDetails, jobData.rig, jobData.well]);
 
+  // Canonical tool identity -> Checklist item lookup. Used to self-heal the
+  // Delivery Ticket display for DT lines whose own stored desc/category went
+  // stale (e.g. a DT generated before the fix above, or one whose line was
+  // edited independently of the checklist) WITHOUT needing the user to click
+  // "Sync from Checklist" or wait on a Refresh that only re-fetches the same
+  // stale stored data. The checklist item the user selected is always the
+  // source of truth for what a tool actually is.
+  const checklistItemByToolKey = useMemo(() => {
+    const map = new Map<string, CalloutItem>();
+    checklistItems.forEach((ci) => {
+      const inv = resolveToolDetails(ci.serialNos?.[0], ci.partNo).inv;
+      const key = inv
+        ? String(inv.id || inv.serial || inv.assetNo).trim().toUpperCase()
+        : (String(ci.partNo || '').trim().toUpperCase() !== '—' && ci.partNo ? String(ci.partNo).trim().toUpperCase() : String(ci.serialNos?.[0] || '').trim().toUpperCase());
+      if (key) map.set(key, ci);
+    });
+    return map;
+  }, [checklistItems, resolveToolDetails]);
+
+  const getChecklistMatchForToolLine = useCallback((t: { serial?: string; assetNo?: string }) => {
+    const inv = resolveToolDetails(t?.serial, t?.assetNo).inv;
+    const key = inv
+      ? String(inv.id || inv.serial || inv.assetNo).trim().toUpperCase()
+      : (String(t?.assetNo || '').trim().toUpperCase() !== '—' && t?.assetNo ? String(t.assetNo).trim().toUpperCase() : String(t?.serial || '').trim().toUpperCase());
+    return key ? checklistItemByToolKey.get(key) : undefined;
+  }, [checklistItemByToolKey, resolveToolDetails]);
+
   const draftDT = useMemo<DTBatch>(() => {
     const curYr = new Date().getFullYear().toString().slice(-2);
     const existingSeqs = dtBatches
@@ -5460,6 +5487,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     {effectiveDT.toolLines && effectiveDT.toolLines.length > 0 ? (
                       effectiveDT.toolLines.map((t, idx) => {
                         const resolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
+                        // Self-heal against the Checklist: if this DT line was created/
+                        // edited before the generation fix (or independently of the
+                        // checklist), its own stored Category can be stale. The checklist
+                        // item for the same tool is the source of truth — prefer it.
+                        const matchedChecklistItem = getChecklistMatchForToolLine(t);
                         const displayDtAssetNo =
                           (t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') && t.assetNo !== '—' ? t.assetNo : '') ||
                           (resolved.assetNo && !resolved.assetNo.toUpperCase().startsWith('EMD-') && resolved.assetNo !== '—' ? resolved.assetNo : '') ||
@@ -5467,6 +5499,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           (resolved.serial && !resolved.serial.toUpperCase().startsWith('EMD-') && resolved.serial !== '—' ? resolved.serial : '') ||
                           t.assetNo || resolved.assetNo || '—';
                         const displayDtDesc = t.desc || resolved.desc;
+                        const displayDtCategory = matchedChecklistItem?.cat || matchedChecklistItem?.shortDesc || resolved.shortDesc;
                         const tSerial = (resolved.serial || t.serial || '').trim().toUpperCase();
                         const tAsset = (resolved.assetNo || t.assetNo || '').trim().toUpperCase();
                         const directRtRef = String((t as any).returnedRtNumber || t.rtBatchId || (t as any).rgtNo || '').trim();
@@ -5528,7 +5561,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                             <td className="py-1 px-2 whitespace-nowrap font-mono font-bold text-emerald-700">{rgtNo || '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap font-mono text-[11px] text-slate-600">{rgtDate ? formatDateDD_MM_YYYY(rgtDate) : '—'}</td>
                             <td className="py-1 px-2 whitespace-nowrap text-slate-700 font-medium">{resolved.supplier}</td>
-                            <td className="py-1 px-2 whitespace-nowrap text-slate-600 text-[11px] font-medium">{resolved.shortDesc}</td>
+                            <td className="py-1 px-2 whitespace-nowrap text-slate-600 text-[11px] font-medium">{displayDtCategory}</td>
 
                             {/* DT tool-line per-row inputs — memoized so only changed row re-renders */}
                             {isContract4700024096 && (
