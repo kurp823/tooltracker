@@ -19,8 +19,8 @@ interface ReceivingTicketsViewProps {
   jobs?: DrillingJob[];
   callouts?: Callout[];
   contracts?: any[];
-  onSaveRTBatch: (batch: RTBatch) => void;
-  onUpdateRTBatch?: (batch: RTBatch) => void;
+  onSaveRTBatch: (batch: RTBatch) => void | Promise<void>;
+  onUpdateRTBatch?: (batch: RTBatch) => void | Promise<void>;
   isNewRTOpen?: boolean;
   onCloseNewRT?: () => void;
   onOpenNewRT?: () => void;
@@ -284,7 +284,8 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
   // the editor mid-typing whenever any other field triggers a re-render.
 
   // Combined save: notes + AD Manifest No (with auto-lock) in one DB write
-  const handleSaveRTChanges = () => {
+  const [isSavingRTChanges, setIsSavingRTChanges] = useState(false);
+  const handleSaveRTChanges = async () => {
     if (!selectedRTDetail) return;
     const trimmedManifest = adManifestNoEdit.trim();
     const today = new Date().toISOString().split('T')[0];
@@ -300,12 +301,19 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
       ...(isAdnocPoolRT ? { adManifestNo: trimmedManifest } : {}),
       ...(autoLock ? { isLocked: true, lockedBy: user?.name || 'System', lockedDate: today } : {}),
     };
-    if (onUpdateRTBatch) {
-      onUpdateRTBatch(updated);
-    } else {
-      onSaveRTBatch(updated);
+    setIsSavingRTChanges(true);
+    try {
+      // Genuinely awaited — resolves only once Azure SQL confirms the write, so
+      // the button's spinner reflects the real save, not just a local update.
+      if (onUpdateRTBatch) {
+        await onUpdateRTBatch(updated);
+      } else {
+        await onSaveRTBatch(updated);
+      }
+      setSelectedRTDetail(updated);
+    } finally {
+      setIsSavingRTChanges(false);
     }
-    setSelectedRTDetail(updated);
   };
 
   // Keep alias for onBlur on notes textarea
@@ -1392,10 +1400,18 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                   <button
                     type="button"
                     onClick={handleSaveRTChanges}
-                    className="px-3 py-1.5 rounded text-xs font-bold bg-blue-500 hover:bg-blue-400 text-white border border-blue-300/30 cursor-pointer transition flex items-center gap-1.5 shadow"
-                    title="Save notes and AD Manifest No"
+                    disabled={isSavingRTChanges}
+                    className={`px-3 py-1.5 rounded text-xs font-bold bg-blue-500 hover:bg-blue-400 disabled:bg-blue-500/60 text-white border border-blue-300/30 transition flex items-center gap-1.5 shadow ${isSavingRTChanges ? 'cursor-wait' : 'cursor-pointer'}`}
+                    title={isSavingRTChanges ? 'Saving to Azure SQL — please wait…' : 'Save notes and AD Manifest No'}
                   >
-                    💾 Save Changes
+                    {isSavingRTChanges ? (
+                      <>
+                        <span className="inline-block w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" aria-hidden="true" />
+                        Saving…
+                      </>
+                    ) : (
+                      '💾 Save Changes'
+                    )}
                   </button>
                 )}
                 <button

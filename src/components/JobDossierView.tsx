@@ -70,14 +70,18 @@ interface JobDossierViewProps {
   inspections?: InspectionRecord[];
   customCategories?: string[];
   customSizes?: string[];
-  onSaveJob: (job: DrillingJob) => void;
-  onRefresh?: () => void;
-  onSaveDTBatch: (batch: DTBatch) => void;
-  onUpdateDTBatch?: (batch: DTBatch, addedTools?: ToolItem[], removedTools?: ToolItem[]) => void;
+  // These return void | Promise<void> because the parent's save handlers now
+  // genuinely await the Azure SQL write before resolving — callers here that
+  // `await` them get a real "saving finished" signal for spinners, not just
+  // the instant the optimistic local state update happens.
+  onSaveJob: (job: DrillingJob) => void | Promise<void>;
+  onRefresh?: () => void | Promise<void>;
+  onSaveDTBatch: (batch: DTBatch) => void | Promise<void>;
+  onUpdateDTBatch?: (batch: DTBatch, addedTools?: ToolItem[], removedTools?: ToolItem[]) => void | Promise<void>;
   onDeleteDTBatch?: (dtNumber: string) => void;
-  onSaveRTBatch: (batch: RTBatch) => void;
-  onUpdateRTBatch?: (batch: RTBatch) => void;
-  onSaveCallout?: (callout: Callout) => void;
+  onSaveRTBatch: (batch: RTBatch) => void | Promise<void>;
+  onUpdateRTBatch?: (batch: RTBatch) => void | Promise<void>;
+  onSaveCallout?: (callout: Callout) => void | Promise<void>;
   onBackToRegister?: () => void;
   onNavigateToInvoicing?: (jobId: string) => void;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
@@ -3676,6 +3680,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
 
+  // While a save to Azure SQL is genuinely in progress, show a wait cursor
+  // over the whole screen — not just the Save button — so it's visually
+  // obvious the system is busy, the way a spinning cursor communicates "the
+  // app is working" in a desktop application.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.body.style.cursor = isSaving ? 'wait' : '';
+    return () => {
+      document.body.style.cursor = '';
+    };
+  }, [isSaving]);
+
   // Master Save Job File handler - Unified save across entire Job Dossier:
   // Saves Job Header, Technical Details, Notes, Crew, Daily Logs, AND Utilization matrix to Azure SQL
   const handleExplicitSaveJob = async () => {
@@ -3780,8 +3796,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         }
       }
 
-      // 4. Save Job data to parent state and Azure SQL (tbl_Jobs)
-      onSaveJob(updatedJob);
+      // 4. Save Job data to parent state and Azure SQL (tbl_Jobs).
+      // Genuinely awaited: onSaveJob now only resolves once Azure SQL has
+      // confirmed the write, so the "Saving…" spinner on the button below
+      // stays up for the real duration of the save, not just a flash.
+      await onSaveJob(updatedJob);
       setJobData(updatedJob);
 
       const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -3830,10 +3849,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             type="button"
             onClick={handleExplicitSaveJob}
             disabled={isSaving || (!canEditJobs && !isAdmin) || (isClosedOrInvoiced && !adminUnlocked)}
-            className="text-xs bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-500 text-white px-3 py-1 rounded font-bold cursor-pointer transition shadow-xs flex items-center gap-1.5"
-            title="Save all changes in this Job File"
+            className={`text-xs bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-500 text-white px-3 py-1 rounded font-bold transition shadow-xs flex items-center gap-1.5 ${isSaving ? 'cursor-wait' : 'cursor-pointer'}`}
+            title={isSaving ? 'Saving to Azure SQL — please wait…' : 'Save all changes in this Job File'}
           >
-            <span>{isSaving ? '⏳' : '💾'}</span>
+            {isSaving ? (
+              <span
+                className="inline-block w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin"
+                aria-hidden="true"
+              />
+            ) : (
+              <span>💾</span>
+            )}
             <span>{isSaving ? 'Saving…' : 'Save Job File'}</span>
           </button>
 

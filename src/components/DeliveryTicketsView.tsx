@@ -21,8 +21,8 @@ interface DeliveryTicketsViewProps {
   callouts: Callout[];
   inventory: ToolItem[];
   contracts?: any[];
-  onSaveDTBatch: (batch: DTBatch) => void;
-  onUpdateDTBatch?: (batch: DTBatch, addedTools?: ToolItem[], removedTools?: ToolItem[]) => void;
+  onSaveDTBatch: (batch: DTBatch) => void | Promise<void>;
+  onUpdateDTBatch?: (batch: DTBatch, addedTools?: ToolItem[], removedTools?: ToolItem[]) => void | Promise<void>;
   isNewDTOpen: boolean;
   onCloseNewDT: () => void;
   onOpenNewDT: () => void;
@@ -168,14 +168,23 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   // the editor to reset mid-typing whenever any other field triggers a re-render.
 
   // Combined save: date + notes in one DB write (single Save button in header)
-  const handleSaveDTChanges = () => {
+  const [isSavingDTChanges, setIsSavingDTChanges] = useState(false);
+  const handleSaveDTChanges = async () => {
     if (!selectedDTDetail || !onUpdateDTBatch) return;
-    onUpdateDTBatch({
-      ...selectedDTDetail,
-      rmDate: dispatchDateEdit || selectedDTDetail.rmDate,
-      dispatchDate: dispatchDateEdit || selectedDTDetail.dispatchDate,
-      notes: dtEditNotes.trim(),
-    });
+    setIsSavingDTChanges(true);
+    try {
+      // Genuinely awaited — onUpdateDTBatch only resolves once Azure SQL has
+      // confirmed the write, so the button's spinner reflects the real save,
+      // not just the instant the local screen updates.
+      await onUpdateDTBatch({
+        ...selectedDTDetail,
+        rmDate: dispatchDateEdit || selectedDTDetail.rmDate,
+        dispatchDate: dispatchDateEdit || selectedDTDetail.dispatchDate,
+        notes: dtEditNotes.trim(),
+      });
+    } finally {
+      setIsSavingDTChanges(false);
+    }
   };
 
   // Keep alias for onBlur on notes textarea (same handler)
@@ -1489,10 +1498,18 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                       <button
                         type="button"
                         onClick={handleSaveDTChanges}
-                        className="px-3 py-1.5 rounded text-xs font-bold bg-blue-500 hover:bg-blue-400 text-white border border-blue-300/30 cursor-pointer transition flex items-center gap-1.5 shadow"
-                        title="Save date and notes changes"
+                        disabled={isSavingDTChanges}
+                        className={`px-3 py-1.5 rounded text-xs font-bold bg-blue-500 hover:bg-blue-400 disabled:bg-blue-500/60 text-white border border-blue-300/30 transition flex items-center gap-1.5 shadow ${isSavingDTChanges ? 'cursor-wait' : 'cursor-pointer'}`}
+                        title={isSavingDTChanges ? 'Saving to Azure SQL — please wait…' : 'Save date and notes changes'}
                       >
-                        💾 Save Changes
+                        {isSavingDTChanges ? (
+                          <>
+                            <span className="inline-block w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" aria-hidden="true" />
+                            Saving…
+                          </>
+                        ) : (
+                          '💾 Save Changes'
+                        )}
                       </button>
                     )}
                     <button

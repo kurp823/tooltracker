@@ -969,15 +969,19 @@ export const App: React.FC = () => {
     } catch {}
   };
 
-  const handleSaveCallout = (saved: Callout) => {
+  const handleSaveCallout = async (saved: Callout) => {
     saveCustomCallout(saved);
     setCallouts((prev) => {
       const exists = prev.some((c) => c.id === saved.id);
       return exists ? prev.map((c) => (c.id === saved.id ? saved : c)) : [saved, ...prev];
     });
-    saveCalloutApi(saved).then((r) => {
-      if (!r.success) showToast(r.message, 'error');
-    });
+    // Awaited: the success toast below (and any caller awaiting this function for
+    // a saving spinner) now only fires after Azure SQL actually confirms the write.
+    const calloutSaveResult = await saveCalloutApi(saved);
+    if (!calloutSaveResult.success) {
+      showToast(calloutSaveResult.message, 'error');
+      return;
+    }
     broadcastSync();
     showToast(`Callout ${saved.id} saved successfully.`, 'success');
   };
@@ -1004,7 +1008,7 @@ export const App: React.FC = () => {
   };
 
   // Jobs Actions
-  const handleSaveJob = (job: DrillingJob) => {
+  const handleSaveJob = async (job: DrillingJob) => {
     saveCustomJob(job);
     setJobs((prev) => {
       const targetId = (job.id || '').trim().toUpperCase();
@@ -1019,9 +1023,15 @@ export const App: React.FC = () => {
       syncCustomJobsToIndexedDB(updated);
       return updated;
     });
-    saveJobApi(job).then((r) => {
-      if (!r.success) showToast(r.message, 'error');
-    });
+    // Awaited (not fire-and-forget): a caller like JobDossierView's "Save Job
+    // File" button can now await this and only clear its saving spinner /
+    // show success once Azure SQL has genuinely confirmed the write, instead
+    // of the moment the optimistic local state update happens.
+    const jobSaveResult = await saveJobApi(job);
+    if (!jobSaveResult.success) {
+      showToast(jobSaveResult.message, 'error');
+      return;
+    }
 
     // If job is linked to a callout, update callout status
     if (job.calloutId) {
@@ -1044,7 +1054,7 @@ export const App: React.FC = () => {
   };
 
   // DT Batch Actions
-  const handleSaveDTBatch = (batch: DTBatch) => {
+  const handleSaveDTBatch = async (batch: DTBatch) => {
     const isActuallyLocked = Boolean(
       batch.isLocked === true ||
       batch.isLocked === 1 ||
@@ -1061,9 +1071,10 @@ export const App: React.FC = () => {
       const filtered = prev.filter((b) => b.id !== finalizedBatch.id && b.dtNumber !== finalizedBatch.dtNumber);
       return [finalizedBatch, ...filtered];
     });
-    saveDeliveryTicketApi(finalizedBatch).then((r) => {
-      if (!r.success) showToast(r.message, 'error');
-    });
+    // Awaited so a caller showing a saving spinner only clears it once Azure SQL
+    // actually confirms the write, not the instant the optimistic UI updates.
+    const dtSaveResult = await saveDeliveryTicketApi(finalizedBatch);
+    if (!dtSaveResult.success) showToast(dtSaveResult.message, 'error');
 
     // Update tool statuses in inventory: only set to 'On Rig' if the DT is genuinely dispatched & locked!
     if (isActuallyLocked) {
@@ -1134,7 +1145,7 @@ export const App: React.FC = () => {
     showToast(`Delivery Ticket ${batch.dtNumber} saved.`, 'success');
   };
 
-  const handleUpdateDTBatch = (
+  const handleUpdateDTBatch = async (
     updatedBatch: DTBatch,
     addedTools?: ToolItem[],
     removedTools?: ToolItem[]
@@ -1142,9 +1153,12 @@ export const App: React.FC = () => {
     setDtBatches((prev) => {
       return prev.map((b) => (b.id === updatedBatch.id ? updatedBatch : b));
     });
-    saveDeliveryTicketApi(updatedBatch).then((r) => {
-      if (!r.success) showToast(r.message, 'error');
-    });
+    // Awaited (not fire-and-forget): callers that await this function — e.g. the
+    // "Save Changes" button on the Delivery Ticket screen — can now show a real
+    // saving spinner that only clears once Azure SQL actually confirms the write,
+    // instead of clearing the instant the optimistic local state update happens.
+    const dtSaveResult = await saveDeliveryTicketApi(updatedBatch);
+    if (!dtSaveResult.success) showToast(dtSaveResult.message, 'error');
 
     const isLocked = Boolean(
       updatedBatch.isLocked === true ||
@@ -1395,7 +1409,7 @@ export const App: React.FC = () => {
   };
 
   // RT Batch Actions (Backload receiving)
-  const handleSaveRTBatch = (batch: RTBatch) => {
+  const handleSaveRTBatch = async (batch: RTBatch) => {
     // Dedup: if same RT already exists (by id or rtNumber), update in place instead of prepending a duplicate.
     setRtBatches((prev) => {
       const exists = prev.some(
@@ -1407,9 +1421,10 @@ export const App: React.FC = () => {
         ? prev.map((b) => (b.id === batch.id || b.rtNumber === batch.rtNumber ? batch : b))
         : [batch, ...prev];
     });
-    saveReceivingTicketApi(batch).then((r) => {
-      if (!r.success) showToast(r.message, 'error');
-    });
+    // Awaited so a caller showing a saving spinner only clears it once Azure SQL
+    // actually confirms the write.
+    const rtSaveResult = await saveReceivingTicketApi(batch);
+    if (!rtSaveResult.success) showToast(rtSaveResult.message, 'error');
 
     // Update DT line statuses from OnRig to Returned
     // Normalize to uppercase strings; filter out blank/undefined serials so they don't cross-match.
@@ -1547,11 +1562,12 @@ export const App: React.FC = () => {
     );
   };
 
-  const handleUpdateRTBatch = (updatedBatch: RTBatch) => {
+  const handleUpdateRTBatch = async (updatedBatch: RTBatch) => {
     setRtBatches((prev) => prev.map((b) => (b.id === updatedBatch.id ? updatedBatch : b)));
-    saveReceivingTicketApi(updatedBatch).then((r) => {
-      if (!r.success) showToast(r.message, 'error');
-    });
+    // Awaited so a caller showing a saving spinner only clears it once Azure SQL
+    // actually confirms the write.
+    const rtUpdateResult = await saveReceivingTicketApi(updatedBatch);
+    if (!rtUpdateResult.success) showToast(rtUpdateResult.message, 'error');
 
     // Cascade RT tool condition changes to Inventory
     // Build map with normalized uppercase keys so case variants ("EMD-1234" vs "emd-1234") resolve correctly.
