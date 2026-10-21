@@ -5698,7 +5698,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   contactNo:    getDTField(effectiveDT, 'contactNo'),
                 }}
                 disabled={!canUserEditDT || (Boolean(effectiveDT.isLocked) && !adminUnlocked)}
-                dispatchDate={formatDateDD_MM_YYYY(effectiveDT.dispatchDate)}
+                dispatchDate={toInputDateFormat(effectiveDT.dispatchDate) || new Date().toISOString().split('T')[0]}
                 onFieldChange={(field, value) => handleUpdateDTField(field, value)}
               />
 

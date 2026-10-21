@@ -15,7 +15,7 @@
  *   <DTFooterSection
  *     fields={footerFields}
  *     disabled={!canUserEditDT || (isLocked && !adminUnlocked)}
- *     dispatchDate="15/10/2026"
+ *     dispatchDate="2026-10-15"   // YYYY-MM-DD, for the HTML5 date input
  *     onFieldChange={(field, value) => handleUpdateDTField(field, value)}
  *   />
  */
@@ -36,8 +36,8 @@ export interface DTFooterFields {
 interface DTFooterSectionProps {
   fields: DTFooterFields;
   disabled: boolean;
-  dispatchDate: string;          // pre-formatted display string, e.g. "15/10/2026"
-  onFieldChange: (field: keyof DTFooterFields, value: string) => void;
+  dispatchDate: string;          // YYYY-MM-DD, for the HTML5 date input
+  onFieldChange: (field: keyof DTFooterFields | 'dispatchDate', value: string) => void;
 }
 
 const DTFooterSectionInner: React.FC<DTFooterSectionProps> = ({
@@ -81,7 +81,13 @@ const DTFooterSectionInner: React.FC<DTFooterSectionProps> = ({
         </div>
         <div className="flex items-center justify-between">
           <span className="font-bold text-slate-600">Dispatch Date:</span>
-          <span className="font-mono font-bold text-slate-800 text-xs">{dispatchDate}</span>
+          <input
+            type="date"
+            value={dispatchDate}
+            onChange={(e) => onFieldChange('dispatchDate', e.target.value)}
+            disabled={disabled}
+            className={`${inputClass} font-mono`}
+          />
         </div>
       </div>
 
