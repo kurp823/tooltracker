@@ -279,7 +279,9 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
     if (selectedRTDetail) {
       setRtEditNotes(selectedRTDetail.notes || '');
     }
-  }, [selectedRTDetail?.id, selectedRTDetail?.notes]);
+  }, [selectedRTDetail?.id]);
+  // Note: selectedRTDetail?.notes intentionally NOT in deps — including it resets
+  // the editor mid-typing whenever any other field triggers a re-render.
 
   const handleSaveRTDetailNotes = () => {
     if (!selectedRTDetail) return;
