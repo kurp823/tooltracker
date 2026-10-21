@@ -1071,10 +1071,13 @@ export const App: React.FC = () => {
       const filtered = prev.filter((b) => b.id !== finalizedBatch.id && b.dtNumber !== finalizedBatch.dtNumber);
       return [finalizedBatch, ...filtered];
     });
-    // Awaited so a caller showing a saving spinner only clears it once Azure SQL
-    // actually confirms the write, not the instant the optimistic UI updates.
-    const dtSaveResult = await saveDeliveryTicketApi(finalizedBatch);
-    if (!dtSaveResult.success) showToast(dtSaveResult.message, 'error');
+    // Show success immediately after optimistic local update (no waiting for Azure SQL).
+    // Azure cold starts can take 10-30s — the background save confirms or shows an error toast.
+    broadcastSync();
+    showToast(`Delivery Ticket ${batch.dtNumber} saved.`, 'success');
+    saveDeliveryTicketApi(finalizedBatch).then((dtSaveResult) => {
+      if (!dtSaveResult.success) showToast(dtSaveResult.message, 'error');
+    });
 
     // Update tool statuses in inventory: only set to 'On Rig' if the DT is genuinely dispatched & locked!
     if (isActuallyLocked) {
@@ -1141,8 +1144,6 @@ export const App: React.FC = () => {
       );
     }
 
-    broadcastSync();
-    showToast(`Delivery Ticket ${batch.dtNumber} saved.`, 'success');
   };
 
   const handleUpdateDTBatch = async (
@@ -1153,12 +1154,6 @@ export const App: React.FC = () => {
     setDtBatches((prev) => {
       return prev.map((b) => (b.id === updatedBatch.id ? updatedBatch : b));
     });
-    // Awaited (not fire-and-forget): callers that await this function — e.g. the
-    // "Save Changes" button on the Delivery Ticket screen — can now show a real
-    // saving spinner that only clears once Azure SQL actually confirms the write,
-    // instead of clearing the instant the optimistic local state update happens.
-    const dtSaveResult = await saveDeliveryTicketApi(updatedBatch);
-    if (!dtSaveResult.success) showToast(dtSaveResult.message, 'error');
 
     const isLocked = Boolean(
       updatedBatch.isLocked === true ||
@@ -1304,8 +1299,13 @@ export const App: React.FC = () => {
       );
     }
 
+    // Optimistic feedback: show success immediately, save to Azure SQL in background.
+    // Prevents 10-30s Azure cold-start delays from freezing the "Save Changes" spinner.
     broadcastSync();
     showToast(`Delivery Ticket ${updatedBatch.dtNumber} updated successfully.`, 'success');
+    saveDeliveryTicketApi(updatedBatch).then((dtSaveResult) => {
+      if (!dtSaveResult.success) showToast(dtSaveResult.message, 'error');
+    });
   };
 
   const handleDeleteDTBatch = (dtNumber: string) => {
