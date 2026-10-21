@@ -163,7 +163,9 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
     if (selectedDTDetail) {
       setDtEditNotes(selectedDTDetail.notes || '');
     }
-  }, [selectedDTDetail?.id, selectedDTDetail?.notes]);
+  }, [selectedDTDetail?.id]);
+  // Note: selectedDTDetail?.notes intentionally NOT in deps — including it causes
+  // the editor to reset mid-typing whenever any other field triggers a re-render.
 
   const handleSaveDTDetailNotes = () => {
     if (!selectedDTDetail) return;
