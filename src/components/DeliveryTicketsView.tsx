@@ -198,10 +198,12 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   const [adminUnlockRemark, setAdminUnlockRemark] = useState('');
   const [unlockError, setUnlockError] = useState('');
 
-  // Dispatch Date local edit state — prevents date picker from closing on state update
-  const [dispatchDateEdit, setDispatchDateEdit] = useState(selectedDTDetail?.rmDate || '');
+  // Dispatch Date local edit state — tracks the EDITED value only (YYYY-MM-DD).
+  // Initialized to '' so the input value falls back to toInputDate(selectedDTDetail.rmDate),
+  // which converts legacy DD-MM-YYYY stored dates to the YYYY-MM-DD format <input type="date"> requires.
+  const [dispatchDateEdit, setDispatchDateEdit] = useState('');
   useEffect(() => {
-    setDispatchDateEdit(selectedDTDetail?.rmDate || '');
+    setDispatchDateEdit('');  // reset edit state when a different DT is selected
   }, [selectedDTDetail?.id]);
 
   // AD Ticket No inline edit state (ADNOC Drilling pool contract 4700024096 only)
