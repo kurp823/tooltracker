@@ -1651,6 +1651,50 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     return jobDTs.find((d) => d.dtNumber === selectedDTNumber) || jobDTs[0] || null;
   }, [jobDTs, selectedDTNumber]);
 
+  // Build a Delivery Ticket line directly FROM an already-resolved Checklist line.
+  // The user selects the exact checklist row — its Asset No, Serial, Description
+  // and Category are already correct and already on screen. Re-running an
+  // inventory lookup here (as this used to do) could pull a DIFFERENT desc/
+  // category straight from the inventory record's own (sometimes messier or
+  // differently-worded) desc/shortDesc fields, which is exactly what caused the
+  // same tool to show a different Category on the Delivery Ticket than on the
+  // Checklist. So: copy the checklist item's fields verbatim, and only fall back
+  // to a fresh inventory lookup when the checklist item itself has no identity
+  // (no Asset No and no Serial) to go on at all.
+  const buildDTLineFromChecklistItem = useCallback((ci: CalloutItem, idx: number) => {
+    const hasIdentity = Boolean(
+      (ci.partNo && ci.partNo !== '—') || (ci.serialNos?.[0] && ci.serialNos[0] !== '—')
+    );
+    const resolved = hasIdentity
+      ? null
+      : resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.cat || ci.shortDesc, ci.supplier);
+
+    const assetNo = (ci.partNo && ci.partNo !== '—' ? ci.partNo : '') || resolved?.assetNo || ci.serialNos?.[0] || '—';
+    const serial = (ci.serialNos?.[0] && ci.serialNos[0] !== '—' ? ci.serialNos[0] : '') || resolved?.serial || assetNo;
+    const desc = ci.description || resolved?.desc || ci.shortDesc || ci.cat || 'Downhole Tool';
+    const shortDesc = ci.cat || ci.shortDesc || resolved?.shortDesc || 'Downhole Tool';
+    const supplier = ci.supplier || ci.ownership || resolved?.supplier || 'EMDAD';
+
+    return {
+      id: idx + 1,
+      itemNo: idx + 1,
+      serial,
+      assetNo,
+      shortDesc,
+      desc,
+      size: ci.size || resolved?.inv?.size || '—',
+      status: 'OnRig' as const,
+      ownership: supplier,
+      supplier,
+      isEmdad: ci.isEmdad ?? resolved?.isEmdad ?? (String(supplier).toUpperCase() === 'EMDAD'),
+      qty: ci.qty || 1,
+      remarks: '',
+      allocatedRig: ci.allocatedRig || jobData.rig || '',
+      allocatedWell: ci.allocatedWell || jobData.well || '',
+      clientDtNo: ci.clientDtNo || '',
+    };
+  }, [resolveToolDetails, jobData.rig, jobData.well]);
+
   const draftDT = useMemo<DTBatch>(() => {
     const curYr = new Date().getFullYear().toString().slice(-2);
     const existingSeqs = dtBatches
@@ -1672,24 +1716,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const dispatchDateStr = toInputDateFormat(jobData.mobDate) || new Date().toISOString().split('T')[0];
 
     const tools: any[] = (checklistItems && checklistItems.length > 0)
-      ? checklistItems.map((ci, idx) => {
-          const resolved = resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.cat || ci.shortDesc, ci.supplier);
-          return {
-            id: idx + 1,
-            itemNo: idx + 1,
-            serial: resolved.serial,
-            assetNo: getCleanAssetNo(ci.partNo, resolved.assetNo, ci.serialNos?.[0], resolved.serial),
-            shortDesc: ci.cat || ci.shortDesc || resolved.shortDesc,
-            desc: ci.description || resolved.desc,
-            size: ci.size || resolved.inv?.size || '—',
-            status: 'OnRig' as const,
-            ownership: resolved.supplier,
-            supplier: resolved.supplier,
-            isEmdad: resolved.isEmdad,
-            qty: ci.qty || 1,
-            remarks: 'Reserved in Checklist',
-          };
-        })
+      ? checklistItems.map((ci, idx) => ({
+          ...buildDTLineFromChecklistItem(ci, idx),
+          remarks: 'Reserved in Checklist',
+        }))
       : [];
 
     return {
@@ -1710,7 +1740,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       isLocked: false,
       toolLines: tools,
     };
-  }, [dtBatches, jobData, checklistItems, jobDTs.length, user]);
+  }, [dtBatches, jobData, checklistItems, jobDTs.length, user, buildDTLineFromChecklistItem]);
 
   const effectiveDT = activeDT || draftDT;
 
@@ -1785,24 +1815,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const dispatchDateStr = toInputDateFormat(jobData.mobDate) || new Date().toISOString().split('T')[0];
 
     const toolsToInclude: any[] = checklistItems.length > 0
-      ? checklistItems.map((ci, idx) => {
-          const resolved = resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.cat || ci.shortDesc, ci.supplier);
-          return {
-            id: idx + 1,
-            itemNo: idx + 1,
-            serial: resolved.serial,
-            assetNo: getCleanAssetNo(ci.partNo, resolved.assetNo, ci.serialNos?.[0], resolved.serial),
-            shortDesc: ci.cat || ci.shortDesc || resolved.shortDesc,
-            desc: ci.description || resolved.desc,
-            size: ci.size || resolved.inv?.size || '—',
-            status: 'OnRig' as const,
-            ownership: resolved.supplier,
-            supplier: resolved.supplier,
-            isEmdad: resolved.isEmdad,
-            qty: ci.qty || 1,
-            remarks: 'Mobilized',
-          };
-        })
+      ? checklistItems.map((ci, idx) => ({
+          ...buildDTLineFromChecklistItem(ci, idx),
+          remarks: 'Mobilized',
+        }))
       : [];
 
     const newDT: DTBatch = {
@@ -2620,34 +2636,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       recipient: `${jobData.rig} Toolpusher`,
       notes: '',
       isLocked: false,
-      toolLines: toolsToMobilize.map((ci, idx) => {
-        const resolved = resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.shortDesc || ci.cat, ci.supplier);
-        const finalAssetNo = getCleanAssetNo(ci.partNo, resolved.assetNo, ci.serialNos?.[0], resolved.serial);
-        const finalSerial = String(
-          (ci.serialNos?.[0] && !ci.serialNos[0].toUpperCase().startsWith('EMD-') && ci.serialNos[0] !== '—' ? ci.serialNos[0] : '') ||
-          (resolved.serial && !resolved.serial.toUpperCase().startsWith('EMD-') && resolved.serial !== '—' ? resolved.serial : '') ||
-          finalAssetNo || ci.serialNos?.[0] || resolved.serial || ''
-        ).trim();
-        const finalDesc = String(ci.description || resolved.desc || ci.shortDesc || '').trim();
-        return {
-          id: idx + 1,
-          itemNo: idx + 1,
-          serial: finalSerial,
-          assetNo: finalAssetNo,
-          shortDesc: ci.cat || ci.shortDesc || resolved.shortDesc,
-          desc: finalDesc,
-          size: ci.size || resolved.inv?.size || '—',
-          status: 'OnRig',
-          ownership: ci.supplier || resolved.supplier,
-          supplier: ci.supplier || resolved.supplier,
-          isEmdad: resolved.isEmdad,
-          qty: ci.qty || 1,
-          remarks: '',
-          allocatedRig: ci.allocatedRig || jobData.rig || '',
-          allocatedWell: ci.allocatedWell || jobData.well || '',
-          clientDtNo: ci.clientDtNo || '',
-        };
-      }),
+      toolLines: toolsToMobilize.map((ci, idx) => buildDTLineFromChecklistItem(ci, idx)),
     };
 
     onSaveDTBatch(newDT);
@@ -2795,27 +2784,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       return true;
     });
 
-    const syncedTools = deduplicatedChecklist.map((ci, idx) => {
-      const resolved = resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.shortDesc || ci.cat, ci.supplier);
-      return {
-        id: idx + 1,
-        itemNo: idx + 1,
-        serial: resolved.serial,
-        assetNo: getCleanAssetNo(ci.partNo, resolved.assetNo, ci.serialNos?.[0], resolved.serial),
-        shortDesc: ci.cat || ci.shortDesc || resolved.shortDesc,
-        desc: ci.description || resolved.desc,
-        size: ci.size || resolved.inv?.size || '—',
-        status: 'OnRig' as const,
-        ownership: resolved.supplier,
-        supplier: resolved.supplier,
-        isEmdad: resolved.isEmdad,
-        qty: ci.qty || 1,
-        remarks: '',
-        allocatedRig: ci.allocatedRig || jobData.rig || '',
-        allocatedWell: ci.allocatedWell || jobData.well || '',
-        clientDtNo: ci.clientDtNo || '',
-      };
-    });
+    const syncedTools = deduplicatedChecklist.map((ci, idx) => buildDTLineFromChecklistItem(ci, idx));
 
     const updatedBatch: DTBatch = {
       ...activeDT,
