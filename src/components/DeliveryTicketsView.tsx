@@ -1782,10 +1782,10 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                               const aKey = (t.assetNo || '').trim().toUpperCase();
                               const invTool = (sKey ? inventoryMap.get(sKey) : undefined) || (aKey ? inventoryMap.get(aKey) : undefined);
                               
-                              // Show AssetNo column directly from DB — no EMD- filtering.
-                              // If AssetNo is blank/wrong in the DB, that is a data issue to fix
-                              // in the database, not in the display logic.
-                              const assetNo = invTool?.assetNo || t.assetNo || invTool?.serial || t.serial || '—';
+                              // Show AssetNo column directly — never fall back to serial/SystemID.
+                              // serial = DB SystemID (EMD-2942 etc.) and must never appear in UI.
+                              // If AssetNo is blank, the tool's DB record needs updating.
+                              const assetNo = invTool?.assetNo || t.assetNo || '—';
 
                                const displaySize = invTool?.size || (t as any).size || '—';
                               const toolType = invTool?.shortDesc?.trim() || t.shortDesc?.trim() || 'Downhole Tool';
