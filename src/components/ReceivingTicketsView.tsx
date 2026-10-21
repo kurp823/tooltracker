@@ -279,13 +279,26 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
     if (selectedRTDetail) {
       setRtEditNotes(selectedRTDetail.notes || '');
     }
-  }, [selectedRTDetail?.id, selectedRTDetail?.notes]);
+  }, [selectedRTDetail?.id]);
+  // Note: selectedRTDetail?.notes intentionally NOT in deps — including it resets
+  // the editor mid-typing whenever any other field triggers a re-render.
 
-  const handleSaveRTDetailNotes = () => {
+  // Combined save: notes + AD Manifest No (with auto-lock) in one DB write
+  const handleSaveRTChanges = () => {
     if (!selectedRTDetail) return;
+    const trimmedManifest = adManifestNoEdit.trim();
+    const today = new Date().toISOString().split('T')[0];
+    const autoLock = isAdnocPoolRT && trimmedManifest && !selectedRTDetail.isLocked;
+    const baseNotes = rtEditNotes.trim();
     const updated: RTBatch = {
       ...selectedRTDetail,
-      notes: rtEditNotes.trim(),
+      notes: autoLock
+        ? (baseNotes
+            ? `${baseNotes}\n[Auto-locked ${today} — AD Manifest No entered by ${user?.name || 'Ops'}]`
+            : `[Auto-locked ${today} — AD Manifest No entered by ${user?.name || 'Ops'}]`)
+        : baseNotes,
+      ...(isAdnocPoolRT ? { adManifestNo: trimmedManifest } : {}),
+      ...(autoLock ? { isLocked: true, lockedBy: user?.name || 'System', lockedDate: today } : {}),
     };
     if (onUpdateRTBatch) {
       onUpdateRTBatch(updated);
@@ -294,6 +307,9 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
     }
     setSelectedRTDetail(updated);
   };
+
+  // Keep alias for onBlur on notes textarea
+  const handleSaveRTDetailNotes = handleSaveRTChanges;
 
   // Save AD Manifest No and auto-lock the RT batch (ADNOC 4700024096 only)
   const handleSaveAdManifestNo = (batch: RTBatch, value: string) => {
@@ -1372,6 +1388,16 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                 >
                   Print Document
                 </button>
+                {!isReadOnly && !selectedRTDetail.isLocked && (
+                  <button
+                    type="button"
+                    onClick={handleSaveRTChanges}
+                    className="px-3 py-1.5 rounded text-xs font-bold bg-blue-500 hover:bg-blue-400 text-white border border-blue-300/30 cursor-pointer transition flex items-center gap-1.5 shadow"
+                    title="Save notes and AD Manifest No"
+                  >
+                    💾 Save Changes
+                  </button>
+                )}
                 <button
                   onClick={() => setSelectedRTDetail(null)}
                   className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 text-xl font-bold transition cursor-pointer"
@@ -1449,17 +1475,10 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                             placeholder="Enter AD Manifest No to lock RT"
                             className="w-64 px-2.5 py-1.5 rounded border border-amber-300 font-mono font-bold text-sm bg-white focus:outline-none focus:ring-1 focus:ring-amber-400"
                           />
-                          <button
-                            type="button"
-                            disabled={!adManifestNoEdit.trim()}
-                            onClick={() => handleSaveAdManifestNo(selectedRTDetail, adManifestNoEdit)}
-                            className="px-3 py-1.5 rounded text-[11px] font-bold bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 cursor-pointer transition"
-                          >
-                            Save &amp; Lock
-                          </button>
                           {selectedRTDetail.adManifestNo && (
                             <span className="text-[11px] text-slate-500 font-mono">Current: {selectedRTDetail.adManifestNo}</span>
                           )}
+                          <span className="text-[10px] text-amber-700">Will auto-lock on 💾 Save Changes</span>
                         </div>
                       )}
                     </div>
@@ -1582,16 +1601,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                   className="w-full bg-white border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
                 />
                 {!isReadOnly && (
-                  <div className="flex justify-end items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleSaveRTDetailNotes}
-                      className="bg-[#1a3055] hover:bg-[#24426d] text-white font-bold text-xs px-3.5 py-1.5 rounded shadow-2xs transition cursor-pointer flex items-center gap-1.5"
-                    >
-                      <span>💾</span>
-                      <span>Save Receiving Ticket Notes</span>
-                    </button>
-                  </div>
+                  <p className="text-[10px] text-slate-400 text-right">Use the <strong>💾 Save Changes</strong> button above to save notes.</p>
                 )}
               </div>
             </div>

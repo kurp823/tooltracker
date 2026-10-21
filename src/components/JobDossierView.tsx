@@ -1819,7 +1819,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     } else {
       setDtNotesInput('');
     }
-  }, [effectiveDT?.id, effectiveDT?.dtNumber, effectiveDT?.notes]);
+  }, [effectiveDT?.id, effectiveDT?.dtNumber]);
+  // Note: effectiveDT?.notes intentionally NOT in deps — resets editor mid-typing on any re-render.
 
   const handleSaveDTNotes = (silent = false) => {
     // Only persist if an active DT exists. Never auto-create a DT from saving notes!
@@ -1923,7 +1924,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     } else {
       setRtNotesInput('');
     }
-  }, [effectiveRT?.id, effectiveRT?.rtNumber, effectiveRT?.notes]);
+  }, [effectiveRT?.id, effectiveRT?.rtNumber]);
+  // Note: effectiveRT?.notes intentionally NOT in deps — resets editor mid-typing on any re-render.
 
   const handleSaveRTNotes = (silent = false) => {
     const targetRT = effectiveRT;

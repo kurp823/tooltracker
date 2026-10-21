@@ -163,18 +163,23 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
     if (selectedDTDetail) {
       setDtEditNotes(selectedDTDetail.notes || '');
     }
-  }, [selectedDTDetail?.id, selectedDTDetail?.notes]);
+  }, [selectedDTDetail?.id]);
+  // Note: selectedDTDetail?.notes intentionally NOT in deps — including it causes
+  // the editor to reset mid-typing whenever any other field triggers a re-render.
 
-  const handleSaveDTDetailNotes = () => {
-    if (!selectedDTDetail) return;
-    const updated: DTBatch = {
+  // Combined save: date + notes in one DB write (single Save button in header)
+  const handleSaveDTChanges = () => {
+    if (!selectedDTDetail || !onUpdateDTBatch) return;
+    onUpdateDTBatch({
       ...selectedDTDetail,
+      rmDate: dispatchDateEdit || selectedDTDetail.rmDate,
+      dispatchDate: dispatchDateEdit || selectedDTDetail.dispatchDate,
       notes: dtEditNotes.trim(),
-    };
-    if (onUpdateDTBatch) {
-      onUpdateDTBatch(updated);
-    }
+    });
   };
+
+  // Keep alias for onBlur on notes textarea (same handler)
+  const handleSaveDTDetailNotes = handleSaveDTChanges;
 
   // Document Attachment Modal state
   const [attachTargetDT, setAttachTargetDT] = useState<DTBatch | null>(null);
@@ -183,6 +188,12 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   const [unlockTargetDT, setUnlockTargetDT] = useState<DTBatch | null>(null);
   const [adminUnlockRemark, setAdminUnlockRemark] = useState('');
   const [unlockError, setUnlockError] = useState('');
+
+  // Dispatch Date local edit state — prevents date picker from closing on state update
+  const [dispatchDateEdit, setDispatchDateEdit] = useState(selectedDTDetail?.rmDate || '');
+  useEffect(() => {
+    setDispatchDateEdit(selectedDTDetail?.rmDate || '');
+  }, [selectedDTDetail?.id]);
 
   // AD Ticket No inline edit state (ADNOC Drilling pool contract 4700024096 only)
   const [clientDtNoEdits, setClientDtNoEdits] = useState<Record<string, string>>({});
@@ -1474,6 +1485,16 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                         📎 Attach Signed Copy
                       </button>
                     )}
+                    {!isReadOnly && !isDTLocked && (
+                      <button
+                        type="button"
+                        onClick={handleSaveDTChanges}
+                        className="px-3 py-1.5 rounded text-xs font-bold bg-blue-500 hover:bg-blue-400 text-white border border-blue-300/30 cursor-pointer transition flex items-center gap-1.5 shadow"
+                        title="Save date and notes changes"
+                      >
+                        💾 Save Changes
+                      </button>
+                    )}
                     <button
                       onClick={() => setSelectedDTId(null)}
                       className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 text-xl font-bold transition cursor-pointer"
@@ -1529,14 +1550,18 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                       ) : (
                         <input
                           type="date"
-                          value={toInputDate(selectedDTDetail.rmDate)}
-                          onChange={(e) => {
+                          value={dispatchDateEdit || toInputDate(selectedDTDetail.rmDate)}
+                          onChange={(e) => setDispatchDateEdit(e.target.value)}
+                          onBlur={(e) => {
                             if (!onUpdateDTBatch) return;
-                            onUpdateDTBatch({
-                              ...selectedDTDetail,
-                              rmDate: e.target.value,
-                              dispatchDate: e.target.value,
-                            });
+                            const val = e.target.value;
+                            if (val !== toInputDate(selectedDTDetail.rmDate)) {
+                              onUpdateDTBatch({
+                                ...selectedDTDetail,
+                                rmDate: val,
+                                dispatchDate: val,
+                              });
+                            }
                           }}
                           className="mt-0.5 w-full bg-white border border-blue-300 rounded px-1.5 py-0.5 text-xs font-mono text-slate-800 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
@@ -1870,16 +1895,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                       className="w-full bg-white border border-[#9fb6cf] rounded p-2.5 text-xs text-slate-800 leading-relaxed font-mono shadow-inner outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
                     />
                     {!isReadOnly && (
-                      <div className="flex justify-end items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={handleSaveDTDetailNotes}
-                          className="bg-[#1a3055] hover:bg-[#24426d] text-white font-bold text-xs px-3.5 py-1.5 rounded shadow-2xs transition cursor-pointer flex items-center gap-1.5"
-                        >
-                          <span>💾</span>
-                          <span>Save Delivery Ticket Notes</span>
-                        </button>
-                      </div>
+                      <p className="text-[10px] text-slate-400 text-right">Use the <strong>💾 Save Changes</strong> button above to save notes and date.</p>
                     )}
                   </div>
                 </div>
