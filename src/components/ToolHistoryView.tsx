@@ -519,12 +519,6 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
                     {currentTool.assetNo || currentTool.serial}
                   </span>
                 </div>
-                {currentTool.serial && currentTool.serial !== currentTool.assetNo && (
-                  <div>
-                    <span className="text-[10px] text-slate-400 block uppercase font-bold">SERIAL NO</span>
-                    <span className="font-mono font-bold text-slate-200 text-sm">{currentTool.serial}</span>
-                  </div>
-                )}
                 <div>
                   <span className="text-[10px] text-slate-400 block uppercase font-bold">TOOL DESCRIPTION</span>
                   <span className="font-semibold text-slate-100">{currentTool.shortDesc || 'Downhole Tool'}</span>
@@ -640,9 +634,6 @@ export const ToolHistoryView: React.FC<ToolHistoryViewProps> = ({
                     <td className="px-3 py-2 text-center font-mono text-slate-500">{r.sNo}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       <div className="font-mono font-bold text-slate-900">{r.partNum}</div>
-                      {(r as any).serial && (r as any).serial !== r.partNum && (
-                        <div className="text-[10px] font-mono text-slate-500">SN: {(r as any).serial}</div>
-                      )}
                     </td>
                     <td className="px-3 py-2 font-medium text-slate-800 max-w-sm truncate" title={r.partDescription}>
                       {r.partDescription}

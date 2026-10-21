@@ -2940,7 +2940,7 @@ export const UtilizationView: React.FC<UtilizationViewProps> = ({
                   {newItemCat === 'Man Power'
                     ? 'Employee ID *'
                     : newItemCat === 'Tools'
-                    ? 'Tool Serial / Asset # *'
+                    ? 'Tool Asset No *'
                     : 'Inventory Asset Code *'}
                 </label>
                 <input

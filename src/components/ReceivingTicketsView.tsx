@@ -949,7 +949,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                                   <thead className="bg-slate-100 text-slate-700 font-semibold text-[11px] border-b border-slate-200">
                                     <tr>
                                       <th className="px-2.5 py-1.5">#</th>
-                                      <th className="px-2.5 py-1.5">Serial #</th>
+                                      <th className="px-2.5 py-1.5">Asset No</th>
                                       <th className="px-2.5 py-1.5">Size</th>
                                       <th className="px-2.5 py-1.5">Tool Description</th>
                                       <th className="px-2.5 py-1.5">Ownership</th>
@@ -961,7 +961,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                                     {grp.tools.map((t, idx) => (
                                       <tr key={t.serial} className="hover:bg-slate-50">
                                         <td className="px-2.5 py-1 text-slate-400 font-mono text-[11px]">{idx + 1}</td>
-                                        <td className="px-2.5 py-1 font-mono font-bold text-amber-900">{t.serial}</td>
+                                        <td className="px-2.5 py-1 font-mono font-bold text-amber-900">{t.assetNo || '—'}</td>
                                         <td className="px-2.5 py-1 font-mono">{t.size || '—'}</td>
                                         <td className="px-2.5 py-1 font-medium text-slate-800">{t.shortDesc}</td>
                                         <td className="px-2.5 py-1 text-slate-600">{t.ownership || 'EMDAD'}</td>
@@ -1122,7 +1122,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                       <thead className="bg-slate-100 text-[#1a3055] font-bold border-b border-[#b8c9db] sticky top-0 text-[11px]">
                         <tr>
                           <th className="p-2 w-10 text-center">Receive</th>
-                          <th className="p-2">Serial #</th>
+                          <th className="p-2">Asset No</th>
                           <th className="p-2">Size</th>
                           <th className="p-2">Description</th>
                           <th className="p-2">Ownership</th>
@@ -1161,7 +1161,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                                   className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
                                 />
                               </td>
-                              <td className="p-2 font-mono font-bold text-amber-900">{t.serial}</td>
+                              <td className="p-2 font-mono font-bold text-amber-900">{t.assetNo || '—'}</td>
                               <td className="p-2 font-mono">{t.size || '—'}</td>
                               <td className="p-2 text-slate-800">{t.shortDesc}</td>
                               <td className="p-2 text-slate-600">{t.ownership || 'EMDAD'}</td>
@@ -1518,7 +1518,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                     <thead className="bg-slate-50 text-[#1a3055] font-bold border-b border-slate-200">
                       <tr>
                         <th className="px-3 py-2 w-12 text-center">#</th>
-                        <th className="px-3 py-2">Serial Number</th>
+                        <th className="px-3 py-2">Asset No</th>
                         <th className="px-3 py-2">Size</th>
                         <th className="px-3 py-2">Tool Category</th>
                         <th className="px-3 py-2">Description</th>
@@ -1549,7 +1549,7 @@ export const ReceivingTicketsView: React.FC<ReceivingTicketsViewProps> = ({
                         return (
                           <tr key={idx} className="hover:bg-slate-50 transition">
                             <td className="px-3 py-2 text-slate-400 font-mono text-[11px] text-center">{idx + 1}</td>
-                            <td className="px-3 py-2 font-mono font-bold text-amber-900">{t.serial}</td>
+                            <td className="px-3 py-2 font-mono font-bold text-amber-900">{t.assetNo || '—'}</td>
                             <td className="px-3 py-2 font-mono font-semibold text-slate-800">{displaySize}</td>
                             <td className="px-3 py-2 font-bold text-[#1a3055] whitespace-nowrap">{toolType}</td>
                             <td className="px-3 py-2 text-slate-700 text-xs">{t.shortDesc || (t as any).toolDescription || 'Downhole Tool'}</td>

@@ -198,10 +198,12 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
   const [adminUnlockRemark, setAdminUnlockRemark] = useState('');
   const [unlockError, setUnlockError] = useState('');
 
-  // Dispatch Date local edit state — prevents date picker from closing on state update
-  const [dispatchDateEdit, setDispatchDateEdit] = useState(selectedDTDetail?.rmDate || '');
+  // Dispatch Date local edit state — tracks the EDITED value only (YYYY-MM-DD).
+  // Initialized to '' so the input value falls back to toInputDate(selectedDTDetail.rmDate),
+  // which converts legacy DD-MM-YYYY stored dates to the YYYY-MM-DD format <input type="date"> requires.
+  const [dispatchDateEdit, setDispatchDateEdit] = useState('');
   useEffect(() => {
-    setDispatchDateEdit(selectedDTDetail?.rmDate || '');
+    setDispatchDateEdit('');  // reset edit state when a different DT is selected
   }, [selectedDTDetail?.id]);
 
   // AD Ticket No inline edit state (ADNOC Drilling pool contract 4700024096 only)
@@ -1115,7 +1117,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                       <thead className="bg-[#eef3f9] text-[#1a3055] border-b border-[#b8c9db] font-bold sticky top-0">
                         <tr>
                           <th className="px-2.5 py-1.5 w-8">#</th>
-                          <th className="px-2.5 py-1.5">Serial / ID</th>
+                          <th className="px-2.5 py-1.5">Asset No</th>
                           <th className="px-2.5 py-1.5">Size</th>
                           <th className="px-2.5 py-1.5">Tool Category</th>
                           <th className="px-2.5 py-1.5">Source</th>
@@ -1134,7 +1136,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                                 {idx + 1}
                               </td>
                               <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">
-                                {tool.serial}
+                                {tool.assetNo || '—'}
                               </td>
                               <td className="px-2.5 py-1.5 font-mono">{tool.size}</td>
                               <td className="px-2.5 py-1.5 font-bold text-[#1a3055]">
@@ -1212,7 +1214,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                     <table className="w-full text-left text-xs border-collapse">
                       <thead className="bg-slate-50 text-[#24476b] border-b border-[#b8c9db] font-bold">
                         <tr>
-                          <th className="px-2.5 py-1.5">Serial</th>
+                          <th className="px-2.5 py-1.5">Asset No</th>
                           <th className="px-2.5 py-1.5">Size</th>
                           <th className="px-2.5 py-1.5">Tool Category</th>
                           <th className="px-2.5 py-1.5">Owner</th>
@@ -1225,7 +1227,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                           const isInserted = checkedToolIds.includes(t.id);
                           return (
                             <tr key={t.id} className="hover:bg-slate-50">
-                              <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">{t.serial}</td>
+                              <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">{t.assetNo || '—'}</td>
                               <td className="px-2.5 py-1.5 font-mono">{t.size}</td>
                               <td className="px-2.5 py-1.5 font-bold text-[#1a3055]">{t.shortDesc}</td>
                               <td className="px-2.5 py-1.5 text-slate-500">{t.ownership}</td>
@@ -1334,7 +1336,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                                     }}
                                   />
                                 </th>
-                                <th className="px-2 py-1.5">Serial</th>
+                                <th className="px-2 py-1.5">Asset No</th>
                                 <th className="px-2 py-1.5">Size</th>
                                 <th className="px-2 py-1.5">Category</th>
                                 <th className="px-2 py-1.5">Owner</th>
@@ -1366,7 +1368,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                                         }}
                                       />
                                     </td>
-                                    <td className="px-2 py-1 font-mono font-bold text-amber-900">{t.serial}</td>
+                                    <td className="px-2 py-1 font-mono font-bold text-amber-900">{t.assetNo || '—'}</td>
                                     <td className="px-2 py-1 font-mono">{t.size}</td>
                                     <td className="px-2 py-1 font-bold text-[#1a3055]">{t.shortDesc}</td>
                                     <td className="px-2 py-1 text-slate-500">{t.ownership}</td>
@@ -1675,7 +1677,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                         <table className="w-full text-left text-xs">
                           <thead className="bg-amber-100/60 font-bold border-b border-amber-200 text-amber-900 sticky top-0">
                             <tr>
-                              <th className="px-2.5 py-1.5">Serial</th>
+                              <th className="px-2.5 py-1.5">Asset No</th>
                               <th className="px-2.5 py-1.5">Size</th>
                               <th className="px-2.5 py-1.5">Tool Type</th>
                               <th className="px-2.5 py-1.5">Description</th>
@@ -1695,7 +1697,7 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                               .slice(0, 15)
                               .map((tool) => (
                                 <tr key={tool.id} className="hover:bg-amber-50/50">
-                                  <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">{tool.serial}</td>
+                                  <td className="px-2.5 py-1.5 font-mono font-bold text-amber-900">{tool.assetNo || '—'}</td>
                                   <td className="px-2.5 py-1.5 font-mono">{tool.size}</td>
                                   <td className="px-2.5 py-1.5 font-bold text-[#1a3055]">{tool.shortDesc}</td>
                                   <td className="px-2.5 py-1.5 text-slate-600 text-xs max-w-xs truncate" title={tool.desc}>{tool.desc}</td>
@@ -1725,7 +1727,6 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                           <tr>
                             <th className="px-3 py-2 w-10 text-slate-500">#</th>
                             <th className="px-3 py-2">Asset No</th>
-                            <th className="px-3 py-2">Serial #</th>
                             <th className="px-3 py-2">Size</th>
                             <th className="px-3 py-2">Tool Type</th>
                             <th className="px-3 py-2">Description</th>
@@ -1825,7 +1826,6 @@ export const DeliveryTicketsView: React.FC<DeliveryTicketsViewProps> = ({
                                 <tr key={i} className="hover:bg-slate-50 transition">
                                   <td className="px-3 py-2 text-slate-400 font-mono text-[11px]">{i + 1}</td>
                                   <td className="px-3 py-2 font-mono font-bold text-slate-900">{assetNo}</td>
-                                  <td className="px-3 py-2 font-mono font-semibold text-amber-900">{t.serial}</td>
                                   <td className="px-3 py-2 font-mono font-semibold text-slate-800">{displaySize}</td>
                                   <td className="px-3 py-2 font-bold text-[#1a3055] whitespace-nowrap">{toolType}</td>
                                   <td className="px-3 py-2 text-slate-700 text-xs" title={description}>
