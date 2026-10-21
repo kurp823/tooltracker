@@ -5087,12 +5087,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   ) : (
                     checklistItems.map((item, i) => {
                       const assignedDT = getAssignedDTForChecklistItem(item);
-                      // Direct read, no inventory lookup: whatever was recorded on this
-                      // checklist line (Asset No, Description, Category, Supplier) when
-                      // the tool was selected is exactly what's shown here. The backend
-                      // record is the single source of truth — nothing is re-derived at
-                      // display time.
-                      const displayItemAssetNo = item.partNo || item.serialNos?.[0] || '—';
+                      // Direct read: use stored values, but if they carry an EMD- system ID
+                      // fall back to inventory resolution to surface the real asset number.
+                      const ciResolved = resolveToolDetails(item.serialNos?.[0], item.partNo, item.description, item.cat || item.shortDesc, item.supplier);
+                      const displayItemAssetNo =
+                        (item.partNo && !item.partNo.toUpperCase().startsWith('EMD-') && item.partNo !== '—' ? item.partNo : '') ||
+                        (ciResolved.assetNo && !ciResolved.assetNo.toUpperCase().startsWith('EMD-') && ciResolved.assetNo !== '—' ? ciResolved.assetNo : '') ||
+                        (item.serialNos?.[0] && !item.serialNos[0].toUpperCase().startsWith('EMD-') && item.serialNos[0] !== '—' ? item.serialNos[0] : '') ||
+                        (ciResolved.serial && !ciResolved.serial.toUpperCase().startsWith('EMD-') && ciResolved.serial !== '—' ? ciResolved.serial : '') ||
+                        item.partNo || item.serialNos?.[0] || '—';
                       const displayItemDesc = item.description || '—';
                       const displayItemCategory = item.cat || item.shortDesc || '—';
                       const displayItemSupplier = item.supplier || item.ownership || 'EMDAD';
@@ -5512,12 +5515,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <tbody className="divide-y divide-slate-200">
                     {effectiveDT.toolLines && effectiveDT.toolLines.length > 0 ? (
                       effectiveDT.toolLines.map((t, idx) => {
-                        // Direct read, no inventory lookup: this Delivery Ticket line
-                        // already carries its own Asset No, Description, Category and
-                        // Supplier exactly as recorded when the ticket was created. The
-                        // backend record is the single source of truth — nothing is
-                        // re-derived at display time.
-                        const displayDtAssetNo = t.assetNo || t.serial || '—';
+                        // Direct read: use stored values, but if they carry an EMD- system ID
+                        // fall back to inventory resolution to surface the real asset number.
+                        const dtResolved = resolveToolDetails(t.serial, t.assetNo, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
+                        const displayDtAssetNo =
+                          (t.assetNo && !t.assetNo.toUpperCase().startsWith('EMD-') && t.assetNo !== '—' ? t.assetNo : '') ||
+                          (dtResolved.assetNo && !dtResolved.assetNo.toUpperCase().startsWith('EMD-') && dtResolved.assetNo !== '—' ? dtResolved.assetNo : '') ||
+                          (t.serial && !t.serial.toUpperCase().startsWith('EMD-') && t.serial !== '—' ? t.serial : '') ||
+                          (dtResolved.serial && !dtResolved.serial.toUpperCase().startsWith('EMD-') && dtResolved.serial !== '—' ? dtResolved.serial : '') ||
+                          t.assetNo || t.serial || '—';
                         const displayDtDesc = t.desc || '—';
                         const displayDtCategory = t.shortDesc || '—';
                         const displayDtSupplier = t.supplier || t.ownership || 'EMDAD';
