@@ -85,6 +85,9 @@ interface JobDossierViewProps {
   onBackToRegister?: () => void;
   onNavigateToInvoicing?: (jobId: string) => void;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  /** True while a background Azure SQL sync is in progress. Used to show a
+   *  loading indicator instead of a misleading "No tools" empty state. */
+  isSyncing?: boolean;
 }
 
 type DossierTabKey =
@@ -381,6 +384,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   onBackToRegister,
   onNavigateToInvoicing,
   showToast,
+  isSyncing,
   customCategories: propCustomCategories,
   customSizes: propCustomSizes,
 }) => {
@@ -1775,13 +1779,11 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     // Use YYYY-MM-DD (ISO) format — <input type="date"> requires this exact format.
     const dispatchDateStr = toInputDateFormat(jobData.mobDate) || new Date().toISOString().split('T')[0];
 
-    const tools: any[] = (checklistItems && checklistItems.length > 0)
-      ? checklistItems.map((ci, idx) => ({
-          ...buildDTLineFromChecklistItem(ci, idx),
-          remarks: 'Reserved in Checklist',
-        }))
-      : [];
-
+    // Draft DT has NO tool lines pre-populated from checklist.
+    // Tools only appear in the DT manifest AFTER the user explicitly clicks
+    // "Create DT from Selected ✓ Tools" in the Checklist tab.
+    // Pre-filling tool lines here created a misleading "Draft Preview" that
+    // looked like a real DT had already been generated.
     return {
       id: `DT-DRAFT-${jobData.id}`,
       dtNumber: nextDTNum,
@@ -1798,9 +1800,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       recipient: `${jobData.rig} Toolpusher`,
       notes: '',
       isLocked: false,
-      toolLines: tools,
+      toolLines: [], // Empty until DT is formally generated
     };
-  }, [dtBatches, jobData, checklistItems, jobDTs.length, user, buildDTLineFromChecklistItem]);
+  }, [dtBatches, jobData, jobDTs.length, user]);
 
   const effectiveDT = activeDT || draftDT;
 
@@ -5081,9 +5083,21 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   {checklistItems.length === 0 ? (
                     <tr>
                       <td colSpan={(isClosedOrInvoiced || isLocked ? 13 : 14) + checklistCustomCols.length} className="p-6 text-center text-slate-500 font-medium">
-                        No tools in checklist.
-                        {!isClosedOrInvoiced && !isLocked && (
-                          <span> Click <strong>&quot;Select Tools&quot;</strong> above to pick available tools from yard inventory.</span>
+                        {isSyncing ? (
+                          <span className="inline-flex items-center gap-2 text-blue-700 font-semibold">
+                            <svg className="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            Syncing data from Azure SQL — checklist will appear shortly…
+                          </span>
+                        ) : (
+                          <>
+                            No tools in checklist.
+                            {!isClosedOrInvoiced && !isLocked && (
+                              <span> Click <strong>&quot;Select Tools&quot;</strong> above to pick available tools from yard inventory.</span>
+                            )}
+                          </>
                         )}
                       </td>
                     </tr>
@@ -5305,8 +5319,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 {jobDTs.length === 0 ? (
                   <>
                     <span className="bg-amber-50 text-amber-900 border border-amber-300 font-bold text-xs px-2.5 py-1 rounded flex items-center gap-1 shadow-2xs">
-                      <span>📝</span>
-                      <span>Draft Preview (Not Dispatched)</span>
+                      <span>⏳</span>
+                      <span>No DT Generated — Go to Checklist to Generate</span>
                     </span>
                   </>
                 ) : Boolean(activeDT?.isLocked) && !adminUnlocked ? (
@@ -5411,9 +5425,9 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <div className="flex items-center gap-2">
                     <span className="text-amber-700 text-lg">⚠️</span>
                     <div>
-                      <strong className="text-amber-900 font-bold">Delivery Ticket Not Generated Yet:</strong>
+                      <strong className="text-amber-900 font-bold">No Delivery Ticket Generated Yet:</strong>
                       <span className="text-amber-800 ml-1">
-                        Equipment is currently in yard (Emdad Base). The lines below are a draft preview. To dispatch equipment to Rig {jobData.rig}, select your checklist tools and click &quot;Create DT from Selected ✓ Tools&quot;.
+                        Equipment is currently in yard (Emdad Base). Go to the <button type="button" onClick={() => setActiveTab('checklist')} className="text-blue-800 underline font-bold cursor-pointer">Checklist</button> tab, select your tools and click &quot;Generate DT from Checklist&quot; to dispatch to Rig {jobData.rig}.
                       </span>
                     </div>
                   </div>
@@ -5435,7 +5449,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <span className="text-xs font-mono">
                     Ticket No : {jobDTs.length === 0 ? (
                       <span className="text-amber-800 font-bold text-sm bg-amber-50 border border-amber-300 px-2 py-0.5 rounded">
-                        Draft Preview (Not Dispatched)
+                        Not Generated Yet
                       </span>
                     ) : (
                       <strong className="text-red-600 font-bold text-base">{effectiveDT.dtNumber}</strong>

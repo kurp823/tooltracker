@@ -79,6 +79,7 @@ interface JobsViewProps {
   onOpenNewJobModal: () => void;
   selectedCalloutForNewJob?: Callout | null;
   onOpenJobToolsList?: (jobId: string) => void;
+  isSyncing?: boolean;
 }
 
 // Clean oilfield date formatter (strictly formats as DD-MMM-YYYY, e.g. 28-May-2023)
@@ -243,6 +244,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   onOpenJobToolsList,
   customCategories,
   customSizes,
+  isSyncing,
 }) => {
   const { canEdit, isReadOnly } = useModulePermission(user, 'jobs');
   const [tab, setTab] = useState<'all' | JobStageKey>('all');
@@ -2281,6 +2283,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
                 inspections={inspections || []}
                 customCategories={customCategories}
                 customSizes={customSizes}
+                isSyncing={isSyncing}
                 onSaveJob={(updated) => {
                   onSaveJob(updated);
                   setDossierJob(updated);

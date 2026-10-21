@@ -764,10 +764,12 @@ export const App: React.FC = () => {
         .catch(() => {});
     }, 60000);
 
-    // 3. Keep-Warm Pinger: ping Azure Function every 4 minutes to eliminate cold starts (10-30s lag)
+    // 3. Keep-Warm Pinger: ping Azure Function every 2 minutes to eliminate cold starts (10-30s lag).
+    //    Reduced from 4 min — Azure Functions go cold after ~5 min of inactivity; 2 min keeps
+    //    the function consistently warm so the next sync responds in ~1s instead of 10-30s.
     const keepWarmInterval = setInterval(() => {
       fetchFromApi('ping', {}).catch(() => {});
-    }, 4 * 60 * 1000);
+    }, 2 * 60 * 1000);
 
     // 4. On window focus: sync only if last sync was > 60 seconds ago (the 30s guard in
     //    handleFetchLiveSql provides an additional safety net against rapid focus events).
@@ -2365,6 +2367,7 @@ export const App: React.FC = () => {
               onOpenNewJobModal={() => setIsNewJobOpen(true)}
               selectedCalloutForNewJob={selectedCalloutForJob}
               onRefresh={() => handleFetchLiveSql(false)}
+              isSyncing={syncStatus === 'syncing'}
             />
           )}
 
