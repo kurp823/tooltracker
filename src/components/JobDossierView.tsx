@@ -2082,6 +2082,73 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     }
   };
 
+  // Confirm receipt and lock a Return/Receiving Ticket against further edits
+  // (mirrors handleConfirmAndLockDT below — same pattern, RT side)
+  const handleConfirmAndLockRT = () => {
+    const targetRT = effectiveRT;
+    if (!targetRT) return;
+    const count = targetRT.toolLines?.length || 0;
+    const confirmed = window.confirm(
+      adminUnlocked
+        ? `Confirm corrections and re-lock Receiving Ticket ${targetRT.rtNumber}?\n\n` +
+          `• Tools Returned: ${count}\n` +
+          `• Rig / Well: ${jobData.rig} / ${jobData.well}\n\n` +
+          `This will save all corrected RT fields, lock the Receiving Ticket, and restore the workspace to normal locked mode.`
+        : `Are you sure you want to confirm receipt and lock Receiving Ticket ${targetRT.rtNumber}?\n\n` +
+          `• Tools Received Back: ${count}\n` +
+          `• Rig / Well: ${jobData.rig} / ${jobData.well}\n\n` +
+          `This confirms the manifest is complete and locks this ticket against further modifications.`
+    );
+    if (!confirmed) return;
+
+    const updatedBatch: RTBatch = {
+      ...targetRT,
+      isLocked: true,
+      lockedBy: user?.name || 'Operations',
+      lockedDate: new Date().toISOString(),
+    };
+
+    if (activeRT && onUpdateRTBatch) {
+      onUpdateRTBatch(updatedBatch);
+    } else {
+      onSaveRTBatch(updatedBatch);
+      setSelectedRTNumber(updatedBatch.rtNumber);
+    }
+
+    if (adminUnlocked) {
+      setAdminUnlocked(false);
+    }
+
+    showToast(`Receiving Ticket ${updatedBatch.rtNumber} confirmed and locked.`, 'success');
+  };
+
+  // Explicit Unlock Receiving Ticket
+  const handleUnlockRT = () => {
+    if (!activeRT) return;
+    const confirmed = window.confirm(
+      `Unlock Receiving Ticket ${activeRT.rtNumber} for editing?\n\n` +
+      `• Job: ${jobData.id}\n` +
+      `• Rig: ${jobData.rig} / Well: ${jobData.well}\n\n` +
+      `This will unlock this Receiving Ticket so you can correct returned tool lines or manifest details.`
+    );
+    if (!confirmed) return;
+
+    const unlockedBatch: RTBatch = {
+      ...activeRT,
+      isLocked: false,
+      lockedBy: undefined,
+      lockedDate: undefined,
+    };
+
+    if (onUpdateRTBatch) {
+      onUpdateRTBatch(unlockedBatch);
+    } else {
+      onSaveRTBatch(unlockedBatch);
+    }
+    setAdminUnlocked(true);
+    showToast(`Receiving Ticket ${activeRT.rtNumber} unlocked for editing.`, 'info');
+  };
+
   // Robust field resolvers for Return Tickets
   const resolveRtDate = (rt?: RTBatch | null): string => {
     if (!rt) return '—';
@@ -4994,7 +5061,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
               {/* Checklist Field Grid - memoized to prevent cascade re-renders on typing */}
               <CalloutHeaderForm
                 calloutId={activeCallout.id || ''}
-                reqDate={activeCallout.reqDate || ''}
+                reqDate={toInputDateFormat(activeCallout.reqDate)}
                 projectNo={activeCallout.projectNo || jobData.contractNo || ''}
                 poNumber={activeCallout.poNumber || jobData.poNumber || ''}
                 emailRef={activeCallout.emailRef || ''}
@@ -5795,6 +5862,47 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 )}
               </div>
               <div className="flex items-center gap-1.5">
+                {jobRTs.length === 0 ? (
+                  <span className="bg-amber-50 text-amber-900 border border-amber-300 font-bold text-xs px-2.5 py-1 rounded flex items-center gap-1 shadow-2xs">
+                    <span>📝</span>
+                    <span>Draft Preview (Not Confirmed)</span>
+                  </span>
+                ) : Boolean(activeRT?.isLocked) && !adminUnlocked ? (
+                  <>
+                    <span className="bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs px-3 py-1 rounded flex items-center gap-1 shadow-2xs">
+                      <span>🔒</span>
+                      <span>Received &amp; Locked</span>
+                    </span>
+                    {(!isClosedOrInvoiced || adminUnlocked) && (!isLocked || adminUnlocked) && (
+                      <button
+                        type="button"
+                        onClick={handleUnlockRT}
+                        className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs cursor-pointer flex items-center gap-1 transition"
+                        title="Unlock this Receiving Ticket to correct returned tool lines or manifest details"
+                      >
+                        <span>🔓</span>
+                        <span>Unlock RT</span>
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-xs px-2.5 py-1 rounded flex items-center gap-1 shadow-2xs">
+                      <span>🔓</span>
+                      <span>Draft / Unlocked</span>
+                    </span>
+                    {(!isClosedOrInvoiced || adminUnlocked) && (!isLocked || adminUnlocked) && (
+                      <button
+                        type="button"
+                        onClick={handleConfirmAndLockRT}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span>📥</span>
+                        <span>{adminUnlocked ? 'Confirm Corrections & Lock RT' : 'Confirm Receipt & Lock RT'}</span>
+                      </button>
+                    )}
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={() => handlePrintReceivingTicket(effectiveRT)}
@@ -5830,7 +5938,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                 </div>
                 {/* RT header input fields — memoized to prevent cascade re-renders on typing */}
                 <RTHeaderForm
-                  isEditable={!(isClosedOrInvoiced || isLocked)}
+                  isEditable={!(isClosedOrInvoiced || isLocked) && (!effectiveRT.isLocked || adminUnlocked)}
                   editDate={toInputDateFormat(effectiveRT.rtDate || effectiveRT.backloadRmDate || jobData.demobDate)}
                   editCarrier={effectiveRT.carrier || effectiveRT.shippedVia || ''}
                   editLoadingNoteDate={toInputDateFormat(effectiveRT.loadingNoteDate || effectiveRT.lNoteDate)}
@@ -6014,7 +6122,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       />
                     </div>
 
-                    {!isClosedOrInvoiced && !isLocked && (
+                    {!isClosedOrInvoiced && !isLocked && (!effectiveRT.isLocked || adminUnlocked) && (
                       <button
                         type="button"
                         onClick={handleMoveToolsToRT}
@@ -7856,11 +7964,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
           <span className="text-slate-400">&bull;</span>
           <span className="text-slate-300">Rig:</span>
           <span className="font-mono text-cyan-300">{jobData.rig || '—'}</span>
-          {lastSavedTime && (
-            <span className="text-[10px] text-emerald-300 font-normal hidden md:inline ml-2">
-              (Last Saved: {lastSavedTime})
-            </span>
-          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -7880,8 +7983,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
             </button>
           )}
           <span className="text-[11px] text-slate-300 font-mono bg-white/5 border border-white/10 px-2.5 py-1 rounded flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            <span>All Changes Synced with Azure SQL</span>
+            <span className={`w-1.5 h-1.5 rounded-full ${isSaving ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
+            <span>{isSaving ? 'Saving to Azure SQL…' : lastSavedTime ? `Synced with Azure SQL (Saved ${lastSavedTime})` : 'Synced with Azure SQL'}</span>
           </span>
         </div>
       </div>

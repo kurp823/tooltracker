@@ -54,8 +54,7 @@ const CalloutHeaderFormInner: React.FC<CalloutHeaderFormProps> = ({
       </div>
       <div className="flex items-center gap-1">
         <span className="font-bold text-slate-600 w-16">Req Date:</span>
-        <input type="text" value={reqDate} disabled={disabled}
-          placeholder="DD-MM-YYYY"
+        <input type="date" value={reqDate} disabled={disabled}
           onChange={(e) => onFieldChange('reqDate', e.target.value)}
           className={`${cls} font-mono`} />
       </div>
