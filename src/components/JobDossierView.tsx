@@ -5471,9 +5471,30 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                     <span className="font-bold text-slate-600">Well:</span>{' '}
                     <span>{jobData.well}</span>
                   </div>
-                  <div>
+                  <div className="flex items-center gap-1">
                     <span className="font-bold text-slate-600">DateShipped:</span>{' '}
-                    <span className="font-mono font-bold">{formatDateDD_MM_YYYY(effectiveDT.dispatchDate)}</span>
+                    {canUserEditDT && (!Boolean(effectiveDT.isLocked) || adminUnlocked) ? (
+                      <input
+                        type="date"
+                        value={toInputDateFormat(effectiveDT.dispatchDate) || new Date().toISOString().split('T')[0]}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (!val) return;
+                          const targetDT = activeDT || draftDT;
+                          if (!targetDT) return;
+                          const updated = { ...targetDT, dispatchDate: val, rmDate: val };
+                          if (onUpdateDTBatch) {
+                            onUpdateDTBatch(updated);
+                          } else {
+                            onSaveDTBatch(updated);
+                            setSelectedDTNumber(updated.dtNumber);
+                          }
+                        }}
+                        className="font-mono font-bold border border-blue-300 rounded px-1.5 py-0.5 text-xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                      />
+                    ) : (
+                      <span className="font-mono font-bold">{formatDateDD_MM_YYYY(effectiveDT.dispatchDate)}</span>
+                    )}
                   </div>
                   <div>
                     <span className="font-bold text-slate-600">RM Ref / Manifest:</span>{' '}
