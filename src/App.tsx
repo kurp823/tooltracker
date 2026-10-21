@@ -339,6 +339,9 @@ export const App: React.FC = () => {
 
   // Sync state
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('saved');
+  // Guards: prevent overlapping fetches and enforce minimum gap between syncs
+  const isSyncingRef = useRef(false);
+  const lastSyncTimeRef = useRef<number>(0);
 
   // Toasts
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
@@ -584,6 +587,14 @@ export const App: React.FC = () => {
 
   const handleFetchLiveSql = useCallback(
     async (isSilent = false) => {
+      // Skip if a sync is already in progress (prevents overlapping parallel fetches)
+      if (isSyncingRef.current) return;
+      // Enforce a 30-second minimum gap between background syncs
+      const now = Date.now();
+      if (isSilent && now - lastSyncTimeRef.current < 30_000) return;
+
+      isSyncingRef.current = true;
+      lastSyncTimeRef.current = now;
       setSyncStatus('syncing');
       const syncTimeout = setTimeout(() => {
         setSyncStatus('saved');
@@ -659,6 +670,8 @@ export const App: React.FC = () => {
         if (!isSilent) {
           showToast('Unable to reach Azure SQL endpoint.', 'error');
         }
+      } finally {
+        isSyncingRef.current = false;
       }
     },
     [showToast]
@@ -734,12 +747,13 @@ export const App: React.FC = () => {
     // Run background sync across all modules smoothly without freezing or blocking the user
     handleFetchLiveSql(true);
 
-    // 1. Periodic background sync every 12 seconds so tools and tickets created by other users sync promptly
+    // 1. Periodic background sync every 90 seconds (was 12s — each sync downloads 5+ MB;
+    //    the isSyncingRef guard in handleFetchLiveSql also prevents overlapping calls).
     const pollInterval = setInterval(() => {
       handleFetchLiveSql(true);
-    }, 12000);
+    }, 90000);
 
-    // 2. Periodic outbox queue replay every 30 seconds
+    // 2. Periodic outbox queue replay every 60 seconds
     const outboxInterval = setInterval(() => {
       flushOfflineOutbox()
         .then((res) => {
@@ -748,14 +762,15 @@ export const App: React.FC = () => {
           }
         })
         .catch(() => {});
-    }, 30000);
+    }, 60000);
 
     // 3. Keep-Warm Pinger: ping Azure Function every 4 minutes to eliminate cold starts (10-30s lag)
     const keepWarmInterval = setInterval(() => {
       fetchFromApi('ping', {}).catch(() => {});
     }, 4 * 60 * 1000);
 
-    // 4. On window focus / tab switch: Immediately refresh to pick up other users' new tools
+    // 4. On window focus: sync only if last sync was > 60 seconds ago (the 30s guard in
+    //    handleFetchLiveSql provides an additional safety net against rapid focus events).
     const handleWindowFocus = () => {
       handleFetchLiveSql(true);
     };
@@ -776,7 +791,7 @@ export const App: React.FC = () => {
     };
     window.addEventListener('online', handleOnline);
 
-    // 6. Cross-tab instant synchronization via BroadcastChannel
+    // 6. Cross-tab synchronization via BroadcastChannel (throttled by the 30s guard)
     let bc: BroadcastChannel | null = null;
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
