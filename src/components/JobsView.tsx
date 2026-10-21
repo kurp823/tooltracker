@@ -323,7 +323,31 @@ export const JobsView: React.FC<JobsViewProps> = ({
   const [holeSectionsList, setHoleSectionsList] = useState<string[]>(() => getDropdownOptions('holeSections'));
   const [serviceTypesList, setServiceTypesList] = useState<string[]>(() => getDropdownOptions('jobServiceCategories'));
   const [rigsList, setRigsList] = useState<string[]>(() => getDropdownOptions('rigs'));
+  const [wellsList, setWellsList] = useState<string[]>(() => getDropdownOptions('wells'));
   const [clientsList, setClientsList] = useState<string[]>(() => getDropdownOptions('clients'));
+
+  // Build comprehensive rig and well lists from both the dropdown service AND every job ever recorded.
+  // This ensures that any rig/well already in the database appears as a suggestion — no data loss
+  // from freetext entries that weren't added to the admin list.
+  const computedRigsList = React.useMemo(() => {
+    const set = new Set<string>(rigsList);
+    jobs.forEach((j) => {
+      if (j.rig && j.rig.trim() && j.rig !== '—' && !j.rig.toLowerCase().includes('multi')) {
+        set.add(j.rig.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [rigsList, jobs]);
+
+  const computedWellsList = React.useMemo(() => {
+    const set = new Set<string>(wellsList);
+    jobs.forEach((j) => {
+      if (j.well && j.well.trim() && j.well !== '—') {
+        set.add(j.well.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [wellsList, jobs]);
 
   React.useEffect(() => {
     const handleDropdownUpdate = () => {
@@ -331,6 +355,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
       setHoleSectionsList(getDropdownOptions('holeSections'));
       setServiceTypesList(getDropdownOptions('jobServiceCategories'));
       setRigsList(getDropdownOptions('rigs'));
+      setWellsList(getDropdownOptions('wells'));
       setClientsList(getDropdownOptions('clients'));
     };
     window.addEventListener('dropdown_options_updated', handleDropdownUpdate);
@@ -1981,26 +2006,6 @@ export const JobsView: React.FC<JobsViewProps> = ({
             </div>
 
             <form onSubmit={handleCreateJobSubmit} className="p-4 space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Link to Callout Request (Optional)
-                </label>
-                <select
-                  value={selectedCalloutId}
-                  onChange={(e) => handleCalloutChange(e.target.value)}
-                  className="w-full border rounded px-3 py-1.5 font-mono"
-                >
-                  <option value="">-- No Direct Callout Link (Standalone Job) --</option>
-                  {callouts
-                    .filter((c) => !c.jobId || c.id === selectedCalloutId)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.id} &bull; {c.client} &bull; {c.rig} / {c.well}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -2026,21 +2031,39 @@ export const JobsView: React.FC<JobsViewProps> = ({
                     className="w-full border rounded px-3 py-1.5"
                   />
                   <datalist id="job-rigs-list">
-                    {rigsList.map((r) => (
+                    {computedRigsList.map((r) => (
                       <option key={r} value={r} />
                     ))}
                   </datalist>
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Well Identifier *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">Well Identifier *</label>
+                    {user?.role === 'Admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminModalKey('wells')}
+                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
+                      >
+                        <SettingsIcon className="w-2.5 h-2.5" />
+                        <span>Manage</span>
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
+                    list="job-wells-list"
                     value={newWell}
                     onChange={(e) => setNewWell(e.target.value)}
                     placeholder="e.g. GH-0023, BUH-412"
                     required
                     className="w-full border rounded px-3 py-1.5"
                   />
+                  <datalist id="job-wells-list">
+                    {computedWellsList.map((w) => (
+                      <option key={w} value={w} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
@@ -2325,6 +2348,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
             setHoleSectionsList(getDropdownOptions('holeSections'));
             setServiceTypesList(getDropdownOptions('jobServiceCategories'));
             setRigsList(getDropdownOptions('rigs'));
+            setWellsList(getDropdownOptions('wells'));
             setClientsList(getDropdownOptions('clients'));
           }}
         />

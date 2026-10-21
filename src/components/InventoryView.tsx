@@ -430,7 +430,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       }
       if (search && typeof search === 'string' && search.trim()) {
         const q = search.toLowerCase().trim();
-        const fullTxt = `${t.id || ''} ${t.assetNo || ''} ${t.size || ''} ${t.shortDesc || ''} ${t.desc || ''} ${t.ownership || ''} ${t.location || ''}`.toLowerCase();
+        const fullTxt = `${t.id || ''} ${t.serial || ''} ${t.assetNo || ''} ${t.oemSerial || ''} ${t.size || ''} ${t.shortDesc || ''} ${t.desc || ''} ${t.ownership || ''} ${t.supplier || ''} ${t.location || ''}`.toLowerCase();
         if (!fullTxt.includes(q)) return false;
       }
       return true;
