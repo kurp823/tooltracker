@@ -1737,6 +1737,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   const healedDTNumbersRef = React.useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!onUpdateDTBatch) return;
+    // Wait for the Checklist to actually have data before attempting a heal.
+    // On first mount this effect used to run before the Checklist's own
+    // useEffect (and the auto-refresh from Azure SQL) had populated
+    // checklistItems — it found nothing to match against, marked the DT as
+    // "already processed" anyway, and then never got a second chance once the
+    // real checklist data arrived a moment later. That's the actual reason
+    // the Category stayed wrong even after this fix shipped: the heal was
+    // burning its one shot on an empty checklist every time.
+    if (checklistItems.length === 0) return;
     jobDTs.forEach((dt) => {
       const dtNum = dt?.dtNumber;
       if (!dtNum || healedDTNumbersRef.current.has(dtNum)) return;
@@ -1760,7 +1769,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
         onUpdateDTBatch({ ...dt, toolLines: healedLines });
       }
     });
-  }, [jobDTs, getChecklistMatchForToolLine, onUpdateDTBatch]);
+  }, [jobDTs, checklistItems, getChecklistMatchForToolLine, onUpdateDTBatch]);
 
   const draftDT = useMemo<DTBatch>(() => {
     const curYr = new Date().getFullYear().toString().slice(-2);
