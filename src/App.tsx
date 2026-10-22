@@ -47,7 +47,7 @@ import {
   fetchFromApi,
   normalizeJobKey,
 } from './services/api';
-import { loadDatasetFromCache, saveDatasetToCache } from './services/dbCache';
+import { clearCache } from './services/dbCache';
 import {
   loadCustomTools,
   saveCustomTool,
@@ -125,6 +125,10 @@ const ConsumablesView = React.lazy(() =>
 
 const POManagementView = React.lazy(() =>
   import('./components/POManagementView').then((module) => ({ default: module.POManagementView }))
+);
+
+const SubRentalInwardView = React.lazy(() =>
+  import('./components/SubRentalInwardView').then((module) => ({ default: module.SubRentalInwardView }))
 );
 
 
@@ -601,16 +605,6 @@ export const App: React.FC = () => {
       }, 8000);
 
       try {
-        // Automatically replay any queued offline changes to Azure SQL before pulling fresh state
-        try {
-          const outboxRes = await flushOfflineOutbox();
-          if (outboxRes.processed > 0 && !isSilent) {
-            showToast('Offline changes synchronized to Azure SQL.', 'success');
-          }
-        } catch (queueErr) {
-          console.warn('[Outbox] Flush before sync notice:', queueErr);
-        }
-
         const res = await fetchAllModulesLive();
         clearTimeout(syncTimeout);
         if (res.success && res.data) {
@@ -630,15 +624,6 @@ export const App: React.FC = () => {
           setGatePasses(res.data.gatePasses);
           setInspections(res.data.inspections);
           setMaintenance(res.data.maintenance);
-
-          // Persist merged dataset to local IndexedDB cache for instant startup next time
-          saveDatasetToCache({
-            inventory: res.data.inventory,
-            jobs: res.data.jobs,
-            dtBatches: cleanDtBatches,
-            rtBatches: res.data.rtBatches,
-            contracts: res.data.contracts,
-          });
 
           setDbStatus({
             isConnected: true,
@@ -677,48 +662,15 @@ export const App: React.FC = () => {
     [showToast]
   );
 
-  // Fast Instant Startup: Load cached dataset from IndexedDB in < 50ms
+  // Direct Live Startup: Purge any old IndexedDB cache so all views load purely live from Azure SQL
   useEffect(() => {
-    loadDatasetFromCache().then((cached) => {
-      const custom = loadCustomTools();
-      const customJobs = loadCustomJobs();
-      if (cached) {
-        if (cached.inventory && cached.inventory.length > 0) {
-          setInventory(mergeInventoryWithCustomTools(cached.inventory, custom));
-        } else if (custom.length > 0) {
-          setInventory((prev) => mergeInventoryWithCustomTools(prev, custom));
-        }
-        if (cached.jobs && cached.jobs.length > 0) {
-          setJobs(mergeJobsWithCustomJobs(cached.jobs, customJobs));
-        } else if (customJobs.length > 0) {
-          setJobs((prev) => mergeJobsWithCustomJobs(prev, customJobs));
-        }
-        if (cached.dtBatches && cached.dtBatches.length > 0) setDtBatches(cached.dtBatches);
-        if (cached.rtBatches && cached.rtBatches.length > 0) setRtBatches(cached.rtBatches);
-        if (cached.contracts && cached.contracts.length > 0) setContracts(mergeContractsWithCustom(cached.contracts));
-        const customCallouts = loadCustomCallouts();
-        if (customCallouts.length > 0) setCallouts((prev) => mergeCalloutsWithCustom(prev, customCallouts));
-        setDbStatus((prev) => ({
-          ...prev,
-          isConnected: true,
-          source: 'azure-sql',
-          message: 'Loaded instantly from local cache',
-          counts: {
-            inventory: (cached.inventory?.length || 0) + custom.length,
-            jobs: cached.jobs?.length || 0,
-            dtBatches: cached.dtBatches?.length || 0,
-            rtBatches: cached.rtBatches?.length || 0,
-          },
-        }));
-      } else {
-        if (custom.length > 0) {
-          setInventory((prev) => mergeInventoryWithCustomTools(prev, custom));
-        }
-        if (customJobs.length > 0) {
-          setJobs((prev) => mergeJobsWithCustomJobs(prev, customJobs));
-        }
-      }
-    });
+    clearCache().catch(() => {});
+    const custom = loadCustomTools();
+    const customJobs = loadCustomJobs();
+    const customCallouts = loadCustomCallouts();
+    if (custom.length > 0) setInventory((prev) => mergeInventoryWithCustomTools(prev, custom));
+    if (customJobs.length > 0) setJobs((prev) => mergeJobsWithCustomJobs(prev, customJobs));
+    if (customCallouts.length > 0) setCallouts((prev) => mergeCalloutsWithCustom(prev, customCallouts));
   }, []);
 
   // Non-blocking initial startup: Do NOT block user with a 2-3 minute splash screen
@@ -736,70 +688,37 @@ export const App: React.FC = () => {
     initialLoadUserRef.current = currentUser.username;
 
     // ── INSTANT WARM-UP: fire a lightweight ping to the Azure Function RIGHT NOW ──
-    // Azure Functions on a Consumption plan go cold after ~5 min.  The warm-up ping
+    // Azure Functions on a Consumption plan go cold after ~5 min. The warm-up ping
     // kicks the function before the real data sync hits it, so the function is already
-    // alive when fetchAllModulesLive() fires 100 ms later.  No await — fire-and-forget.
+    // alive when fetchAllModulesLive() fires 100 ms later. No await — fire-and-forget.
     fetchFromApi('ping', {}).catch(() => {});
 
-    // Immediately flush any offline outbox items upon user login
-    flushOfflineOutbox()
-      .then((res) => {
-        if (res.processed > 0) {
-          handleFetchLiveSql(true);
-        }
-      })
-      .catch(() => {});
-
-    // Run background sync (fires ~100 ms after the warm-up ping, giving the ping a tiny
-    // head-start so the function is already waking when the real request arrives)
-    setTimeout(() => { handleFetchLiveSql(true); }, 100);
+    // Fetch live data directly from Azure SQL upon user login (~100ms after warm-up ping)
+    setTimeout(() => { handleFetchLiveSql(false); }, 100);
 
     // 1. Periodic background sync every 90 seconds
     const pollInterval = setInterval(() => {
       handleFetchLiveSql(true);
     }, 90000);
 
-    // 2. Periodic outbox queue replay every 60 seconds
-    const outboxInterval = setInterval(() => {
-      flushOfflineOutbox()
-        .then((res) => {
-          if (res.processed > 0) {
-            handleFetchLiveSql(true);
-          }
-        })
-        .catch(() => {});
-    }, 60000);
-
-    // 3. Keep-Warm Pinger: fires every 90 s (half the Azure Function idle-timeout).
-    //    Keeps the function warm at all times once a user is logged in — cold starts
-    //    (10-30 s) become impossible during an active session.
+    // 2. Keep-Warm Pinger: fires every 90 s (well within the 5-min Azure idle window)
     const keepWarmInterval = setInterval(() => {
       fetchFromApi('ping', {}).catch(() => {});
-    }, 90 * 1000); // every 90 seconds — well within the 5-min Azure idle window
+    }, 90 * 1000);
 
-    // 4. On window focus: sync only if last sync was > 60 seconds ago (the 30s guard in
-    //    handleFetchLiveSql provides an additional safety net against rapid focus events).
+    // 3. On window focus: sync only if last sync was > 30 seconds ago
     const handleWindowFocus = () => {
       handleFetchLiveSql(true);
     };
     window.addEventListener('focus', handleWindowFocus);
 
-    // 5. On network reconnect ('online' event): replay outbox queue and refresh live data immediately
+    // 4. On network reconnect ('online' event): refresh live data immediately
     const handleOnline = () => {
-      flushOfflineOutbox()
-        .then((res) => {
-          if (res.processed > 0) {
-            showToast('Offline changes synchronized to Azure SQL.', 'success');
-          }
-          handleFetchLiveSql(true);
-        })
-        .catch(() => {
-          handleFetchLiveSql(true);
-        });
+      handleFetchLiveSql(true);
     };
     window.addEventListener('online', handleOnline);
 
-    // 6. Cross-tab synchronization via BroadcastChannel (throttled by the 30s guard)
+    // 5. Cross-tab synchronization via BroadcastChannel (throttled by the 30s guard)
     let bc: BroadcastChannel | null = null;
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -812,7 +731,6 @@ export const App: React.FC = () => {
 
     return () => {
       clearInterval(pollInterval);
-      clearInterval(outboxInterval);
       clearInterval(keepWarmInterval);
       window.removeEventListener('focus', handleWindowFocus);
       window.removeEventListener('online', handleOnline);
@@ -907,10 +825,13 @@ export const App: React.FC = () => {
       syncCustomToolsToIndexedDB(updated);
       return updated;
     });
-    saveInventoryApi(newTool).then((r) => {
-      if (!r.success) showToast(r.message, 'error');
+    saveInventoryApi({ ...newTool, _isExisting: false }).then((r) => {
+      if (r.success) {
+        showToast(`Asset ${newTool.assetNo || newTool.id || newTool.serial} registered and saved to Azure SQL.`, 'success');
+      } else {
+        showToast(r.message, 'error');
+      }
     });
-    showToast(`Asset ${newTool.id || newTool.serial} registered and saved.`, 'success');
   };
 
   const handleUpdateTool = (id: string, updates: Partial<ToolItem>) => {
@@ -921,8 +842,12 @@ export const App: React.FC = () => {
         if (k === targetId) {
           const merged = { ...t, ...updates };
           saveCustomTool(merged);
-          saveInventoryApi(merged).then((r) => {
-            if (!r.success) showToast(r.message, 'error');
+          saveInventoryApi({ ...merged, _isExisting: true }).then((r) => {
+            if (r.success) {
+              showToast(`Asset ${id} updated in Azure SQL.`, 'success');
+            } else {
+              showToast(r.message, 'error');
+            }
           });
           return merged;
         }
@@ -931,7 +856,6 @@ export const App: React.FC = () => {
       syncCustomToolsToIndexedDB(updated);
       return updated;
     });
-    showToast(`Asset ${id} updated.`, 'success');
   };
 
   const handleSaveInventory = (updated: ToolItem[]) => {
@@ -958,7 +882,7 @@ export const App: React.FC = () => {
     if (changedTools.length > 0) {
       changedTools.forEach((tool) => {
         saveCustomTool(tool);
-        saveInventoryApi(tool).then((r) => {
+        saveInventoryApi({ ...tool, _isExisting: true }).then((r) => {
           if (!r.success) showToast(r.message, 'error');
         });
       });
@@ -2648,6 +2572,26 @@ export const App: React.FC = () => {
                 onNavigate={(mod) => setActiveView(mod as ViewKey)}
                 categories={customCategories}
                 sizes={customSizes}
+                inventory={inventory}
+                onSaveTool={handleCreateTool}
+              />
+            </React.Suspense>
+          )}
+
+          {activeView === 'sub-rental-inward' && (
+            <React.Suspense
+              fallback={
+                <div className="bg-white border border-[#b8c9db] rounded p-12 text-center text-slate-500 font-semibold shadow-sm">
+                  <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                  Loading Sub-Rental Inward Hub...
+                </div>
+              }
+            >
+              <SubRentalInwardView
+                user={currentUser}
+                showToast={showToast}
+                inventory={inventory}
+                onSaveTool={handleCreateTool}
               />
             </React.Suspense>
           )}

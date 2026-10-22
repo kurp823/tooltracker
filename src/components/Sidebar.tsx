@@ -99,6 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'inventory', label: 'Assets and Inventory', icon: '🧰' },
         { id: 'categories-sizes', label: 'Tool Categories & Sizes', icon: '🏷️' },
         { id: 'po-management', label: 'PO & Goods Inward (GRN)', icon: '📑' },
+        { id: 'sub-rental-inward', label: 'Third-Party Rental Inward', icon: '🚚' },
         { id: 'consumables', label: 'Consumables & Store (SIV)', icon: '🧴' },
       ],
     },

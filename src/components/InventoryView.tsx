@@ -39,7 +39,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   onOpenToolHistory,
   onRefresh,
 }) => {
-  const { canEdit, isReadOnly } = useModulePermission(user, 'inventory');
+  const isAdmin = user?.role === 'Admin';
+  const canEdit = isAdmin;
+  const isReadOnly = !isAdmin;
 
   const showToast = useCallback(
     (msg: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -579,10 +581,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
     const isSub = editOwnershipType === 'sub';
     const supplierName = editSupplier.trim() || 'Sub-Contractor';
+    const cleanAsset = (editAssetNo.trim() || editSerial.trim());
 
     const updates: Partial<ToolItem> = {
-      serial: editSerial.trim() || editingToolId,
-      assetNo: editAssetNo.trim() || undefined,
+      serial: cleanAsset || editingToolId,
+      assetNo: cleanAsset || undefined,
       shortDesc: editShortDesc.trim() || 'DRILLING TOOL',
       desc: editDesc.trim(),
       size: editSize.trim(),
@@ -663,15 +666,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           >
             📤 Export CSV
           </button>
-          {canEdit && (
-            <button
-              type="button"
-              onClick={handleOpenAddModal}
-              className="px-3 py-1.5 rounded bg-[#ffd875] text-[#4a2e00] font-bold text-xs border border-[#c8860d] hover:brightness-105 shadow-sm transition cursor-pointer"
-            >
-              + New Asset
-            </button>
-          )}
         </div>
       </div>
 
@@ -1115,492 +1109,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         </div>
       </div>
 
-      {/* Add New Tool Modal */}
-      {isAddModalOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 no-print"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) onCloseAddModal();
-          }}
-        >
-          <div className="bg-white rounded shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
-            <div className="px-4 py-3 bg-[#5b7fa6] text-white flex justify-between items-center">
-              <h3 className="font-bold text-sm">Register New Tool Asset</h3>
-              <button
-                onClick={onCloseAddModal}
-                className="text-white hover:text-amber-300 font-bold text-lg cursor-pointer"
-              >
-                &times;
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateAssetSubmit} className="p-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-bold mb-1 text-slate-700">Ownership Type</label>
-                <div className="flex space-x-4">
-                  <label className="flex items-center space-x-1.5 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="ownershipType"
-                      checked={newOwnershipType === 'emdad'}
-                      onChange={() => setNewOwnershipType('emdad')}
-                    />
-                    <span className="font-bold text-amber-900">EMDAD Owned (Auto-assign {nextEmdadId})</span>
-                  </label>
-                  <label className="flex items-center space-x-1.5 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="ownershipType"
-                      checked={newOwnershipType === 'sub'}
-                      onChange={() => setNewOwnershipType('sub')}
-                    />
-                    <span className="font-bold text-slate-700">Sub-Contractor Tool</span>
-                  </label>
-                </div>
-              </div>
-
-              {newOwnershipType === 'sub' ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold mb-1">Supplier / Vendor *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. MOTORMAX, SALTIRE"
-                        value={newSupplier}
-                        onChange={(e) => setNewSupplier(e.target.value)}
-                        className="w-full border rounded px-2.5 py-1.5"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold mb-1">Their Serial / ID *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. 351, EOE1076"
-                        value={newSerial}
-                        onChange={(e) => setNewSerial(e.target.value)}
-                        className="w-full border rounded px-2.5 py-1.5 font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Sub-Rental Financial & Agreement Structure */}
-                  <div className="p-3.5 bg-amber-50/80 rounded border border-amber-200/90 space-y-3">
-                    <div className="font-bold text-amber-950 text-xs flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <span>💰</span>
-                        <span>Sub-Rental Agreement &amp; Rates (Standby, Ops, Run, Redress)</span>
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-slate-500 font-semibold">Currency:</span>
-                        <select
-                          value={newSupplierCurrency}
-                          onChange={(e) => setNewSupplierCurrency(e.target.value)}
-                          className="border rounded px-1.5 py-0.5 bg-white text-[11px] font-bold"
-                        >
-                          <option value="AED">AED</option>
-                          <option value="USD">USD</option>
-                          <option value="EUR">EUR</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2.5">
-                      <div>
-                        <label className="block font-semibold mb-1 text-slate-700">Agreement Type</label>
-                        <select
-                          value={newSubAgreementType}
-                          onChange={(e) => setNewSubAgreementType(e.target.value as any)}
-                          className="w-full border rounded px-2 py-1 bg-white font-medium text-xs"
-                        >
-                          <option value="Daily">Daily Rental</option>
-                          <option value="BackToBack">Back-to-Back Job</option>
-                          <option value="MonthlyPool">Monthly Pool Lease</option>
-                        </select>
-                      </div>
-
-                      <div className="col-span-2">
-                        <label className="block font-semibold mb-1 text-slate-700">Supplier PO Number</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. PO-42002198"
-                          value={newSupplierPo}
-                          onChange={(e) => setNewSupplierPo(e.target.value)}
-                          className="w-full border rounded px-2 py-1 font-mono text-xs bg-white"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Rates Grid */}
-                    <div className="bg-white p-2.5 rounded border border-amber-200 space-y-2">
-                      <span className="text-[10px] uppercase tracking-wider font-bold text-slate-600 block">
-                        Commercial Rates Breakdown
-                      </span>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        <div>
-                          <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
-                            Operating Rate (/d)
-                          </label>
-                          <input
-                            type="number"
-                            step="any"
-                            placeholder="e.g. 4500"
-                            value={newSubOperatingRate}
-                            onChange={(e) => {
-                              setNewSubOperatingRate(e.target.value);
-                              if (!newSubDailyRate) setNewSubDailyRate(e.target.value);
-                            }}
-                            className="w-full border rounded px-2 py-1 font-mono font-bold text-emerald-700 text-xs bg-emerald-50/20"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
-                            Standby Rate (/d)
-                          </label>
-                          <input
-                            type="number"
-                            step="any"
-                            placeholder="e.g. 3000"
-                            value={newSubStandbyRate}
-                            onChange={(e) => setNewSubStandbyRate(e.target.value)}
-                            className="w-full border rounded px-2 py-1 font-mono font-bold text-amber-700 text-xs bg-amber-50/20"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
-                            Run Charge (/run)
-                          </label>
-                          <input
-                            type="number"
-                            step="any"
-                            placeholder="e.g. 1500"
-                            value={newSubRunCharge}
-                            onChange={(e) => setNewSubRunCharge(e.target.value)}
-                            className="w-full border rounded px-2 py-1 font-mono font-bold text-blue-700 text-xs bg-blue-50/20"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
-                            Redress Charge
-                          </label>
-                          <input
-                            type="number"
-                            step="any"
-                            placeholder="e.g. 2500"
-                            value={newSubRedressCharge}
-                            onChange={(e) => setNewSubRedressCharge(e.target.value)}
-                            className="w-full border rounded px-2 py-1 font-mono font-bold text-purple-700 text-xs bg-purple-50/20"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
-                        <div>
-                          <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
-                            Standard Daily Rate (/d)
-                          </label>
-                          <input
-                            type="number"
-                            step="any"
-                            placeholder="e.g. 3850"
-                            value={newSubDailyRate}
-                            onChange={(e) => setNewSubDailyRate(e.target.value)}
-                            className="w-full border rounded px-2 py-1 font-mono font-bold text-rose-700 text-xs bg-slate-50/50"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-semibold mb-0.5 text-slate-700">
-                            Monthly Pool Lease Rate
-                          </label>
-                          <input
-                            type="number"
-                            step="any"
-                            placeholder="e.g. 45000"
-                            value={newSubMonthlyRate}
-                            onChange={(e) => {
-                              setNewSubMonthlyRate(e.target.value);
-                              if (e.target.value && !newSubDailyRate) {
-                                setNewSubDailyRate(String(Math.round(parseFloat(e.target.value) / 30)));
-                              }
-                            }}
-                            className="w-full border rounded px-2 py-1 font-mono font-bold text-rose-700 text-xs bg-slate-50/50"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2.5 pt-1">
-                      <div>
-                        <label className="block font-semibold mb-1 text-slate-700">Delivery / On-Hire Date</label>
-                        <input
-                          type="date"
-                          value={newRentalStartDate}
-                          onChange={(e) => setNewRentalStartDate(e.target.value)}
-                          className="w-full border rounded px-2 py-1 text-xs bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-semibold mb-1 text-slate-700">Expected Off-Hire / Return Date</label>
-                        <input
-                          type="date"
-                          value={newRentalEndDate}
-                          onChange={(e) => setNewRentalEndDate(e.target.value)}
-                          className="w-full border rounded px-2 py-1 text-xs bg-white"
-                        />
-                      </div>
-                    </div>
-                  </div>
-              </>
-            ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold mb-1">System ID</label>
-                    <input
-                      type="text"
-                      disabled
-                      value={nextEmdadId}
-                      className="w-full border rounded px-2.5 py-1.5 bg-slate-100 font-mono font-bold text-amber-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold mb-1">Asset No (ERP Ref) *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. DJ650-003, FS434-01"
-                      value={newAssetNo}
-                      onChange={(e) => setNewAssetNo(e.target.value)}
-                      className="w-full border rounded px-2.5 py-1.5 font-mono"
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                {/* Tool Category */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-bold text-slate-700">Tool Category / Type *</label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAddingNewCat(!isAddingNewCat);
-                        setNewCatInput('');
-                      }}
-                      className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer"
-                    >
-                      {isAddingNewCat ? '✕ Cancel' : '+ Add New Category'}
-                    </button>
-                  </div>
-
-                  {!isAddingNewCat ? (
-                    <select
-                      required
-                      value={newType}
-                      onChange={(e) => {
-                        if (e.target.value === '__NEW__') {
-                          setIsAddingNewCat(true);
-                          setNewCatInput('');
-                        } else {
-                          setNewType(e.target.value);
-                        }
-                      }}
-                      className="w-full border rounded px-2.5 py-1.5 bg-white font-medium text-slate-800 text-xs"
-                    >
-                      <option value="">Select category...</option>
-                      <option value="__NEW__" className="font-bold text-blue-700 bg-blue-50">
-                        + Add New Category...
-                      </option>
-                      {categories.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="flex gap-1.5">
-                      <input
-                        type="text"
-                        autoFocus
-                        placeholder="Enter new category name..."
-                        value={newCatInput}
-                        onChange={(e) => setNewCatInput(e.target.value.toUpperCase())}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleSaveNewCategory();
-                          }
-                        }}
-                        className="flex-1 border-2 border-blue-400 rounded px-2 py-1 uppercase font-bold text-slate-800 text-xs focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleSaveNewCategory}
-                        className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded font-bold text-xs cursor-pointer shadow-xs"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Tool Size */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-bold text-slate-700">Tool Size (OD) *</label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAddingNewSize(!isAddingNewSize);
-                        setNewSizeInput('');
-                      }}
-                      className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer"
-                    >
-                      {isAddingNewSize ? '✕ Cancel' : '+ Add New Size'}
-                    </button>
-                  </div>
-
-                  {!isAddingNewSize ? (
-                    <select
-                      required
-                      value={newSize}
-                      onChange={(e) => {
-                        if (e.target.value === '__NEW__') {
-                          setIsAddingNewSize(true);
-                          setNewSizeInput('');
-                        } else {
-                          setNewSize(e.target.value);
-                        }
-                      }}
-                      className="w-full border rounded px-2.5 py-1.5 bg-white font-mono font-medium text-slate-800 text-xs"
-                    >
-                      <option value="">Select size...</option>
-                      <option value="__NEW__" className="font-bold text-blue-700 bg-blue-50">
-                        + Add New Size...
-                      </option>
-                      {standardSizes.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="flex gap-1.5">
-                      <input
-                        type="text"
-                        autoFocus
-                        placeholder="e.g. 7-1/4&quot; or 178mm..."
-                        value={newSizeInput}
-                        onChange={(e) => setNewSizeInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleSaveNewSize();
-                          }
-                        }}
-                        className="flex-1 border-2 border-blue-400 rounded px-2 py-1 font-mono font-bold text-slate-800 text-xs focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleSaveNewSize}
-                        className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded font-bold text-xs cursor-pointer shadow-xs"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold mb-1">Full Technical Description</label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. 6-1/2 OD DRILLING JAR ASSY (HQ650), 4-1/2 IF PIN x BOX"
-                  value={newDesc}
-                  onChange={(e) => setNewDesc(e.target.value)}
-                  className="w-full border rounded px-2.5 py-1.5"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-bold">Initial Location</label>
-                    {user?.role === 'Admin' && (
-                      <button
-                        type="button"
-                        onClick={() => setAdminModalKey('toolLocations')}
-                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
-                      >
-                        <SettingsIcon className="w-2.5 h-2.5" />
-                        <span>Manage</span>
-                      </button>
-                    )}
-                  </div>
-                  <select
-                    value={newLocation}
-                    onChange={(e) => setNewLocation(e.target.value)}
-                    className="w-full border rounded px-2.5 py-1.5 bg-white text-xs font-medium"
-                  >
-                    <option value="">-- Select Location --</option>
-                    {locationsList.map((loc) => (
-                      <option key={loc} value={loc}>{loc}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-bold">Initial Status</label>
-                    {user?.role === 'Admin' && (
-                      <button
-                        type="button"
-                        onClick={() => setAdminModalKey('toolStatuses')}
-                        className="text-[10px] text-blue-700 hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
-                      >
-                        <SettingsIcon className="w-2.5 h-2.5" />
-                        <span>Manage</span>
-                      </button>
-                    )}
-                  </div>
-                  <select
-                    value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value as ToolItem['status'])}
-                    className="w-full border rounded px-2.5 py-1.5 font-bold bg-white text-xs"
-                  >
-                    {statusesList.map((st) => (
-                      <option key={st} value={st}>{st}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t flex justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={handleCloseAddModal}
-                  className="px-3 py-1.5 rounded bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold hover:bg-amber-500 shadow-sm cursor-pointer"
-                >
-                  Save Asset
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Edit Tool Modal */}
       {editingToolId && (
         <div
@@ -1674,33 +1182,23 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 </div>
               </div>
 
-              {/* Identification: Serial No & Asset No */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Serial Number *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editSerial}
-                    onChange={(e) => setEditSerial(e.target.value)}
-                    placeholder="e.g. 351, EOE1076, 12345"
-                    className="w-full border rounded px-2.5 py-1.5 font-mono font-bold text-slate-900 bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Asset Number / ERP Ref
-                  </label>
-                  <input
-                    type="text"
-                    value={editAssetNo}
-                    onChange={(e) => setEditAssetNo(e.target.value)}
-                    placeholder="e.g. DJ650-003, FS434-01"
-                    className="w-full border rounded px-2.5 py-1.5 font-mono text-slate-800 bg-white"
-                  />
-                </div>
+              {/* Identification: Asset No */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Asset Number *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editAssetNo || editSerial}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEditAssetNo(val);
+                    setEditSerial(val);
+                  }}
+                  placeholder="e.g. 250398, NMDC912-023A, XO-1545"
+                  className="w-full border rounded px-2.5 py-1.5 font-mono font-bold text-slate-900 bg-white"
+                />
               </div>
 
               {/* Tool Category & Size */}
@@ -2031,7 +1529,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   type="submit"
                   className="px-5 py-1.5 rounded bg-amber-400 text-[#1a3055] font-bold hover:bg-amber-500 shadow-sm cursor-pointer"
                 >
-                  Save Changes
+                  Update Tool
                 </button>
               </div>
             </form>

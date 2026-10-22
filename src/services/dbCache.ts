@@ -8,12 +8,16 @@ const DB_NAME = 'ToolTrackerLocalCache';
 const DB_VERSION = 1;
 const STORE_NAME = 'datasetStore';
 
-interface CachedDataset {
+export interface CachedDataset {
   inventory?: any[];
   jobs?: any[];
   dtBatches?: any[];
   rtBatches?: any[];
   contracts?: any[];
+  callouts?: any[];
+  gatePasses?: any[];
+  inspections?: any[];
+  maintenance?: any[];
   timestamp: number;
 }
 
@@ -44,6 +48,10 @@ export async function saveDatasetToCache(data: {
   dtBatches?: any[];
   rtBatches?: any[];
   contracts?: any[];
+  callouts?: any[];
+  gatePasses?: any[];
+  inspections?: any[];
+  maintenance?: any[];
 }): Promise<void> {
   try {
     const db = await openDB();
@@ -157,4 +165,12 @@ export async function loadDatasetFromCache(): Promise<CachedDataset | null> {
     console.warn('[Cache] Could not load dataset from IndexedDB:', err);
     return null;
   }
+}
+
+export async function clearCache(): Promise<void> {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).clear();
+  } catch {}
 }
