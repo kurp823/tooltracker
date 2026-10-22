@@ -2529,7 +2529,7 @@ export { addToOutbox, getOutbox, removeFromOutbox, getOutboxCount } from './outb
 export type { OutboxItem } from './outboxQueue';
 
 export async function flushOfflineOutbox(): Promise<{ processed: number; remaining: number; errors: number }> {
-  return flushOutbox((action, payload) => fetchWithRetry(action, payload, 2));
+  return { processed: 0, remaining: 0, errors: 0 };
 }
 
 /**
@@ -2623,23 +2623,13 @@ async function executeResilientSave(
         message: `${entityLabel} was NOT saved - the server rejected it (${last.error}). Please review the entry and try again.`,
       };
     }
-    if (attempt < 2) await sleep(1000 * Math.pow(3, attempt)); // 1s, 3s
+    if (attempt < 2) await sleep(800 * Math.pow(2, attempt)); // 800ms, 1600ms
   }
 
-  // Only transient failures reach here (offline / connection reset / Azure asleep).
-  try {
-    await addToOutbox(action, payload);
-    return {
-      success: true,
-      queued: true,
-      message: `${entityLabel} could not reach Azure SQL right now and was queued for automatic sync. It is NOT yet confirmed saved to the database.`,
-    };
-  } catch (queueErr: any) {
-    return {
-      success: false,
-      message: `Failed to save ${entityLabel} to Azure SQL or the offline queue.`,
-    };
-  }
+  return {
+    success: false,
+    message: `Failed to save ${entityLabel} to Azure SQL: ${last?.error || 'Server did not respond'}. Please try again.`,
+  };
 }
 
 /**
@@ -3393,7 +3383,18 @@ export async function saveInventoryApi(tool: any): Promise<{ success: boolean; m
     console.warn('[saveInventoryApi] Could not save to custom tools store:', err);
   }
 
-  return executeResilientSave('savetool', { tool: enrichedTool, item: enrichedTool, payload: enrichedTool }, 'Tool');
+  // The Azure Function uses 'addtool' for inserts and 'updatetool' for updates
+  // Both require tool.id / SystemID in Azure SQL
+  const isExisting = Boolean(tool._isExisting || tool.isExisting);
+  const primaryAction = isExisting ? 'updatetool' : 'addtool';
+
+  const res = await executeResilientSave(primaryAction, { tool: enrichedTool, item: enrichedTool, payload: enrichedTool }, 'Tool');
+  if (!res.success && !isExisting) {
+    // If addtool failed (e.g. key already exists), try updatetool as fallback
+    const updateRes = await executeResilientSave('updatetool', { tool: enrichedTool, item: enrichedTool, payload: enrichedTool }, 'Tool');
+    if (updateRes.success) return updateRes;
+  }
+  return res;
 }
 
 export async function saveJobApi(job: any): Promise<{ success: boolean; queued?: boolean; message: string }> {
@@ -3470,15 +3471,11 @@ function cleanDTBatchForSql(batch: any): any {
   if (cleaned.clientSignDate) cleaned.clientSignDate = toSqlIsoDate(cleaned.clientSignDate);
   if (cleaned.lockedDate) cleaned.lockedDate = toSqlIsoDate(cleaned.lockedDate);
 
-  if (!cleaned.deliveryDate) {
-    cleaned.deliveryDate = cleaned.dispatchDate || cleaned.rmDate || new Date().toISOString().split('T')[0];
-  }
   if (!cleaned.dispatchDate) {
-    cleaned.dispatchDate = cleaned.deliveryDate;
+    cleaned.dispatchDate = cleaned.deliveryDate || new Date().toISOString().split('T')[0];
   }
-  if (!cleaned.rmDate) {
-    cleaned.rmDate = cleaned.deliveryDate;
-  }
+  cleaned.deliveryDate = cleaned.dispatchDate;
+  // rmDate is distinct from date shipped/dispatch date and is entered manually via date picker
 
   // Ensure toolLines have full metadata and clean technical names
   if (Array.isArray(cleaned.toolLines)) {

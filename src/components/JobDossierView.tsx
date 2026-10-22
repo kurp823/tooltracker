@@ -1157,7 +1157,10 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const fbShort = String(fallbackShortDesc || '').trim();
     const invShort = String(inv?.shortDesc || '').trim();
 
-    if (fbDesc) {
+    // Prefer full technical description from inventory when available
+    if (invDesc && (!fbDesc || invDesc.length > fbDesc.length || fbDesc.toUpperCase() === invShort.toUpperCase())) {
+      desc = invDesc;
+    } else if (fbDesc) {
       desc = fbDesc;
     } else if (invDesc) {
       desc = invDesc;
@@ -1245,13 +1248,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     const candidateSupplier = dtLine?.ownership || dtLine?.supplier || it?.supplier;
 
     const resolved = resolveToolDetails(candidateSerial, candidateAssetNo, candidateDesc, it?.shortDesc || it?.cat, candidateSupplier);
+    const cleanAsset = getCleanAssetNo(it.partNo, resolved.assetNo, it.serialNos?.[0], resolved.serial);
+    const isEmd = (v: string) => !v || v.toUpperCase().startsWith('EMD-') || v === '—' || v === '-';
+
     return {
       ...it,
       dtNumber: targetDT ? targetDT.dtNumber : undefined,
       status: (targetDT ? 'Released' : (it.status === 'Released' ? 'Assigned' : it.status || 'Assigned')) as any,
-      partNo: getCleanAssetNo(it.partNo, resolved.assetNo, it.serialNos?.[0], resolved.serial),
-      serialNos: (it.serialNos && it.serialNos.length > 0 && it.serialNos[0] !== '—') ? it.serialNos : [resolved.serial && resolved.serial !== '—' ? resolved.serial : resolved.assetNo],
-      description: it.description || resolved.desc,
+      partNo: (!isEmd(cleanAsset) ? cleanAsset : '') || (!isEmd(it.partNo) ? it.partNo : '') || resolved.assetNo || it.partNo || it.serialNos?.[0] || '—',
+      serialNos: (it.serialNos && it.serialNos.length > 0 && it.serialNos[0] !== '—' && !isEmd(it.serialNos[0]))
+        ? it.serialNos
+        : [resolved.serial && !isEmd(resolved.serial) ? resolved.serial : (resolved.assetNo && !isEmd(resolved.assetNo) ? resolved.assetNo : cleanAsset)],
+      description: (resolved.desc && resolved.desc !== 'Downhole Tool') ? resolved.desc : (it.description || resolved.desc),
       shortDesc: it.shortDesc || it.cat || resolved.shortDesc,
       cat: it.cat || resolved.shortDesc,
       supplier: it.supplier || resolved.supplier,
@@ -1260,21 +1268,100 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
     };
   }, [jobDTs, resolveToolDetails]);
 
-  // Checklist Items State
+  // Checklist Items State — instant load from activeCallout or instant fallback from Delivery Ticket tools
   const [checklistItems, setChecklistItems] = useState<CalloutItem[]>(() => {
     if (activeCallout?.items && activeCallout.items.length > 0) {
       return activeCallout.items.filter(Boolean).map((it, idx) => resolveChecklistItemWithDT(it, idx));
+    }
+    // Instant Fallback: If callouts table is still loading, reconstruct immediately from the job's Delivery Ticket tools
+    if (jobDTs.length > 0) {
+      const allLines = jobDTs.flatMap((dt) => dt.toolLines || []);
+      if (allLines.length > 0) {
+        return allLines.map((tl, idx) => {
+          const rawAsset = String(tl.assetNo || '').trim();
+          const rawSerial = String(tl.serial || '').trim();
+          const resolved = resolveToolDetails(rawSerial, rawAsset, tl.desc, tl.shortDesc, tl.supplier || (tl as any).ownership);
+          const cleanAsset = getCleanAssetNo(rawAsset, resolved.assetNo, rawSerial, resolved.serial);
+          const isEmd = (v: string) => !v || v.toUpperCase().startsWith('EMD-') || v === '—' || v === '-';
+          const partNo = (!isEmd(cleanAsset) ? cleanAsset : '') || (!isEmd(rawAsset) ? rawAsset : '') || resolved.assetNo || rawAsset || rawSerial || '—';
+          return {
+            seq: idx + 1,
+            size: tl.size || resolved.inv?.size || '—',
+            shortDesc: tl.shortDesc || resolved.shortDesc || 'DOWNHOLE TOOL',
+            qty: Number(tl.qty) || 1,
+            assigned: 1,
+            serialNos: [rawSerial && !isEmd(rawSerial) ? rawSerial : (partNo || '—')],
+            status: 'Released' as const,
+            partNo,
+            description: (resolved.desc && resolved.desc !== 'Downhole Tool') ? resolved.desc : (tl.desc || 'Downhole Tool'),
+            supplier: tl.supplier || tl.ownership || resolved.supplier || 'EMDAD',
+            ownership: tl.ownership || tl.supplier || resolved.supplier || 'EMDAD',
+            isEmdad: tl.isEmdad ?? resolved.isEmdad ?? true,
+            qtyIn: 1,
+            insNum: '—',
+            insDate: '—',
+            comments: 'ACCEPTED',
+            cat: tl.shortDesc || resolved.shortDesc || 'DOWNHOLE TOOL',
+            condition: 'ACCEPTED',
+            allocatedRig: tl.allocatedRig || jobData.rig || '',
+            allocatedWell: tl.allocatedWell || jobData.well || '',
+            clientDtNo: tl.clientDtNo || '',
+            dtNumber: jobDTs[0]?.dtNumber,
+            mobDate: formatDateDD_MM_YYYY(jobDTs[0]?.dispatchDate || new Date().toISOString()),
+          };
+        });
+      }
     }
     return [];
   });
 
   useEffect(() => {
-    if (activeCallout && Array.isArray(activeCallout.items)) {
+    if (activeCallout && Array.isArray(activeCallout.items) && activeCallout.items.length > 0) {
       setChecklistItems(
         activeCallout.items.filter(Boolean).map((it, idx) => resolveChecklistItemWithDT(it, idx))
       );
+    } else if (jobDTs.length > 0) {
+      const allLines = jobDTs.flatMap((dt) => dt.toolLines || []);
+      if (allLines.length > 0) {
+        setChecklistItems((prev) => {
+          if (prev.length > 0) return prev;
+          return allLines.map((tl, idx) => {
+            const rawAsset = String(tl.assetNo || '').trim();
+            const rawSerial = String(tl.serial || '').trim();
+            const resolved = resolveToolDetails(rawSerial, rawAsset, tl.desc, tl.shortDesc, tl.supplier || (tl as any).ownership);
+            const cleanAsset = getCleanAssetNo(rawAsset, resolved.assetNo, rawSerial, resolved.serial);
+            const isEmd = (v: string) => !v || v.toUpperCase().startsWith('EMD-') || v === '—' || v === '-';
+            const partNo = (!isEmd(cleanAsset) ? cleanAsset : '') || (!isEmd(rawAsset) ? rawAsset : '') || resolved.assetNo || rawAsset || rawSerial || '—';
+            return {
+              seq: idx + 1,
+              size: tl.size || resolved.inv?.size || '—',
+              shortDesc: tl.shortDesc || resolved.shortDesc || 'DOWNHOLE TOOL',
+              qty: Number(tl.qty) || 1,
+              assigned: 1,
+              serialNos: [rawSerial && !isEmd(rawSerial) ? rawSerial : (partNo || '—')],
+              status: 'Released' as const,
+              partNo,
+              description: (resolved.desc && resolved.desc !== 'Downhole Tool') ? resolved.desc : (tl.desc || 'Downhole Tool'),
+              supplier: tl.supplier || tl.ownership || resolved.supplier || 'EMDAD',
+              ownership: tl.ownership || tl.supplier || resolved.supplier || 'EMDAD',
+              isEmdad: tl.isEmdad ?? resolved.isEmdad ?? true,
+              qtyIn: 1,
+              insNum: '—',
+              insDate: '—',
+              comments: 'ACCEPTED',
+              cat: tl.shortDesc || resolved.shortDesc || 'DOWNHOLE TOOL',
+              condition: 'ACCEPTED',
+              allocatedRig: tl.allocatedRig || jobData.rig || '',
+              allocatedWell: tl.allocatedWell || jobData.well || '',
+              clientDtNo: tl.clientDtNo || '',
+              dtNumber: jobDTs[0]?.dtNumber,
+              mobDate: formatDateDD_MM_YYYY(jobDTs[0]?.dispatchDate || new Date().toISOString()),
+            };
+          });
+        });
+      }
     }
-  }, [activeCallout, resolveChecklistItemWithDT]);
+  }, [activeCallout, jobDTs, resolveChecklistItemWithDT, resolveToolDetails, jobData.rig, jobData.well]);
 
   // Master Tool Categories & Sizes for Tool Picker
   const customCategories = useMemo<string[]>(() => {
@@ -1654,18 +1741,18 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
   // to a fresh inventory lookup when the checklist item itself has no identity
   // (no Asset No and no Serial) to go on at all.
   const buildDTLineFromChecklistItem = useCallback((ci: CalloutItem, idx: number) => {
-    const hasIdentity = Boolean(
-      (ci.partNo && ci.partNo !== '—') || (ci.serialNos?.[0] && ci.serialNos[0] !== '—')
-    );
-    const resolved = hasIdentity
-      ? null
-      : resolveToolDetails(ci.serialNos?.[0], ci.partNo, ci.description, ci.cat || ci.shortDesc, ci.supplier);
+    const rawAsset = String(ci.partNo || '').trim();
+    const rawSerial = String(ci.serialNos?.[0] || '').trim();
+    const isEmd = (v: string) => !v || v.toUpperCase().startsWith('EMD-') || v === '—' || v === '-';
 
-    const assetNo = (ci.partNo && ci.partNo !== '—' ? ci.partNo : '') || resolved?.assetNo || ci.serialNos?.[0] || '—';
-    const serial = (ci.serialNos?.[0] && ci.serialNos[0] !== '—' ? ci.serialNos[0] : '') || resolved?.serial || assetNo;
-    const desc = ci.description || resolved?.desc || ci.shortDesc || ci.cat || 'Downhole Tool';
-    const shortDesc = ci.cat || ci.shortDesc || resolved?.shortDesc || 'Downhole Tool';
-    const supplier = ci.supplier || ci.ownership || resolved?.supplier || 'EMDAD';
+    const resolved = resolveToolDetails(rawSerial, rawAsset, ci.description, ci.cat || ci.shortDesc, ci.supplier, ci.ownership);
+    const cleanAsset = getCleanAssetNo(rawAsset, resolved.assetNo, rawSerial, resolved.serial);
+
+    const assetNo = (!isEmd(cleanAsset) ? cleanAsset : '') || (!isEmd(rawAsset) ? rawAsset : '') || resolved.assetNo || rawAsset || rawSerial || '—';
+    const serial = (!isEmd(rawSerial) ? rawSerial : '') || (!isEmd(resolved.serial) ? resolved.serial : '') || (!isEmd(cleanAsset) ? cleanAsset : '') || assetNo || '—';
+    const desc = (resolved.desc && resolved.desc !== 'Downhole Tool') ? resolved.desc : (ci.description || resolved.desc || ci.shortDesc || ci.cat || 'Downhole Tool');
+    const shortDesc = ci.cat || ci.shortDesc || resolved.shortDesc || 'Downhole Tool';
+    const supplier = ci.supplier || ci.ownership || resolved.supplier || 'EMDAD';
 
     return {
       id: idx + 1,
@@ -1678,7 +1765,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       status: 'OnRig' as const,
       ownership: supplier,
       supplier,
-      isEmdad: ci.isEmdad ?? resolved?.isEmdad ?? (String(supplier).toUpperCase() === 'EMDAD'),
+      isEmdad: ci.isEmdad ?? resolved.isEmdad ?? (String(supplier).toUpperCase() === 'EMDAD'),
       qty: ci.qty || 1,
       remarks: '',
       allocatedRig: ci.allocatedRig || jobData.rig || '',
@@ -1789,7 +1876,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       dtNumber: nextDTNum,
       jobId: jobData.id,
       jobNumber: jobData.id,
-      rmDate: dispatchDateStr,
+      rmDate: '',
       rmRef: `MR-${jobData.id.slice(-4) || '881'}`,
       dispatchDate: dispatchDateStr,
       deliveryDate: dispatchDateStr,
@@ -1888,7 +1975,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       dtNumber: nextDTNum,
       jobId: jobData.id,
       jobNumber: jobData.id,
-      rmDate: dispatchDateStr,
+      rmDate: '',
       rmRef: `MR-${jobData.id.slice(-4) || '881'}`,
       dispatchDate: dispatchDateStr,
       deliveryDate: dispatchDateStr,
@@ -1958,8 +2045,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       (updated as any).vehicleVesselNo = value;
       (updated as any).vesselNo = value;
     } else if (field === 'dispatchDate') {
-      // Keep rmDate in sync with dispatchDate (both represent the same date shipped)
-      (updated as any).rmDate = value;
+      // Date shipped and dispatch date sync automatically, rmDate is entered manually
+      (updated as any).deliveryDate = value;
     }
     if (onUpdateDTBatch) {
       onUpdateDTBatch(updated);
@@ -2673,7 +2760,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
       dtNumber: nextDTNum,
       jobId: jobData.id,
       jobNumber: jobData.id,
-      rmDate: new Date().toISOString().split('T')[0],        // YYYY-MM-DD — required by <input type="date">
+      rmDate: '', // Entered manually via date picker
       rmRef: `MR-${jobData.id.slice(-4) || '881'}`,
       dispatchDate: new Date().toISOString().split('T')[0],  // YYYY-MM-DD
       deliveryDate: new Date().toISOString().split('T')[0],  // YYYY-MM-DD
@@ -5104,15 +5191,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   ) : (
                     checklistItems.map((item, i) => {
                       const assignedDT = getAssignedDTForChecklistItem(item);
-                      // Direct read, no inventory lookup: whatever was recorded on this
-                      // checklist line (Asset No, Description, Category, Supplier) when
-                      // the tool was selected is exactly what's shown here. The backend
-                      // record is the single source of truth — nothing is re-derived at
-                      // display time.
-                      const displayItemAssetNo = item.partNo || item.serialNos?.[0] || '—';
-                      const displayItemDesc = item.description || '—';
-                      const displayItemCategory = item.cat || item.shortDesc || '—';
-                      const displayItemSupplier = item.supplier || item.ownership || 'EMDAD';
+                      const rawPart = String(item.partNo || '').trim();
+                      const rawSer = String(item.serialNos?.[0] || '').trim();
+                      const isEmd = (v: string) => !v || v.toUpperCase().startsWith('EMD-') || v === '—' || v === '-';
+
+                      const resolved = resolveToolDetails(rawSer, rawPart, item.description, item.cat || item.shortDesc, item.supplier, item.ownership);
+                      const cleanAsset = getCleanAssetNo(rawPart, resolved.assetNo, rawSer, resolved.serial);
+
+                      const displayItemAssetNo = (!isEmd(cleanAsset) ? cleanAsset : '') || (!isEmd(rawPart) ? rawPart : '') || resolved.assetNo || rawPart || rawSer || '—';
+                      const displayItemDesc = (resolved.desc && resolved.desc !== 'Downhole Tool') ? resolved.desc : (item.description || '—');
+                      const displayItemCategory = item.cat || item.shortDesc || resolved.shortDesc || '—';
+                      const displayItemSupplier = item.supplier || item.ownership || resolved.supplier || 'EMDAD';
 
                       // Look up genuine inspection record if item has none or has dummy GIS-Z-
                       const itemInspections = (inspections || []).filter(
@@ -5288,31 +5377,15 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   </select>
                 )}
                 {(!isClosedOrInvoiced || adminUnlocked) && (!isLocked || adminUnlocked || isAdmin) && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleCreateNewDTInJob}
-                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs transition cursor-pointer flex items-center gap-1"
-                      title="Create a new Delivery Ticket manifest for this job"
-                    >
-                      <span>+</span>
-                      <span>New DT</span>
-                    </button>
-                    {pendingChecklistItems.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={handleGenerateDTFromChecklist}
-                        className="bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs px-3 py-1 rounded shadow-xs transition cursor-pointer flex items-center gap-1.5"
-                        title="Create a new Delivery Ticket from selected checklist tools and dispatch to rig"
-                      >
-                        <span>🚚</span>
-                        <span>
-                          Create DT from Selected ✓ Tools
-                          {selectedPendingCount > 0 ? ` (${selectedPendingCount} Selected)` : ` (${pendingChecklistItems.length} Pending)`}
-                        </span>
-                      </button>
-                    )}
-                  </>
+                  <button
+                    type="button"
+                    onClick={handleCreateNewDTInJob}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-2.5 py-1 rounded shadow-2xs transition cursor-pointer flex items-center gap-1"
+                    title="Create a new Delivery Ticket manifest for this job"
+                  >
+                    <span>+</span>
+                    <span>New DT</span>
+                  </button>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -5431,16 +5504,6 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       </span>
                     </div>
                   </div>
-                  {pendingChecklistItems.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={handleGenerateDTFromChecklist}
-                      className="bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs px-3.5 py-1.5 rounded shadow-xs whitespace-nowrap cursor-pointer flex items-center gap-1.5"
-                    >
-                      <span>🚚</span>
-                      <span>Create DT from Selected ✓ Tools</span>
-                    </button>
-                  )}
                 </div>
               )}
               <div className="bg-[#f0f5fb] border border-[#b8cce0] rounded p-3 text-xs">
@@ -5457,7 +5520,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-[11px]">
                   <div>
                     <span className="font-bold text-slate-600">Customer:</span>{' '}
                     <span className="font-bold">{jobData.client}</span>
@@ -5499,7 +5562,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           if (!val) return;
                           const targetDT = activeDT || draftDT;
                           if (!targetDT) return;
-                          const updated = { ...targetDT, dispatchDate: val, rmDate: val };
+                          // Date shipped and dispatch date sync automatically — rmDate is entered manually
+                          const updated = { ...targetDT, dispatchDate: val, deliveryDate: val };
                           if (onUpdateDTBatch) {
                             onUpdateDTBatch(updated);
                           } else {
@@ -5516,6 +5580,30 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <div>
                     <span className="font-bold text-slate-600">RM Ref / Manifest:</span>{' '}
                     <span className="font-mono">{effectiveDT.rmRef || 'MR-881'}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="font-bold text-slate-600">RM Date:</span>{' '}
+                    {canUserEditDT && (!Boolean(effectiveDT.isLocked) || adminUnlocked) ? (
+                      <input
+                        type="date"
+                        value={toInputDateFormat(effectiveDT.rmDate) || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const targetDT = activeDT || draftDT;
+                          if (!targetDT) return;
+                          const updated = { ...targetDT, rmDate: val };
+                          if (onUpdateDTBatch) {
+                            onUpdateDTBatch(updated);
+                          } else {
+                            onSaveDTBatch(updated);
+                            setSelectedDTNumber(updated.dtNumber);
+                          }
+                        }}
+                        className="font-mono font-bold border border-blue-300 rounded px-1.5 py-0.5 text-xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                      />
+                    ) : (
+                      <span className="font-mono font-bold">{effectiveDT.rmDate ? formatDateDD_MM_YYYY(effectiveDT.rmDate) : '—'}</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -5550,15 +5638,17 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                   <tbody className="divide-y divide-slate-200">
                     {effectiveDT.toolLines && effectiveDT.toolLines.length > 0 ? (
                       effectiveDT.toolLines.map((t, idx) => {
-                        // Direct read, no inventory lookup: this Delivery Ticket line
-                        // already carries its own Asset No, Description, Category and
-                        // Supplier exactly as recorded when the ticket was created. The
-                        // backend record is the single source of truth — nothing is
-                        // re-derived at display time.
-                        const displayDtAssetNo = t.assetNo || t.serial || '—';
-                        const displayDtDesc = t.desc || '—';
-                        const displayDtCategory = t.shortDesc || '—';
-                        const displayDtSupplier = t.supplier || t.ownership || 'EMDAD';
+                        const rawAsset = String(t.assetNo || '').trim();
+                        const rawSer = String(t.serial || '').trim();
+                        const isEmd = (v: string) => !v || v.toUpperCase().startsWith('EMD-') || v === '—' || v === '-';
+
+                        const resolved = resolveToolDetails(rawSer, rawAsset, t.desc, t.shortDesc, t.supplier || (t as any).ownership);
+                        const cleanAsset = getCleanAssetNo(rawAsset, resolved.assetNo, rawSer, resolved.serial);
+
+                        const displayDtAssetNo = (!isEmd(cleanAsset) ? cleanAsset : '') || (!isEmd(rawAsset) ? rawAsset : '') || resolved.assetNo || rawAsset || rawSer || '—';
+                        const displayDtDesc = (resolved.desc && resolved.desc !== 'Downhole Tool') ? resolved.desc : (t.desc || '—');
+                        const displayDtCategory = t.shortDesc || resolved.shortDesc || '—';
+                        const displayDtSupplier = t.supplier || t.ownership || resolved.supplier || 'EMDAD';
                         const tSerial = (t.serial || '').trim().toUpperCase();
                         const tAsset = (t.assetNo || '').trim().toUpperCase();
                         const directRtRef = String((t as any).returnedRtNumber || t.rtBatchId || (t as any).rgtNo || '').trim();
@@ -5669,7 +5759,7 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                           No tools added to Delivery Ticket yet.
                           {!isClosedOrInvoiced && !isLocked && (
                             <span>
-                              {' '}Select tools in the <button type="button" onClick={() => setActiveTab('checklist')} className="text-blue-700 underline font-bold cursor-pointer">Checklist</button> tab and click &quot;Create DT from Selected ✓ Tools&quot;, or click <button type="button" onClick={handleCreateNewDTInJob} className="text-emerald-700 underline font-bold cursor-pointer">+ New DT</button> to add tools.
+                              {' '}Select tools in the <button type="button" onClick={() => setActiveTab('checklist')} className="text-blue-700 underline font-bold cursor-pointer">Checklist</button> tab and click &quot;Generate DT from Checklist&quot;, or click <button type="button" onClick={handleCreateNewDTInJob} className="text-emerald-700 underline font-bold cursor-pointer">+ New DT</button> to add tools.
                             </span>
                           )}
                         </td>

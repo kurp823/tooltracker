@@ -37,6 +37,7 @@ export type NavModule =
   | 'monthly-expenses'   // Monthly Expense Grid & Sub-Division P&L
   | 'consumables'        // Consumables Store & Store Issuance Vouchers
   | 'po-management'     // PO Creation, Bulk Upload, Multi-Line GRNs & Supplier Reports
+  | 'sub-rental-inward' // Third-Party Sub-Rental Inward
   | 'contract-dash'      // Contracts Analytics Dashboard (Ceiling vs Legally Invoiced Revenue)
   | 'contracts'          // Master Contracts Register
   | 'data-management'   // Data Management Tool (DMT)
