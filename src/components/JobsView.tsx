@@ -351,6 +351,14 @@ export const JobsView: React.FC<JobsViewProps> = ({
     return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }, [wellsList, jobs]);
 
+  // Auto-grow clients from live jobs + contracts data so all users see consistent options
+  const computedClientsList = React.useMemo(() => {
+    const set = new Set<string>(clientsList);
+    jobs.forEach((j) => { if (j.client && j.client.trim()) set.add(j.client.trim()); });
+    contracts.forEach((c) => { if (c.client && c.client.trim()) set.add(c.client.trim()); });
+    return Array.from(set).sort();
+  }, [clientsList, jobs, contracts]);
+
   React.useEffect(() => {
     const handleDropdownUpdate = () => {
       setDivisionsList(getDropdownOptions('subDivisions'));
@@ -2023,20 +2031,17 @@ export const JobsView: React.FC<JobsViewProps> = ({
                       </button>
                     )}
                   </div>
-                  <input
-                    type="text"
-                    list="job-rigs-list"
+                  <select
                     value={newRig}
                     onChange={(e) => setNewRig(e.target.value)}
-                    placeholder="e.g. AD-33, ND-19, RIG-8"
                     required
-                    className="w-full border rounded px-3 py-1.5"
-                  />
-                  <datalist id="job-rigs-list">
+                    className="w-full border rounded px-3 py-1.5 bg-white"
+                  >
+                    <option value="">— Select Rig —</option>
                     {computedRigsList.map((r) => (
-                      <option key={r} value={r} />
+                      <option key={r} value={r}>{r}</option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -2052,20 +2057,17 @@ export const JobsView: React.FC<JobsViewProps> = ({
                       </button>
                     )}
                   </div>
-                  <input
-                    type="text"
-                    list="job-wells-list"
+                  <select
                     value={newWell}
                     onChange={(e) => setNewWell(e.target.value)}
-                    placeholder="e.g. GH-0023, BUH-412"
                     required
-                    className="w-full border rounded px-3 py-1.5"
-                  />
-                  <datalist id="job-wells-list">
+                    className="w-full border rounded px-3 py-1.5 bg-white"
+                  >
+                    <option value="">— Select Well —</option>
                     {computedWellsList.map((w) => (
-                      <option key={w} value={w} />
+                      <option key={w} value={w}>{w}</option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
               </div>
 
@@ -2084,25 +2086,21 @@ export const JobsView: React.FC<JobsViewProps> = ({
                       </button>
                     )}
                   </div>
-                  <input
-                    type="text"
-                    list="job-clients-list"
+                  <select
                     value={newClient}
                     onChange={(e) => setNewClient(e.target.value)}
-                    placeholder="e.g. ADNOC Onshore, ADNOC Drilling"
                     required
-                    className="w-full border rounded px-3 py-1.5"
-                  />
-                  <datalist id="job-clients-list">
-                    {clientsList.map((c) => (
-                      <option key={c} value={c} />
+                    className="w-full border rounded px-3 py-1.5 bg-white"
+                  >
+                    <option value="">— Select Client —</option>
+                    {computedClientsList.map((c) => (
+                      <option key={c} value={c}>{c}</option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Contract / Project Code</label>
-                  <input
-                    type="text"
+                  <select
                     value={newContract}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -2110,9 +2108,19 @@ export const JobsView: React.FC<JobsViewProps> = ({
                       const resolved = resolveContractSubDivision(val);
                       if (resolved) setNewSubDivision(resolved);
                     }}
-                    placeholder="e.g. 4700018368"
-                    className="w-full border rounded px-3 py-1.5"
-                  />
+                    className="w-full border rounded px-3 py-1.5 bg-white font-mono"
+                  >
+                    <option value="">— Select Contract —</option>
+                    {contracts.filter((c) => c.status === 'Active').map((c) => (
+                      <option key={c.id} value={c.contractNo || c.contractRef || c.id}>
+                        {c.contractNo || c.contractRef} — {c.client}{c.name ? ` | ${c.name}` : ''}
+                      </option>
+                    ))}
+                    {/* Allow free entry if contracts list is empty */}
+                    {contracts.filter((c) => c.status === 'Active').length === 0 && (
+                      <option value={newContract}>{newContract || '(No active contracts yet)'}</option>
+                    )}
+                  </select>
                 </div>
               </div>
 

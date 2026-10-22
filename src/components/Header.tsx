@@ -6,6 +6,7 @@ interface HeaderProps {
   syncStatus?: 'idle' | 'syncing' | 'saved' | 'error';
   isSyncing?: boolean;
   dbStatus?: DbConnectionStatus;
+  isInitializing?: boolean;
   onSync?: () => void;
   onRefresh?: () => void;
   isSidebarCollapsed?: boolean;
@@ -16,6 +17,7 @@ export const Header: React.FC<HeaderProps> = ({
   syncStatus,
   isSyncing,
   dbStatus,
+  isInitializing,
   onSync,
   onRefresh,
   isSidebarCollapsed,
@@ -47,7 +49,15 @@ export const Header: React.FC<HeaderProps> = ({
         <div>
           <div className="flex items-center space-x-2">
             <span className="font-extrabold text-sm tracking-wide text-white">EMDAD LLC</span>
-            {dbStatus?.isConnected ? (
+            {isInitializing ? (
+              <span
+                className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center space-x-1"
+                title="Connecting to Azure SQL database…"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                <span>CONNECTING…</span>
+              </span>
+            ) : dbStatus?.isConnected ? (
               <span
                 className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1"
                 title="Connected to live Azure SQL database"

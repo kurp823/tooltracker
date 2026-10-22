@@ -3004,10 +3004,68 @@ export interface AllModulesLiveResult {
  * Tools, Jobs, Delivery Tickets, Receiving Tickets, Contracts & Rates, Callouts,
  * Gate Passes, Inspections, and Maintenance Orders.
  */
+/**
+ * Supplemental jobs-only fetch — tries several Azure Function action variants that
+ * may return ALL jobs without the row cap that GET_ALL_DATA imposes.
+ * Called in parallel with the primary fetch; results are merged in, so jobs above
+ * the GET_ALL_DATA limit (e.g. JOB-26-01814+) always appear.
+ */
+async function fetchJobsSupplemental(): Promise<any[]> {
+  const endpoint = getApiEndpoint();
+  const apiKey = (() => {
+    try { return localStorage.getItem('emdad_api_key') || ''; } catch { return ''; }
+  })();
+
+  function makeUrl(base: string, action: string, extra = ''): string {
+    const sep = base.includes('?') ? '&' : '?';
+    const keyPart = apiKey ? `&code=${encodeURIComponent(apiKey)}` : '';
+    return `${base}${sep}action=${action}&env=live&_t=${Date.now()}${keyPart}${extra}`;
+  }
+
+  // Try all known "fetch all jobs" action names the Azure Function might expose
+  const variants = [
+    makeUrl(endpoint, 'getjobs', '&all=true'),
+    makeUrl(endpoint, 'getjobs'),
+    makeUrl(endpoint, 'GET_JOBS'),
+    makeUrl(endpoint, 'getAllJobs'),
+    makeUrl(endpoint, 'getJobsAll'),
+  ];
+
+  for (const url of variants) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 10_000);
+      const res = await fetch(url, {
+        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const json = await res.json();
+      let payload = json?.data !== undefined ? json.data : json;
+      if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch { /* ignore */ } }
+      const raw =
+        (Array.isArray(payload) ? payload : null) ||
+        payload?.jobs ||
+        payload?.Jobs ||
+        payload?.tbl_Jobs ||
+        payload?.value ||
+        null;
+      if (Array.isArray(raw) && raw.length > 0) {
+        return raw.map(normalizeJob);
+      }
+    } catch {
+      // try next variant
+    }
+  }
+  return [];
+}
+
 export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
-  const [primarySettled, secondarySettled] = await Promise.allSettled([
+  const [primarySettled, secondarySettled, suppJobsSettled] = await Promise.allSettled([
     fetchLiveDatabaseData(),
     fetchSecondaryModules(),
+    fetchJobsSupplemental(),
   ]);
 
   const primaryRes = primarySettled.status === 'fulfilled' ? primarySettled.value : {
@@ -3017,6 +3075,8 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
     message: 'Primary database connection notice',
   };
   const secondaryRes = secondarySettled.status === 'fulfilled' ? secondarySettled.value : {};
+  // Supplemental jobs from dedicated getjobs action (bypasses GET_ALL_DATA row cap)
+  const suppJobs: any[] = suppJobsSettled.status === 'fulfilled' ? suppJobsSettled.value : [];
 
   const customTools = loadCustomTools();
   const customJobs = loadCustomJobs();
@@ -3033,6 +3093,32 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
     primaryRes.data?.jobs && primaryRes.data.jobs.length > 0
       ? primaryRes.data.jobs
       : MASTER_JOBS;
+
+  // Merge supplemental jobs (from dedicated getjobs call) into the primary list.
+  // This captures any jobs above the GET_ALL_DATA SQL row cap (e.g. JOB-26-01814+).
+  if (suppJobs.length > 0) {
+    const existingKeys = new Set<string>();
+    jobsList.forEach((j: any) => {
+      const k = String(j.id || '').trim().toUpperCase();
+      if (k) existingKeys.add(k);
+      const std = formatStandardJobId(j.id).toUpperCase();
+      if (std) existingKeys.add(std);
+      const norm = normalizeJobKey(j.id);
+      if (norm) existingKeys.add(norm);
+    });
+    suppJobs.forEach((sj: any) => {
+      const rawK = String(sj.id || '').trim().toUpperCase();
+      const stdK = formatStandardJobId(sj.id).toUpperCase();
+      const normK = normalizeJobKey(sj.id);
+      if (!existingKeys.has(rawK) && !existingKeys.has(stdK) && !existingKeys.has(normK)) {
+        jobsList.push(sj);
+        if (rawK) existingKeys.add(rawK);
+        if (stdK) existingKeys.add(stdK);
+        if (normK) existingKeys.add(normK);
+      }
+    });
+  }
+
   jobsList = mergeJobsWithCustomJobs(jobsList, customJobs);
 
   const rawDtList: any[] =
@@ -3115,7 +3201,11 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
   const isConnected = primaryRes.success || Boolean(secondaryRes.contracts || secondaryRes.callouts);
   const source = primaryRes.source !== 'failed' ? primaryRes.source : 'azure-sql';
 
-  const message = 'Complete database synchronized successfully.';
+  const message = primaryRes.success
+    ? `Azure SQL synced — ${counts.jobs} jobs · ${counts.inventory} tools · ${counts.dtBatches} DTs`
+    : secondaryRes.contracts || secondaryRes.callouts
+      ? `Partial sync — secondary modules loaded (jobs from local cache)`
+      : `Local cache active — ${primaryRes.message || 'Azure connection unavailable'}`;
 
   return {
     success: isConnected,
