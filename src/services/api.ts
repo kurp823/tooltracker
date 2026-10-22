@@ -3196,7 +3196,17 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
   };
   const secondaryRes = secondarySettled.status === 'fulfilled' ? secondarySettled.value : {};
   // Supplemental jobs from dedicated getjobs action (bypasses GET_ALL_DATA row cap)
-  const suppJobs: any[] = suppJobsSettled.status === 'fulfilled' ? suppJobsSettled.value : [];
+  let suppJobs: any[] = suppJobsSettled.status === 'fulfilled' ? suppJobsSettled.value : [];
+
+  // If supplemental came back empty but the primary succeeded, the Azure Function was
+  // cold-starting when the parallel supplemental ran. Now that the primary has warmed it
+  // up, retry the supplemental fetch — it will find the jobs above the row cap.
+  if (suppJobs.length === 0 && primaryRes.data?.jobs && primaryRes.data.jobs.length > 0) {
+    try {
+      console.log('[JobsSupplemental] Retrying after primary warm-up...');
+      suppJobs = await fetchJobsSupplemental(primaryRes.data.jobs);
+    } catch { /* non-blocking */ }
+  }
 
   const customTools = loadCustomTools();
   const customJobs = loadCustomJobs();
