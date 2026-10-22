@@ -440,8 +440,9 @@ export const POManagementView: React.FC<POManagementViewProps> = ({
           };
 
           saveCustomTool(toolItem);
+          // onSaveTool (handleAddTool in App.tsx) calls saveInventoryApi internally —
+          // do NOT also call saveInventoryApi here directly; that would double-write.
           if (onSaveTool) onSaveTool(toolItem);
-          saveInventoryApi({ ...toolItem, _isExisting: false }).catch(() => {});
         }
       }
 
