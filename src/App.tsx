@@ -47,7 +47,7 @@ import {
   fetchFromApi,
   normalizeJobKey,
 } from './services/api';
-import { clearCache } from './services/dbCache';
+import { clearCache, saveDatasetToCache } from './services/dbCache';
 import {
   loadCustomTools,
   saveCustomTool,
@@ -2607,7 +2607,7 @@ export const App: React.FC = () => {
                 categories={customCategories}
                 sizes={customSizes}
                 inventory={inventory}
-                onSaveTool={handleCreateTool}
+                onSaveTool={handleAddTool}
               />
             </React.Suspense>
           )}
@@ -2625,7 +2625,7 @@ export const App: React.FC = () => {
                 user={currentUser}
                 showToast={showToast}
                 inventory={inventory}
-                onSaveTool={handleCreateTool}
+                onSaveTool={handleAddTool}
               />
             </React.Suspense>
           )}
