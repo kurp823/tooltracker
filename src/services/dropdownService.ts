@@ -9,6 +9,8 @@ export type DropdownListKey =
   | 'clients'
   | 'rigs'
   | 'wells'
+  | 'personnel'
+  | 'contracts'
   | 'subDivisions'
   | 'toolOwnerships'
   | 'toolLocations'
@@ -31,6 +33,27 @@ export interface DropdownDefinition {
   group: 'Commercial & Financial' | 'Operations & Rig' | 'Inventory & Fleet' | 'Maintenance & QC' | 'Consumables & Store';
   description: string;
   defaultOptions: string[];
+}
+
+/**
+ * Merge live DB-derived values into a dropdown list.
+ * Call this after getDropdownOptions() to enrich with values that already exist in the DB,
+ * ensuring all users see consistent options derived from real records.
+ * Deduplicates case-insensitively, preserving original casing of first occurrence.
+ */
+export function mergeWithDbValues(baseOptions: string[], ...dbValueSets: (string | undefined | null)[][]): string[] {
+  const seen = new Map<string, string>(); // lowercase → original
+  for (const opt of baseOptions) {
+    const t = opt.trim();
+    if (t) seen.set(t.toLowerCase(), t);
+  }
+  for (const valueSet of dbValueSets) {
+    for (const val of valueSet) {
+      const t = (val || '').trim();
+      if (t && !seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
+    }
+  }
+  return Array.from(seen.values()).sort();
 }
 
 export const DROPDOWN_DEFINITIONS: Record<DropdownListKey, DropdownDefinition> = {
@@ -136,6 +159,36 @@ export const DROPDOWN_DEFINITIONS: Record<DropdownListKey, DropdownDefinition> =
       'US-102',
       'US-152',
       'BUH-412',
+    ],
+  },
+  personnel: {
+    key: 'personnel',
+    label: 'Field Engineers & Personnel',
+    group: 'Operations & Rig',
+    description: 'Engineers, supervisors, and field personnel assigned to jobs',
+    defaultOptions: [
+      'Ravi Kumar',
+      'Azmi',
+      'Tariq',
+      'Field Supervisor',
+      'Lead Fishing Engineer',
+      'Whipstock Specialist',
+      'Drilling Engineer',
+      'Well Intervention Engineer',
+      'Tool Pusher',
+      'Company Man',
+    ],
+  },
+  contracts: {
+    key: 'contracts',
+    label: 'Contract Numbers',
+    group: 'Commercial & Financial',
+    description: 'Active client contract numbers — format: ContractNo | Client | Short Description',
+    defaultOptions: [
+      '4700018368 | ADNOC Onshore | AON Fishing & Whipstock',
+      '4700024096 | ADNOC Drilling | ADD Pool Rental',
+      '4700022841 | ADNOC Offshore | AOF Well Intervention',
+      '4700031001 | Turnwell | TWL Fishing Services',
     ],
   },
   subDivisions: {

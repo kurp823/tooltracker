@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Callout, CalloutItem, ToolItem, User, DrillingJob } from '../types';
+import { Callout, CalloutItem, ToolItem, User, DrillingJob, ContractRecord } from '../types';
 import { TOOL_SIZES } from '../data/initialData';
 import { ToolPickerModal } from './ToolPickerModal';
 import { formatDateDDMMYY } from '../utils';
@@ -13,6 +13,7 @@ interface CalloutsViewProps {
   callouts: Callout[];
   inventory: ToolItem[];
   jobs?: DrillingJob[];
+  contracts?: ContractRecord[];
   onSaveCallout?: (callout: Callout, reservedTools?: ToolItem[]) => void;
   onCreateJob?: (callout: Callout) => void;
   onCreateJobFromCallout?: (callout: Callout) => void;
@@ -29,6 +30,7 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
   callouts,
   inventory,
   jobs = [],
+  contracts = [],
   onSaveCallout,
   onCreateJob,
   onCreateJobFromCallout,
@@ -50,11 +52,38 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
   // Dynamic Dropdown Lists from dropdownService
   const [adminModalKey, setAdminModalKey] = useState<DropdownListKey | null>(null);
   const [rigsList, setRigsList] = useState<string[]>(() => getDropdownOptions('rigs'));
+  const [wellsList, setWellsList] = useState<string[]>(() => getDropdownOptions('wells'));
   const [clientsList, setClientsList] = useState<string[]>(() => getDropdownOptions('clients'));
+
+  // Auto-grow lists from live DB data to ensure cross-user consistency
+  const computedRigsList = React.useMemo(() => {
+    const set = new Set<string>(rigsList);
+    jobs.forEach((j) => { if (j.rig && j.rig.trim() && j.rig !== '—') set.add(j.rig.trim()); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [rigsList, jobs]);
+
+  const computedWellsList = React.useMemo(() => {
+    const set = new Set<string>(wellsList);
+    jobs.forEach((j) => { if (j.well && j.well.trim() && j.well !== '—') set.add(j.well.trim()); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [wellsList, jobs]);
+
+  const computedClientsList = React.useMemo(() => {
+    const set = new Set<string>(clientsList);
+    jobs.forEach((j) => { if (j.client && j.client.trim()) set.add(j.client.trim()); });
+    contracts.forEach((c) => { if (c.client && c.client.trim()) set.add(c.client.trim()); });
+    return Array.from(set).sort();
+  }, [clientsList, jobs, contracts]);
+
+  const activeContracts = React.useMemo(
+    () => contracts.filter((c) => c.status === 'Active'),
+    [contracts]
+  );
 
   React.useEffect(() => {
     const handleUpdate = () => {
       setRigsList(getDropdownOptions('rigs'));
+      setWellsList(getDropdownOptions('wells'));
       setClientsList(getDropdownOptions('clients'));
     };
     window.addEventListener('dropdown_options_updated', handleUpdate);
@@ -692,31 +721,39 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
                       </button>
                     )}
                   </div>
-                  <input
-                    type="text"
+                  <select
                     required
-                    list="calloutRigsList"
-                    placeholder="e.g. ND-11, AD-45"
                     value={newRig}
                     onChange={(e) => setNewRig(e.target.value)}
                     className="w-full border rounded px-2.5 py-1.5 bg-white"
-                  />
-                  <datalist id="calloutRigsList">
-                    {rigsList.map((r) => (
-                      <option key={r} value={r} />
+                  >
+                    <option value="">— Select Rig —</option>
+                    {computedRigsList.map((r) => (
+                      <option key={r} value={r}>{r}</option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">Well *</label>
-                  <input
-                    type="text"
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold mb-1">Well *</label>
+                    {user?.role === 'Admin' && (
+                      <button type="button" onClick={() => setAdminModalKey('wells')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer">
+                        <SettingsIcon className="w-2.5 h-2.5" /> Manage
+                      </button>
+                    )}
+                  </div>
+                  <select
                     required
-                    placeholder="e.g. BU-324, GH-0512"
                     value={newWell}
                     onChange={(e) => setNewWell(e.target.value)}
-                    className="w-full border rounded px-2.5 py-1.5"
-                  />
+                    className="w-full border rounded px-2.5 py-1.5 bg-white"
+                  >
+                    <option value="">— Select Well —</option>
+                    {computedWellsList.map((w) => (
+                      <option key={w} value={w}>{w}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -732,36 +769,32 @@ export const CalloutsView: React.FC<CalloutsViewProps> = ({
                       </button>
                     )}
                   </div>
-                  <input
-                    type="text"
+                  <select
                     required
-                    list="calloutClientsList"
-                    placeholder="e.g. ADNOC Onshore"
                     value={newClient}
                     onChange={(e) => setNewClient(e.target.value)}
                     className="w-full border rounded px-2.5 py-1.5 bg-white"
-                  />
-                  <datalist id="calloutClientsList">
-                    {clientsList.map((cl) => (
-                      <option key={cl} value={cl} />
+                  >
+                    <option value="">— Select Client —</option>
+                    {computedClientsList.map((cl) => (
+                      <option key={cl} value={cl}>{cl}</option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">Contract Code / Client</label>
-                  <input
-                    type="text"
-                    list="calloutContractsList"
-                    placeholder="e.g. 4700023373 or ADNOC Onshore"
+                  <label className="block font-bold mb-1">Contract</label>
+                  <select
                     value={newContract}
                     onChange={(e) => setNewContract(e.target.value)}
-                    className="w-full border rounded px-2.5 py-1.5 font-bold bg-white"
-                  />
-                  <datalist id="calloutContractsList">
-                    {clientsList.map((cl) => (
-                      <option key={cl} value={cl} />
+                    className="w-full border rounded px-2.5 py-1.5 font-mono bg-white"
+                  >
+                    <option value="">— Select Contract (optional) —</option>
+                    {activeContracts.map((c) => (
+                      <option key={c.id} value={c.contractNo || c.contractRef || c.id}>
+                        {c.contractNo || c.contractRef} — {c.client}{c.name ? ` | ${c.name}` : ''}
+                      </option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
                 <div>
                   <label className="block font-bold mb-1">PO Reference</label>

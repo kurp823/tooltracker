@@ -2238,6 +2238,7 @@ export const App: React.FC = () => {
               callouts={callouts}
               inventory={inventory}
               jobs={jobs}
+              contracts={contracts}
               onSaveCallout={handleSaveCallout}
               onCreateJob={handleCreateJobFromCallout}
               onLinkCalloutToJob={handleLinkCalloutToJob}
