@@ -346,6 +346,8 @@ export const App: React.FC = () => {
   // Guards: prevent overlapping fetches and enforce minimum gap between syncs
   const isSyncingRef = useRef(false);
   const lastSyncTimeRef = useRef<number>(0);
+  // Consecutive silent-poll failure counter — badge only reverts after 2+ consecutive failures
+  const pollFailCountRef = useRef(0);
 
   // Toasts
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
@@ -608,6 +610,10 @@ export const App: React.FC = () => {
         const res = await fetchAllModulesLive();
         clearTimeout(syncTimeout);
         if (res.success && res.data) {
+          // Success: reset consecutive failure counter
+          pollFailCountRef.current = 0;
+          setIsInitializing(false);
+
           const cleanDtBatches = (Array.isArray(res.data.dtBatches) ? res.data.dtBatches : []).filter(
             (b: any) =>
               String(b?.dtNumber || '').trim().toUpperCase() !== 'DT-26-10001' &&
@@ -637,22 +643,46 @@ export const App: React.FC = () => {
             showToast(res.message, 'success');
           }
         } else {
-          setDbStatus((prev) => ({
-            ...prev,
-            isConnected: false,
-            source: 'local-cache',
-            lastChecked: new Date().toLocaleTimeString(),
-            message: res.message,
-          }));
-          setSyncStatus('saved');
-          if (!isSilent) {
+          // Failure: for silent background polls, only flip the badge after 2+ consecutive failures
+          // to prevent transient network hiccups from reverting a working connection
+          setIsInitializing(false);
+          if (isSilent) {
+            pollFailCountRef.current += 1;
+            if (pollFailCountRef.current >= 2) {
+              setDbStatus((prev) => ({
+                ...prev,
+                isConnected: false,
+                source: 'local-cache',
+                lastChecked: new Date().toLocaleTimeString(),
+                message: res.message,
+              }));
+            }
+          } else {
+            // Explicit user-triggered sync failed — always show the failure
+            pollFailCountRef.current = 0;
+            setDbStatus((prev) => ({
+              ...prev,
+              isConnected: false,
+              source: 'local-cache',
+              lastChecked: new Date().toLocaleTimeString(),
+              message: res.message,
+            }));
             showToast(res.message, 'info');
           }
+          setSyncStatus('saved');
         }
       } catch (e: any) {
         clearTimeout(syncTimeout);
+        setIsInitializing(false);
         setSyncStatus('saved');
-        if (!isSilent) {
+        if (isSilent) {
+          pollFailCountRef.current += 1;
+          // Let the badge stay green through transient errors — only revert after 2+ failures
+          if (pollFailCountRef.current >= 2) {
+            setDbStatus((prev) => ({ ...prev, isConnected: false, source: 'local-cache', lastChecked: new Date().toLocaleTimeString(), message: 'Connection lost' }));
+          }
+        } else {
+          pollFailCountRef.current = 0;
           showToast('Unable to reach Azure SQL endpoint.', 'error');
         }
       } finally {
@@ -675,6 +705,8 @@ export const App: React.FC = () => {
 
   // Non-blocking initial startup: Do NOT block user with a 2-3 minute splash screen
   const [isInitialLoading, setIsInitialLoading] = useState(false);
+  // True from app start until the first sync attempt completes — shows "CONNECTING..." badge
+  const [isInitializing, setIsInitializing] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isChangingPasswordOpen, setIsChangingPasswordOpen] = useState(false);
   const initialLoadUserRef = useRef<string | null>(null);
@@ -2121,6 +2153,7 @@ export const App: React.FC = () => {
       <Header
         syncStatus={syncStatus}
         dbStatus={dbStatus}
+        isInitializing={isInitializing}
         onSync={handleManualSync}
         onRefresh={() => handleFetchLiveSql(false)}
         isSidebarCollapsed={isSidebarCollapsed}
