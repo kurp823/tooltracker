@@ -735,6 +735,12 @@ export const App: React.FC = () => {
     if (initialLoadUserRef.current === currentUser.username) return;
     initialLoadUserRef.current = currentUser.username;
 
+    // ── INSTANT WARM-UP: fire a lightweight ping to the Azure Function RIGHT NOW ──
+    // Azure Functions on a Consumption plan go cold after ~5 min.  The warm-up ping
+    // kicks the function before the real data sync hits it, so the function is already
+    // alive when fetchAllModulesLive() fires 100 ms later.  No await — fire-and-forget.
+    fetchFromApi('ping', {}).catch(() => {});
+
     // Immediately flush any offline outbox items upon user login
     flushOfflineOutbox()
       .then((res) => {
@@ -744,11 +750,11 @@ export const App: React.FC = () => {
       })
       .catch(() => {});
 
-    // Run background sync across all modules smoothly without freezing or blocking the user
-    handleFetchLiveSql(true);
+    // Run background sync (fires ~100 ms after the warm-up ping, giving the ping a tiny
+    // head-start so the function is already waking when the real request arrives)
+    setTimeout(() => { handleFetchLiveSql(true); }, 100);
 
-    // 1. Periodic background sync every 90 seconds (was 12s — each sync downloads 5+ MB;
-    //    the isSyncingRef guard in handleFetchLiveSql also prevents overlapping calls).
+    // 1. Periodic background sync every 90 seconds
     const pollInterval = setInterval(() => {
       handleFetchLiveSql(true);
     }, 90000);
@@ -764,12 +770,12 @@ export const App: React.FC = () => {
         .catch(() => {});
     }, 60000);
 
-    // 3. Keep-Warm Pinger: ping Azure Function every 2 minutes to eliminate cold starts (10-30s lag).
-    //    Reduced from 4 min — Azure Functions go cold after ~5 min of inactivity; 2 min keeps
-    //    the function consistently warm so the next sync responds in ~1s instead of 10-30s.
+    // 3. Keep-Warm Pinger: fires every 90 s (half the Azure Function idle-timeout).
+    //    Keeps the function warm at all times once a user is logged in — cold starts
+    //    (10-30 s) become impossible during an active session.
     const keepWarmInterval = setInterval(() => {
       fetchFromApi('ping', {}).catch(() => {});
-    }, 2 * 60 * 1000);
+    }, 90 * 1000); // every 90 seconds — well within the 5-min Azure idle window
 
     // 4. On window focus: sync only if last sync was > 60 seconds ago (the 30s guard in
     //    handleFetchLiveSql provides an additional safety net against rapid focus events).

@@ -2148,31 +2148,85 @@ export async function fetchLiveDatabaseData(): Promise<{
         ? DEFAULT_AZURE_FUNCTION_URL
         : endpoint;
 
-    // The Azure Function responds to 'GET_ALL_DATA'
-    const attempts = [
-      { method: 'GET', url: buildUrl(fnEndpoint, 'GET_ALL_DATA'), body: undefined },
-      { method: 'POST', url: buildUrl(fnEndpoint, 'GET_ALL_DATA'), body: JSON.stringify({ action: 'GET_ALL_DATA', env: 'live' }) },
-      { method: 'GET', url: buildUrl(fnEndpoint, 'getInventory'), body: undefined },
-      { method: 'POST', url: buildUrl(fnEndpoint, 'SYNC_ALL_DATA'), body: JSON.stringify({ action: 'SYNC_ALL_DATA', env: 'live' }) },
-      { method: 'GET', url: buildUrl(fnEndpoint, 'SYNC_ALL_DATA'), body: undefined },
-      { method: 'GET', url: buildUrl(DEFAULT_AZURE_FUNCTION_URL, 'GET_ALL_DATA'), body: undefined },
+    // All API variant attempts — fired in PARALLEL (Promise.race) so the app never
+    // waits 30 s × 6 = 3 minutes for sequential cold-start probes.  Each attempt gets
+    // its own AbortController so losers are cancelled the instant a winner responds.
+    // The winning URL+method is cached in sessionStorage so the NEXT sync skips straight
+    // to it instead of probing again.
+    const WIN_KEY = 'emdad_fn_winner';
+    const cachedWinner = (() => {
+      try { return JSON.parse(sessionStorage.getItem(WIN_KEY) || 'null'); } catch { return null; }
+    })();
+
+    type Attempt = { method: string; url: string; body: string | undefined; tag: string };
+    const allAttempts: Attempt[] = [
+      { method: 'GET',  url: buildUrl(fnEndpoint, 'GET_ALL_DATA'),  body: undefined,                                                     tag: 'GET/GET_ALL_DATA' },
+      { method: 'POST', url: buildUrl(fnEndpoint, 'GET_ALL_DATA'),  body: JSON.stringify({ action: 'GET_ALL_DATA', env: 'live' }),        tag: 'POST/GET_ALL_DATA' },
+      { method: 'GET',  url: buildUrl(fnEndpoint, 'getInventory'),  body: undefined,                                                     tag: 'GET/getInventory' },
+      { method: 'POST', url: buildUrl(fnEndpoint, 'SYNC_ALL_DATA'), body: JSON.stringify({ action: 'SYNC_ALL_DATA', env: 'live' }),       tag: 'POST/SYNC_ALL_DATA' },
+      { method: 'GET',  url: buildUrl(fnEndpoint, 'SYNC_ALL_DATA'), body: undefined,                                                     tag: 'GET/SYNC_ALL_DATA' },
+      { method: 'GET',  url: buildUrl(DEFAULT_AZURE_FUNCTION_URL, 'GET_ALL_DATA'), body: undefined,                                      tag: 'GET/DEFAULT_GET_ALL_DATA' },
     ];
 
+    // If we have a cached winner from a previous call this session, put it first and
+    // skip the rest — avoids the probe entirely for warm calls.
+    const attempts: Attempt[] = cachedWinner
+      ? [cachedWinner, ...allAttempts.filter((a) => a.tag !== cachedWinner.tag)]
+      : allAttempts;
+
+    /**
+     * Race all attempts in parallel.  Each has a 12-second AbortController timeout.
+     * Returns the first { res, json, attempt } that yields an HTTP 200 with parseable
+     * JSON — or null if all fail.
+     */
+    async function raceAttempts(list: Attempt[]): Promise<{ res: Response; json: any; attempt: Attempt } | null> {
+      const controllers = list.map(() => new AbortController());
+      // 12-second hard timeout per attempt (Azure Function cold-start is ≤ 30 s, so
+      // this lets the parallel group resolve well before any single one would time out)
+      const timers = controllers.map((c, i) =>
+        setTimeout(() => { try { c.abort(); } catch { /* ignore */ } }, 12_000 + i * 300)
+      );
+      const cleanup = () => timers.forEach((t) => clearTimeout(t));
+
+      const settled = await Promise.allSettled(
+        list.map(async (attempt, i) => {
+          const res = await fetch(attempt.url, {
+            method: attempt.method,
+            headers,
+            body: attempt.body,
+            signal: controllers[i].signal,
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const json = await res.json();
+          // Cancel all other in-flight requests
+          controllers.forEach((c, j) => { if (j !== i) { try { c.abort(); } catch { /* ignore */ } } });
+          return { res, json, attempt };
+        })
+      );
+
+      cleanup();
+      for (const r of settled) {
+        if (r.status === 'fulfilled') return r.value;
+      }
+      return null;
+    }
+
+    const winner = await raceAttempts(attempts);
+    if (!winner) {
+      return {
+        success: false,
+        source: 'azure-function',
+        message: 'All Azure Function probe attempts failed or timed out (12 s each).',
+      };
+    }
+
+    // Cache the winning attempt for this session so the next sync is instant
+    try { sessionStorage.setItem(WIN_KEY, JSON.stringify({ method: winner.attempt.method, url: winner.attempt.url, body: winner.attempt.body, tag: winner.attempt.tag })); } catch { /* ignore */ }
+
     let lastError = '';
-    for (const attempt of attempts) {
+    {
+      const json = winner.json;
       try {
-        const res = await fetch(attempt.url, {
-          method: attempt.method,
-          headers,
-          body: attempt.body,
-        });
-
-        if (!res.ok) {
-          lastError = `HTTP ${res.status}: ${res.statusText}`;
-          continue;
-        }
-
-        const json = await res.json();
         let payload = json.data !== undefined ? json.data : json;
         if (typeof payload === 'string') {
           try {
@@ -2355,12 +2409,12 @@ export async function fetchLiveDatabaseData(): Promise<{
       } catch (e: any) {
         lastError = e?.message || 'Network error';
       }
-    }
+    } // end single-winner block
 
     return {
       success: false,
       source: 'azure-function',
-      message: `Azure API reached but data empty: ${lastError}`,
+      message: `Azure API reached but data was empty: ${lastError}`,
     };
   } catch (err: any) {
     return {
