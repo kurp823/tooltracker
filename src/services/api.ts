@@ -2149,11 +2149,113 @@ export async function fetchLiveDatabaseData(): Promise<{
         ? DEFAULT_AZURE_FUNCTION_URL
         : endpoint;
 
+    // ── Strategy 2a: Fast split-endpoint fetch ────────────────────────────────────────────
+    // Tries four dedicated per-type actions (getJobs / getInventory / getDeliveryTickets /
+    // getReceivingTickets) in PARALLEL.  Each returns a small payload (~50-500 KB) so all
+    // four finish in 1-3 s on a warm Azure Function — far faster than the 5-10 MB
+    // GET_ALL_DATA payload.
+    //
+    // These endpoints only exist if the user added them to the Azure Function in Azure
+    // Portal.  If they don't exist yet, they 404 in <500 ms and we fall through to the
+    // GET_ALL_DATA race immediately (no significant extra delay).
+    //
+    // sessionStorage key 'emdad_split_ok':
+    //   'yes' → known to work this session (skip the 4-s safety timeout next time)
+    //   'no'  → known to fail this session (skip straight to GET_ALL_DATA)
+    //   null  → first load; probe and learn
+    // ─────────────────────────────────────────────────────────────────────────────────────
+    {
+      const SPLIT_KEY = 'emdad_split_ok';
+      const splitState = (() => { try { return sessionStorage.getItem(SPLIT_KEY); } catch { return null; } })();
+
+      if (splitState !== 'no') {
+        // Helper: fetch one split endpoint; returns parsed JSON or null on any failure
+        const fetchSplit = async (action: string, ctrl: AbortController): Promise<any | null> => {
+          try {
+            const r = await fetch(buildUrl(fnEndpoint, action), { method: 'GET', headers, signal: ctrl.signal });
+            if (!r.ok) return null;
+            return await r.json();
+          } catch {
+            return null;
+          }
+        };
+
+        // 4-second hard cap — if endpoints are cold/missing they 404 well before this
+        const splitAborts = [new AbortController(), new AbortController(), new AbortController(), new AbortController()];
+        const splitTimer  = setTimeout(() => splitAborts.forEach((c) => { try { c.abort(); } catch {} }), 4_000);
+
+        const [jR, iR, dR, rR] = await Promise.allSettled([
+          fetchSplit('getJobs',             splitAborts[0]),
+          fetchSplit('getInventory',        splitAborts[1]),
+          fetchSplit('getDeliveryTickets',  splitAborts[2]),
+          fetchSplit('getReceivingTickets', splitAborts[3]),
+        ]);
+        clearTimeout(splitTimer);
+
+        const jData = jR.status === 'fulfilled' ? jR.value : null;
+        const iData = iR.status === 'fulfilled' ? iR.value : null;
+        const dData = dR.status === 'fulfilled' ? dR.value : null;
+        const rData = rR.status === 'fulfilled' ? rR.value : null;
+
+        const rawJobs2 = (jData?.jobs || jData?.Jobs || []) as any[];
+        const rawInv2  = (iData?.inventory || iData?.tools || iData?.Tools || iData?.Inventory || []) as any[];
+        const rawDt2   = (dData?.dtBatches || dData?.deliveryTickets || dData?.DeliveryTickets || []) as any[];
+        const rawDtL2  = (dData?.dtLines   || dData?.deliveryTicketLines || dData?.DeliveryTicketLines || []) as any[];
+        const rawRt2   = (rData?.rtBatches || rData?.receivingTickets || rData?.ReceivingTickets || []) as any[];
+        const rawRtL2  = (rData?.rtLines   || rData?.receivingTicketLines || rData?.ReceivingTicketLines || []) as any[];
+
+        if (Array.isArray(rawJobs2) && rawJobs2.length > 0) {
+          // Split endpoints are live and returning data — cache success for this session
+          try { sessionStorage.setItem(SPLIT_KEY, 'yes'); } catch {}
+
+          const dtFull2 = rawDtL2.length > 0 ? attachLinesToBatches(rawDt2, rawDtL2, 'DT') : rawDt2;
+          const rtFull2 = rawRtL2.length > 0 ? attachLinesToBatches(rawRt2, rawRtL2, 'RT') : rawRt2;
+
+          let parsedJobs2 = rawJobs2.map(normalizeJob);
+
+          // Merge any master jobs not in SQL yet
+          const existKeys2 = new Set<string>();
+          parsedJobs2.forEach((j: any) => {
+            existKeys2.add(String(j.id || '').trim().toUpperCase());
+            existKeys2.add(formatStandardJobId(j.id).toUpperCase());
+            existKeys2.add(normalizeJobKey(j.id));
+          });
+          MASTER_JOBS.forEach((mj) => {
+            const k1 = String(mj.id || '').trim().toUpperCase();
+            const k2 = formatStandardJobId(mj.id).toUpperCase();
+            const k3 = normalizeJobKey(mj.id);
+            if (!existKeys2.has(k1) && !existKeys2.has(k2) && !existKeys2.has(k3)) {
+              parsedJobs2.push(normalizeJob(mj));
+              existKeys2.add(k1); existKeys2.add(k2); existKeys2.add(k3);
+            }
+          });
+
+          const parsedDTs2 = dtFull2.map(normalizeDTBatch);
+          const parsedRTs2 = rtFull2.map(normalizeRTBatch);
+          const parsedInv2 = rawInv2.length > 0 ? rawInv2.map(normalizeInventoryItem) : undefined;
+
+          const rec2 = reconcileJobsDTRTAndInventory(parsedJobs2, parsedDTs2, parsedRTs2, parsedInv2);
+          return {
+            success: true,
+            source: 'azure-function',
+            data: { inventory: rec2.inventory, jobs: rec2.jobs, dtBatches: rec2.dtBatches, rtBatches: rec2.rtBatches },
+            message: 'Connected to Azure SQL database (fast mode)',
+          };
+        } else {
+          // Split endpoints not yet added or returned empty — fall through to GET_ALL_DATA
+          try { sessionStorage.setItem(SPLIT_KEY, 'no'); } catch {}
+        }
+      }
+    }
+    // ── End Strategy 2a ───────────────────────────────────────────────────────────────────
+
     // All API variant attempts — fired in PARALLEL (Promise.race) so the app never
     // waits 30 s × 6 = 3 minutes for sequential cold-start probes.  Each attempt gets
     // its own AbortController so losers are cancelled the instant a winner responds.
     // The winning URL+method is cached in sessionStorage so the NEXT sync skips straight
     // to it instead of probing again.
+    // NOTE: getInventory is NOT in this list — if that endpoint only returns inventory
+    // (not jobs/DTs/RTs) it would win the race but leave the screen empty.
     const WIN_KEY = 'emdad_fn_winner';
     const cachedWinner = (() => {
       try { return JSON.parse(sessionStorage.getItem(WIN_KEY) || 'null'); } catch { return null; }
@@ -2163,7 +2265,6 @@ export async function fetchLiveDatabaseData(): Promise<{
     const allAttempts: Attempt[] = [
       { method: 'GET',  url: buildUrl(fnEndpoint, 'GET_ALL_DATA'),  body: undefined,                                                     tag: 'GET/GET_ALL_DATA' },
       { method: 'POST', url: buildUrl(fnEndpoint, 'GET_ALL_DATA'),  body: JSON.stringify({ action: 'GET_ALL_DATA', env: 'live' }),        tag: 'POST/GET_ALL_DATA' },
-      { method: 'GET',  url: buildUrl(fnEndpoint, 'getInventory'),  body: undefined,                                                     tag: 'GET/getInventory' },
       { method: 'POST', url: buildUrl(fnEndpoint, 'SYNC_ALL_DATA'), body: JSON.stringify({ action: 'SYNC_ALL_DATA', env: 'live' }),       tag: 'POST/SYNC_ALL_DATA' },
       { method: 'GET',  url: buildUrl(fnEndpoint, 'SYNC_ALL_DATA'), body: undefined,                                                     tag: 'GET/SYNC_ALL_DATA' },
       { method: 'GET',  url: buildUrl(DEFAULT_AZURE_FUNCTION_URL, 'GET_ALL_DATA'), body: undefined,                                      tag: 'GET/DEFAULT_GET_ALL_DATA' },
