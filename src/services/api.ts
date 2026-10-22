@@ -8,6 +8,7 @@ import { saveCustomTool, loadCustomTools, mergeInventoryWithCustomTools } from '
 import { saveCustomJob, loadCustomJobs, mergeJobsWithCustomJobs } from './customJobs';
 import { loadCustomContracts, mergeContractsWithCustom } from './customContracts';
 import { saveCustomCallout, loadCustomCallouts, mergeCalloutsWithCustom } from './customCallouts';
+import { mergeDTBatchesWithCustom, pruneConfirmedDTBatches } from './customDTBatches';
 import {
   INITIAL_CONTRACTS,
   INITIAL_CALLOUTS,
@@ -3010,55 +3011,174 @@ export interface AllModulesLiveResult {
  * Called in parallel with the primary fetch; results are merged in, so jobs above
  * the GET_ALL_DATA limit (e.g. JOB-26-01814+) always appear.
  */
-async function fetchJobsSupplemental(): Promise<any[]> {
+/**
+ * Extract the highest sequential job number from a list of jobs.
+ * Returns e.g. 1813 from "JOB-26-01813".
+ */
+function getHighestJobSeq(jobList: any[]): number {
+  let highest = 0;
+  for (const j of jobList) {
+    const raw = j?.id || j?.jobNumber || '';
+    const m = String(raw).match(/(\d{4,6})$/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (!isNaN(n) && n > highest) highest = n;
+    }
+  }
+  return highest;
+}
+
+/**
+ * Attempt a single Azure Function GET with AbortController timeout.
+ * Returns parsed raw array or null on failure.
+ */
+async function probeJobsUrl(url: string, timeoutMs = 10_000): Promise<any[] | null> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch(url, {
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const json = await res.json().catch(() => null);
+    if (!json) return null;
+    let payload = json?.data !== undefined ? json.data : json;
+    if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch { /* */ } }
+    const raw =
+      (Array.isArray(payload) ? payload : null) ||
+      payload?.jobs || payload?.Jobs || payload?.tbl_Jobs || payload?.value || null;
+    return Array.isArray(raw) && raw.length > 0 ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Supplemental jobs fetch — runs in parallel with the primary GET_ALL_DATA sync.
+ *
+ * Strategy (in order):
+ *
+ * 1. Try GET_ALL_DATA with limit-override query params that some stored procedures
+ *    honour — &limit=99999, &noLimit=true, &all=true. If any returns MORE rows
+ *    than the primary list already, those extras are the missing jobs.
+ *
+ * 2. Try action=getjobs (the write side uses "savejob" → read counterpart is
+ *    likely "getjobs" or "getJob"). Several naming variants in parallel.
+ *
+ * 3. Incremental fill: read the highest sequence returned by the primary sync
+ *    (stored in sessionStorage), then try individual-job fetches for IDs above
+ *    that sequence — action=getjob&jobId=JOB-26-01814, …01815, etc. — stopping
+ *    after 3 consecutive misses.  Covers newly-created jobs that are above the
+ *    row cap but do exist in Azure SQL.
+ *
+ * Returns a deduplicated list of normalized job objects found beyond the cap.
+ */
+async function fetchJobsSupplemental(primaryJobs?: any[]): Promise<any[]> {
   const endpoint = getApiEndpoint();
   const apiKey = (() => {
     try { return localStorage.getItem('emdad_api_key') || ''; } catch { return ''; }
   })();
+  const ts = Date.now();
 
-  function makeUrl(base: string, action: string, extra = ''): string {
-    const sep = base.includes('?') ? '&' : '?';
+  function makeUrl(action: string, extra = ''): string {
+    const sep = endpoint.includes('?') ? '&' : '?';
     const keyPart = apiKey ? `&code=${encodeURIComponent(apiKey)}` : '';
-    return `${base}${sep}action=${action}&env=live&_t=${Date.now()}${keyPart}${extra}`;
+    return `${endpoint}${sep}action=${action}&env=live&_t=${ts}${keyPart}${extra}`;
   }
 
-  // Try all known "fetch all jobs" action names the Azure Function might expose
-  const variants = [
-    makeUrl(endpoint, 'getjobs', '&all=true'),
-    makeUrl(endpoint, 'getjobs'),
-    makeUrl(endpoint, 'GET_JOBS'),
-    makeUrl(endpoint, 'getAllJobs'),
-    makeUrl(endpoint, 'getJobsAll'),
+  // ── Strategy 1: GET_ALL_DATA with limit-override parameters ────────────────
+  const limitOverrides = [
+    makeUrl('GET_ALL_DATA', '&limit=99999&noLimit=true'),
+    makeUrl('GET_ALL_DATA', '&limit=99999'),
+    makeUrl('GET_ALL_DATA', '&noLimit=true&all=true'),
   ];
-
-  for (const url of variants) {
-    try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 10_000);
-      const res = await fetch(url, {
-        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
-        signal: ctrl.signal,
-      });
-      clearTimeout(timer);
-      if (!res.ok) continue;
-      const json = await res.json();
-      let payload = json?.data !== undefined ? json.data : json;
-      if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch { /* ignore */ } }
-      const raw =
-        (Array.isArray(payload) ? payload : null) ||
-        payload?.jobs ||
-        payload?.Jobs ||
-        payload?.tbl_Jobs ||
-        payload?.value ||
-        null;
-      if (Array.isArray(raw) && raw.length > 0) {
-        return raw.map(normalizeJob);
-      }
-    } catch {
-      // try next variant
+  for (const url of limitOverrides) {
+    const raw = await probeJobsUrl(url, 12_000);
+    if (raw && raw.length > (primaryJobs?.length ?? 0)) {
+      console.log(`[JobsSupplemental] GET_ALL_DATA+limit override returned ${raw.length} jobs`);
+      return raw.map(normalizeJob);
     }
   }
-  return [];
+
+  // ── Strategy 2: Dedicated getjobs action names (parallel) ──────────────────
+  const jobActionVariants = [
+    makeUrl('getjobs', '&all=true'),
+    makeUrl('getjobs'),
+    makeUrl('GET_JOBS', '&all=true'),
+    makeUrl('getAllJobs'),
+    makeUrl('getJobsAll'),
+    makeUrl('listjobs'),
+    makeUrl('listJobs'),
+  ];
+  // Run all in parallel; take the first that returns rows
+  const parallelResults = await Promise.allSettled(
+    jobActionVariants.map((url) => probeJobsUrl(url, 10_000))
+  );
+  for (const r of parallelResults) {
+    if (r.status === 'fulfilled' && Array.isArray(r.value) && r.value.length > 0) {
+      console.log(`[JobsSupplemental] Action variant returned ${r.value.length} jobs`);
+      return r.value.map(normalizeJob);
+    }
+  }
+
+  // ── Strategy 3: Incremental fill for jobs above the primary-sync cap ────────
+  // Determine highest seq already in primary list (or from sessionStorage cache).
+  const primaryHighest = primaryJobs ? getHighestJobSeq(primaryJobs) : 0;
+  let storedHighest = 0;
+  try {
+    storedHighest = parseInt(sessionStorage.getItem('emdad_highest_job_seq') || '0', 10) || 0;
+  } catch { /* */ }
+  const capSeq = Math.max(primaryHighest, storedHighest);
+
+  // Persist cap for next run
+  if (capSeq > 0) {
+    try { sessionStorage.setItem('emdad_highest_job_seq', String(capSeq)); } catch { /* */ }
+  }
+
+  if (capSeq === 0) return []; // No cap data, can't increment
+
+  // Detect current year
+  const curYr = new Date().getFullYear().toString().slice(-2); // "26"
+
+  const supplementalJobs: any[] = [];
+  let consecutiveMisses = 0;
+  const MAX_MISSES = 3;
+  const MAX_PROBE = 100; // never probe more than 100 above cap
+
+  for (let seq = capSeq + 1; seq <= capSeq + MAX_PROBE && consecutiveMisses < MAX_MISSES; seq++) {
+    const seqStr = String(seq).padStart(5, '0');
+    const jobId = `JOB-${curYr}-${seqStr}`;
+
+    // Try individual job action names in parallel
+    const probeUrls = [
+      makeUrl('getjob', `&jobId=${encodeURIComponent(jobId)}`),
+      makeUrl('getJob', `&jobId=${encodeURIComponent(jobId)}`),
+      makeUrl('getjob', `&id=${encodeURIComponent(jobId)}`),
+      makeUrl('getjob', `&jobNumber=${encodeURIComponent(jobId)}`),
+    ];
+    const probeResults = await Promise.allSettled(
+      probeUrls.map((url) => probeJobsUrl(url, 5_000))
+    );
+    let found = false;
+    for (const pr of probeResults) {
+      if (pr.status === 'fulfilled' && Array.isArray(pr.value) && pr.value.length > 0) {
+        supplementalJobs.push(...pr.value.map(normalizeJob));
+        consecutiveMisses = 0;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      consecutiveMisses++;
+    }
+  }
+
+  if (supplementalJobs.length > 0) {
+    console.log(`[JobsSupplemental] Incremental fill found ${supplementalJobs.length} jobs above seq ${capSeq}`);
+  }
+  return supplementalJobs;
 }
 
 export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
@@ -3121,16 +3241,35 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
 
   jobsList = mergeJobsWithCustomJobs(jobsList, customJobs);
 
+  // Store the highest primary job seq to sessionStorage so the NEXT
+  // fetchJobsSupplemental() call (Strategy 3 incremental fill) knows
+  // where the Azure SQL row cap currently is.
+  try {
+    const primaryHighestSeq = getHighestJobSeq(primaryRes.data?.jobs || []);
+    if (primaryHighestSeq > 0) {
+      const stored = parseInt(sessionStorage.getItem('emdad_highest_job_seq') || '0', 10) || 0;
+      // Only update if we got a meaningful count (don't reset cap on empty syncs)
+      if (primaryHighestSeq > stored) {
+        sessionStorage.setItem('emdad_highest_job_seq', String(primaryHighestSeq));
+      }
+    }
+  } catch { /* sessionStorage may not be available (SSR/test) */ }
+
   const rawDtList: any[] =
     primaryRes.data?.dtBatches && primaryRes.data.dtBatches.length > 0
       ? primaryRes.data.dtBatches
       : (isPureSql ? [] : INITIAL_DT_BATCHES);
 
-  const dtList: any[] = (rawDtList || []).filter((b: any) => {
+  const filteredDtList: any[] = (rawDtList || []).filter((b: any) => {
     const id = String(b?.id || '').toUpperCase();
     const num = String(b?.dtNumber || '').toUpperCase();
     return !num.includes('10000') && !id.includes('10000') && !num.includes('10001') && !id.includes('10001') && !num.includes('10002') && !id.includes('10002');
   });
+  // Merge with locally-saved custom DTs so that a newly-created DT that hasn't
+  // finished persisting to Azure SQL yet never disappears from the UI (race condition fix).
+  const dtList: any[] = mergeDTBatchesWithCustom(filteredDtList);
+  // Prune confirmed DTs from localStorage cache (keeps it lean; non-blocking)
+  pruneConfirmedDTBatches(filteredDtList);
 
   const rtList: any[] =
     primaryRes.data?.rtBatches && primaryRes.data.rtBatches.length > 0
