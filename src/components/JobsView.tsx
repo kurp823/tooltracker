@@ -258,7 +258,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
   // Sorting State
   const [sortField, setSortField] = useState<'id' | 'client' | 'rig' | 'startDate' | 'endDate' | 'dtTools' | 'rtTools' | 'toolsOnRig' | 'stage' | 'stageDays' | 'value'>('id');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Pagination State
   const [pageSize, setPageSize] = useState<number>(50);
