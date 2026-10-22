@@ -74,6 +74,10 @@ import {
   saveCustomCallout,
   mergeCalloutsWithCustom,
 } from './services/customCallouts';
+import {
+  saveCustomDTBatch,
+  deleteCustomDTBatch,
+} from './services/customDTBatches';
 import { MASTER_JOBS } from './data/masterJobs';
 import { Toast, ToastNotification } from './components/Toast';
 import { Header } from './components/Header';
@@ -939,15 +943,26 @@ export const App: React.FC = () => {
       const exists = prev.some((c) => c.id === saved.id);
       return exists ? prev.map((c) => (c.id === saved.id ? saved : c)) : [saved, ...prev];
     });
-    // Awaited: the success toast below (and any caller awaiting this function for
-    // a saving spinner) now only fires after Azure SQL actually confirms the write.
-    const calloutSaveResult = await saveCalloutApi(saved);
-    if (!calloutSaveResult.success) {
-      showToast(calloutSaveResult.message, 'error');
-      return;
-    }
-    broadcastSync();
-    showToast(`Callout ${saved.id} saved successfully.`, 'success');
+    // Fire-and-forget: callout status updates (e.g. "Delivery Ticket - Created") are
+    // supplementary metadata. A save failure MUST NOT affect or revert the DT operation
+    // that triggered this callout update. Show a non-blocking warning only — never
+    // block the caller or revert local state on a callout save failure.
+    saveCalloutApi(saved).then((calloutSaveResult) => {
+      if (!calloutSaveResult.success) {
+        // Warn in console only — the callout is already saved to localStorage and
+        // local state; it will sync on the next full refresh.
+        console.warn('[Callout] Background save to Azure SQL failed:', calloutSaveResult.message);
+        // Only show a toast if the failure is NOT a 500-series server error — those
+        // are transient backend issues that self-resolve; spamming the user is unhelpful.
+        if (!calloutSaveResult.message.includes('HTTP 5') && !calloutSaveResult.message.includes('500')) {
+          showToast(`Callout status update delayed — will sync automatically. (${calloutSaveResult.message})`, 'info');
+        }
+        return;
+      }
+      broadcastSync();
+    }).catch(() => {
+      // Network error — non-fatal; callout is in localStorage and will sync later.
+    });
   };
 
   const handleCreateJobFromCallout = (callout: Callout) => {
@@ -1035,6 +1050,9 @@ export const App: React.FC = () => {
       const filtered = prev.filter((b) => b.id !== finalizedBatch.id && b.dtNumber !== finalizedBatch.dtNumber);
       return [finalizedBatch, ...filtered];
     });
+    // Persist to localStorage immediately so that if Azure SQL sync runs before
+    // saveDeliveryTicketApi completes (race condition), this DT is NOT wiped from the UI.
+    saveCustomDTBatch(finalizedBatch);
     // Show success immediately after optimistic local update (no waiting for Azure SQL).
     // Azure cold starts can take 10-30s — the background save confirms or shows an error toast.
     broadcastSync();
@@ -1118,6 +1136,8 @@ export const App: React.FC = () => {
     setDtBatches((prev) => {
       return prev.map((b) => (b.id === updatedBatch.id ? updatedBatch : b));
     });
+    // Keep localStorage in sync so Azure SQL re-sync doesn't wipe pending edits.
+    saveCustomDTBatch(updatedBatch);
 
     const isLocked = Boolean(
       updatedBatch.isLocked === true ||
@@ -1287,6 +1307,8 @@ export const App: React.FC = () => {
           (b.id || '').trim().toUpperCase() !== targetUpper
       )
     );
+    // Remove from local cache so it doesn't resurface after next sync.
+    deleteCustomDTBatch(dtNumber);
     deleteDeliveryTicketApi(dtNumber).catch(() => {});
 
     // Revert tool statuses in inventory to 'Good' / 'Emdad Base'
