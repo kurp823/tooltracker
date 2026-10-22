@@ -3058,22 +3058,11 @@ async function probeJobsUrl(url: string, timeoutMs = 10_000): Promise<any[] | nu
 /**
  * Supplemental jobs fetch — runs in parallel with the primary GET_ALL_DATA sync.
  *
- * Strategy (in order):
+ * Strategy: Try known "getjobs" action name variants in PARALLEL (fast).
+ * If the Azure Function exposes a dedicated jobs endpoint, it will be found here.
+ * Capped at 10 seconds total so it never blocks the UI.
  *
- * 1. Try GET_ALL_DATA with limit-override query params that some stored procedures
- *    honour — &limit=99999, &noLimit=true, &all=true. If any returns MORE rows
- *    than the primary list already, those extras are the missing jobs.
- *
- * 2. Try action=getjobs (the write side uses "savejob" → read counterpart is
- *    likely "getjobs" or "getJob"). Several naming variants in parallel.
- *
- * 3. Incremental fill: read the highest sequence returned by the primary sync
- *    (stored in sessionStorage), then try individual-job fetches for IDs above
- *    that sequence — action=getjob&jobId=JOB-26-01814, …01815, etc. — stopping
- *    after 3 consecutive misses.  Covers newly-created jobs that are above the
- *    row cap but do exist in Azure SQL.
- *
- * Returns a deduplicated list of normalized job objects found beyond the cap.
+ * Returns a deduplicated list of normalized job objects found beyond the primary cap.
  */
 async function fetchJobsSupplemental(primaryJobs?: any[]): Promise<any[]> {
   const endpoint = getApiEndpoint();
@@ -3088,21 +3077,7 @@ async function fetchJobsSupplemental(primaryJobs?: any[]): Promise<any[]> {
     return `${endpoint}${sep}action=${action}&env=live&_t=${ts}${keyPart}${extra}`;
   }
 
-  // ── Strategy 1: GET_ALL_DATA with limit-override parameters ────────────────
-  const limitOverrides = [
-    makeUrl('GET_ALL_DATA', '&limit=99999&noLimit=true'),
-    makeUrl('GET_ALL_DATA', '&limit=99999'),
-    makeUrl('GET_ALL_DATA', '&noLimit=true&all=true'),
-  ];
-  for (const url of limitOverrides) {
-    const raw = await probeJobsUrl(url, 12_000);
-    if (raw && raw.length > (primaryJobs?.length ?? 0)) {
-      console.log(`[JobsSupplemental] GET_ALL_DATA+limit override returned ${raw.length} jobs`);
-      return raw.map(normalizeJob);
-    }
-  }
-
-  // ── Strategy 2: Dedicated getjobs action names (parallel) ──────────────────
+  // ── Try dedicated getjobs action names (all in parallel, 8s cap) ──────────
   const jobActionVariants = [
     makeUrl('getjobs', '&all=true'),
     makeUrl('getjobs'),
@@ -3114,7 +3089,7 @@ async function fetchJobsSupplemental(primaryJobs?: any[]): Promise<any[]> {
   ];
   // Run all in parallel; take the first that returns rows
   const parallelResults = await Promise.allSettled(
-    jobActionVariants.map((url) => probeJobsUrl(url, 10_000))
+    jobActionVariants.map((url) => probeJobsUrl(url, 8_000))
   );
   for (const r of parallelResults) {
     if (r.status === 'fulfilled' && Array.isArray(r.value) && r.value.length > 0) {
@@ -3123,7 +3098,7 @@ async function fetchJobsSupplemental(primaryJobs?: any[]): Promise<any[]> {
     }
   }
 
-  // ── Strategy 3: Incremental fill for jobs above the primary-sync cap ────────
+  // ── Incremental fill for jobs above the primary-sync cap ────────────────────
   // Determine highest seq already in primary list (or from sessionStorage cache).
   const primaryHighest = primaryJobs ? getHighestJobSeq(primaryJobs) : 0;
   let storedHighest = 0;
@@ -3144,8 +3119,8 @@ async function fetchJobsSupplemental(primaryJobs?: any[]): Promise<any[]> {
 
   const supplementalJobs: any[] = [];
   let consecutiveMisses = 0;
-  const MAX_MISSES = 3;
-  const MAX_PROBE = 100; // never probe more than 100 above cap
+  const MAX_MISSES = 2;
+  const MAX_PROBE = 20; // limit probing to avoid excessive calls
 
   for (let seq = capSeq + 1; seq <= capSeq + MAX_PROBE && consecutiveMisses < MAX_MISSES; seq++) {
     const seqStr = String(seq).padStart(5, '0');
@@ -3182,10 +3157,12 @@ async function fetchJobsSupplemental(primaryJobs?: any[]): Promise<any[]> {
 }
 
 export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
+  // Cap supplemental fetch at 12s so it never blocks the UI waiting on dead variants
+  const suppTimeout = new Promise<any[]>(resolve => setTimeout(() => resolve([]), 12_000));
   const [primarySettled, secondarySettled, suppJobsSettled] = await Promise.allSettled([
     fetchLiveDatabaseData(),
     fetchSecondaryModules(),
-    fetchJobsSupplemental(),
+    Promise.race([fetchJobsSupplemental(), suppTimeout]),
   ]);
 
   const primaryRes = primarySettled.status === 'fulfilled' ? primarySettled.value : {
@@ -3196,17 +3173,7 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
   };
   const secondaryRes = secondarySettled.status === 'fulfilled' ? secondarySettled.value : {};
   // Supplemental jobs from dedicated getjobs action (bypasses GET_ALL_DATA row cap)
-  let suppJobs: any[] = suppJobsSettled.status === 'fulfilled' ? suppJobsSettled.value : [];
-
-  // If supplemental came back empty but the primary succeeded, the Azure Function was
-  // cold-starting when the parallel supplemental ran. Now that the primary has warmed it
-  // up, retry the supplemental fetch — it will find the jobs above the row cap.
-  if (suppJobs.length === 0 && primaryRes.data?.jobs && primaryRes.data.jobs.length > 0) {
-    try {
-      console.log('[JobsSupplemental] Retrying after primary warm-up...');
-      suppJobs = await fetchJobsSupplemental(primaryRes.data.jobs);
-    } catch { /* non-blocking */ }
-  }
+  const suppJobs: any[] = suppJobsSettled.status === 'fulfilled' ? (suppJobsSettled.value as any[]) : [];
 
   const customTools = loadCustomTools();
   const customJobs = loadCustomJobs();
