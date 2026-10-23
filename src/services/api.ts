@@ -2197,12 +2197,17 @@ export async function fetchLiveDatabaseData(): Promise<{
         const dData = dR.status === 'fulfilled' ? dR.value : null;
         const rData = rR.status === 'fulfilled' ? rR.value : null;
 
-        const rawJobs2 = (jData?.jobs || jData?.Jobs || []) as any[];
-        const rawInv2  = (iData?.inventory || iData?.tools || iData?.Tools || iData?.Inventory || []) as any[];
-        const rawDt2   = (dData?.dtBatches || dData?.deliveryTickets || dData?.DeliveryTickets || []) as any[];
-        const rawDtL2  = (dData?.dtLines   || dData?.deliveryTicketLines || dData?.DeliveryTicketLines || []) as any[];
-        const rawRt2   = (rData?.rtBatches || rData?.receivingTickets || rData?.ReceivingTickets || []) as any[];
-        const rawRtL2  = (rData?.rtLines   || rData?.receivingTicketLines || rData?.ReceivingTicketLines || []) as any[];
+        // Azure Function ok() wraps: { success: true, data: X }
+        // getjobs   → data = [...jobRecords]
+        // getinventory → data = [...invRecords]
+        // getdeliverytickets → data = { dtBatches:[...], dtLines:[...] }
+        // getreceivingtickets → data = { rtBatches:[...], rtLines:[...] }
+        const rawJobs2 = (jData?.data || jData?.jobs || jData?.Jobs || []) as any[];
+        const rawInv2  = (iData?.data || iData?.inventory || iData?.tools || iData?.Tools || iData?.Inventory || []) as any[];
+        const rawDt2   = (dData?.data?.dtBatches || dData?.dtBatches || dData?.deliveryTickets || dData?.DeliveryTickets || []) as any[];
+        const rawDtL2  = (dData?.data?.dtLines   || dData?.dtLines   || dData?.deliveryTicketLines || dData?.DeliveryTicketLines || []) as any[];
+        const rawRt2   = (rData?.data?.rtBatches || rData?.rtBatches || rData?.receivingTickets || rData?.ReceivingTickets || []) as any[];
+        const rawRtL2  = (rData?.data?.rtLines   || rData?.rtLines   || rData?.receivingTicketLines || rData?.ReceivingTicketLines || []) as any[];
 
         if (Array.isArray(rawJobs2) && rawJobs2.length > 0) {
           // Split endpoints are live and returning data — cache success for this session
