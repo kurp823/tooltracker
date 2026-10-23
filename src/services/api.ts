@@ -2197,12 +2197,18 @@ export async function fetchLiveDatabaseData(): Promise<{
         const dData = dR.status === 'fulfilled' ? dR.value : null;
         const rData = rR.status === 'fulfilled' ? rR.value : null;
 
-        const rawJobs2 = (jData?.jobs || jData?.Jobs || []) as any[];
-        const rawInv2  = (iData?.inventory || iData?.tools || iData?.Tools || iData?.Inventory || []) as any[];
-        const rawDt2   = (dData?.dtBatches || dData?.deliveryTickets || dData?.DeliveryTickets || []) as any[];
-        const rawDtL2  = (dData?.dtLines   || dData?.deliveryTicketLines || dData?.DeliveryTicketLines || []) as any[];
-        const rawRt2   = (rData?.rtBatches || rData?.receivingTickets || rData?.ReceivingTickets || []) as any[];
-        const rawRtL2  = (rData?.rtLines   || rData?.receivingTicketLines || rData?.ReceivingTicketLines || []) as any[];
+        // ok() wrapper: { success: true, data: X } — unwrap .data first, then fallbacks
+        const jPayload = jData?.data ?? jData;
+        const iPayload = iData?.data ?? iData;
+        const dPayload = dData?.data ?? dData;
+        const rPayload = rData?.data ?? rData;
+
+        const rawJobs2 = (Array.isArray(jPayload) ? jPayload : (jPayload?.jobs || jPayload?.Jobs || [])) as any[];
+        const rawInv2  = (Array.isArray(iPayload) ? iPayload : (iPayload?.inventory || iPayload?.tools || iPayload?.Tools || iPayload?.Inventory || [])) as any[];
+        const rawDt2   = (dPayload?.dtBatches || dPayload?.deliveryTickets || dPayload?.DeliveryTickets || []) as any[];
+        const rawDtL2  = (dPayload?.dtLines   || dPayload?.deliveryTicketLines || dPayload?.DeliveryTicketLines || []) as any[];
+        const rawRt2   = (rPayload?.rtBatches || rPayload?.receivingTickets || rPayload?.ReceivingTickets || []) as any[];
+        const rawRtL2  = (rPayload?.rtLines   || rPayload?.receivingTicketLines || rPayload?.ReceivingTicketLines || []) as any[];
 
         if (Array.isArray(rawJobs2) && rawJobs2.length > 0) {
           // Split endpoints are live and returning data — cache success for this session
