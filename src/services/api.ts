@@ -3263,11 +3263,24 @@ async function fetchJobsSupplemental(primaryJobs?: any[]): Promise<any[]> {
 }
 
 export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
-  // Cap supplemental fetch at 12s so it never blocks the UI waiting on dead variants
+  // Hard timeout caps on ALL three parallel calls — ensures setIsInitializing(false)
+  // is ALWAYS called even if Azure Function is cold/slow and never responds.
+  // Primary data (inventory + jobs + DT/RT): 30s cap
+  const primaryTimeout = new Promise<{
+    success: boolean; source: 'failed'; data: { inventory: any[]; jobs: any[]; dtBatches: any[]; rtBatches: any[] }; message: string;
+  }>(resolve => setTimeout(() => resolve({
+    success: false, source: 'failed',
+    data: { inventory: [], jobs: [], dtBatches: [], rtBatches: [] },
+    message: 'Primary fetch timed out (30s)',
+  }), 30_000));
+  // Secondary modules (callouts, contracts, etc.): 25s cap
+  const secondaryTimeout = new Promise<{}>(resolve => setTimeout(() => resolve({}), 25_000));
+  // Supplemental jobs: 12s cap (unchanged)
   const suppTimeout = new Promise<any[]>(resolve => setTimeout(() => resolve([]), 12_000));
+
   const [primarySettled, secondarySettled, suppJobsSettled] = await Promise.allSettled([
-    fetchLiveDatabaseData(),
-    fetchSecondaryModules(),
+    Promise.race([fetchLiveDatabaseData(), primaryTimeout]),
+    Promise.race([fetchSecondaryModules(), secondaryTimeout]),
     Promise.race([fetchJobsSupplemental(), suppTimeout]),
   ]);
 
