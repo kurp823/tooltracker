@@ -355,11 +355,7 @@ export const getCleanAssetNo = (...candidates: (string | undefined | null)[]): s
       return str;
     }
   }
-  for (const c of candidates) {
-    if (!c) continue;
-    const str = String(c).trim();
-    if (str && str !== '—' && str !== '-') return str;
-  }
+  // Never fall back to EMD- SystemIDs — return '—' if no real asset number exists
   return '—';
 };
 
@@ -5198,7 +5194,8 @@ export const JobDossierView: React.FC<JobDossierViewProps> = ({
                       const resolved = resolveToolDetails(rawSer, rawPart, item.description, item.cat || item.shortDesc, item.supplier, item.ownership);
                       const cleanAsset = getCleanAssetNo(rawPart, resolved.assetNo, rawSer, resolved.serial);
 
-                      const displayItemAssetNo = (!isEmd(cleanAsset) ? cleanAsset : '') || (!isEmd(rawPart) ? rawPart : '') || resolved.assetNo || rawPart || rawSer || '—';
+                      // Never show EMD- SystemIDs as Asset No — show '—' if no real asset number found
+                      const displayItemAssetNo = (!isEmd(cleanAsset) ? cleanAsset : '') || (!isEmd(rawPart) ? rawPart : '') || (!isEmd(resolved.assetNo) ? resolved.assetNo : '') || '—';
                       const displayItemDesc = (resolved.desc && resolved.desc !== 'Downhole Tool') ? resolved.desc : (item.description || '—');
                       const displayItemCategory = item.cat || item.shortDesc || resolved.shortDesc || '—';
                       const displayItemSupplier = item.supplier || item.ownership || resolved.supplier || 'EMDAD';
