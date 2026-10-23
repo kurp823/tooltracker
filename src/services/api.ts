@@ -2180,9 +2180,9 @@ export async function fetchLiveDatabaseData(): Promise<{
           }
         };
 
-        // 4-second hard cap — if endpoints are cold/missing they 404 well before this
+        // 20-second hard cap — allows for Azure Function cold start + SQL connection pool init
         const splitAborts = [new AbortController(), new AbortController(), new AbortController(), new AbortController()];
-        const splitTimer  = setTimeout(() => splitAborts.forEach((c) => { try { c.abort(); } catch {} }), 4_000);
+        const splitTimer  = setTimeout(() => splitAborts.forEach((c) => { try { c.abort(); } catch {} }), 20_000);
 
         const [jR, iR, dR, rR] = await Promise.allSettled([
           fetchSplit('getJobs',             splitAborts[0]),
