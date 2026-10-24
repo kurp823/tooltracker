@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   NavModule,
   User,
@@ -12,6 +12,7 @@ import {
   ContractRecord,
   JobUtData,
 } from '../types';
+import { fetchDashboardKpis, DashboardKpis } from '../services/api';
 import {
   ResponsiveContainer,
   BarChart,
@@ -137,6 +138,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [dashboardMode, setDashboardMode] = useState<'operations' | 'management'>('operations');
   const [currencyMode, setCurrencyMode] = useState<'AED' | 'USD' | 'NATIVE'>('AED');
   const [categoryChartMetric, setCategoryChartMetric] = useState<'total' | 'split'>('split');
+  const [serverKpis, setServerKpis] = useState<DashboardKpis | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchDashboardKpis().then((data) => {
+      if (mounted && data) {
+        setServerKpis(data);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [dbStatus?.lastChecked]);
 
   // Live aggregation of Jobs by Client / Operator (Top 12) from real jobs database
   const clientJobsBenchmarkData = useMemo(() => {
@@ -719,7 +733,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-2xl font-black font-mono text-emerald-700">
-              {activeRigsCount}
+              {serverKpis != null ? serverKpis.activeRigs : activeRigsCount}
             </span>
             <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
               {new Set(activeJobs.map((j) => j.client)).size} Clients
@@ -735,7 +749,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-2xl font-black font-mono text-blue-700">
-              {toolsOnRigCount}
+              {serverKpis != null ? serverKpis.toolsOnRig : toolsOnRigCount}
             </span>
             <span className="text-[11px] font-semibold text-slate-500">
               {inventory.length} Total Fleet
@@ -747,7 +761,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs hover:shadow-xs transition-all border-t-[3px] border-t-amber-500 flex flex-col justify-between">
           <div className="text-[11px] text-slate-500 font-bold uppercase tracking-wider flex justify-between items-center">
             <span>Pending Signed DTs</span>
-            {pendingSignedDTs.length > 0 && (
+            {(serverKpis != null ? serverKpis.pendingDTs : pendingSignedDTs.length) > 0 && (
               <span className="px-1.5 py-0.2 rounded text-[9px] bg-amber-100 text-amber-900 font-extrabold uppercase">
                 Action Req
               </span>
@@ -755,7 +769,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-2xl font-black font-mono text-amber-700">
-              {pendingSignedDTs.length}
+              {serverKpis != null ? serverKpis.pendingDTs : pendingSignedDTs.length}
             </span>
             <span className="text-[11px] font-semibold text-slate-500">
               of {activeDTsCount} Active DTs
@@ -770,7 +784,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-2xl font-black font-mono text-rose-700">
-              {pendingSignedRTs.length}
+              {serverKpis != null ? serverKpis.pendingRTs : pendingSignedRTs.length}
             </span>
             <span className="text-[11px] font-semibold text-slate-500">
               of {activeRTsCount} Active RTs

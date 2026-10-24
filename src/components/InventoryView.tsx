@@ -7,6 +7,7 @@ import { DropdownListKey, getDropdownOptions } from '../services/dropdownService
 import { AdminDropdownModal } from './AdminDropdownModal';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { SearchableDropdown } from './SearchableDropdown';
+import { fetchInventory } from '../services/api';
 
 interface InventoryViewProps {
   user?: User | null;
@@ -70,12 +71,42 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   };
 
   const [fleetTab, setFleetTab] = useState<'active' | 'all' | 'sub' | 'released'>('active');
-  const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const pageSize = 48;
+  const [serverTools, setServerTools] = useState<ToolItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [selectedOwner, setSelectedOwner] = useState('ALL');
-  const [page, setPage] = useState(1);
-  const pageSize = 48;
+
+  useEffect(() => {
+    let active = true;
+    const timer = setTimeout(async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetchInventory({
+          page: currentPage,
+          limit: pageSize,
+          search: searchQuery.trim(),
+        });
+        if (active && res && Array.isArray(res.data)) {
+          setServerTools(res.data);
+          setTotalCount(res.totalCount || 0);
+        }
+      } catch (err) {
+        console.warn('[InventoryView] Error fetching inventory page:', err);
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [currentPage, searchQuery]);
 
   // Dynamic Dropdown Lists from dropdownService
   const [adminModalKey, setAdminModalKey] = useState<DropdownListKey | null>(null);
@@ -410,38 +441,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     };
   }, [inventory]);
 
-  // Filtered inventory
-  const filtered = useMemo(() => {
-    return inventory.filter((t) => {
-      // Tab filter
-      if (fleetTab === 'active' && (t.status === 'Removed' || t.location === 'Returned to Supplier')) {
-        if (selectedStatus === 'ALL') return false;
-      }
-      if (fleetTab === 'released' && t.status !== 'Removed' && t.location !== 'Returned to Supplier') {
-        return false;
-      }
-      if (fleetTab === 'sub' && t.isEmdad) {
-        return false;
-      }
-
-      if (selectedStatus !== 'ALL' && t.status !== selectedStatus) return false;
-      if (selectedCategory !== 'ALL' && t.shortDesc !== selectedCategory) return false;
-      if (selectedOwner !== 'ALL') {
-        const toolOwner = getToolOwner(t);
-        if (toolOwner !== selectedOwner) return false;
-      }
-      if (search && typeof search === 'string' && search.trim()) {
-        const q = search.toLowerCase().trim();
-        const fullTxt = `${t.id || ''} ${t.serial || ''} ${t.assetNo || ''} ${t.oemSerial || ''} ${t.size || ''} ${t.shortDesc || ''} ${t.desc || ''} ${t.ownership || ''} ${t.supplier || ''} ${t.location || ''}`.toLowerCase();
-        if (!fullTxt.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [inventory, fleetTab, selectedStatus, selectedCategory, selectedOwner, search, getToolOwner]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const currentPage = Math.min(Math.max(1, page), totalPages);
-  const pagedList = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const pagedList = serverTools.length > 0
+    ? serverTools
+    : (inventory && inventory.length > 0 && !searchQuery.trim()
+        ? inventory.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+        : serverTools);
 
   const handleExportCSV = () => {
     if (inventory.length === 0) return;
@@ -802,10 +807,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <input
               type="text"
-              value={search}
+              value={searchQuery}
               onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
               }}
               placeholder="Search serial #, asset name, description, size..."
               className="bg-white border border-[#b8c9db] rounded px-3 py-1 text-xs w-72 outline-none font-medium focus:ring-1 focus:ring-amber-400"
@@ -814,7 +819,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               value={selectedCategory}
               onChange={(val) => {
                 setSelectedCategory(val);
-                setPage(1);
+                setCurrentPage(1);
               }}
               options={categoryDropdownOptions}
               allLabel="All Categories"
@@ -828,7 +833,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 value={selectedStatus}
                 onChange={(e) => {
                   setSelectedStatus(e.target.value);
-                  setPage(1);
+                  setCurrentPage(1);
                 }}
                 className="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-medium outline-none"
               >
@@ -853,7 +858,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               value={selectedOwner}
               onChange={(e) => {
                 setSelectedOwner(e.target.value);
-                setPage(1);
+                setCurrentPage(1);
               }}
               className="bg-white border border-[#b8c9db] rounded px-2.5 py-1 text-xs font-medium outline-none"
               title="Filter assets by tool owner / supplier"
@@ -866,14 +871,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               ))}
             </select>
 
-            {(search || selectedCategory !== 'ALL' || selectedStatus !== 'ALL' || selectedOwner !== 'ALL') && (
+            {(searchQuery || selectedCategory !== 'ALL' || selectedStatus !== 'ALL' || selectedOwner !== 'ALL') && (
               <button
                 onClick={() => {
-                  setSearch('');
+                  setSearchQuery('');
                   setSelectedCategory('ALL');
                   setSelectedStatus('ALL');
                   setSelectedOwner('ALL');
-                  setPage(1);
+                  setCurrentPage(1);
                 }}
                 className="text-xs text-slate-600 hover:text-slate-900 font-semibold underline px-2 cursor-pointer"
               >
@@ -883,9 +888,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="text-xs font-bold text-slate-700">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}-
-              {Math.min(currentPage * pageSize, filtered.length)} of {filtered.length.toLocaleString()} tools
+            <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <span>
+                Showing {totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1}-
+                {Math.min(currentPage * pageSize, totalCount)} of {totalCount.toLocaleString()} tools
+              </span>
+              {isLoading && (
+                <span className="text-amber-600 font-semibold animate-pulse">(Loading...)</span>
+              )}
             </div>
           </div>
         </div>
@@ -1088,19 +1098,47 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         <div className="px-4 py-3 bg-[#f8fafc] border-t border-[#b8c9db] flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="text-slate-600 font-medium">
             Page <strong className="text-slate-900">{currentPage}</strong> of{' '}
-            <strong>{totalPages}</strong> ({filtered.length.toLocaleString()} tools)
+            <strong>{totalPages}</strong> ({totalCount.toLocaleString()} tools)
+            {isLoading && <span className="ml-2 text-amber-600 font-semibold animate-pulse">(Loading...)</span>}
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1.5">
             <button
-              disabled={currentPage <= 1}
-              onClick={() => setPage(currentPage - 1)}
+              disabled={currentPage <= 1 || isLoading}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               className="px-2.5 py-1 rounded border bg-white hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               &larr; Prev
             </button>
+            {/* Numbered buttons */}
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum: number;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              return (
+                <button
+                  key={pageNum}
+                  disabled={isLoading}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`px-2.5 py-1 rounded border text-xs font-semibold cursor-pointer ${
+                    currentPage === pageNum
+                      ? 'bg-[#1a3055] text-white border-[#1a3055]'
+                      : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
             <button
-              disabled={currentPage >= totalPages}
-              onClick={() => setPage(currentPage + 1)}
+              disabled={currentPage >= totalPages || isLoading}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               className="px-2.5 py-1 rounded border bg-white hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               Next &rarr;

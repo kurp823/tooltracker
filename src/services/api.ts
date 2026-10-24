@@ -23,17 +23,18 @@ import { addToOutbox, flushOutbox, getOutboxCount } from './outboxQueue';
 
 // Job ID aliases: redirect known placeholder/wrong IDs to the correct canonical ID
 const JOB_ID_ALIASES: Record<string, string> = {
-  'JOB-UNK-00001': 'JOB-23-00266',
+  'JOB-UNK-00001': 'JOB-023-00266',
 };
 
 export function formatStandardJobId(id?: string): string {
   if (!id) return '';
   const s = String(id).trim();
   if (!s || s === '—' || s === '-') return '';
-  // Strip any leading JOB/job/Job prefix with optional dash or space
+  // Strip any leading JOB/job/Job prefix with optional dash, underscore, or space
   const bare = s.replace(/^JOB[-_\s]?/i, '');
-  // Strip leading 0 before 2 digits and dash (e.g. 026-XXXXX -> 26-XXXXX)
-  const normalizedYear = bare.replace(/^0(\d{2}-)/, '$1');
+  // Standardize Year Pattern: enforce 3-digit year with leading 0 (e.g. 26-01814 -> 026-01814)
+  // Preserves existing 3-digit years like 026-XXXXX or 023-XXXXX
+  const normalizedYear = bare.replace(/^(\d{2}-)/, '0$1');
   const result = `JOB-${normalizedYear}`;
   return JOB_ID_ALIASES[result.toUpperCase()] ?? result;
 }
@@ -44,7 +45,8 @@ export const normalizeJobKey = (str?: string): string => {
     .trim()
     .toUpperCase()
     .replace(/^JOB[-_\s]?/i, '');
-  return s.replace(/^0(\d{2}-)/, '$1');
+  // Normalize year prefix to always have leading 0 e.g. 26-01814 -> 026-01814
+  return s.replace(/^(\d{2}-)/, '0$1');
 };
 
 const MASTER_JOBS_MAP = new Map<string, any>();
@@ -82,6 +84,10 @@ export interface DbConnectionStatus {
     maintenance?: number;
   };
 }
+
+export const dbStatus: { isConnected: boolean } = {
+  isConnected: false,
+};
 
 export const DEFAULT_AZURE_FUNCTION_URL =
   'https://tooltracker-api-dyath8gehaavcdah.westeurope-01.azurewebsites.net/api/ToolTracker';
@@ -2807,9 +2813,12 @@ export async function changePasswordWithApi(
 }
 
 /**
- * Tests live connection to the configured endpoint
+ * Tests live connection to the configured endpoint.
+ * Connection probe logic: ONLY calls action=ping with a 10-second timeout.
+ * Does NOT fetch inventory, jobs, or delivery tickets during the initial health probe.
+ * If ping responds ok, sets dbStatus.isConnected = true.
  */
-export async function testAzureConnection(): Promise<{
+export async function testAzureConnection(timeoutMs = 10_000): Promise<{
   ok: boolean;
   latencyMs: number;
   message: string;
@@ -2818,61 +2827,49 @@ export async function testAzureConnection(): Promise<{
   const start = performance.now();
   const endpoint = getApiEndpoint();
   const apiKey = getApiKey();
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    try {
+      controller.abort();
+    } catch {}
+  }, timeoutMs);
 
   try {
-    const headers: Record<string, string> = { 'Cache-Control': 'no-cache' };
+    const headers: Record<string, string> = {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      Pragma: 'no-cache',
+    };
     if (apiKey) {
       headers['x-functions-key'] = apiKey;
     }
 
-    let testUrl = endpoint;
-    if (apiKey && testUrl.startsWith('http') && !testUrl.includes('code=')) {
-      testUrl += `${testUrl.includes('?') ? '&' : '?'}code=${encodeURIComponent(apiKey)}`;
+    const sep = endpoint.includes('?') ? '&' : '?';
+    let pingUrl = `${endpoint}${sep}action=ping&env=live&_t=${Date.now()}`;
+    if (apiKey && !pingUrl.includes('code=')) {
+      pingUrl += `&code=${encodeURIComponent(apiKey)}`;
     }
 
-    let res = await fetch(testUrl, {
+    const res = await fetch(pingUrl, {
       method: 'GET',
       headers,
+      signal: controller.signal,
     }).catch(() => null);
 
-    // If GET gave 404 or failed, try POST with action SYNC_ALL_DATA which Azure Functions often require
-    if (!res || res.status === 404) {
-      try {
-        const postUrl = testUrl.includes('action=')
-          ? testUrl
-          : `${testUrl}${testUrl.includes('?') ? '&' : '?'}action=SYNC_ALL_DATA`;
-        res = await fetch(postUrl, {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'SYNC_ALL_DATA', env: 'live' }),
-        });
-      } catch {
-        // keep original res
-      }
-    }
-
+    clearTimeout(timer);
     const latencyMs = Math.round(performance.now() - start);
 
     if (!res) {
+      dbStatus.isConnected = false;
       return {
         ok: false,
         latencyMs,
         endpoint,
-        message: 'Unable to connect to endpoint (network error or CORS).',
+        message: 'Unable to connect to endpoint (network error, timeout, or CORS).',
       };
     }
 
-    if (res.status === 404 && endpoint.includes('/data-api/rest')) {
-      return {
-        ok: false,
-        latencyMs,
-        endpoint,
-        message:
-          'Data API returned 404. Ensure "Database connection" is linked in Azure Static Web Apps Settings.',
-      };
-    }
-
-    if (res.ok || res.status === 401 || res.status === 403 || res.status === 405) {
+    if (res.ok) {
+      dbStatus.isConnected = true;
       return {
         ok: true,
         latencyMs,
@@ -2881,19 +2878,204 @@ export async function testAzureConnection(): Promise<{
       };
     }
 
+    dbStatus.isConnected = false;
     return {
       ok: false,
       latencyMs,
       endpoint,
-      message: `Endpoint responded with HTTP ${res.status}: ${res.statusText || 'Not Found'} - Check Function Name or Route.`,
+      message: `Ping responded with HTTP ${res.status}: ${res.statusText || 'Error'}`,
     };
   } catch (err: any) {
+    clearTimeout(timer);
     const latencyMs = Math.round(performance.now() - start);
+    dbStatus.isConnected = false;
+    const isTimeout = err?.name === 'AbortError' || err?.message?.includes('aborted');
     return {
       ok: false,
       latencyMs,
       endpoint,
-      message: err?.message || 'Connection failed or blocked by CORS / Network.',
+      message: isTimeout
+        ? `Health probe timed out after ${timeoutMs / 1000}s.`
+        : (err?.message || 'Connection failed or blocked by CORS / Network.'),
+    };
+  }
+}
+
+export const probeConnection = testAzureConnection;
+
+export interface DashboardKpis {
+  activeRigs: number;
+  toolsOnRig: number;
+  pendingDTs: number;
+  pendingRTs: number;
+}
+
+/**
+ * Fetches dashboard KPI summary metrics directly from the server via 'getdashboardkpis'
+ */
+export async function fetchDashboardKpis(): Promise<DashboardKpis | null> {
+  try {
+    const res = await fetchFromApi<any>('getdashboardkpis');
+    if (!res) return null;
+    const data = res?.data ?? res;
+    if (data && typeof data === 'object') {
+      return {
+        activeRigs: Number(data.activeRigs ?? 0),
+        toolsOnRig: Number(data.toolsOnRig ?? 0),
+        pendingDTs: Number(data.pendingDTs ?? 0),
+        pendingRTs: Number(data.pendingRTs ?? 0),
+      };
+    }
+    return null;
+  } catch (err) {
+    console.warn('[fetchDashboardKpis] Failed to fetch KPIs:', err);
+    return null;
+  }
+}
+
+export interface PaginatedResult<T> {
+  data: T[];
+  totalCount: number;
+  page: number;
+  limit: number;
+}
+
+export interface PaginationParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+}
+
+/**
+ * Fetches inventory tools with server-side pagination and search filter
+ */
+export async function fetchInventory(
+  params?: PaginationParams
+): Promise<PaginatedResult<any>> {
+  const endpoint = getApiEndpoint();
+  const apiKey = getApiKey();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+  };
+  if (apiKey) {
+    headers['x-functions-key'] = apiKey;
+  }
+
+  let url = endpoint;
+  try {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    const fullBase = endpoint.startsWith('http') ? endpoint : `${origin}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+    const urlObj = new URL(fullBase);
+    urlObj.searchParams.set('action', 'getinventory');
+    urlObj.searchParams.set('env', 'live');
+    urlObj.searchParams.set('_t', String(Date.now()));
+    if (apiKey && !urlObj.searchParams.has('code')) {
+      urlObj.searchParams.set('code', apiKey);
+    }
+    url = endpoint.startsWith('http') ? urlObj.toString() : `${urlObj.pathname}${urlObj.search}`;
+  } catch {
+    url = `${endpoint}?action=getinventory&env=live&_t=${Date.now()}${apiKey ? `&code=${encodeURIComponent(apiKey)}` : ''}`;
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action: 'getinventory', env: 'live', ...params }),
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const json = await res.json();
+    const rawRows = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
+    const normalizedRows = rawRows.map(normalizeInventoryItem);
+    const totalCount = typeof json?.totalCount === 'number' ? json.totalCount : rawRows.length;
+    const page = typeof json?.page === 'number' ? json.page : (params?.page || 1);
+    const limit = typeof json?.limit === 'number' ? json.limit : (params?.limit || normalizedRows.length || 50);
+
+    return {
+      data: normalizedRows,
+      totalCount,
+      page,
+      limit,
+    };
+  } catch (err: any) {
+    console.warn('[fetchInventory] Error:', err?.message || err);
+    return {
+      data: [],
+      totalCount: 0,
+      page: params?.page || 1,
+      limit: params?.limit || 50,
+    };
+  }
+}
+
+/**
+ * Fetches drilling jobs with server-side pagination and search filter
+ */
+export async function fetchJobs(
+  params?: PaginationParams
+): Promise<PaginatedResult<any>> {
+  const endpoint = getApiEndpoint();
+  const apiKey = getApiKey();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+  };
+  if (apiKey) {
+    headers['x-functions-key'] = apiKey;
+  }
+
+  let url = endpoint;
+  try {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    const fullBase = endpoint.startsWith('http') ? endpoint : `${origin}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+    const urlObj = new URL(fullBase);
+    urlObj.searchParams.set('action', 'getjobs');
+    urlObj.searchParams.set('env', 'live');
+    urlObj.searchParams.set('_t', String(Date.now()));
+    if (apiKey && !urlObj.searchParams.has('code')) {
+      urlObj.searchParams.set('code', apiKey);
+    }
+    url = endpoint.startsWith('http') ? urlObj.toString() : `${urlObj.pathname}${urlObj.search}`;
+  } catch {
+    url = `${endpoint}?action=getjobs&env=live&_t=${Date.now()}${apiKey ? `&code=${encodeURIComponent(apiKey)}` : ''}`;
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action: 'getjobs', env: 'live', ...params }),
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const json = await res.json();
+    const rawRows = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
+    const normalizedRows = rawRows.map(normalizeJob);
+    const totalCount = typeof json?.totalCount === 'number' ? json.totalCount : rawRows.length;
+    const page = typeof json?.page === 'number' ? json.page : (params?.page || 1);
+    const limit = typeof json?.limit === 'number' ? json.limit : (params?.limit || normalizedRows.length || 50);
+
+    return {
+      data: normalizedRows,
+      totalCount,
+      page,
+      limit,
+    };
+  } catch (err: any) {
+    console.warn('[fetchJobs] Error:', err?.message || err);
+    return {
+      data: [],
+      totalCount: 0,
+      page: params?.page || 1,
+      limit: params?.limit || 50,
     };
   }
 }
@@ -3230,12 +3412,13 @@ async function fetchJobsSupplemental(primaryJobs?: any[]): Promise<any[]> {
 
   for (let seq = capSeq + 1; seq <= capSeq + MAX_PROBE && consecutiveMisses < MAX_MISSES; seq++) {
     const seqStr = String(seq).padStart(5, '0');
-    const jobId = `JOB-${curYr}-${seqStr}`;
+    const jobId = `JOB-0${curYr}-${seqStr}`;
+    const legacyJobId = `JOB-${curYr}-${seqStr}`;
 
-    // Try individual job action names in parallel
+    // Try individual job action names in parallel (check both standard 026 and legacy 26)
     const probeUrls = [
       makeUrl('getjob', `&jobId=${encodeURIComponent(jobId)}`),
-      makeUrl('getJob', `&jobId=${encodeURIComponent(jobId)}`),
+      makeUrl('getjob', `&jobId=${encodeURIComponent(legacyJobId)}`),
       makeUrl('getjob', `&id=${encodeURIComponent(jobId)}`),
       makeUrl('getjob', `&jobNumber=${encodeURIComponent(jobId)}`),
     ];
@@ -3724,7 +3907,8 @@ export async function saveInventoryApi(tool: any): Promise<{ success: boolean; m
 
 export async function saveJobApi(job: any): Promise<{ success: boolean; queued?: boolean; message: string }> {
   if (!job) return { success: true, message: 'No job provided' };
-  const jId = String(job.id || job.jobNumber || '').trim();
+  const rawId = String(job.id || job.jobNumber || '').trim();
+  const jId = formatStandardJobId(rawId) || rawId;
   const notesVal = String(job.notes || job.Notes || job.remarks || job.Remarks || '').trim();
 
   try {
