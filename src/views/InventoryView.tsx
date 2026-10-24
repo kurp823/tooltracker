@@ -21,7 +21,7 @@ export function InventoryView() {
         const q = search.toLowerCase()
         return (
           (i.SystemID || '').toLowerCase().includes(q) ||
-          (i.Serial   || '').toLowerCase().includes(q) ||
+          (i.OEMSerial || '').toLowerCase().includes(q) ||
           (i.AssetNo  || '').toLowerCase().includes(q) ||
           (i.ShortDesc|| '').toLowerCase().includes(q)
         )
@@ -109,7 +109,7 @@ export function InventoryView() {
                   <tr key={item.SystemID} className="table-tr">
                     <td className="table-td font-mono text-xs font-medium text-brand-600">{item.SystemID}</td>
                     <td className="table-td text-xs">
-                      {item.Serial && <div>{item.Serial}</div>}
+                      {item.OEMSerial && <div>{item.OEMSerial}</div>}
                       {item.AssetNo && <div className="text-gray-400">{item.AssetNo}</div>}
                     </td>
                     <td className="table-td font-medium">{item.ShortDesc}</td>
@@ -120,7 +120,7 @@ export function InventoryView() {
                         {item.IsEmdad ? 'Own' : 'Subcontract'}
                       </span>
                     </td>
-                    <td className="table-td text-gray-500">{item.Condition || '—'}</td>
+                    <td className="table-td text-gray-500">{(item as any).Condition || '—'}</td>
                     <td className="table-td text-gray-500">{item.Location || '—'}</td>
                   </tr>
                 ))

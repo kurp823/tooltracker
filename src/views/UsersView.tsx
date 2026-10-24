@@ -91,7 +91,7 @@ export function UsersView() {
                 <td className="table-td font-mono text-sm">{u.Username}</td>
                 <td className="table-td font-medium">{u.FullName}</td>
                 <td className="table-td">
-                  <span className={`badge ${ROLE_COLORS[u.Role] || 'bg-gray-100 text-gray-700'}`}>
+                  <span className={`badge ${ROLE_COLORS[u.Role ?? ''] || 'bg-gray-100 text-gray-700'}`}>
                     {u.Role}
                   </span>
                 </td>
