@@ -46,6 +46,7 @@ import {
   flushOfflineOutbox,
   fetchFromApi,
   normalizeJobKey,
+  testAzureConnection,
 } from './services/api';
 import { clearCache, saveDatasetToCache } from './services/dbCache';
 import {
@@ -723,11 +724,23 @@ export const App: React.FC = () => {
     if (initialLoadUserRef.current === currentUser.username) return;
     initialLoadUserRef.current = currentUser.username;
 
-    // ── INSTANT WARM-UP: fire a lightweight ping to the Azure Function RIGHT NOW ──
-    // Azure Functions on a Consumption plan go cold after ~5 min. The warm-up ping
-    // kicks the function before the real data sync hits it, so the function is already
-    // alive when fetchAllModulesLive() fires 100 ms later. No await — fire-and-forget.
-    fetchFromApi('ping', {}).catch(() => {});
+    // ── ISOLATED HEALTH PROBE: ONLY calls action=ping with a 10s timeout ──
+    // Does NOT fetch inventory, jobs, or delivery tickets during the initial health probe.
+    // If ping responds ok, set dbStatus.isConnected = true immediately.
+    testAzureConnection(10_000)
+      .then((probeResult) => {
+        if (probeResult.ok) {
+          setDbStatus((prev) => ({
+            ...prev,
+            isConnected: true,
+            source: 'azure-function',
+            lastChecked: new Date().toLocaleTimeString(),
+            message: 'Connected to Azure SQL',
+          }));
+          setIsInitializing(false);
+        }
+      })
+      .catch(() => {});
 
     // Fetch live data directly from Azure SQL upon user login (~100ms after warm-up ping)
     setTimeout(() => { handleFetchLiveSql(false); }, 100);

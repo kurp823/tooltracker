@@ -16,7 +16,7 @@ import { JobToolsListView } from './JobToolsListView';
 import { SearchableSelect } from './SearchableSelect';
 import { ToolItem, ContractRecord, InspectionRecord, SubDivision } from '../types';
 import { isInvalidOrPlaceholderDate } from '../utils';
-import { resolveJobClient, formatStandardJobId } from '../services/api';
+import { resolveJobClient, formatStandardJobId, fetchJobs } from '../services/api';
 import { useModulePermission, ReadOnlyBanner } from '../services/permissionService';
 import { useResizableColumns, ResizerHandle, useCustomColumns } from '../services/customColumnService';
 import { resolveContractSubDivision } from '../services/customContracts';
@@ -169,7 +169,8 @@ export const getJobStartDate = (job: DrillingJob, dtBatches?: DTBatch[]): string
       return valid[0].raw;
     }
   }
-  return !isInvalidOrPlaceholderDate(job.mobDate) ? (job.mobDate || '') : '';
+  const mob = (job as any)?.MobDate || job?.mobDate || '';
+  return !isInvalidOrPlaceholderDate(mob) ? mob : '';
 };
 
 // End Date is always the last (latest) Receiving Ticket date; fallback to demobDate
@@ -186,7 +187,8 @@ export const getJobEndDate = (job: DrillingJob, rtBatches?: RTBatch[]): string =
       return valid[valid.length - 1].raw;
     }
   }
-  return !isInvalidOrPlaceholderDate(job.demobDate) ? (job.demobDate || '') : '';
+  const demob = (job as any)?.DemobDate || job?.demobDate || '';
+  return !isInvalidOrPlaceholderDate(demob) ? demob : '';
 };
 
 // Normalize keys to allow exact cross-matching (e.g. Job-023-00002 <-> 023-00002)
@@ -195,8 +197,9 @@ const normalizeJobKey = (str?: string): string => {
   const s = str
     .trim()
     .toUpperCase()
-    .replace(/^JOB[-_]?/i, '');
-  return s.replace(/^0(\d{2}-)/, '$1');
+    .replace(/^JOB[-_\s]?/i, '');
+  // Normalize year prefix to always have leading 0 e.g. 26-01814 -> 026-01814
+  return s.replace(/^(\d{2}-)/, '0$1');
 };
 
 // Natural sequential sorter for Job IDs (handles Job-023-00001, Job-023-00002-1, JOB-26-00001)
@@ -248,7 +251,12 @@ export const JobsView: React.FC<JobsViewProps> = ({
 }) => {
   const { canEdit, isReadOnly } = useModulePermission(user, 'jobs');
   const [tab, setTab] = useState<'all' | JobStageKey>('all');
-  const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const pageSize = 50;
+  const [serverJobs, setServerJobs] = useState<DrillingJob[]>([]);
   const [selectedRigFilter, setSelectedRigFilter] = useState<string>('all');
   const [selectedClientFilter, setSelectedClientFilter] = useState<string>('all');
   const [density, setDensity] = useState<'compact' | 'comfortable'>('compact');
@@ -260,9 +268,32 @@ export const JobsView: React.FC<JobsViewProps> = ({
   const [sortField, setSortField] = useState<'id' | 'client' | 'rig' | 'startDate' | 'endDate' | 'dtTools' | 'rtTools' | 'toolsOnRig' | 'stage' | 'stageDays' | 'value'>('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
-  // Pagination State
-  const [pageSize, setPageSize] = useState<number>(50);
-  const [currentPage, setCurrentPage] = useState<number>(1);
+  useEffect(() => {
+    let active = true;
+    const timer = setTimeout(async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetchJobs({
+          page: currentPage,
+          limit: pageSize,
+          search: searchQuery.trim(),
+        });
+        if (active && res && Array.isArray(res.data)) {
+          setServerJobs(res.data);
+          setTotalCount(res.totalCount || 0);
+        }
+      } catch (err) {
+        console.warn('[JobsView] Error fetching jobs page:', err);
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [currentPage, searchQuery]);
 
   // Dynamic Custom Columns & Excel-like Resizable Grid Columns
   const jobsCustomCols = useCustomColumns('jobs');
@@ -549,8 +580,8 @@ export const JobsView: React.FC<JobsViewProps> = ({
         return false;
       }
 
-      if (search.trim()) {
-        const q = search.toLowerCase();
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
         const stageDef = STAGE_DEFINITIONS[stage];
         const full = `${j.id} ${j.calloutId || ''} ${j.rig} ${j.well} ${j.client} ${j.contract || ''} ${
           j.poNumber || ''
@@ -628,15 +659,15 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
       return sortOrder === 'desc' ? -comparison : comparison;
     });
-  }, [validJobs, tab, search, selectedRigFilter, selectedClientFilter, sortField, sortOrder, jobToolStats]);
+  }, [validJobs, tab, searchQuery, selectedRigFilter, selectedClientFilter, sortField, sortOrder, jobToolStats]);
 
   // Paginated jobs
-  const totalPages = Math.max(1, Math.ceil(filteredAndSortedJobs.length / (pageSize || 1)));
-  const paginatedJobs = useMemo(() => {
-    if (pageSize === 0) return filteredAndSortedJobs;
-    const start = (currentPage - 1) * pageSize;
-    return filteredAndSortedJobs.slice(start, start + pageSize);
-  }, [filteredAndSortedJobs, currentPage, pageSize]);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const paginatedJobs = serverJobs.length > 0
+    ? serverJobs
+    : (filteredAndSortedJobs && filteredAndSortedJobs.length > 0 && !searchQuery.trim()
+        ? filteredAndSortedJobs.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+        : serverJobs);
 
   const handleCalloutChange = (calId: string) => {
     setSelectedCalloutId(calId);
@@ -666,7 +697,8 @@ export const JobsView: React.FC<JobsViewProps> = ({
       })
       .filter((n) => !isNaN(n));
     const nextSeq = jobNums.length > 0 ? Math.max(...jobNums) + 1 : 1;
-    const newJobId = `JOB-${curYr}-${String(nextSeq).padStart(5, '0')}`;
+    // Standard pattern: JOB-0YY-NNNNN (e.g. JOB-026-01849)
+    const newJobId = `JOB-0${curYr}-${String(nextSeq).padStart(5, '0')}`;
 
     const newJob: DrillingJob = {
       id: newJobId,
@@ -1277,18 +1309,18 @@ export const JobsView: React.FC<JobsViewProps> = ({
             <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-400 pointer-events-none" />
             <input
               type="text"
-              value={search}
+              value={searchQuery}
               onChange={(e) => {
-                setSearch(e.target.value);
+                setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
               placeholder="Search Job #, Rig, Well, Client, PO..."
               className="w-full bg-slate-50 border border-slate-300 rounded pl-8 pr-7 h-7.5 text-xs outline-none font-medium text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-[#1a3055] focus:ring-1 focus:ring-[#1a3055] transition"
             />
-            {search && (
+            {searchQuery && (
               <button
                 onClick={() => {
-                  setSearch('');
+                  setSearchQuery('');
                   setCurrentPage(1);
                 }}
                 className="absolute right-2 text-slate-400 hover:text-slate-600 cursor-pointer"
@@ -1333,13 +1365,13 @@ export const JobsView: React.FC<JobsViewProps> = ({
           </div>
 
           {/* Active Filter Clear Tag */}
-          {(tab !== 'all' || selectedRigFilter !== 'all' || selectedClientFilter !== 'all' || search.trim() !== '') && (
+          {(tab !== 'all' || selectedRigFilter !== 'all' || selectedClientFilter !== 'all' || searchQuery.trim() !== '') && (
             <button
               onClick={() => {
                 setTab('all');
                 setSelectedRigFilter('all');
                 setSelectedClientFilter('all');
-                setSearch('');
+                setSearchQuery('');
                 setCurrentPage(1);
               }}
               className="h-7.5 px-2.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[11px] transition cursor-pointer flex items-center gap-1"
@@ -1353,8 +1385,9 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
         {/* Right Controls: Total Result Count & Density Toggle */}
         <div className="flex items-center gap-3">
-          <div className="text-[11px] text-slate-500 whitespace-nowrap">
-            Showing <strong className="text-slate-800">{filteredAndSortedJobs.length.toLocaleString()}</strong> jobs
+          <div className="text-[11px] text-slate-500 whitespace-nowrap flex items-center gap-1">
+            <span>Showing <strong className="text-slate-800">{totalCount.toLocaleString()}</strong> jobs</span>
+            {isLoading && <span className="text-amber-600 font-semibold animate-pulse">(Loading...)</span>}
           </div>
 
           {/* Density Switcher */}
@@ -1597,161 +1630,210 @@ export const JobsView: React.FC<JobsViewProps> = ({
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-100 bg-white">
+            <tbody className="divide-y divide-slate-200 bg-white">
               {paginatedJobs.length === 0 ? (
                 <tr>
-                  <td colSpan={14 + jobsCustomCols.length} className="py-12 text-center text-slate-500 font-medium">
+                  <td colSpan={14 + jobsCustomCols.length} className="py-12 text-center text-slate-600 font-medium">
                     <div className="flex flex-col items-center justify-center gap-1">
-                      <FileSpreadsheet className="w-8 h-8 text-slate-300" />
-                      <div className="font-semibold text-slate-700">No drilling jobs found</div>
-                      <div className="text-xs text-slate-400">
+                      <FileSpreadsheet className="w-8 h-8 text-slate-400" />
+                      <div className="font-semibold text-slate-800">No drilling jobs found</div>
+                      <div className="text-xs text-slate-500">
                         Try resetting your search query, rig filter, or status tab.
                       </div>
                     </div>
                   </td>
                 </tr>
               ) : (
-                paginatedJobs.map((job) => {
-                  const st = getJobStats(job.id);
+                paginatedJobs.map((job, idx) => {
+                  const rawJobId = (job as any)?.JobID || (job as any)?.jobNumber || job?.id || '';
+                  const stdJobId = formatStandardJobId(rawJobId) || rawJobId;
+                  const client = (job as any)?.Client || job?.client || '';
+                  const contract = (job as any)?.Contract || job?.contract || '';
+                  const rig = (job as any)?.Rig || job?.rig || '';
+                  const well = (job as any)?.Well || job?.well || '';
+                  const status = (job as any)?.Status || job?.status || 'Open';
+                  const mobDate = (job as any)?.MobDate || job?.mobDate || '';
+                  const demobDate = (job as any)?.DemobDate || job?.demobDate || '';
+
+                  const normalizedJob: DrillingJob = {
+                    ...job,
+                    id: stdJobId || rawJobId,
+                    jobNumber: stdJobId || rawJobId,
+                    client,
+                    contract,
+                    rig,
+                    well,
+                    status,
+                    mobDate,
+                    demobDate,
+                  };
+
+                  const st = getJobStats(normalizedJob.id || rawJobId || job?.id);
                   const dtToolsCount = st.dtCount;
                   const rtToolsCount = st.rtCount;
-                  const toolsOnRig = Math.max(0, dtToolsCount - rtToolsCount);
                   const padY = density === 'compact' ? 'py-1.5' : 'py-2.5';
-                  const stage = resolveJobStage(job, dtToolsCount, rtToolsCount);
-                  const lifecycleMetrics = calculateJobLifecycleMetrics(job, stage, st.dtBatches, st.rtBatches);
-                  const isActive = ['1_open', '2_ongoing'].includes(stage);
-                  const startDate = getJobStartDate(job, st.dtBatches);
-                  const endDate = getJobEndDate(job, st.rtBatches);
+                  const stage = resolveJobStage(normalizedJob, dtToolsCount, rtToolsCount);
+                  const lifecycleMetrics = calculateJobLifecycleMetrics(normalizedJob, stage, st.dtBatches, st.rtBatches);
+                  const startDate = getJobStartDate(normalizedJob, st.dtBatches);
+                  const endDate = getJobEndDate(normalizedJob, st.rtBatches);
+                  const rowBg = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50';
 
                   return (
                     <tr
-                      key={job.id}
-                      className="hover:bg-blue-50/40 transition-colors group"
+                      key={rawJobId || job?.id || idx}
+                      className={`${rowBg} hover:bg-blue-50/50 transition-colors group border-b border-slate-200`}
                     >
                       {/* 1. Job # */}
-                      <td className={`px-3 ${padY} whitespace-nowrap align-middle sticky left-0 bg-white group-hover:bg-slate-50 z-20 w-[130px] min-w-[130px] max-w-[130px] border-r border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]`}>
+                      <td className={`px-3 ${padY} whitespace-nowrap align-middle sticky left-0 ${rowBg} group-hover:bg-blue-50/50 z-20 w-[130px] min-w-[130px] max-w-[130px] border-r border-slate-200 border-b border-slate-200 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]`}>
                         <button
-                          onClick={() => setDossierJob(job)}
-                          className="font-mono font-medium text-[#1a3055] group-hover:text-blue-700 text-xs tracking-tight transition cursor-pointer text-left select-all hover:underline"
+                          onClick={() => setDossierJob(normalizedJob)}
+                          className="font-mono text-blue-700 font-bold hover:underline cursor-pointer text-xs tracking-tight transition text-left select-all"
                           title="Click to open Job File"
                         >
-                          {job.id}
+                          {stdJobId || rawJobId || '—'}
                         </button>
                       </td>
 
                       {/* 2. Client */}
-                      <td className={`px-3 ${padY} align-middle text-xs text-slate-800 truncate min-w-[140px] max-w-[180px]`} title={job.client || 'ADNOC Drilling'}>
-                        {job.client || 'ADNOC Drilling'}
+                      <td className={`px-3 ${padY} align-middle text-xs font-medium text-slate-800 truncate min-w-[140px] max-w-[180px] border-b border-slate-200`} title={client || 'ADNOC Drilling'}>
+                        {client || 'ADNOC Drilling'}
                       </td>
 
                       {/* 3. Project / Contract (Single clean line, no wrap) */}
-                      <td className={`px-2.5 ${padY} align-middle font-mono text-xs text-slate-700 whitespace-nowrap`} title={job.contract || '—'}>
-                        {job.contract || '—'}
+                      <td className={`px-2.5 ${padY} align-middle font-mono text-xs font-medium text-slate-800 whitespace-nowrap border-b border-slate-200`} title={contract || '—'}>
+                        {contract || '—'}
                       </td>
 
                       {/* 3b. Sub-Division (Separate plain column, no badge colors, no wrap) */}
-                      <td className={`px-2.5 ${padY} align-middle text-xs font-semibold text-slate-800 whitespace-nowrap uppercase`}>
-                        {job.subDivision || resolveContractSubDivision(job.contract) || '—'}
+                      <td className={`px-2.5 ${padY} align-middle text-xs font-medium text-slate-800 whitespace-nowrap uppercase border-b border-slate-200`}>
+                        {(job as any)?.subDivision || resolveContractSubDivision(contract) || '—'}
                       </td>
 
                       {/* 4. Rig */}
-                      <td className={`px-2.5 ${padY} align-middle text-xs font-medium text-slate-900 whitespace-nowrap`}>
-                        {job.rig || '—'}
+                      <td className={`px-2.5 ${padY} align-middle text-xs font-medium text-slate-800 whitespace-nowrap border-b border-slate-200`}>
+                        {rig || '—'}
                       </td>
 
                       {/* 5. Well */}
-                      <td className={`px-2.5 ${padY} align-middle text-xs text-slate-700 whitespace-nowrap`}>
-                        {job.well && job.well !== '—' && job.well !== '-' ? job.well : '—'}
+                      <td className={`px-2.5 ${padY} align-middle text-xs font-medium text-slate-800 whitespace-nowrap border-b border-slate-200`}>
+                        {well && well !== '—' && well !== '-' ? well : '—'}
                       </td>
 
                       {/* 6. PO Number */}
-                      <td className={`px-2.5 ${padY} font-mono text-xs text-slate-700 whitespace-nowrap align-middle`}>
-                        {job.poNumber ? job.poNumber : <span className="text-slate-300">—</span>}
+                      <td className={`px-2.5 ${padY} font-mono text-xs font-medium text-slate-800 whitespace-nowrap align-middle border-b border-slate-200`}>
+                        {(job as any)?.PONumber || (job as any)?.poNumber ? ((job as any)?.PONumber || (job as any)?.poNumber) : <span className="text-slate-500">—</span>}
                       </td>
 
                       {/* 7. Job Start Date */}
-                      <td className={`px-2.5 ${padY} text-center font-mono text-xs text-slate-700 whitespace-nowrap align-middle`}>
-                        {formatJobDate(startDate) === '—' ? <span className="text-slate-300">—</span> : formatJobDate(startDate)}
+                      <td className={`px-2.5 ${padY} text-center font-mono text-xs font-medium text-slate-800 whitespace-nowrap align-middle border-b border-slate-200`}>
+                        {formatJobDate(startDate) === '—' ? <span className="text-slate-500">—</span> : formatJobDate(startDate)}
                       </td>
 
                       {/* 8. Job End Date */}
-                      <td className={`px-2.5 ${padY} text-center font-mono text-xs text-slate-700 whitespace-nowrap align-middle`}>
-                        {formatJobDate(endDate) === '—' ? <span className="text-slate-300">—</span> : formatJobDate(endDate)}
+                      <td className={`px-2.5 ${padY} text-center font-mono text-xs font-medium text-slate-800 whitespace-nowrap align-middle border-b border-slate-200`}>
+                        {formatJobDate(endDate) === '—' ? <span className="text-slate-500">—</span> : formatJobDate(endDate)}
                       </td>
 
                       {/* 9. Job Value */}
-                      <td className={`px-2.5 ${padY} text-right font-mono text-xs whitespace-nowrap align-middle`}>
+                      <td className={`px-2.5 ${padY} text-right font-mono text-xs whitespace-nowrap align-middle border-b border-slate-200`}>
                         {(() => {
-                          const val = job.invoiceAmount || (typeof job.cost === 'number' ? job.cost : parseFloat(String(job.cost || '').replace(/[^0-9.-]/g, '')) || 0);
+                          const val = (job as any)?.InvoiceAmount || job.invoiceAmount || (typeof (job as any)?.Cost === 'number' ? (job as any)?.Cost : (typeof job.cost === 'number' ? job.cost : parseFloat(String((job as any)?.Cost || job.cost || '').replace(/[^0-9.-]/g, '')) || 0));
                           if (typeof val === 'number' && !isNaN(val) && val !== 0) {
                             const isNeg = val < 0;
                             return (
-                              <span className={isNeg ? 'font-bold text-rose-600 text-xs' : 'font-medium text-slate-900 text-xs'}>
+                              <span className={isNeg ? 'font-bold text-rose-600 text-xs' : 'font-semibold text-slate-900 text-xs'}>
                                 {isNeg
                                   ? `-$${Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                                   : `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                               </span>
                             );
                           }
-                          return <span className="text-slate-300">—</span>;
+                          return <span className="text-slate-500">—</span>;
                         })()}
                       </td>
 
                       {/* 10. Legal / Invoice NO */}
-                      <td className={`px-2.5 ${padY} font-mono text-xs whitespace-nowrap align-middle`}>
-                        {job.legalInvoiceNumber && isLegalInvoiceNumber(job.legalInvoiceNumber) ? (
-                          <span className="font-medium text-slate-800 text-xs" title={job.legalInvoiceNumber}>
-                            {job.legalInvoiceNumber.split(',')[0].trim()}
-                            {job.legalInvoiceNumber.includes(',') && ` +${job.legalInvoiceNumber.split(',').length - 1}`}
-                          </span>
-                        ) : job.draftInvoiceNumber || (job.legalInvoiceNumber && !isLegalInvoiceNumber(job.legalInvoiceNumber)) ? (
-                          <span className="text-slate-500 text-[11px]" title="ERP Billing Document (Under Approval)">
-                            ERP #{job.draftInvoiceNumber || job.legalInvoiceNumber}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
+                      <td className={`px-2.5 ${padY} font-mono text-xs whitespace-nowrap align-middle border-b border-slate-200`}>
+                        {(() => {
+                          const legalInv = (job as any)?.LegalInvoiceNumber || job.legalInvoiceNumber || '';
+                          const draftInv = (job as any)?.DraftInvoiceNumber || job.draftInvoiceNumber || '';
+                          if (legalInv && isLegalInvoiceNumber(legalInv)) {
+                            return (
+                              <span className="font-semibold text-slate-900 text-xs" title={legalInv}>
+                                {legalInv.split(',')[0].trim()}
+                                {legalInv.includes(',') && ` +${legalInv.split(',').length - 1}`}
+                              </span>
+                            );
+                          }
+                          if (draftInv || (legalInv && !isLegalInvoiceNumber(legalInv))) {
+                            return (
+                              <span className="text-slate-700 font-medium text-[11px]" title="ERP Billing Document (Under Approval)">
+                                ERP #{draftInv || legalInv}
+                              </span>
+                            );
+                          }
+                          return <span className="text-slate-500">—</span>;
+                        })()}
                       </td>
 
                       {/* 11. Current Status (Clean text + subtle dot, no lock icons) */}
-                      <td className={`px-2.5 ${padY} text-center whitespace-nowrap align-middle`}>
-                        {isLegalInvoiceNumber(job.legalInvoiceNumber) || stage === '6_completed' ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            <span>Completed</span>
-                          </span>
-                        ) : stage === '2_ongoing' ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-blue-700 font-medium">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                            <span>Ongoing</span>
-                          </span>
-                        ) : stage === '5_ses_submitted' ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-purple-700 font-medium">
-                            <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-                            <span>Under SES</span>
-                          </span>
-                        ) : stage === '4_submitted_billing' ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-amber-800 font-medium">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            <span>In Billing</span>
-                          </span>
-                        ) : stage === '3_waiting_signed_docs' ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-rose-700 font-medium">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            <span>Waiting Docs</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                            <span>Open</span>
-                          </span>
-                        )}
+                      <td className={`px-2.5 ${padY} text-center whitespace-nowrap align-middle border-b border-slate-200`}>
+                        {(() => {
+                          const legalInv = (job as any)?.LegalInvoiceNumber || job.legalInvoiceNumber || '';
+                          const sLower = status.toLowerCase();
+                          if (isLegalInvoiceNumber(legalInv) || stage === '6_completed' || sLower === 'completed' || sLower === 'closed') {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 text-xs text-emerald-800 font-semibold">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                                <span>Completed</span>
+                              </span>
+                            );
+                          }
+                          if (stage === '2_ongoing' || sLower === 'ongoing') {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 text-xs text-blue-800 font-semibold">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+                                <span>Ongoing</span>
+                              </span>
+                            );
+                          }
+                          if (stage === '5_ses_submitted' || sLower.includes('ses')) {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 text-xs text-purple-800 font-semibold">
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
+                                <span>Under SES</span>
+                              </span>
+                            );
+                          }
+                          if (stage === '4_submitted_billing' || sLower.includes('billing')) {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 text-xs text-amber-900 font-semibold">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+                                <span>In Billing</span>
+                              </span>
+                            );
+                          }
+                          if (stage === '3_waiting_signed_docs' || sLower.includes('waiting') || sLower.includes('docs')) {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 text-xs text-rose-800 font-semibold">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
+                                <span>Waiting Docs</span>
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-slate-800 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                              <span>{status || 'Open'}</span>
+                            </span>
+                          );
+                        })()}
                       </td>
 
                       {/* 12. Stage Aging (Single clean duration line) */}
-                      <td className={`px-2.5 ${padY} text-center font-mono text-xs whitespace-nowrap align-middle`}>
+                      <td className={`px-2.5 ${padY} text-center font-mono text-xs whitespace-nowrap align-middle border-b border-slate-200`}>
                         <span
-                          className={stage === '3_waiting_signed_docs' && lifecycleMetrics.currentStageDays > 0 ? 'text-amber-800 font-medium' : 'text-slate-700'}
+                          className={stage === '3_waiting_signed_docs' && lifecycleMetrics.currentStageDays > 0 ? 'text-amber-900 font-bold' : 'text-slate-800 font-medium'}
                           title={`${lifecycleMetrics.currentStageDays} days in stage: ${STAGE_DEFINITIONS[stage].label}`}
                         >
                           {lifecycleMetrics.currentStageDays}d
@@ -1764,29 +1846,29 @@ export const JobsView: React.FC<JobsViewProps> = ({
                         return (
                           <td
                             key={c.key}
-                            className={`px-2.5 ${padY} text-xs text-slate-700 whitespace-nowrap align-middle border-l border-slate-100 font-mono`}
+                            className={`px-2.5 ${padY} text-xs font-medium text-slate-800 whitespace-nowrap align-middle border-l border-slate-200 border-b border-slate-200 font-mono`}
                           >
                             {val !== undefined && val !== null && String(val).trim() !== ''
                               ? String(val)
-                              : <span className="text-slate-300 font-sans">—</span>}
+                              : <span className="text-slate-500 font-sans">—</span>}
                           </td>
                         );
                       })}
 
                       {/* 13. Actions */}
-                      <td className={`px-3 ${padY} text-right whitespace-nowrap align-middle pr-3.5`}>
+                      <td className={`px-3 ${padY} text-right whitespace-nowrap align-middle pr-3.5 border-b border-slate-200`}>
                         <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => setDossierJob(job)}
-                            className="h-6 px-2.5 rounded bg-blue-50 hover:bg-[#1a3055] hover:text-white text-blue-900 font-medium text-[11px] transition-colors border border-blue-200 cursor-pointer flex items-center gap-1 shadow-2xs"
+                            onClick={() => setDossierJob(normalizedJob)}
+                            className="h-6 px-2.5 rounded bg-blue-50 hover:bg-[#1a3055] hover:text-white text-blue-900 font-semibold text-[11px] transition-colors border border-blue-200 cursor-pointer flex items-center gap-1 shadow-2xs"
                             title="Open Job File (Dossier, DTs, RTs, Tools & Commercials)"
                           >
                             <span>🗂️</span>
                             <span>Job File</span>
                           </button>
                           <button
-                            onClick={() => setSelectedToolsJobId(job.id)}
-                            className="h-6 px-2 rounded bg-sky-50 hover:bg-sky-600 hover:text-white text-sky-800 font-medium text-[11px] transition-colors border border-sky-200 cursor-pointer flex items-center gap-1 shadow-2xs"
+                            onClick={() => setSelectedToolsJobId(normalizedJob.id || rawJobId)}
+                            className="h-6 px-2 rounded bg-sky-50 hover:bg-sky-600 hover:text-white text-sky-900 font-semibold text-[11px] transition-colors border border-sky-200 cursor-pointer flex items-center gap-1 shadow-2xs"
                             title="Open Tools List (Dispatched vs Returned)"
                           >
                             <span>📋</span>
@@ -1803,63 +1885,58 @@ export const JobsView: React.FC<JobsViewProps> = ({
         </div>
 
         {/* Compact Pagination Bar */}
-        {filteredAndSortedJobs.length > 0 && (
-          <div className="px-3.5 py-2 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
-            <div className="flex items-center gap-2">
-              <span className="text-slate-500 font-medium">Rows:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="border border-slate-300 rounded px-1.5 py-0.5 bg-white font-medium outline-none text-xs"
-              >
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-                <option value={250}>250</option>
-                <option value={0}>All ({filteredAndSortedJobs.length})</option>
-              </select>
-              <span className="text-slate-300">|</span>
-              <span className="text-slate-500">
-                Showing{' '}
-                <strong className="text-slate-800">
-                  {pageSize === 0 ? 1 : Math.min((currentPage - 1) * pageSize + 1, filteredAndSortedJobs.length)}
-                </strong>{' '}
-                to{' '}
-                <strong className="text-slate-800">
-                  {pageSize === 0 ? filteredAndSortedJobs.length : Math.min(currentPage * pageSize, filteredAndSortedJobs.length)}
-                </strong>{' '}
-                of <strong className="text-slate-800">{filteredAndSortedJobs.length.toLocaleString()}</strong> jobs
-              </span>
-            </div>
-
-            {pageSize > 0 && totalPages > 1 && (
-              <div className="flex items-center gap-1.5">
-                <button
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  className="h-6 px-2 rounded bg-white border border-slate-300 font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition cursor-pointer flex items-center gap-1"
-                >
-                  <ChevronLeft className="w-3 h-3" />
-                  <span>Prev</span>
-                </button>
-                <span className="px-2 font-medium text-slate-600">
-                  Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
-                </span>
-                <button
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  className="h-6 px-2 rounded bg-white border border-slate-300 font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition cursor-pointer flex items-center gap-1"
-                >
-                  <span>Next</span>
-                  <ChevronRight className="w-3 h-3" />
-                </button>
-              </div>
-            )}
+        <div className="px-4 py-3 bg-[#f8fafc] border-t border-[#b8c9db] flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="text-slate-600 font-medium">
+            Page <strong className="text-slate-900">{currentPage}</strong> of{' '}
+            <strong>{totalPages}</strong> ({totalCount.toLocaleString()} jobs)
+            {isLoading && <span className="ml-2 text-amber-600 font-semibold animate-pulse">(Loading...)</span>}
           </div>
-        )}
+          <div className="flex items-center space-x-1.5">
+            <button
+              disabled={currentPage <= 1 || isLoading}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="px-2.5 py-1 rounded border bg-white hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>Prev</span>
+            </button>
+            {/* Numbered buttons */}
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum: number;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              return (
+                <button
+                  key={pageNum}
+                  disabled={isLoading}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`px-2.5 py-1 rounded border text-xs font-semibold cursor-pointer ${
+                    currentPage === pageNum
+                      ? 'bg-[#1a3055] text-white border-[#1a3055]'
+                      : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+            <button
+              disabled={currentPage >= totalPages || isLoading}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="px-2.5 py-1 rounded border bg-white hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1"
+            >
+              <span>Next</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* CSV Import / Synchronization Modal */}
