@@ -30,12 +30,9 @@ jobs:
           app_location: "/"
           api_location: "api"
           output_location: "dist"
-        env:
-          SQL_SERVER:   ${{ secrets.SQL_SERVER }}
-          SQL_DATABASE: ${{ secrets.SQL_DATABASE }}
-          SQL_USER:     ${{ secrets.SQL_USER }}
-          SQL_PASSWORD: ${{ secrets.SQL_PASSWORD }}
-          JWT_SECRET:   ${{ secrets.JWT_SECRET }}
+          # NOTE: SQL credentials are NOT passed here.
+          # Set them in Azure Portal → Static Web Apps → Configuration → Application settings.
+          # They are stored and read entirely within Azure — GitHub never sees them.
 
   pr_build_check:
     if: github.event_name == 'pull_request' && github.event.action != 'closed'
