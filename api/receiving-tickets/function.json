@@ -1,0 +1,13 @@
+{
+  "bindings": [
+    {
+      "authLevel": "anonymous",
+      "type": "httpTrigger",
+      "direction": "in",
+      "name": "req",
+      "route": "receiving-tickets/{id?}/{sub?}/{subId?}",
+      "methods": ["get","post","put","delete"]
+    },
+    { "type": "http", "direction": "out", "name": "res" }
+  ]
+}
