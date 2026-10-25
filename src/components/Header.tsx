@@ -1,61 +1,101 @@
-import React from 'react'
-import { useLocation } from 'react-router-dom'
-import { LogOut, Bell, RefreshCw } from 'lucide-react'
-import { useAuth } from '../contexts/AuthContext'
+import React from 'react';
+import { DbConnectionStatus } from '../services/api';
+import { EmdadLogo } from '../constants/branding';
 
-const PAGE_TITLES: Record<string, string> = {
-  '/':                   'Dashboard',
-  '/jobs':               'Jobs',
-  '/inventory':          'Inventory',
-  '/clients':            'Clients',
-  '/contracts':          'Contracts',
-  '/suppliers':          'Suppliers',
-  '/users':              'Users',
-  '/settings':           'Settings',
-  '/delivery-tickets':   'Delivery Tickets',
-  '/receiving-tickets':  'Receiving Tickets',
-  '/utilization':        'Utilization',
-  '/gate-pass':          'Gate Pass',
-  '/inspection':         'Inspection',
-  '/maintenance':        'Maintenance',
-  '/invoices':           'Invoices',
+interface HeaderProps {
+  syncStatus?: 'idle' | 'syncing' | 'saved' | 'error';
+  isSyncing?: boolean;
+  dbStatus?: DbConnectionStatus;
+  isInitializing?: boolean;
+  onSync?: () => void;
+  onRefresh?: () => void;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
 }
 
-function getTitle(pathname: string): string {
-  if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname]
-  const base = '/' + pathname.split('/')[1]
-  return PAGE_TITLES[base] || 'Tool Tracker'
-}
-
-export function Header() {
-  const { logout, user } = useAuth()
-  const location = useLocation()
+export const Header: React.FC<HeaderProps> = ({
+  syncStatus,
+  isSyncing,
+  dbStatus,
+  isInitializing,
+  onSync,
+  onRefresh,
+  isSidebarCollapsed,
+  onToggleSidebar,
+}) => {
+  const syncing = isSyncing || syncStatus === 'syncing';
+  const handleRefresh = onRefresh || onSync || (() => {});
 
   return (
-    <header className="h-14 bg-white border-b border-gray-200 flex items-center px-5 gap-4 shrink-0">
-      {/* Page title */}
-      <h1 className="text-base font-semibold text-gray-900 flex-1">
-        {getTitle(location.pathname)}
-      </h1>
+    <header className="bg-[#0b192c] text-white px-4 py-2.5 flex items-center justify-between shadow-md border-b border-[#182944] no-print sticky top-0 z-40 transition-colors">
+      <div className="flex items-center space-x-3">
+        {onToggleSidebar && (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="p-1.5 rounded-lg bg-[#14263f] hover:bg-[#1f375a] text-slate-300 hover:text-white border border-[#233d63] transition cursor-pointer flex items-center justify-center"
+            title={isSidebarCollapsed ? 'Expand Navigation Sidebar' : 'Collapse Navigation Sidebar'}
+          >
+            <span className="text-xs font-bold font-mono">
+              {isSidebarCollapsed ? '▶' : '◀'}
+            </span>
+          </button>
+        )}
 
-      {/* Right side actions */}
-      <div className="flex items-center gap-1">
-        <button className="btn-ghost" title="Refresh page">
-          <RefreshCw size={16} />
-        </button>
-        <button className="btn-ghost" title="Notifications">
-          <Bell size={16} />
-        </button>
-        <div className="w-px h-5 bg-gray-200 mx-1" />
+        <div className="bg-white px-2 py-1 rounded shadow flex items-center justify-center">
+          <EmdadLogo className="h-6 w-auto object-contain" />
+        </div>
+
+        <div>
+          <div className="flex items-center space-x-2">
+            <span className="font-extrabold text-sm tracking-wide text-white">EMDAD LLC</span>
+            {isInitializing ? (
+              <span
+                className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center space-x-1"
+                title="Connecting to Azure SQL database…"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                <span>CONNECTING…</span>
+              </span>
+            ) : dbStatus?.isConnected ? (
+              <span
+                className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1"
+                title="Connected to live Azure SQL database"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>AZURE SQL LIVE</span>
+              </span>
+            ) : (
+              <span
+                className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center space-x-1"
+                title="Demo/Local cache active. Refresh or configure SQL endpoint in Settings to pull live database rows."
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                <span>LOCAL CACHE / DEMO</span>
+              </span>
+            )}
+          </div>
+          <div className="text-[10px] text-amber-300/90 font-medium">Well Intervention - Upstream Services</div>
+        </div>
+      </div>
+
+      <div className="flex items-center space-x-2.5 text-xs">
+        {syncing && (
+          <div className="flex items-center space-x-1.5 bg-[#12233c] px-2.5 py-1 rounded-md border border-[#233f67]">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+            <span className="text-[11px] font-medium text-slate-200">Syncing Azure…</span>
+          </div>
+        )}
+
         <button
-          onClick={logout}
-          className="btn-ghost text-red-600 hover:bg-red-50 hover:text-red-700"
-          title="Logout"
+          onClick={handleRefresh}
+          className="px-3 py-1 bg-[#14263f] hover:bg-[#1f375a] text-slate-200 hover:text-white rounded-md border border-[#25426b] text-[11px] font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-xs"
+          title="Refresh data from Azure SQL database"
         >
-          <LogOut size={16} />
-          <span className="text-xs">Logout</span>
+          <span>🔄</span>
+          <span>Refresh</span>
         </button>
       </div>
     </header>
-  )
-}
+  );
+};
