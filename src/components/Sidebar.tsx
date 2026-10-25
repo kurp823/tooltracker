@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Briefcase, Package, Users, FileText,
   Truck, RotateCcw, ClipboardCheck, Wrench, DoorOpen,
   Receipt, Building2, BarChart3, Settings, ChevronDown,
-  ChevronRight, BookOpen, Factory, Tag
+  ChevronRight, BookOpen, Factory, Tag, History
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import type { UserRole } from '../types'
@@ -28,6 +28,7 @@ const NAV: NavItem[] = [
       { label: 'Delivery Tickets',  to: '/delivery-tickets',  icon: <Truck size={18} /> },
       { label: 'Receiving Tickets', to: '/receiving-tickets', icon: <RotateCcw size={18} /> },
       { label: 'Utilization',       to: '/utilization',       icon: <BarChart3 size={18} /> },
+      { label: 'Tool History',      to: '/tool-history',      icon: <History size={18} /> },
       { label: 'Gate Pass',         to: '/gate-pass',         icon: <DoorOpen size={18} /> },
     ],
   },
