@@ -63,7 +63,12 @@ module.exports = async function (context, req) {
                CreatedDate, CreatedBy, UpdatedAt
         FROM   tbl_Jobs
         ${where}
-        ORDER  BY CreatedDate DESC
+        -- Newest job first. CreatedDate is NULL on the newer rows, and a DESC
+        -- sort puts NULLs last in SQL Server, which pushed the newest jobs to
+        -- the bottom and showed 2017/2018 jobs first. The trailing sequence in
+        -- Job-YYY-NNNNN never resets across years, so it is the reliable key.
+        ORDER  BY TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) DESC,
+                  JobID DESC
       `, params)
       return jsonResponse(context, 200, result.recordset)
     } catch (err) {
