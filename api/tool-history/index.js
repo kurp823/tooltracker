@@ -107,8 +107,12 @@ module.exports = async function (context, req) {
           r.receivingDate                                        AS DateIn,
           r.usedStatus                                           AS Comments,
           r.condition                                            AS Condition,
+          -- Show the actual sub-contractor name, not a generic label.
+          -- Ownership is the reliable field here (only 1 blank across 269
+          -- sub-contract tools); Supplier has 41 blanks and wrongly reads
+          -- 'EMDAD' on 10 of them.
           CASE WHEN i.IsEmdad = 1 THEN 'EMDAD'
-               ELSE COALESCE(NULLIF(i.Supplier, ''), NULLIF(i.Ownership, '')) END AS Supplier,
+               ELSE COALESCE(NULLIF(i.Ownership, ''), NULLIF(i.Supplier, '')) END AS Supplier,
           dt.jobNumber                                           AS JobID,
           dt.rig                                                 AS Rig,
           dt.well                                                AS Well,
@@ -120,7 +124,24 @@ module.exports = async function (context, req) {
           COALESCE(u.OpsAmount, 0) + COALESCE(u.StandbyAmount, 0) AS TotalAmount
         FROM      tbl_DeliveryTicketLines dtl
         JOIN      tbl_DeliveryTickets     dt ON dtl.dtNumber = dt.dtNumber
-        LEFT JOIN tbl_Inventory           i  ON i.SystemID   = dtl.serial
+        OUTER APPLY (
+          -- Despite the comment in api/delivery-tickets, the `serial` column
+          -- on ticket lines mostly holds the ASSET NUMBER, not the SystemID:
+          -- inventory keys look like SystemID 'EMD-5794' / AssetNo 'STB578-01',
+          -- while line serials read 'STB578-09', 'ADSE1144', 'CX0697'.
+          -- Joining on SystemID alone missed ~72% of lines, which is why Size
+          -- and Supplier came back blank. Match on any of the three keys,
+          -- preferring SystemID, and take one row so a line never duplicates.
+          SELECT TOP 1 i2.AssetNo, i2.ShortDesc, i2.[Size], i2.IsEmdad,
+                       i2.Supplier, i2.Ownership
+          FROM   tbl_Inventory i2
+          WHERE  i2.SystemID = dtl.serial
+             OR  i2.AssetNo  = dtl.serial
+             OR  NULLIF(i2.OEMSerial, '') = dtl.serial
+          ORDER BY CASE WHEN i2.SystemID = dtl.serial THEN 0
+                        WHEN i2.AssetNo  = dtl.serial THEN 1
+                        ELSE 2 END
+        ) i
         OUTER APPLY (
           -- The receiving ticket that brought this same tool back on this job.
           SELECT TOP 1 rth.rtNumber, rth.receivingDate, rtl.usedStatus, rtl.condition

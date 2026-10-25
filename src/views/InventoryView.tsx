@@ -45,7 +45,7 @@ export function InventoryView() {
         </div>
         <div className="card px-4 py-2 flex items-center gap-2">
           <Package size={16} className="text-orange-500" />
-          <span className="text-sm font-medium text-gray-700">{subCount} Subcontract tools</span>
+          <span className="text-sm font-medium text-gray-700">{subCount} Sub-Contractor tools</span>
         </div>
       </div>
 
@@ -88,13 +88,13 @@ export function InventoryView() {
             <thead>
               <tr>
                 <th className="table-th">Asset No</th>
-                <th className="table-th">Serial</th>
-                <th className="table-th">Description</th>
-                <th className="table-th">Category</th>
                 <th className="table-th">Size</th>
-                <th className="table-th">Ownership</th>
-                <th className="table-th">Condition</th>
+                <th className="table-th">Tool Type</th>
+                <th className="table-th">Description</th>
+                <th className="table-th">Owner</th>
                 <th className="table-th">Location</th>
+                <th className="table-th">Status</th>
+                <th className="table-th">Qty</th>
               </tr>
             </thead>
             <tbody>
@@ -107,20 +107,23 @@ export function InventoryView() {
               ) : (
                 filtered.map(item => (
                   <tr key={item.SystemID} className="table-tr">
-                    <td className="table-td font-mono text-xs font-medium text-brand-600">{item.AssetNo || '—'}</td>
-                    <td className="table-td text-xs">
-                      {item.Serial || <span className="text-gray-400">—</span>}
+                    <td className="table-td font-mono text-xs font-medium text-brand-600">{item.AssetNo || item.SystemID || '—'}</td>
+                    <td className="table-td text-xs">{item.Size || <span className="text-gray-400">—</span>}</td>
+                    <td className="table-td font-medium">{item.ShortDesc || '—'}</td>
+                    <td className="table-td text-gray-600 max-w-md truncate" title={item.Description || ''}>
+                      {item.Description || '—'}
                     </td>
-                    <td className="table-td font-medium">{item.ShortDesc}</td>
-                    <td className="table-td text-gray-500">{(item as any).CategoryName || '—'}</td>
-                    <td className="table-td text-gray-500">{(item as any).SizeName || '—'}</td>
                     <td className="table-td">
+                      {/* The sub-contractor's own name, as in the old app — not a
+                          generic "Subcontract" label. Ownership is the reliable
+                          field; Supplier is blank on 41 of the 269 sub tools. */}
                       <span className={`badge ${item.IsEmdad ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
-                        {item.IsEmdad ? 'Own' : 'Subcontract'}
+                        {item.IsEmdad ? 'EMDAD' : (item.Ownership || item.Supplier || 'Sub-Contractor')}
                       </span>
                     </td>
-                    <td className="table-td text-gray-500">{(item as any).Condition || '—'}</td>
                     <td className="table-td text-gray-500">{item.Location || '—'}</td>
+                    <td className="table-td text-gray-500">{item.Status || '—'}</td>
+                    <td className="table-td text-center text-gray-500">{item.Qty ?? '—'}</td>
                   </tr>
                 ))
               )}
