@@ -14,7 +14,7 @@ module.exports = async function (context, req) {
         (SELECT COUNT(*) FROM tbl_Jobs WHERE Status = 'Open')      AS openJobs,
         (SELECT COUNT(*) FROM tbl_Jobs WHERE Status NOT IN ('Completed','Cancelled')) AS totalActiveJobs,
         (SELECT COUNT(*) FROM tbl_Jobs)                            AS totalJobs,
-        (SELECT COUNT(*) FROM tbl_Inventory WHERE IsActive = 1)    AS totalInventory,
+        (SELECT COUNT(*) FROM tbl_Inventory)                       AS totalInventory,
         (SELECT COUNT(*) FROM tbl_InspectionRecords WHERE status = 'Pending') AS pendingInspections,
         (SELECT COUNT(*) FROM tbl_MaintenanceJobs WHERE status IN ('Open','In Progress')) AS pendingMaintenance,
         (SELECT COUNT(*) FROM tbl_Invoices WHERE status IN ('Draft','Submitted'))       AS pendingInvoices,
