@@ -45,7 +45,7 @@ module.exports = async function (context, req) {
         SELECT JobID, Client, Rig, Well, Contract, PONumber, ClientRef,
                ServiceType, HoleSection, MobDate, DemobDate,
                Status, InvoicingType, Currency, FiscalYear,
-               CreatedDate, CreatedBy, UpdatedDate
+               CreatedDate, CreatedBy, UpdatedAt
         FROM   tbl_Jobs
         ORDER  BY CreatedDate DESC
       `)
@@ -145,7 +145,7 @@ module.exports = async function (context, req) {
            DraftInvoiceNumber = @din, SesSubmittedDate = @ses,
            SesNumber = @sesno, FinalInvoicedDate = @fid,
            LegalInvoiceNumber = @lin, InvoiceDate = @invdt,
-           UpdatedDate = GETDATE(), UpdatedBy = @by
+           UpdatedAt = GETDATE()
          WHERE  JobID = @id`,
         [
           { name: 'id',       type: sql.NVarChar, value: jobId },
