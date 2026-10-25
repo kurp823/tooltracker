@@ -8,6 +8,7 @@ import { PageLoader } from './components/Spinner'
 // Views
 import { LoginView }          from './views/LoginView'
 import { ChangePasswordView } from './views/ChangePasswordView'
+import { ActivateView }       from './views/ActivateView'
 import { DashboardView }      from './views/DashboardView'
 import { JobsView }           from './views/JobsView'
 import { JobDetailView }      from './views/JobDetailView'
@@ -57,6 +58,7 @@ export default function App() {
           <Routes>
             {/* Public */}
             <Route path="/login"           element={<LoginView />} />
+            <Route path="/activate"        element={<ActivateView />} />
             <Route path="/change-password" element={<ChangePasswordView />} />
 
             {/* Protected */}

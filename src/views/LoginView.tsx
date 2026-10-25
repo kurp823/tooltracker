@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { Package, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
@@ -94,6 +94,13 @@ export function LoginView() {
               {loading ? <Spinner size="sm" /> : 'Sign In'}
             </button>
           </form>
+
+          <p className="text-center text-sm text-gray-500 mt-5">
+            First time here?{' '}
+            <Link to="/activate" className="text-brand-700 font-medium hover:underline">
+              Activate your account
+            </Link>
+          </p>
         </div>
 
         <p className="text-center text-brand-400 text-xs mt-6">

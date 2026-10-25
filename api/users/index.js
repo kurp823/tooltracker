@@ -7,6 +7,26 @@
  */
 const { sql, query, jsonResponse, requireAuth } = require('../db')
 const bcrypt = require('bcryptjs')
+const crypto = require('crypto')
+
+/**
+ * Generate a one-time activation code, e.g. "7K4P-29QX".
+ *
+ * The code is never stored in clear text: it is bcrypt-hashed into the
+ * existing Password column with MustChangePassword = 1, so it behaves as a
+ * single-use credential that dies the moment the user sets a real password.
+ * That keeps enrollment working with no schema change.
+ *
+ * The alphabet omits 0/O/1/I so a code can be read aloud without confusion,
+ * and has 32 symbols — a clean divisor of 256, so there is no modulo bias.
+ */
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+function generateActivationCode() {
+  const bytes = crypto.randomBytes(8)
+  let out = ''
+  for (let i = 0; i < 8; i++) out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length]
+  return `${out.slice(0, 4)}-${out.slice(4)}`
+}
 
 module.exports = async function (context, req) {
   const user   = requireAuth(context, req)
@@ -81,10 +101,14 @@ module.exports = async function (context, req) {
     if (user.Role !== 'Admin')
       return jsonResponse(context, 403, { error: 'Admin only' })
     const b = req.body || {}
-    if (!b.Username || !b.FullName || !b.Role || !b.Password)
-      return jsonResponse(context, 400, { error: 'Username, FullName, Role, Password required' })
+    if (!b.Username || !b.FullName || !b.Role)
+      return jsonResponse(context, 400, { error: 'Username, FullName and Role are required' })
     try {
-      const hash = await bcrypt.hash(b.Password, 12)
+      // No password is supplied by the admin. We mint a one-time activation
+      // code instead and return it once, so the user chooses their own
+      // password at activation and no human ever invents or relays one.
+      const activationCode = b.Password ? null : generateActivationCode()
+      const hash = await bcrypt.hash(b.Password || activationCode, 12)
       await query(
         `INSERT INTO tbl_Users (Username, Password, FullName, Role, Active, MustChangePassword, CreatedDate)
          VALUES (@u, @h, @fn, @role, 1, 1, GETDATE())`,
@@ -95,7 +119,8 @@ module.exports = async function (context, req) {
           { name: 'role', type: sql.NVarChar, value: b.Role },
         ]
       )
-      return jsonResponse(context, 201, { success: true })
+      // Returned ONCE — it is only recoverable by reissuing a new code.
+      return jsonResponse(context, 201, { success: true, activationCode })
     } catch (err) {
       if (err.number === 2627)
         return jsonResponse(context, 409, { error: 'Username already exists' })
@@ -120,8 +145,21 @@ module.exports = async function (context, req) {
           { name: 'id',     type: sql.Int,      value: parseInt(id) },
         ]
       )
-      // Optional: reset password
-      if (b.NewPassword) {
+      // Optional: mint a fresh one-time activation code (lost/expired code).
+      // Returned once; it replaces whatever credential the account had, so an
+      // existing password stops working until the user activates again.
+      let activationCode = null
+      if (b.ReissueCode) {
+        activationCode = generateActivationCode()
+        const hash = await bcrypt.hash(activationCode, 12)
+        await query(
+          `UPDATE tbl_Users SET Password = @h, MustChangePassword = 1 WHERE UserID = @id`,
+          [
+            { name: 'h',  type: sql.NVarChar, value: hash },
+            { name: 'id', type: sql.Int,      value: parseInt(id) },
+          ]
+        )
+      } else if (b.NewPassword) {
         const hash = await bcrypt.hash(b.NewPassword, 12)
         await query(
           `UPDATE tbl_Users SET Password = @h, MustChangePassword = 1 WHERE UserID = @id`,
@@ -131,7 +169,7 @@ module.exports = async function (context, req) {
           ]
         )
       }
-      return jsonResponse(context, 200, { success: true })
+      return jsonResponse(context, 200, { success: true, activationCode })
     } catch (err) {
       context.log.error(err)
       return jsonResponse(context, 500, { error: 'Failed to update user' })

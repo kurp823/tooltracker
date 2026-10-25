@@ -5,6 +5,8 @@ interface AuthContextValue {
   user: AuthUser | null
   isLoading: boolean
   login: (username: string, password: string) => Promise<{ mustChange: boolean }>
+  /** Establish a session from a token issued outside the login call (activation). */
+  adoptSession: (user: AuthUser, token: string) => void
   logout: () => void
   hasRole: (...roles: UserRole[]) => boolean
   isAdmin: boolean
@@ -54,6 +56,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { mustChange: !!u.MustChangePassword }
   }, [])
 
+  const adoptSession = useCallback((u: AuthUser, token: string) => {
+    localStorage.setItem('tt_token', token)
+    localStorage.setItem('tt_user', JSON.stringify(u))
+    setUser({ ...u, token })
+  }, [])
+
   const logout = useCallback(() => {
     localStorage.removeItem('tt_token')
     localStorage.removeItem('tt_user')
@@ -69,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = user?.Role === 'Admin'
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, hasRole, isAdmin }}>
+    <AuthContext.Provider value={{ user, isLoading, login, adoptSession, logout, hasRole, isAdmin }}>
       {children}
     </AuthContext.Provider>
   )
