@@ -56,6 +56,116 @@ const MIGRATIONS = [
         CREATE INDEX IX_tbl_JobPersonnel_JobID ON dbo.tbl_JobPersonnel (JobID);
       END`,
   },
+  {
+    name: 'tbl_VendorOrderLines',
+    sql: `
+      IF OBJECT_ID('dbo.tbl_VendorOrderLines', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.tbl_VendorOrderLines (
+          id        int IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_tbl_VendorOrderLines PRIMARY KEY,
+          poNumber  nvarchar(50)  NOT NULL,
+          lineNo    int           NULL,
+          assetNo   nvarchar(50)  NULL,
+          description nvarchar(500) NULL,
+          [size]    nvarchar(50)  NULL,
+          qty       decimal(18,2) NULL,
+          unitPrice decimal(18,2) NULL,
+          -- ASSET / INVENTORY lines become inventory on receipt; others do not.
+          costCode  nvarchar(30)  NULL,
+          requiresInspection bit  NULL CONSTRAINT DF_VOL_ReqInsp DEFAULT (0),
+          receivedQty decimal(18,2) NULL CONSTRAINT DF_VOL_RecvQty DEFAULT (0),
+          notes     nvarchar(500) NULL
+        );
+        CREATE INDEX IX_tbl_VendorOrderLines_poNumber ON dbo.tbl_VendorOrderLines (poNumber);
+      END`,
+  },
+  {
+    name: 'tbl_GRN',
+    sql: `
+      IF OBJECT_ID('dbo.tbl_GRN', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.tbl_GRN (
+          id        int IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_tbl_GRN PRIMARY KEY,
+          grnNumber nvarchar(50)  NOT NULL,
+          manualRef nvarchar(100) NULL,
+          poNumber  nvarchar(50)  NULL,
+          supplierCode nvarchar(50)  NULL,
+          supplierName nvarchar(200) NULL,
+          receiptDate  date          NULL,
+          receivedBy   nvarchar(100) NULL,
+          currency     nvarchar(10)  NULL,
+          totalItemsReceived decimal(18,2) NULL,
+          totalInwardValue   decimal(18,2) NULL,
+          notes        nvarchar(1000) NULL,
+          attachmentRef nvarchar(500) NULL,
+          createdBy    nvarchar(100) NULL,
+          createdAt    datetime      NULL CONSTRAINT DF_GRN_CreatedAt DEFAULT (GETDATE())
+        );
+        CREATE UNIQUE INDEX UX_tbl_GRN_grnNumber ON dbo.tbl_GRN (grnNumber);
+        CREATE INDEX IX_tbl_GRN_poNumber ON dbo.tbl_GRN (poNumber);
+      END`,
+  },
+  {
+    name: 'tbl_GRNLines',
+    sql: `
+      IF OBJECT_ID('dbo.tbl_GRNLines', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.tbl_GRNLines (
+          id        int IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_tbl_GRNLines PRIMARY KEY,
+          grnNumber nvarchar(50)  NOT NULL,
+          poLineId  int           NULL,
+          assetNo   nvarchar(50)  NULL,
+          description nvarchar(500) NULL,
+          [size]    nvarchar(50)  NULL,
+          receivedQty decimal(18,2) NULL,
+          unitPrice decimal(18,2) NULL,
+          costCode  nvarchar(30)  NULL,
+          requiresInspection bit  NULL CONSTRAINT DF_GRNL_ReqInsp DEFAULT (0),
+          inventoryCreated   bit  NULL CONSTRAINT DF_GRNL_InvCreated DEFAULT (0),
+          notes     nvarchar(500) NULL
+        );
+        CREATE INDEX IX_tbl_GRNLines_grnNumber ON dbo.tbl_GRNLines (grnNumber);
+      END`,
+  },
+  {
+    name: 'tbl_SubRentalInward',
+    sql: `
+      IF OBJECT_ID('dbo.tbl_SubRentalInward', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.tbl_SubRentalInward (
+          id           int IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_tbl_SubRentalInward PRIMARY KEY,
+          inwardNumber nvarchar(50)  NULL,
+          supplierCode nvarchar(50)  NULL,
+          supplierName nvarchar(200) NULL,
+          manifestRef  nvarchar(100) NULL,
+          inwardDate   date          NULL,
+          assetNo      nvarchar(50)  NULL,
+          description  nvarchar(500) NULL,
+          [size]       nvarchar(50)  NULL,
+          qty          decimal(18,2) NULL,
+          currency     nvarchar(10)  NULL,
+          -- Agreed hire rates for this supplier's tool. These are the rate
+          -- source for sub-contract equipment, the counterpart to the
+          -- contract rate card used for EMDAD-owned tools.
+          standbyRate   decimal(18,2) NULL,
+          operatingRate decimal(18,2) NULL,
+          runCharge     decimal(18,2) NULL,
+          redress       decimal(18,2) NULL,
+          monthlyCharge decimal(18,2) NULL,
+          location     nvarchar(50)  NULL,
+          status       nvarchar(30)  NULL,
+          notes        nvarchar(500) NULL,
+          createdBy    nvarchar(100) NULL,
+          createdAt    datetime      NULL CONSTRAINT DF_SRI_CreatedAt DEFAULT (GETDATE())
+        );
+        CREATE INDEX IX_tbl_SubRentalInward_supplier ON dbo.tbl_SubRentalInward (supplierCode);
+        CREATE INDEX IX_tbl_SubRentalInward_assetNo  ON dbo.tbl_SubRentalInward (assetNo);
+      END`,
+  },
 ]
 
 module.exports = async function (context, req) {
