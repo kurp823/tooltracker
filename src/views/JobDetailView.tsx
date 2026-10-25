@@ -1059,6 +1059,8 @@ function ReturnTicketTab({
     Status: 'Draft',
     Notes:  '',
   })
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [adding,      setAdding]    = useState(false)
 
   const loadRTs = useCallback(async () => {
     setLoading(true)
@@ -1123,6 +1125,31 @@ function ReturnTicketTab({
       showToast('Line removed', 'success')
     } catch {
       showToast('Failed to remove line', 'error')
+    }
+  }
+
+  async function handleInsertTools(invItems: InvItem[]) {
+    if (!activeRT) return
+    setAdding(true)
+    try {
+      await Promise.all(invItems.map(inv =>
+        api.post(`/receiving-tickets/${activeRT.RTID}/lines`, {
+          SystemID:        inv.SystemID,        // real Inventory join key — resolved to AssetNo on GET
+          ToolDescription: inv.ShortDesc,
+          SizeName:        inv.SizeName,
+          Quantity:        1,
+          Condition:       inv.Condition || 'Good',
+          UsedStatus:      'Used',
+        })
+      ))
+      const ln = await api.get<RTLine[]>(`/receiving-tickets/${activeRT.RTID}/lines`)
+      setLines(ln)
+      setPickerOpen(false)
+      showToast(`${invItems.length} tool(s) added to ${activeRT.RTNumber}`, 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to add tool(s)', 'error')
+    } finally {
+      setAdding(false)
     }
   }
 
@@ -1225,8 +1252,17 @@ function ReturnTicketTab({
           </div>
 
           <div className="card overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 text-sm font-medium text-gray-700">
-              Returned Tools — {lines.length} item(s)
+            <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 text-sm font-medium text-gray-700 flex items-center justify-between">
+              <span>Returned Tools — {lines.length} item(s)</span>
+              {canEdit && (
+                <button
+                  onClick={() => setPickerOpen(true)}
+                  disabled={adding}
+                  className="btn-primary text-xs py-1.5 disabled:opacity-40"
+                >
+                  <Plus size={13} /> Add Tool
+                </button>
+              )}
             </div>
             <table className="w-full text-sm">
               <thead>
@@ -1275,6 +1311,15 @@ function ReturnTicketTab({
             </table>
           </div>
         </>
+      )}
+
+      {pickerOpen && activeRT && (
+        <ToolPickerModal
+          jobId={jobId}
+          existingAssetNos={new Set(lines.map(l => l.AssetNo).filter(Boolean))}
+          onInsert={handleInsertTools}
+          onClose={() => setPickerOpen(false)}
+        />
       )}
     </div>
   )
