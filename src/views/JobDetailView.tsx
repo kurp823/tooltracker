@@ -18,25 +18,9 @@ import { api } from '../utils/api'
 import { useFetch } from '../hooks/useFetch'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
-import { toDateInput } from '../utils/format'
+import { toDateInput, normalizeJobId } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
 import type { Job, JobStatus, InvoicingType } from '../types'
-
-// Historical job numbers were entered in inconsistent formats across screens
-// (e.g. "Job-026-01836" on tbl_Jobs vs "JOB-26-01836" on tbl_DeliveryTickets —
-// same job, different casing and zero-padding). Compare job numbers by their
-// normalized form (upper-cased, each dash-separated numeric segment stripped
-// of leading zeros) rather than exact string equality, so a job's tickets
-// are found regardless of which format they were saved in.
-function normalizeJobId(id: string | null | undefined): string {
-  if (!id) return ''
-  return id
-    .trim()
-    .toUpperCase()
-    .split('-')
-    .map(seg => (/^\d+$/.test(seg) ? String(parseInt(seg, 10)) : seg))
-    .join('-')
-}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -86,6 +70,34 @@ interface DTLine {
   Notes: string
 }
 
+interface RTRecord {
+  RTID: number
+  RTNumber: string
+  JobID: string
+  RTDate: string
+  LinkedDT?: string
+  ManifestNumber?: string
+  Status: string
+  Notes: string
+  CreatedBy: string
+  CreatedDate: string
+}
+
+interface RTLine {
+  LineID: number
+  SerialNumber?: string
+  AssetNo?: string
+  ToolDescription: string
+  Quantity: number
+  Condition?: string
+  UsedStatus?: string
+  RoutedTo?: string
+  Notes: string
+}
+
+interface UtilCell { code: '1' | 'S'; logId: number }
+interface UtilRow { label: string; toolId: string | number | null; days: Record<number, UtilCell> }
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const WORKSPACE_TABS = [
@@ -104,6 +116,7 @@ const STATUS_OPTIONS: JobStatus[]     = ['Open','Active','Completed','Cancelled'
 const INVOICING_OPTS: InvoicingType[] = ['PerJob','PerDay','Lump Sum']
 const CURRENCY_OPTS                   = ['USD','AED','SAR','OMR']
 const DT_STATUS_OPTS                  = ['Draft','Submitted','Approved','Rejected']
+const RT_STATUS_OPTS                  = ['Draft','Submitted','Approved','Rejected']
 
 // ─── Tool Picker Modal ────────────────────────────────────────────────────────
 
@@ -1022,6 +1035,390 @@ function DTHeaderTab({
   )
 }
 
+// ─── Return Ticket Tab ─────────────────────────────────────────────────────────
+
+function ReturnTicketTab({
+  jobId,
+  job,
+}: {
+  jobId: string
+  job: Partial<Job>
+}) {
+  const { hasRole } = useAuth()
+  const { showToast } = useToast()
+  const canEdit = hasRole('Admin', 'Operations')
+
+  const [rts,       setRts]      = useState<RTRecord[]>([])
+  const [activeRT,  setActiveRT] = useState<RTRecord | null>(null)
+  const [lines,     setLines]    = useState<RTLine[]>([])
+  const [loading,   setLoading]  = useState(true)
+  const [saving,    setSaving]   = useState(false)
+  const [form, setForm] = useState({
+    RTDate: new Date().toISOString().split('T')[0],
+    Status: 'Draft',
+    Notes:  '',
+  })
+
+  const loadRTs = useCallback(async () => {
+    setLoading(true)
+    try {
+      const all = await api.get<RTRecord[]>('/receiving-tickets')
+      const normJobId = normalizeJobId(jobId)
+      const jobRTs = all.filter((r: RTRecord) => normalizeJobId(r.JobID) === normJobId)
+      setRts(jobRTs)
+      if (jobRTs.length > 0) selectRT(jobRTs[0])
+    } catch {
+      showToast('Failed to load return tickets', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [jobId])
+
+  useEffect(() => { loadRTs() }, [loadRTs])
+
+  async function selectRT(rt: RTRecord) {
+    setActiveRT(rt)
+    setForm({ RTDate: rt.RTDate?.split('T')[0] || '', Status: rt.Status || 'Draft', Notes: rt.Notes || '' })
+    try {
+      const ln = await api.get<RTLine[]>(`/receiving-tickets/${rt.RTID}/lines`)
+      setLines(ln)
+    } catch {
+      setLines([])
+    }
+  }
+
+  async function handleSave() {
+    if (!activeRT) return
+    setSaving(true)
+    try {
+      await api.put(`/receiving-tickets/${activeRT.RTID}`, form)
+      showToast('Return ticket saved', 'success')
+      loadRTs()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Save failed', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleNewRT() {
+    try {
+      const res = await api.post<{ RTID: number; RTNumber: string }>('/receiving-tickets', {
+        JobID:  jobId,
+        RTDate: new Date().toISOString().split('T')[0],
+      })
+      showToast(`${res.RTNumber} created`, 'success')
+      loadRTs()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to create RT', 'error')
+    }
+  }
+
+  async function removeLine(lineId: number) {
+    if (!activeRT) return
+    try {
+      await api.delete(`/receiving-tickets/${activeRT.RTID}/lines/${lineId}`)
+      setLines(prev => prev.filter(l => l.LineID !== lineId))
+      showToast('Line removed', 'success')
+    } catch {
+      showToast('Failed to remove line', 'error')
+    }
+  }
+
+  if (loading) return (
+    <div className="card p-12 flex items-center justify-center">
+      <Spinner size="md" />
+    </div>
+  )
+
+  return (
+    <div className="space-y-4">
+      {/* RT Selector */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">Select Return Ticket:</span>
+          {rts.length === 0 ? (
+            <span className="text-sm text-gray-400 italic">No RT Generated</span>
+          ) : (
+            <select
+              className="input py-1.5 text-sm w-auto"
+              value={activeRT?.RTID || ''}
+              onChange={e => {
+                const rt = rts.find(r => r.RTID === Number(e.target.value))
+                if (rt) selectRT(rt)
+              }}
+            >
+              {rts.map(r => (
+                <option key={r.RTID} value={r.RTID}>
+                  {r.RTNumber} — {r.Status}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        {canEdit && (
+          <button onClick={handleNewRT} className="btn-secondary text-xs py-1.5">
+            <Plus size={13} /> New RT
+          </button>
+        )}
+        {activeRT && canEdit && (
+          <button onClick={handleSave} disabled={saving} className="btn-primary text-xs py-1.5 ml-auto">
+            {saving ? <><Spinner size="sm" /> Saving…</> : <><Save size={13} /> Save RT</>}
+          </button>
+        )}
+      </div>
+
+      {rts.length === 0 && (
+        <div className="card p-4 border-amber-200 bg-amber-50 flex items-start gap-3">
+          <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-700">
+            <strong>No Return Ticket Yet:</strong> Once equipment returns from Rig <strong>{job.Rig}</strong>,
+            click <strong>"+ New RT"</strong> above to log the receipt and route each tool
+            (back to yard, to inspection, or to maintenance).
+          </p>
+        </div>
+      )}
+
+      {activeRT && (
+        <>
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-sm text-gray-800">Return / Receiving Manifest</h3>
+              <span className="badge text-xs bg-blue-100 text-blue-700">{activeRT.RTNumber}</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+              <div>
+                <label className="label">Job Number</label>
+                <input className="input py-1.5 text-xs bg-gray-50" value={jobId} readOnly />
+              </div>
+              <div>
+                <label className="label">Linked DT</label>
+                <input className="input py-1.5 text-xs bg-gray-50" value={activeRT.LinkedDT || '—'} readOnly />
+              </div>
+              <div>
+                <label className="label">Receiving Date</label>
+                <input type="date" className="input py-1.5 text-xs"
+                  value={form.RTDate}
+                  onChange={e => setForm(p => ({ ...p, RTDate: e.target.value }))}
+                  disabled={!canEdit} />
+              </div>
+              <div>
+                <label className="label">Status</label>
+                <select className="input py-1.5 text-xs"
+                  value={form.Status}
+                  onChange={e => setForm(p => ({ ...p, Status: e.target.value }))}
+                  disabled={!canEdit}>
+                  {RT_STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="label">Notes</label>
+              <textarea
+                className="input text-xs py-2 min-h-16 resize-y"
+                value={form.Notes}
+                onChange={e => setForm(p => ({ ...p, Notes: e.target.value }))}
+                disabled={!canEdit}
+              />
+            </div>
+          </div>
+
+          <div className="card overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 text-sm font-medium text-gray-700">
+              Returned Tools — {lines.length} item(s)
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <th className="table-th">#</th>
+                  <th className="table-th">Serial / Asset</th>
+                  <th className="table-th">Description</th>
+                  <th className="table-th text-center">Qty</th>
+                  <th className="table-th">Condition</th>
+                  <th className="table-th">Routed To</th>
+                  <th className="table-th">Notes</th>
+                  {canEdit && <th className="table-th"></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {lines.length === 0 ? (
+                  <tr>
+                    <td colSpan={canEdit ? 8 : 7} className="table-td text-center py-8 text-gray-400">
+                      No tools returned on this ticket yet.
+                    </td>
+                  </tr>
+                ) : (
+                  lines.map((line, idx) => (
+                    <tr key={line.LineID} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="table-td text-gray-500">{idx + 1}</td>
+                      <td className="table-td font-medium text-gray-900">{line.SerialNumber || line.AssetNo || '—'}</td>
+                      <td className="table-td text-gray-700">{line.ToolDescription}</td>
+                      <td className="table-td text-center">{line.Quantity}</td>
+                      <td className="table-td"><span className="text-green-600 text-xs">{line.Condition || '—'}</span></td>
+                      <td className="table-td text-gray-500 text-xs">{line.RoutedTo || '—'}</td>
+                      <td className="table-td text-gray-400 text-xs">{line.Notes || '—'}</td>
+                      {canEdit && (
+                        <td className="table-td">
+                          <button
+                            onClick={() => removeLine(line.LineID)}
+                            className="text-gray-300 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Utilization Tab ────────────────────────────────────────────────────────────
+
+function UtilizationTab({ jobId }: { jobId: string }) {
+  const { hasRole } = useAuth()
+  const { showToast } = useToast()
+  const canEdit = hasRole('Admin', 'Operations')
+
+  const today = new Date()
+  const [year,  setYear]  = useState(today.getFullYear())
+  const [month, setMonth] = useState(today.getMonth() + 1)
+  const [rows,    setRows]    = useState<UtilRow[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1)
+  const monthName = new Date(year, month - 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' })
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      // Fetch the whole month (not filtered server-side by jobId — historical
+      // job-number formats don't match exactly) and filter client-side by
+      // normalized job number, same fix as the Delivery Ticket tab.
+      const res = await api.get<{ rows: (UtilRow & { jobId: string })[] }>(`/utilization?year=${year}&month=${month}`)
+      const normJobId = normalizeJobId(jobId)
+      setRows((res.rows || []).filter(r => normalizeJobId(r.jobId) === normJobId))
+    } catch {
+      showToast('Failed to load utilization', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [jobId, year, month])
+
+  useEffect(() => { load() }, [load])
+
+  async function handleCellClick(rowIdx: number, day: number) {
+    if (!canEdit) return
+    const row = rows[rowIdx]
+    const current = row.days[day]
+    const nextCode: '1' | 'S' | null = !current ? '1' : current.code === '1' ? 'S' : null
+    try {
+      if (!current) {
+        const logDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+        const res = await api.post<{ LogID: number }>('/utilization', {
+          JobID: jobId, ToolID: row.toolId, LogDate: logDate, UtilizationCode: '1',
+        })
+        setRows(prev => prev.map((r, i) => i !== rowIdx ? r : { ...r, days: { ...r.days, [day]: { code: '1', logId: res.LogID } } }))
+      } else if (nextCode) {
+        await api.put(`/utilization/${current.logId}`, { UtilizationCode: nextCode })
+        setRows(prev => prev.map((r, i) => i !== rowIdx ? r : { ...r, days: { ...r.days, [day]: { code: nextCode, logId: current.logId } } }))
+      } else {
+        await api.delete(`/utilization/${current.logId}`)
+        setRows(prev => prev.map((r, i) => {
+          if (i !== rowIdx) return r
+          const newDays = { ...r.days }
+          delete newDays[day]
+          return { ...r, days: newDays }
+        }))
+      }
+    } catch {
+      showToast('Failed to update — try again', 'error')
+    }
+  }
+
+  function prevMonth() { if (month === 1) { setYear(y => y - 1); setMonth(12) } else setMonth(m => m - 1) }
+  function nextMonth() { if (month === 12) { setYear(y => y + 1); setMonth(1) } else setMonth(m => m + 1) }
+
+  if (loading) return (
+    <div className="card p-12 flex items-center justify-center">
+      <Spinner size="md" />
+    </div>
+  )
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1 card px-2 py-1">
+          <button onClick={prevMonth} className="p-1 hover:bg-gray-100 rounded transition-colors">‹</button>
+          <span className="text-sm font-medium px-2 min-w-40 text-center">{monthName}</span>
+          <button onClick={nextMonth} className="p-1 hover:bg-gray-100 rounded transition-colors">›</button>
+        </div>
+        {!canEdit && <span className="text-gray-400 italic text-xs">View only</span>}
+        <p className="text-xs text-gray-400 ml-auto">
+          Rows come from tools dispatched on this job's Delivery Tickets. Click a day to mark 1 (Operations) / S (Standby).
+        </p>
+      </div>
+
+      <div className="card overflow-auto">
+        <table className="text-xs border-collapse select-none" style={{ minWidth: `${200 + daysInMonth * 30}px` }}>
+          <thead>
+            <tr className="bg-gray-50">
+              <th className="text-left px-3 py-2.5 font-semibold text-gray-600 w-48 sticky left-0 z-10 bg-gray-50 border-b border-gray-200">
+                Tool
+              </th>
+              {days.map(d => (
+                <th key={d} className="text-center px-0 py-2.5 w-7 font-medium border-b border-gray-200 text-gray-500">{d}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={daysInMonth + 1} className="text-center text-gray-400 py-12">
+                  No utilization logged for {monthName} on this job.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row, rowIdx) => (
+                <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                  <td className="px-3 py-1.5 sticky left-0 z-10 bg-inherit border-b border-gray-100 font-medium text-gray-800 truncate max-w-[11rem]">
+                    {row.label}
+                  </td>
+                  {days.map(d => {
+                    const cell = row.days[d]
+                    return (
+                      <td
+                        key={d}
+                        className={`text-center px-0 py-1 border-b border-gray-100 ${canEdit ? 'cursor-pointer' : ''}`}
+                        onClick={() => handleCellClick(rowIdx, d)}
+                      >
+                        {cell?.code === '1' ? (
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded font-bold text-xs bg-blue-500 text-white">1</span>
+                        ) : cell?.code === 'S' ? (
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded font-bold text-xs bg-amber-400 text-white">S</span>
+                        ) : canEdit ? (
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded text-gray-200 hover:bg-gray-100 hover:text-gray-400 text-xs font-bold">+</span>
+                        ) : null}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ─── Job Header Tab (Details) ─────────────────────────────────────────────────
 
 function JobHeaderTab({
@@ -1323,10 +1720,10 @@ export function JobDetailView() {
           />
         )}
         {tab === 'rt' && !isNew && (
-          <PlaceholderTab label="Return Ticket" />
+          <ReturnTicketTab jobId={id!} job={form} />
         )}
         {tab === 'util' && !isNew && (
-          <PlaceholderTab label="Utilization — built in Phase 3" />
+          <UtilizationTab jobId={id!} />
         )}
       </div>
 

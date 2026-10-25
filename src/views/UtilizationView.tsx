@@ -5,6 +5,7 @@ import { useFetch } from '../hooks/useFetch'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import { api } from '../utils/api'
+import { normalizeJobId } from '../utils/format'
 import { Spinner, PageLoader } from '../components/Spinner'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -170,18 +171,21 @@ export function UtilizationView() {
   const [pendingCells, setPendingCells] = useState<Set<string>>(new Set())
   const pendingRef = useRef<Set<string>>(new Set())
 
-  const path = jobId
-    ? `/utilization?year=${year}&month=${month}&jobId=${encodeURIComponent(jobId)}`
-    : `/utilization?year=${year}&month=${month}`
+  // Historical job numbers were saved in inconsistent formats (e.g.
+  // "Job-026-01836" vs "JOB-26-01836" for the same job), so an exact
+  // server-side jobId match misses rows. Always fetch the whole month and
+  // filter client-side by normalized job number instead.
+  const path = `/utilization?year=${year}&month=${month}`
 
   const { data, isLoading, error, refetch } = useRealtimeFetch<{ rows: UtilRow[] }>(path)
 
   // Sync from API data — skip if any cell is mid-flight to avoid stomping optimistic state
   useEffect(() => {
     if (pendingRef.current.size === 0 && data?.rows) {
-      setLocalRows(data.rows)
+      const normJobId = jobId ? normalizeJobId(jobId) : null
+      setLocalRows(normJobId ? data.rows.filter(r => normalizeJobId(r.jobId) === normJobId) : data.rows)
     }
-  }, [data])
+  }, [data, jobId])
 
   const daysInMonth = new Date(year, month, 0).getDate()
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1)
