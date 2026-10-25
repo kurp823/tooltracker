@@ -633,6 +633,7 @@ export const App: React.FC = () => {
               String(b?.dtNumber || '').trim().toUpperCase() !== 'DT-26-100001' &&
               String(b?.id || '').trim().toUpperCase() !== 'DT-26-100001'
           );
+          console.log('[DEBUG-JOBS-FIX]', { success: res.success, jobsLen: Array.isArray(res.data.jobs) ? res.data.jobs.length : typeof res.data.jobs, source: res.source, message: res.message });
           setInventory(res.data.inventory);
           setJobs(res.data.jobs);
           setDtBatches(cleanDtBatches);
