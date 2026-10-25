@@ -5,7 +5,7 @@
 @layer base {
   body {
     font-family: 'Inter', sans-serif;
-    @apply text-gray-900 bg-gray-50;
+    @apply text-gray-900 bg-canvas;
   }
 }
 
@@ -35,37 +35,71 @@
     @apply block text-xs font-medium text-gray-600 mb-1;
   }
   .card {
-    @apply bg-white rounded-xl border border-gray-200 shadow-sm;
+    @apply bg-white rounded-lg border border-gray-300 shadow-sm;
   }
   .badge {
     @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
   }
   .table-th {
-    @apply px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50;
+    @apply px-2.5 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide
+           bg-gray-100 border-b border-gray-300 whitespace-nowrap;
   }
   .table-td {
-    @apply px-3 py-3 text-sm text-gray-700;
+    @apply px-2.5 py-1.5 text-[13px] text-gray-700;
   }
   .table-tr {
-    @apply border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer;
+    @apply border-b border-gray-100 hover:bg-brand-50/50 transition-colors cursor-pointer;
+  }
+  /* Page title block, as used across the old app's screens */
+  .page-crumb {
+    @apply text-[11px] uppercase tracking-wide text-gray-500;
+  }
+  .page-title {
+    @apply text-xl font-bold text-navy-900;
+  }
+  .btn-accent {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 bg-accent-500 text-navy-950 text-xs font-semibold
+           rounded border border-accent-600 hover:bg-accent-400 transition-colors
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-mini {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 bg-white text-gray-700 text-xs font-medium
+           rounded border border-gray-300 hover:bg-gray-50 transition-colors;
+  }
+  .tab {
+    @apply px-3 py-2 text-sm font-medium border-b-2 transition-colors;
+  }
+  .tab-active {
+    @apply border-brand-600 text-navy-900;
+  }
+  .tab-idle {
+    @apply border-transparent text-gray-500 hover:text-gray-800;
   }
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: #b7c2d4; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #91a0b8; }
+/* Dark shell keeps its own scrollbar so it doesn't flash light grey */
+.dark-scroll::-webkit-scrollbar-thumb { background: #1b3a5c; }
+.dark-scroll::-webkit-scrollbar-thumb:hover { background: #26507c; }
 
 /* Sidebar transition */
 .sidebar-link {
-  @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors;
+  @apply flex items-center gap-2.5 px-3 py-[7px] rounded text-[13px] font-medium transition-colors;
 }
 .sidebar-link.active {
-  @apply bg-brand-600 text-white;
+  @apply bg-accent-500 text-navy-950 font-semibold;
 }
 .sidebar-link:not(.active) {
-  @apply text-gray-600 hover:bg-gray-100 hover:text-gray-900;
+  @apply text-slate-300 hover:bg-navy-800 hover:text-white;
+}
+.sidebar-group {
+  @apply flex items-center gap-2 w-full px-2.5 py-2 text-[11px] font-bold uppercase tracking-wider
+         text-slate-400 hover:text-slate-200 transition-colors;
 }
 
 /* Status badge colors */

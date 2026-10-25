@@ -4,154 +4,216 @@ import {
   LayoutDashboard, Briefcase, Package, Users, FileText,
   Truck, RotateCcw, ClipboardCheck, Wrench, DoorOpen,
   Receipt, Building2, BarChart3, Settings, ChevronDown,
-  ChevronRight, BookOpen, Factory, Tag, History
+  ChevronRight, BookOpen, Factory, Tag, History, Boxes,
+  ShoppingCart, PackagePlus, Database, LogOut, KeyRound,
+  Gauge, ClipboardList, Coins, FileSpreadsheet, HardHat
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import type { UserRole } from '../types'
 
+/**
+ * Operations-platform sidebar: deep navy shell, amber active state and the
+ * grouped modules used in the previous app. Workshop Handling is deliberately
+ * absent — Delivery/Receiving Tickets live under Operations, and Rig Callouts
+ * was retired when tbl_Callouts was replaced by tbl_JobTools.
+ */
 interface NavItem {
   label: string
   to: string
   icon: React.ReactNode
   roles?: UserRole[]
-  children?: NavItem[]
+  /** Not built yet — shown but inert, so the map matches the old app. */
+  pending?: boolean
 }
 
-const NAV: NavItem[] = [
-  { label: 'Dashboard',   to: '/',             icon: <LayoutDashboard size={18} /> },
-  { label: 'Jobs',        to: '/jobs',         icon: <Briefcase size={18} />,
-    roles: ['Admin','Operations','QAQC','Billing','Finance','CostController','Executive'] },
+interface NavModule {
+  module: string
+  icon: React.ReactNode
+  roles?: UserRole[]
+  adminBadge?: boolean
+  items: NavItem[]
+}
+
+const ICON = 16
+
+const MODULES: NavModule[] = [
   {
-    label: 'Operations', to: '#ops', icon: <Factory size={18} />,
-    roles: ['Admin','Operations'],
-    children: [
-      { label: 'Delivery Tickets',  to: '/delivery-tickets',  icon: <Truck size={18} /> },
-      { label: 'Receiving Tickets', to: '/receiving-tickets', icon: <RotateCcw size={18} /> },
-      { label: 'Utilization',       to: '/utilization',       icon: <BarChart3 size={18} /> },
-      { label: 'Job Tools List',    to: '/job-tools-list',    icon: <FileText size={18} /> },
-      { label: 'Tool History',      to: '/tool-history',      icon: <History size={18} /> },
-      { label: 'Gate Pass',         to: '/gate-pass',         icon: <DoorOpen size={18} /> },
+    module: 'Operations Module',
+    icon: <Factory size={ICON} />,
+    roles: ['Admin', 'Operations', 'QAQC', 'Billing', 'Finance', 'CostController', 'Executive'],
+    items: [
+      { label: 'Operations Dashboard',   to: '/',                   icon: <LayoutDashboard size={ICON} /> },
+      { label: 'Drilling Jobs',          to: '/jobs',               icon: <Briefcase size={ICON} /> },
+      { label: 'Job Tools List',         to: '/job-tools-list',     icon: <ClipboardList size={ICON} /> },
+      { label: 'Tool Movement History',  to: '/tool-history',       icon: <History size={ICON} /> },
+      { label: 'Delivery Tickets',       to: '/delivery-tickets',   icon: <Truck size={ICON} /> },
+      { label: 'Receiving Tickets',      to: '/receiving-tickets',  icon: <RotateCcw size={ICON} /> },
+      { label: 'Utilization',            to: '/utilization',        icon: <BarChart3 size={ICON} /> },
+      { label: 'Security Gate Pass',     to: '/gate-pass',          icon: <DoorOpen size={ICON} /> },
     ],
   },
   {
-    label: 'Technical', to: '#tech', icon: <Wrench size={18} />,
-    roles: ['Admin','Operations','QAQC','ThirdParty'],
-    children: [
-      { label: 'Inspection',   to: '/inspection',   icon: <ClipboardCheck size={18} /> },
-      { label: 'Maintenance',  to: '/maintenance',  icon: <Wrench size={18} /> },
+    module: 'Inventory Module',
+    icon: <Boxes size={ICON} />,
+    roles: ['Admin', 'Operations'],
+    items: [
+      { label: 'Inventory Dashboard',       to: '/inventory-dashboard', icon: <Gauge size={ICON} />, pending: true },
+      { label: 'Assets and Inventory',      to: '/inventory',           icon: <Package size={ICON} /> },
+      { label: 'Tool Categories & Sizes',   to: '/categories',          icon: <Tag size={ICON} /> },
+      { label: 'PO & Goods Inward (GRN)',   to: '/po-grn',              icon: <ShoppingCart size={ICON} />, pending: true },
+      { label: 'Third-Party Rental Inward', to: '/sub-rental-inward',   icon: <PackagePlus size={ICON} />, pending: true },
+      { label: 'Consumables & Store (SIV)', to: '/consumables',         icon: <Boxes size={ICON} />, pending: true },
     ],
   },
   {
-    label: 'Finance', to: '#finance', icon: <Receipt size={18} />,
-    roles: ['Admin','Billing','Finance','CostController','Executive'],
-    children: [
-      { label: 'Invoices',   to: '/invoices',   icon: <FileText size={18} /> },
+    module: 'Maintenance & QC Module',
+    icon: <HardHat size={ICON} />,
+    roles: ['Admin', 'Operations', 'QAQC', 'ThirdParty'],
+    items: [
+      { label: 'Maintenance & QC Dashboard', to: '/maintenance-dashboard', icon: <Gauge size={ICON} />, pending: true },
+      { label: 'QC Inspection Bay',          to: '/inspection',            icon: <ClipboardCheck size={ICON} /> },
+      { label: 'Maintenance Orders',         to: '/maintenance',           icon: <Wrench size={ICON} /> },
     ],
   },
-  { label: 'Inventory',  to: '/inventory',  icon: <Package size={18} />,
-    roles: ['Admin','Operations'] },
   {
-    label: 'Master Data', to: '#master', icon: <BookOpen size={18} />,
-    roles: ['Admin','Operations','Billing'],
-    children: [
-      { label: 'Clients',   to: '/clients',   icon: <Building2 size={18} /> },
-      { label: 'Contracts', to: '/contracts', icon: <FileText size={18} /> },
-      { label: 'Suppliers', to: '/suppliers', icon: <Building2 size={18} /> },
-      { label: 'Categories & Sizes', to: '/categories', icon: <Tag size={18} /> },
+    module: 'Billing & Cost Control',
+    icon: <Receipt size={ICON} />,
+    roles: ['Admin', 'Billing', 'Finance', 'CostController', 'Executive'],
+    items: [
+      { label: 'Billing Dashboard',              to: '/billing-dashboard', icon: <Gauge size={ICON} />, pending: true },
+      { label: 'Invoicing',                      to: '/invoices',          icon: <FileText size={ICON} /> },
+      { label: 'Tool Revenue & Utilization',     to: '/tool-revenue',      icon: <Coins size={ICON} />, pending: true },
+      { label: 'Sub-Contractor Rentals',         to: '/sub-rentals',       icon: <Building2 size={ICON} />, pending: true },
+      { label: 'Monthly Expense Grid & P&L',     to: '/monthly-expenses',  icon: <FileSpreadsheet size={ICON} />, pending: true },
     ],
   },
-  { label: 'Users',      to: '/users',      icon: <Users size={18} />,
-    roles: ['Admin'] },
-  { label: 'Settings',   to: '/settings',   icon: <Settings size={18} />,
-    roles: ['Admin'] },
+  {
+    module: 'Contracts Module',
+    icon: <BookOpen size={ICON} />,
+    roles: ['Admin', 'Billing', 'Finance'],
+    items: [
+      { label: 'Contracts Dashboard',     to: '/contracts-dashboard', icon: <Gauge size={ICON} />, pending: true },
+      { label: 'Master Contract Register', to: '/contracts',          icon: <FileText size={ICON} /> },
+      { label: 'Clients',                  to: '/clients',            icon: <Building2 size={ICON} /> },
+      { label: 'Suppliers',                to: '/suppliers',          icon: <Building2 size={ICON} /> },
+    ],
+  },
+  {
+    module: 'Administration',
+    icon: <Settings size={ICON} />,
+    roles: ['Admin'],
+    adminBadge: true,
+    items: [
+      { label: 'System Database Inspector', to: '/db-inspector', icon: <Database size={ICON} />, pending: true },
+      { label: 'Users',                     to: '/users',        icon: <Users size={ICON} /> },
+      { label: 'Global Configurations',     to: '/settings',     icon: <Settings size={ICON} /> },
+    ],
+  },
 ]
 
-function NavGroup({ item, depth = 0 }: { item: NavItem; depth?: number }) {
+function Module({ mod }: { mod: NavModule }) {
   const location = useLocation()
   const { hasRole } = useAuth()
-  const [open, setOpen] = useState(() =>
-    item.children?.some(c => location.pathname.startsWith(c.to)) ?? false
+  const containsActive = mod.items.some(
+    i => i.to === location.pathname || (i.to !== '/' && location.pathname.startsWith(i.to))
   )
+  const [open, setOpen] = useState(containsActive)
 
-  if (item.roles && !hasRole(...item.roles)) return null
-
-  if (item.children) {
-    return (
-      <div>
-        <button
-          onClick={() => setOpen(o => !o)}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
-                     text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-        >
-          {item.icon}
-          <span className="flex-1 text-left">{item.label}</span>
-          {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-        </button>
-        {open && (
-          <div className="ml-4 mt-0.5 border-l border-gray-200 pl-2 flex flex-col gap-0.5">
-            {item.children.map(child => (
-              <NavGroup key={child.to} item={child} depth={depth + 1} />
-            ))}
-          </div>
-        )}
-      </div>
-    )
-  }
+  if (mod.roles && !hasRole(...mod.roles)) return null
 
   return (
-    <NavLink
-      to={item.to}
-      className={({ isActive }) =>
-        `sidebar-link ${isActive ? 'active' : ''}`
-      }
-      end={item.to === '/'}
-    >
-      {item.icon}
-      {item.label}
-    </NavLink>
+    <div className="mb-0.5">
+      <button className="sidebar-group" onClick={() => setOpen(o => !o)}>
+        <span className="text-accent-500">{mod.icon}</span>
+        <span className="flex-1 text-left">{mod.module}</span>
+        {mod.adminBadge && (
+          <span className="px-1.5 py-px rounded bg-accent-500 text-navy-950 text-[9px] font-bold tracking-normal">
+            Admin
+          </span>
+        )}
+        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+      </button>
+
+      {open && (
+        <div className="pb-1">
+          {mod.items.map(item =>
+            item.pending ? (
+              <div
+                key={item.to}
+                className="sidebar-link text-slate-500 cursor-not-allowed"
+                title="Not built yet"
+              >
+                <span className="opacity-60">{item.icon}</span>
+                <span className="flex-1 truncate">{item.label}</span>
+                <span className="text-[9px] uppercase tracking-wide text-slate-500">soon</span>
+              </div>
+            ) : (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+              >
+                {item.icon}
+                <span className="truncate">{item.label}</span>
+              </NavLink>
+            )
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
 export function Sidebar() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
 
   return (
-    <aside className="w-60 shrink-0 h-screen bg-white border-r border-gray-200 flex flex-col overflow-hidden">
-      {/* Logo */}
-      <div className="px-4 py-5 border-b border-gray-200">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center shrink-0">
-            <Package size={16} className="text-white" />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-gray-900 leading-tight">Tool Tracker</p>
-            <p className="text-xs text-gray-500 leading-tight">Emdad</p>
+    <aside className="w-[228px] shrink-0 bg-navy-900 flex flex-col border-r border-navy-950">
+      {/* Brand */}
+      <div className="px-3 py-3 border-b border-navy-800 flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded bg-white flex items-center justify-center shrink-0">
+          <Package size={20} className="text-brand-700" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-white font-bold text-sm leading-tight">EMDAD LLC</div>
+          <div className="text-slate-400 text-[10px] leading-tight truncate">
+            Well Intervention &ndash; Upstream Services
           </div>
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-0.5">
-        {NAV.map(item => (
-          <NavGroup key={item.to} item={item} />
-        ))}
+      {/* Platform label */}
+      <div className="px-3 py-2 border-b border-navy-800">
+        <div className="flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-accent-500" />
+          <span className="text-white text-[11px] font-bold uppercase tracking-wider">
+            Operations Platform
+          </span>
+        </div>
+        <div className="text-slate-400 text-[10px] pl-3.5">Tool Fleet &amp; Dispatch</div>
+      </div>
+
+      {/* Modules */}
+      <nav className="flex-1 overflow-y-auto px-1.5 py-2 dark-scroll">
+        {MODULES.map(m => <Module key={m.module} mod={m} />)}
       </nav>
 
-      {/* User info */}
-      <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-brand-100 rounded-full flex items-center justify-center shrink-0">
-            <span className="text-xs font-semibold text-brand-700">
-              {(user?.FullName || user?.Username || 'U').charAt(0).toUpperCase()}
-            </span>
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-gray-900 truncate">
-              {user?.FullName || user?.Username}
-            </p>
-            <p className="text-xs text-gray-500">{user?.Role}</p>
-          </div>
+      {/* User */}
+      <div className="px-3 py-2.5 border-t border-navy-800 flex items-center gap-2">
+        <div className="w-7 h-7 rounded-full bg-accent-500 text-navy-950 flex items-center justify-center text-xs font-bold shrink-0">
+          {(user?.FullName || user?.Username || '?').charAt(0).toUpperCase()}
         </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-white text-xs font-medium truncate">{user?.FullName || user?.Username}</div>
+          <div className="text-slate-400 text-[10px]">{user?.Role}</div>
+        </div>
+        <NavLink to="/change-password" className="text-slate-400 hover:text-accent-500" title="Change password">
+          <KeyRound size={14} />
+        </NavLink>
+        <button onClick={logout} className="text-slate-400 hover:text-red-400" title="Sign out">
+          <LogOut size={14} />
+        </button>
       </div>
     </aside>
   )

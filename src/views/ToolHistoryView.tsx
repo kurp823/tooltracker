@@ -76,7 +76,7 @@ export function ToolHistoryView() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-128px)]">
+    <div className="flex flex-col h-[calc(100vh-104px)]">
       {/* Controls */}
       <div className="flex items-center gap-2 flex-wrap mb-3">
         <div className="w-80">
