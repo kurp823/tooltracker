@@ -17,6 +17,11 @@ const PROBES = {
          LEFT JOIN tbl_Inventory i ON i.SystemID = l.serial
          WHERE l.dtNumber = 'DT-26-3427'
          ORDER BY l.itemNo`,
+  'dtlines-real-join-match': `SELECT TOP 10 l.id, l.dtNumber, l.serial AS StoredJoinKey,
+         i.SystemID, i.AssetNo AS ResolvedAssetNo
+         FROM tbl_DeliveryTicketLines l
+         JOIN tbl_Inventory i ON i.SystemID = l.serial
+         ORDER BY l.id DESC`,
 }
 
 module.exports = async function (context, req) {
