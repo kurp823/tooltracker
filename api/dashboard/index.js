@@ -1,39 +1,11 @@
 /**
  * GET /api/dashboard/stats
  */
-const { query, jsonResponse } = require('../db')
+const { query, jsonResponse, requireAuth } = require('../db')
 
 module.exports = async function (context, req) {
-  // --- INLINE AUTH (bypass db.js to eliminate module-cache issues) ---
-  const jwt = require('jsonwebtoken')
-  const SECRET = 'tt-secret-key-change-in-prod'
-  const header = req.headers['authorization'] || ''
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null
-
-  // DEBUG: Return 200 even on auth failure to stop redirect loop
-  // and see what's actually happening
-  if (!token) {
-    return jsonResponse(context, 200, {
-      _authFailed: true,
-      _reason: 'no_token_in_header',
-      _headerKeys: Object.keys(req.headers).join(','),
-    })
-  }
-
-  let user
-  try {
-    user = jwt.verify(token, SECRET)
-  } catch (err) {
-    // Return 200 (not 401!) so the frontend doesn't redirect
-    return jsonResponse(context, 200, {
-      _authFailed: true,
-      _reason: err.message,
-      _tokenLen: token.length,
-      _secretUsed: SECRET.length,
-      _tokenStart: token.substring(0, 20),
-    })
-  }
-  // --- END INLINE AUTH ---
+  const user = requireAuth(context, req)
+  if (!user) return
 
   try {
     const result = await query(`
