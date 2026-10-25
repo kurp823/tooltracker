@@ -10,16 +10,23 @@ module.exports = async function (context, req) {
   const header = req.headers['authorization'] || ''
   const token = header.startsWith('Bearer ') ? header.slice(7) : null
 
+  // DEBUG: Return 200 even on auth failure to stop redirect loop
+  // and see what's actually happening
   if (!token) {
-    return jsonResponse(context, 401, { error: 'Unauthorized', _reason: 'no_token' })
+    return jsonResponse(context, 200, {
+      _authFailed: true,
+      _reason: 'no_token_in_header',
+      _headerKeys: Object.keys(req.headers).join(','),
+    })
   }
 
   let user
   try {
     user = jwt.verify(token, SECRET)
   } catch (err) {
-    return jsonResponse(context, 401, {
-      error: 'Unauthorized',
+    // Return 200 (not 401!) so the frontend doesn't redirect
+    return jsonResponse(context, 200, {
+      _authFailed: true,
       _reason: err.message,
       _tokenLen: token.length,
       _secretUsed: SECRET.length,
