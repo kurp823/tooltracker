@@ -1,0 +1,333 @@
+import { ContractRecord, ContractRateItem } from '../types';
+import { INITIAL_CONTRACTS } from '../data/initialData';
+import { MASTER_CONTRACT_RATES } from '../data/masterContractRates';
+
+const CUSTOM_CONTRACTS_KEY = 'emdad_custom_contracts';
+const CUSTOM_CONTRACT_RATES_KEY = 'emdad_custom_contract_rates';
+const DELETED_CONTRACTS_KEY = 'emdad_deleted_contracts';
+
+/**
+ * 13 Master Contract to Sub-Division Mapping
+ */
+export const CONTRACT_SUB_DIVISIONS: Record<string, 'FISHING' | 'WHIPSTOCK' | 'RENTALS'> = {
+  '4700018368': 'WHIPSTOCK',
+  '4700023373': 'RENTALS',
+  '4700024096': 'RENTALS',
+  '4700024608': 'FISHING',
+  '444558': 'FISHING',
+  '4700012465': 'WHIPSTOCK',
+  '4700023861': 'RENTALS',
+  '4700016147': 'FISHING',
+  'DVP-2023-K-016': 'FISHING',
+  'ALB/C204/TED/2026-A': 'RENTALS',
+  'CW369672': 'WHIPSTOCK',
+  'TW-2025-1007': 'FISHING',
+  'TW-2025-1026': 'FISHING',
+  '16358.13': 'FISHING',
+};
+
+/**
+ * Resolves the Sub-Division for any contract reference or number
+ */
+export function resolveContractSubDivision(contractRefOrNo?: string): 'FISHING' | 'WHIPSTOCK' | 'RENTALS' | undefined {
+  if (!contractRefOrNo) return undefined;
+  const cleaned = String(contractRefOrNo).trim().toUpperCase();
+  for (const [ref, div] of Object.entries(CONTRACT_SUB_DIVISIONS)) {
+    const normRef = ref.toUpperCase();
+    if (cleaned.includes(normRef) || normRef.includes(cleaned)) {
+      return div;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Normalizes a contract identifier for consistent map lookup
+ */
+export function normalizeContractKey(val: any): string {
+  if (!val) return '';
+  return String(val)
+    .trim()
+    .toUpperCase()
+    .replace(/^SAP\s+/i, '')
+    .replace(/^PO[-_]/i, '');
+}
+
+export function loadDeletedContractKeys(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(DELETED_CONTRACTS_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return new Set(parsed.map(normalizeContractKey).filter(Boolean));
+    }
+  } catch {}
+  return new Set();
+}
+
+export function markContractDeleted(idOrRef: string): void {
+  if (typeof window === 'undefined' || !idOrRef) return;
+  try {
+    const keys = loadDeletedContractKeys();
+    keys.add(normalizeContractKey(idOrRef));
+    localStorage.setItem(DELETED_CONTRACTS_KEY, JSON.stringify(Array.from(keys)));
+  } catch {}
+}
+
+export function unmarkContractDeleted(idOrRef: string): void {
+  if (typeof window === 'undefined' || !idOrRef) return;
+  try {
+    const keys = loadDeletedContractKeys();
+    keys.delete(normalizeContractKey(idOrRef));
+    localStorage.setItem(DELETED_CONTRACTS_KEY, JSON.stringify(Array.from(keys)));
+  } catch {}
+}
+
+export function deleteCustomContract(idOrRef: string): ContractRecord[] {
+  const norm = normalizeContractKey(idOrRef);
+  markContractDeleted(idOrRef);
+  const list = loadCustomContracts();
+  const filtered = list.filter((c) => {
+    return (
+      normalizeContractKey(c.id) !== norm &&
+      normalizeContractKey(c.contractRef) !== norm &&
+      normalizeContractKey(c.contractNo) !== norm
+    );
+  });
+  saveAllCustomContracts(filtered);
+  return filtered;
+}
+
+/**
+ * Safely loads user-added or modified contracts from persistent storage
+ */
+export function loadCustomContracts(): ContractRecord[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(CUSTOM_CONTRACTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((c) => c && (c.id || c.contractRef || c.contractNo));
+    }
+  } catch (err) {
+    console.warn('[CustomContracts] Failed to parse custom contracts from localStorage:', err);
+  }
+  return [];
+}
+
+/**
+ * Safely saves the custom contracts list to persistent storage
+ */
+export function saveAllCustomContracts(contracts: ContractRecord[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(CUSTOM_CONTRACTS_KEY, JSON.stringify(contracts));
+  } catch (err) {
+    console.warn('[CustomContracts] Failed to save custom contracts to localStorage:', err);
+  }
+}
+
+/**
+ * Loads all custom / user-added contract rate schedules from persistent storage
+ */
+export function loadCustomContractRatesMap(): Record<string, ContractRateItem[]> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(CUSTOM_CONTRACT_RATES_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      return parsed;
+    }
+  } catch (err) {
+    console.warn('[CustomContracts] Failed to parse custom contract rates from localStorage:', err);
+  }
+  return {};
+}
+
+/**
+ * Saves itemized rate schedules for a specific contract
+ */
+export function saveCustomContractRates(contractKey: string, rates: ContractRateItem[]): void {
+  if (typeof window === 'undefined' || !contractKey) return;
+  try {
+    const map = loadCustomContractRatesMap();
+    const norm = normalizeContractKey(contractKey);
+    map[norm] = rates;
+    // Also save raw key if different
+    const rawKey = String(contractKey).trim().toUpperCase();
+    if (rawKey !== norm) map[rawKey] = rates;
+    localStorage.setItem(CUSTOM_CONTRACT_RATES_KEY, JSON.stringify(map));
+  } catch (err) {
+    console.warn('[CustomContracts] Failed to save custom contract rates:', err);
+  }
+}
+
+/**
+ * Adds or updates a single contract and its rates in persistent storage
+ */
+export function saveCustomContract(contract: ContractRecord): ContractRecord[] {
+  const list = loadCustomContracts();
+  const kId = normalizeContractKey(contract.id);
+  const kRef = normalizeContractKey(contract.contractRef);
+  const kNo = normalizeContractKey(contract.contractNo);
+
+  if (kId) unmarkContractDeleted(kId);
+  if (kRef) unmarkContractDeleted(kRef);
+  if (kNo) unmarkContractDeleted(kNo);
+
+  const existingIdx = list.findIndex((c) => {
+    return (
+      (kId && normalizeContractKey(c.id) === kId) ||
+      (kRef && normalizeContractKey(c.contractRef) === kRef) ||
+      (kNo && normalizeContractKey(c.contractNo) === kNo)
+    );
+  });
+
+  let updatedList: ContractRecord[];
+  if (existingIdx >= 0) {
+    updatedList = [...list];
+    updatedList[existingIdx] = { ...list[existingIdx], ...contract };
+  } else {
+    updatedList = [contract, ...list];
+  }
+
+  saveAllCustomContracts(updatedList);
+
+  // If contract carries rates, persist them in the rates map under all its aliases
+  if (Array.isArray(contract.rates) && contract.rates.length > 0) {
+    if (contract.id) saveCustomContractRates(contract.id, contract.rates);
+    if (contract.contractRef) saveCustomContractRates(contract.contractRef, contract.rates);
+    if (contract.contractNo) saveCustomContractRates(contract.contractNo, contract.rates);
+  }
+
+  return updatedList;
+}
+
+/**
+ * Merges base contracts (e.g. from INITIAL_CONTRACTS or Azure SQL) with user-customized contracts and rates.
+ * Guarantees that:
+ * 1. User-added rates are NEVER lost or overwritten.
+ * 2. User-edited contract parameters take precedence.
+ * 3. Any new contracts added by the user persist across refreshes.
+ * 4. Deleted / archived contracts are permanently filtered out.
+ */
+export function mergeContractsWithCustom(baseContracts: ContractRecord[] = []): ContractRecord[] {
+  const customContracts = loadCustomContracts();
+  const ratesMap = loadCustomContractRatesMap();
+  const deletedKeys = loadDeletedContractKeys();
+
+  const customMap = new Map<string, ContractRecord>();
+  customContracts.forEach((c) => {
+    if (c.id) customMap.set(normalizeContractKey(c.id), c);
+    if (c.contractRef) customMap.set(normalizeContractKey(c.contractRef), c);
+    if (c.contractNo) customMap.set(normalizeContractKey(c.contractNo), c);
+  });
+
+  const seenCustomKeys = new Set<string>();
+
+  // Helper to resolve rates for a contract
+  function resolveRatesForContract(c: ContractRecord): ContractRateItem[] {
+    const kId = normalizeContractKey(c.id);
+    const kRef = normalizeContractKey(c.contractRef);
+    const kNo = normalizeContractKey(c.contractNo);
+
+    // 1. Check user custom rates map
+    const customRates = ratesMap[kRef] || ratesMap[kNo] || ratesMap[kId];
+    if (customRates && customRates.length > 0) {
+      return customRates;
+    }
+
+    // 2. Check if contract object itself already has non-empty rates
+    if (Array.isArray(c.rates) && c.rates.length > 0) {
+      return c.rates;
+    }
+
+    // 3. Fallback to MASTER_CONTRACT_RATES master data
+    const masterRates =
+      MASTER_CONTRACT_RATES[c.contractRef || '']?.rates ||
+      MASTER_CONTRACT_RATES[c.contractNo || '']?.rates ||
+      MASTER_CONTRACT_RATES[c.id || '']?.rates;
+    if (masterRates && masterRates.length > 0) {
+      return masterRates;
+    }
+
+    // 4. Fallback to INITIAL_CONTRACTS
+    const initial = INITIAL_CONTRACTS.find(
+      (i) =>
+        normalizeContractKey(i.id) === kId ||
+        normalizeContractKey(i.contractRef) === kRef ||
+        normalizeContractKey(i.contractNo) === kNo
+    );
+    return initial?.rates || [];
+  }
+
+  // Overlay custom contracts on base contracts, filtering out deleted ones
+  const mergedBase = baseContracts
+    .filter((c) => {
+      const kId = normalizeContractKey(c.id);
+      const kRef = normalizeContractKey(c.contractRef);
+      const kNo = normalizeContractKey(c.contractNo);
+      return !(
+        (kId && deletedKeys.has(kId)) ||
+        (kRef && deletedKeys.has(kRef)) ||
+        (kNo && deletedKeys.has(kNo))
+      );
+    })
+    .map((c) => {
+      const kId = normalizeContractKey(c.id);
+      const kRef = normalizeContractKey(c.contractRef);
+      const kNo = normalizeContractKey(c.contractNo);
+
+      const match = (kId && customMap.get(kId)) || (kRef && customMap.get(kRef)) || (kNo && customMap.get(kNo));
+      if (match) {
+        if (kId) seenCustomKeys.add(kId);
+        if (kRef) seenCustomKeys.add(kRef);
+        if (kNo) seenCustomKeys.add(kNo);
+        const merged = { ...c, ...match };
+        merged.subDivision = match.subDivision || c.subDivision || resolveContractSubDivision(c.contractRef || c.contractNo);
+        merged.rates = resolveRatesForContract(merged);
+        return merged;
+      }
+
+      return {
+        ...c,
+        subDivision: c.subDivision || resolveContractSubDivision(c.contractRef || c.contractNo),
+        rates: resolveRatesForContract(c),
+      };
+    });
+
+  // Append any brand new user-added contracts
+  const brandNew: ContractRecord[] = [];
+  customContracts.forEach((c) => {
+    const kId = normalizeContractKey(c.id);
+    const kRef = normalizeContractKey(c.contractRef);
+    const kNo = normalizeContractKey(c.contractNo);
+
+    if (
+      (kId && deletedKeys.has(kId)) ||
+      (kRef && deletedKeys.has(kRef)) ||
+      (kNo && deletedKeys.has(kNo))
+    ) {
+      return;
+    }
+
+    const alreadyIncluded =
+      (kId && seenCustomKeys.has(kId)) ||
+      (kRef && seenCustomKeys.has(kRef)) ||
+      (kNo && seenCustomKeys.has(kNo));
+
+    if (!alreadyIncluded) {
+      c.subDivision = c.subDivision || resolveContractSubDivision(c.contractRef || c.contractNo) || 'RENTALS';
+      c.rates = resolveRatesForContract(c);
+      brandNew.push(c);
+      if (kId) seenCustomKeys.add(kId);
+      if (kRef) seenCustomKeys.add(kRef);
+      if (kNo) seenCustomKeys.add(kNo);
+    }
+  });
+
+  return [...brandNew, ...mergedBase];
+}

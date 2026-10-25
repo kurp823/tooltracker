@@ -1,90 +1,80 @@
-import React, { createContext, useContext, useState, useCallback } from 'react'
-import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react'
+import React, { useEffect } from 'react';
 
-type ToastType = 'success' | 'error' | 'warning' | 'info'
-
-interface Toast {
-  id: string
-  type: ToastType
-  message: string
+export interface ToastNotification {
+  id: string;
+  msg: string;
+  type?: 'success' | 'error' | 'info' | 'wrn' | 'err' | 'inf';
 }
 
-interface ToastContextValue {
-  // shorthand methods
-  success: (msg: string) => void
-  error:   (msg: string) => void
-  warning: (msg: string) => void
-  info:    (msg: string) => void
-  // unified method: showToast(message, type)
-  showToast: (msg: string, type?: ToastType) => void
+interface ToastProps {
+  toasts: ToastNotification[];
+  onRemove: (id: string) => void;
 }
 
-const ToastContext = createContext<ToastContextValue | null>(null)
+const ToastItem: React.FC<{ toast: ToastNotification; onRemove: (id: string) => void }> = ({
+  toast,
+  onRemove,
+}) => {
+  useEffect(() => {
+    // Guaranteed auto-dismiss alert after 3.5 seconds
+    const timer = setTimeout(() => {
+      onRemove(toast.id);
+    }, 3500);
 
-const ICONS: Record<ToastType, React.ReactNode> = {
-  success: <CheckCircle size={18} className="text-emerald-500 shrink-0" />,
-  error:   <XCircle    size={18} className="text-red-500 shrink-0" />,
-  warning: <AlertCircle size={18} className="text-yellow-500 shrink-0" />,
-  info:    <Info        size={18} className="text-blue-500 shrink-0" />,
-}
+    return () => clearTimeout(timer);
+  }, [toast.id, onRemove]);
 
-const BG: Record<ToastType, string> = {
-  success: 'border-emerald-200 bg-emerald-50',
-  error:   'border-red-200 bg-red-50',
-  warning: 'border-yellow-200 bg-yellow-50',
-  info:    'border-blue-200 bg-blue-50',
-}
-
-export function ToastProvider({ children }: { children: React.ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([])
-
-  const add = useCallback((type: ToastType, message: string) => {
-    const id = Date.now().toString()
-    setToasts(prev => [...prev, { id, type, message }])
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id))
-    }, 4000)
-  }, [])
-
-  const remove = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id))
-  }, [])
-
-  const ctx: ToastContextValue = {
-    success:   (m) => add('success', m),
-    error:     (m) => add('error',   m),
-    warning:   (m) => add('warning', m),
-    info:      (m) => add('info',    m),
-    showToast: (m, type = 'info') => add(type, m),
+  let bg = 'bg-emerald-800 border-emerald-500 shadow-emerald-950/40 text-emerald-50';
+  let icon = '✓';
+  if (toast.type === 'error' || toast.type === 'err') {
+    bg = 'bg-rose-800 border-rose-500 shadow-rose-950/40 text-rose-50';
+    icon = '✕';
+  } else if (toast.type === 'wrn') {
+    bg = 'bg-amber-800 border-amber-500 shadow-amber-950/40 text-amber-50';
+    icon = '⚠';
+  } else if (toast.type === 'info' || toast.type === 'inf') {
+    bg = 'bg-blue-800 border-blue-500 shadow-blue-950/40 text-blue-50';
+    icon = 'ℹ';
   }
 
   return (
-    <ToastContext.Provider value={ctx}>
-      {children}
-      {/* Toast container */}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 w-80">
-        {toasts.map(t => (
-          <div
-            key={t.id}
-            className={`flex items-start gap-3 p-3 rounded-lg border shadow-md text-sm ${BG[t.type]} animate-in slide-in-from-bottom-2`}
-          >
-            {ICONS[t.type]}
-            <p className="flex-1 text-gray-800">{t.message}</p>
-            <button
-              onClick={() => remove(t.id)}
-              className="text-gray-400 hover:text-gray-600 shrink-0"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        ))}
+    <div
+      onClick={() => onRemove(toast.id)}
+      role="alert"
+      className={`${bg} text-xs font-semibold px-4 py-2.5 rounded-lg shadow-2xl pointer-events-auto border flex items-center justify-between gap-3 cursor-pointer transition transform hover:scale-[1.02] active:scale-[0.98] animate-in fade-in slide-in-from-right-4 duration-200 min-w-[300px] max-w-md backdrop-blur-md`}
+    >
+      <div className="flex items-center gap-2 flex-1">
+        <span className="text-sm font-bold opacity-90">{icon}</span>
+        <span className="leading-snug">{toast.msg}</span>
       </div>
-    </ToastContext.Provider>
-  )
-}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove(toast.id);
+        }}
+        className="text-white/60 hover:text-white font-black text-base px-1 leading-none rounded hover:bg-white/10 transition cursor-pointer"
+        title="Dismiss"
+      >
+        &times;
+      </button>
+    </div>
+  );
+};
 
-export function useToast() {
-  const ctx = useContext(ToastContext)
-  if (!ctx) throw new Error('useToast must be inside ToastProvider')
-  return ctx
-}
+export const Toast: React.FC<ToastProps> = ({ toasts, onRemove }) => {
+  if (!toasts || toasts.length === 0) return null;
+
+  return (
+    <div
+      id="toast-container"
+      className="fixed bottom-5 right-5 z-[99999] flex flex-col items-end space-y-2 pointer-events-none no-print"
+      style={{ zIndex: 99999 }}
+    >
+      {toasts.map((t) => (
+        <ToastItem key={t.id} toast={t} onRemove={onRemove} />
+      ))}
+    </div>
+  );
+};
+

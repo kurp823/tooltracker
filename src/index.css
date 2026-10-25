@@ -1,78 +1,41 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 @layer base {
   body {
-    font-family: 'Inter', sans-serif;
-    @apply text-gray-900 bg-gray-50;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #eef3f8;
+    color: #1e293b;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .font-mono {
+    font-family: 'IBM Plex Mono', monospace;
   }
 }
 
-@layer components {
-  .btn-primary {
-    @apply inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg
-           hover:bg-brand-700 active:bg-brand-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-  .btn-secondary {
-    @apply inline-flex items-center gap-2 px-4 py-2 bg-white text-gray-700 text-sm font-medium rounded-lg border
-           border-gray-300 hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-  .btn-danger {
-    @apply inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg
-           hover:bg-red-700 active:bg-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-  .btn-ghost {
-    @apply inline-flex items-center gap-2 px-3 py-1.5 text-gray-600 text-sm font-medium rounded-lg
-           hover:bg-gray-100 active:bg-gray-200 transition-colors;
-  }
-  .input {
-    @apply w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white
-           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent
-           placeholder:text-gray-400 disabled:bg-gray-50 disabled:text-gray-500;
-  }
-  .label {
-    @apply block text-xs font-medium text-gray-600 mb-1;
-  }
-  .card {
-    @apply bg-white rounded-xl border border-gray-200 shadow-sm;
-  }
-  .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
-  }
-  .table-th {
-    @apply px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50;
-  }
-  .table-td {
-    @apply px-3 py-3 text-sm text-gray-700;
-  }
-  .table-tr {
-    @apply border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer;
-  }
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
-
-/* Sidebar transition */
-.sidebar-link {
-  @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors;
+/* Print Styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+  }
 }
-.sidebar-link.active {
-  @apply bg-brand-600 text-white;
-}
-.sidebar-link:not(.active) {
-  @apply text-gray-600 hover:bg-gray-100 hover:text-gray-900;
-}
-
-/* Status badge colors */
-.status-open      { @apply bg-blue-100 text-blue-700; }
-.status-active    { @apply bg-green-100 text-green-700; }
-.status-closed    { @apply bg-gray-100 text-gray-600; }
-.status-pending   { @apply bg-yellow-100 text-yellow-700; }
-.status-draft     { @apply bg-orange-100 text-orange-700; }
-.status-completed { @apply bg-emerald-100 text-emerald-700; }
-.status-cancelled { @apply bg-red-100 text-red-700; }
