@@ -20,34 +20,6 @@ jobs:
           submodules: true
           lfs: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      # ── Build frontend ──────────────────────────────────────────────────────
-      - name: Install frontend dependencies
-        run: npm install
-
-      - name: Build frontend
-        run: npm run build
-        # Produces dist/ which the SWA action uploads as the static site
-
-      # ── Pre-install API packages ─────────────────────────────────────────────
-      # Without a package-lock.json, Oryx (the SWA build engine) may silently
-      # skip npm install for the API, leaving node_modules empty. We pre-install
-      # here so node_modules is already present when the SWA action packages
-      # the api/ directory. skip_app_build:true tells SWA we already built
-      # dist/ — Oryx still runs npm install for the API on top of ours.
-      - name: Install API dependencies
-        run: npm install --omit=dev
-        working-directory: api
-
-      # ── Deploy to Azure Static Web Apps ─────────────────────────────────────
-      # NOTE: SQL credentials are NOT in this file.
-      # Set them in Azure Portal → Static Web Apps → tooltracker-app
-      #   → Settings → Environment variables
-      # They live entirely within Azure — GitHub never sees them.
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
@@ -58,7 +30,9 @@ jobs:
           app_location: "/"
           api_location: "api"
           output_location: "dist"
-          skip_app_build: true
+          # NOTE: SQL credentials are NOT passed here.
+          # Set them in Azure Portal → Static Web Apps → Configuration → Application settings.
+          # They are stored and read entirely within Azure — GitHub never sees them.
 
   pr_build_check:
     if: github.event_name == 'pull_request' && github.event.action != 'closed'

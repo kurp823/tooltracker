@@ -29,7 +29,7 @@ module.exports = async function (context, req) {
     const jobId = qs.jobId || null
 
     // Join tbl_Inventory for tool label; fall back gracefully if no match
-    const rows = await query(
+    const result = await query(
       `SELECT d.LogID, d.JobID, d.ToolID,
               d.LogDate, d.UtilizationCode,
               i.Serial    AS SerialNumber,
@@ -54,7 +54,7 @@ module.exports = async function (context, req) {
 
     // Group into rows keyed by (JobID + ToolID)
     const rowMap = new Map()
-    for (const r of rows) {
+    for (const r of result.recordset) {
       const key = `${r.JobID}|${r.ToolID ?? 'null'}`
 
       const serial = r.SerialNumber || r.AssetNo || ''
@@ -101,7 +101,7 @@ module.exports = async function (context, req) {
         { name: 'by',   value: user.Username      },
       ]
     )
-    return jsonResponse(context, 201, { LogID: r[0].LogID })
+    return jsonResponse(context, 201, { LogID: r.recordset[0].LogID })
   }
 
   // ── PUT update code ──────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ module.exports = async function (context, req) {
 
   // ── GET list ─────────────────────────────────────────────────────────────
   if (!id && method === 'GET') {
-    const rows = await query(
+    const result = await query(
       `SELECT m.MaintenanceJobID, m.MaintenanceJobNumber,
               m.SerialNumber, m.AssetNo, m.ToolDescription,
               m.MaintenanceType, m.Priority, m.Description,
@@ -22,17 +22,17 @@ module.exports = async function (context, req) {
           m.ScheduledDate ASC`,
       []
     )
-    return jsonResponse(context, 200, rows)
+    return jsonResponse(context, 200, result.recordset)
   }
 
   // ── GET single ───────────────────────────────────────────────────────────
   if (id && method === 'GET') {
-    const rows = await query(
+    const result = await query(
       `SELECT m.* FROM tbl_MaintenanceJobs m WHERE m.MaintenanceJobID = @id`,
       [{ name: 'id', value: Number(id) }]
     )
-    if (!rows.length) return jsonResponse(context, 404, { error: 'Not found' })
-    return jsonResponse(context, 200, rows[0])
+    if (!result.recordset.length) return jsonResponse(context, 404, { error: 'Not found' })
+    return jsonResponse(context, 200, result.recordset[0])
   }
 
   // ── POST create ──────────────────────────────────────────────────────────
@@ -48,8 +48,8 @@ module.exports = async function (context, req) {
         ORDER BY MaintenanceJobNumber DESC`, []
     )
     let seq = 1
-    if (lastRow.length) {
-      const parts = lastRow[0].MaintenanceJobNumber.split('-')
+    if (lastRow.recordset.length) {
+      const parts = lastRow.recordset[0].MaintenanceJobNumber.split('-')
       seq = parseInt(parts[parts.length - 1], 10) + 1
     }
     const MaintenanceJobNumber = `MJ-${yr}-${String(seq).padStart(5, '0')}`
@@ -75,7 +75,7 @@ module.exports = async function (context, req) {
         { name: 'by',        value: user.Username            },
       ]
     )
-    return jsonResponse(context, 201, { MaintenanceJobID: r[0].MaintenanceJobID, MaintenanceJobNumber })
+    return jsonResponse(context, 201, { MaintenanceJobID: r.recordset[0].MaintenanceJobID, MaintenanceJobNumber })
   }
 
   // ── PUT update ───────────────────────────────────────────────────────────

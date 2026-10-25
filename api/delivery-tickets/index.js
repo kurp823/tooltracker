@@ -15,7 +15,7 @@ module.exports = async function (context, req) {
     if (method === 'GET') {
       // Select line columns directly — SerialNumber/AssetNo/ToolDescription/Size
       // are stored directly in the line row (old-app freeform style)
-      const rows = await query(
+      const result = await query(
         `SELECT l.LineID, l.DTID, l.LineNumber,
                 l.SerialNumber, l.AssetNo, l.ToolDescription, l.Size AS SizeName,
                 l.Quantity, l.UnitRate, l.LineAmount, l.Condition, l.Notes
@@ -24,7 +24,7 @@ module.exports = async function (context, req) {
           ORDER BY l.LineNumber`,
         [{ name: 'id', value: Number(id) }]
       )
-      return jsonResponse(context, 200, rows)
+      return jsonResponse(context, 200, result.recordset)
     }
 
     if (method === 'POST') {
@@ -51,7 +51,7 @@ module.exports = async function (context, req) {
           { name: 'notes',  value: b.Notes          || null },
         ]
       )
-      return jsonResponse(context, 201, { LineID: r[0].LineID })
+      return jsonResponse(context, 201, { LineID: r.recordset[0].LineID })
     }
 
     if (method === 'DELETE' && subId) {
@@ -65,7 +65,7 @@ module.exports = async function (context, req) {
 
   // ── /delivery-tickets (list) ─────────────────────────────────────────────
   if (!id && method === 'GET') {
-    const rows = await query(
+    const result = await query(
       `SELECT d.DTID, d.DTNumber, d.JobID, d.DTDate, d.Status,
               d.CreatedDate, d.CreatedBy,
               j.ClientID,
@@ -77,12 +77,12 @@ module.exports = async function (context, req) {
         ORDER BY d.CreatedDate DESC`,
       []
     )
-    return jsonResponse(context, 200, rows)
+    return jsonResponse(context, 200, result.recordset)
   }
 
   // ── /delivery-tickets/:id (single) ───────────────────────────────────────
   if (id && !sub && method === 'GET') {
-    const rows = await query(
+    const result = await query(
       `SELECT d.*, c.ClientName AS Client
          FROM tbl_DeliveryTickets d
          LEFT JOIN tbl_Jobs j ON d.JobID = j.JobID
@@ -90,8 +90,8 @@ module.exports = async function (context, req) {
         WHERE d.DTID = @id`,
       [{ name: 'id', value: Number(id) }]
     )
-    if (!rows.length) return jsonResponse(context, 404, { error: 'Not found' })
-    return jsonResponse(context, 200, rows[0])
+    if (!result.recordset.length) return jsonResponse(context, 404, { error: 'Not found' })
+    return jsonResponse(context, 200, result.recordset[0])
   }
 
   // ── POST /delivery-tickets (create) ─────────────────────────────────────
@@ -110,8 +110,8 @@ module.exports = async function (context, req) {
         ORDER BY DTNumber DESC`, []
     )
     let seq = 1
-    if (lastRow.length) {
-      const parts = lastRow[0].DTNumber.split('-')
+    if (lastRow.recordset.length) {
+      const parts = lastRow.recordset[0].DTNumber.split('-')
       seq = parseInt(parts[parts.length - 1], 10) + 1
     }
     const DTNumber = `DT-${yr}-${String(seq).padStart(5, '0')}`
@@ -128,7 +128,7 @@ module.exports = async function (context, req) {
         { name: 'by',    value: user.Username },
       ]
     )
-    return jsonResponse(context, 201, { DTID: r[0].DTID, DTNumber })
+    return jsonResponse(context, 201, { DTID: r.recordset[0].DTID, DTNumber })
   }
 
   // ── PUT /delivery-tickets/:id (update) ──────────────────────────────────
