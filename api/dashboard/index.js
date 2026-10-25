@@ -1,21 +1,32 @@
 /**
  * GET /api/dashboard/stats
  */
-const { query, jsonResponse, requireAuth } = require('../db')
+const { query, jsonResponse } = require('../db')
 
 module.exports = async function (context, req) {
-  // DEBUG: if ?debug=headers, dump what we receive before auth
-  if (req.query && req.query.debug === 'headers') {
-    return jsonResponse(context, 200, {
-      hasAuthHeader: !!req.headers['authorization'],
-      authHeaderLen: (req.headers['authorization'] || '').length,
-      authHeaderPrefix: (req.headers['authorization'] || '').substring(0, 15),
-      allHeaderKeys: Object.keys(req.headers),
-    })
+  // --- INLINE AUTH (bypass db.js to eliminate module-cache issues) ---
+  const jwt = require('jsonwebtoken')
+  const SECRET = 'tt-secret-key-change-in-prod'
+  const header = req.headers['authorization'] || ''
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null
+
+  if (!token) {
+    return jsonResponse(context, 401, { error: 'Unauthorized', _reason: 'no_token' })
   }
 
-  const user = requireAuth(context, req)
-  if (!user) return
+  let user
+  try {
+    user = jwt.verify(token, SECRET)
+  } catch (err) {
+    return jsonResponse(context, 401, {
+      error: 'Unauthorized',
+      _reason: err.message,
+      _tokenLen: token.length,
+      _secretUsed: SECRET.length,
+      _tokenStart: token.substring(0, 20),
+    })
+  }
+  // --- END INLINE AUTH ---
 
   try {
     const result = await query(`
