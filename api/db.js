@@ -64,11 +64,12 @@ function verifyToken(req) {
   const jwt = require('jsonwebtoken')
   const header = req.headers['authorization'] || ''
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null
-  if (!token) return null
+  if (!token) return { user: null, reason: 'no_token' }
   try {
-    return jwt.verify(token, 'tt-secret-key-change-in-prod')
-  } catch {
-    return null
+    const user = jwt.verify(token, 'tt-secret-key-change-in-prod')
+    return { user, reason: null }
+  } catch (err) {
+    return { user: null, reason: err.message, tokenLen: token.length }
   }
 }
 
@@ -76,9 +77,10 @@ function verifyToken(req) {
  * Middleware-style auth check. Returns user payload or sends 401.
  */
 function requireAuth(context, req) {
-  const user = verifyToken(req)
+  const { user, reason, tokenLen } = verifyToken(req)
   if (!user) {
-    jsonResponse(context, 401, { error: 'Unauthorized' })
+    // DEBUG: include reason so we can diagnose 401s
+    jsonResponse(context, 401, { error: 'Unauthorized', _reason: reason, _tokenLen: tokenLen })
     return null
   }
   return user
