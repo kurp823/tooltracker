@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
     @apply text-gray-900 bg-canvas;
   }
 }
@@ -40,12 +40,13 @@
   .badge {
     @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
   }
+  /* Measured from the previous app: navy header row, white 11px uppercase. */
   .table-th {
-    @apply px-2.5 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide
-           bg-gray-100 border-b border-gray-300 whitespace-nowrap;
+    @apply px-3 py-2 text-left text-[11px] font-semibold text-white uppercase tracking-wide
+           bg-navy-head whitespace-nowrap;
   }
   .table-td {
-    @apply px-2.5 py-1.5 text-[13px] text-gray-700;
+    @apply px-3 py-1.5 text-[12px] text-gray-700;
   }
   .table-tr {
     @apply border-b border-gray-100 hover:bg-brand-50/50 transition-colors cursor-pointer;
