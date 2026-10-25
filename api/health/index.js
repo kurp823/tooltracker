@@ -1,106 +1,90 @@
 /**
- * GET /api/health — Diagnostic endpoint (no auth required)
- * Tests JWT sign+verify round-trip server-side.
- * Also does a full login+verify test to check cross-function consistency.
- * TEMPORARY — remove after debugging.
+ * GET /api/health — Full end-to-end diagnostic
+ * 1. Signs a token (same as auth/index.js)
+ * 2. Verifies it in-process (same as db.js)
+ * 3. Calls POST /api/auth via HTTP (real network path)
+ * 4. Calls GET /api/dashboard/stats with that token via HTTP
+ * Reports everything. TEMPORARY — remove after debugging.
  */
 const { sql, query: dbQuery } = require('../db')
-const bcrypt = require('bcryptjs')
 
 module.exports = async function (context, req) {
   const jwt = require('jsonwebtoken')
-
   const secret = 'tt-secret-key-change-in-prod'
-  const secretSource = 'hardcoded'
-  const secretLen = secret.length
 
-  // Self-test: sign then verify
-  let selfToken, selfVerified, selfVerifyErr
+  // 1. In-process sign+verify
+  let inProcessTest = 'untested'
   try {
-    selfToken = jwt.sign({ test: true, ts: Date.now() }, secret, { expiresIn: '1m' })
+    const t = jwt.sign({ test: true }, secret, { expiresIn: '1m' })
+    jwt.verify(t, secret)
+    inProcessTest = 'ok'
   } catch (e) {
-    selfToken = null
-  }
-  if (selfToken) {
-    try {
-      selfVerified = jwt.verify(selfToken, secret)
-      selfVerifyErr = null
-    } catch (e) {
-      selfVerified = null
-      selfVerifyErr = e.message
-    }
+    inProcessTest = 'FAIL:' + e.message
   }
 
-  // Full login simulation: query the DB for admin user, sign token same as auth/index.js
-  let loginTest = null
+  // 2. Full HTTP round-trip: login then dashboard
+  const host = req.headers['host'] || 'polite-tree-0c9507d00.2.azurestaticapps.net'
+  const proto = req.headers['x-forwarded-proto'] || 'https'
+  const baseUrl = proto + '://' + host
+
+  let httpLoginStatus = null, httpLoginBody = null
+  let httpDashStatus = null, httpDashBody = null
+  let tokenFromLogin = null
+
   try {
-    const result = await dbQuery(
-      `SELECT TOP 1 UserID, Username, FullName, Role, Password, Active
-       FROM tbl_Users WHERE Active = 1`,
-      []
-    )
-    const user = result.recordset[0]
-    if (user) {
-      const payload = {
-        UserID: user.UserID,
-        Username: user.Username,
-        FullName: user.FullName,
-        Role: user.Role,
-        MustChangePassword: false,
+    // Call POST /api/auth
+    const loginResp = await fetch(baseUrl + '/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'ravi', password: req.query.p || '' })
+    })
+    httpLoginStatus = loginResp.status
+    const loginText = await loginResp.text()
+    try {
+      const parsed = JSON.parse(loginText)
+      httpLoginBody = {
+        hasToken: !!parsed.token,
+        tokenLen: parsed.token ? parsed.token.length : 0,
+        user: parsed.user ? parsed.user.Username : null
       }
-      // Sign exactly as auth/index.js does
-      const loginToken = jwt.sign(
-        payload,
-        'tt-secret-key-change-in-prod',
-        { expiresIn: '12h' }
-      )
-      // Verify exactly as db.js does
-      let verifyResult = null
+      tokenFromLogin = parsed.token || null
+    } catch (e) {
+      httpLoginBody = { raw: loginText.substring(0, 200) }
+    }
+
+    // Call GET /api/dashboard/stats with the token
+    if (tokenFromLogin) {
+      // First verify the token ourselves
+      let localVerify = 'untested'
       try {
-        const decoded = jwt.verify(loginToken, 'tt-secret-key-change-in-prod')
-        verifyResult = { ok: true, username: decoded.Username }
+        jwt.verify(tokenFromLogin, secret)
+        localVerify = 'ok'
       } catch (e) {
-        verifyResult = { ok: false, error: e.message }
+        localVerify = 'FAIL:' + e.message
       }
-      loginTest = {
-        userFound: user.Username,
-        tokenSigned: !!loginToken,
-        tokenLen: loginToken.length,
-        verifyResult
-      }
-    } else {
-      loginTest = { userFound: null }
+
+      const dashResp = await fetch(baseUrl + '/api/dashboard/stats', {
+        headers: { 'Authorization': 'Bearer ' + tokenFromLogin }
+      })
+      httpDashStatus = dashResp.status
+      const dashText = await dashResp.text()
+      httpDashBody = dashText.substring(0, 500)
+
+      httpLoginBody.localVerifyOfToken = localVerify
     }
   } catch (e) {
-    loginTest = { dbError: e.message }
-  }
-
-  // Test incoming token via query param (for browser testing without custom headers)
-  let incomingResult = null
-  const incomingToken = (req.query && req.query.token) || null
-  if (incomingToken) {
-    try {
-      const decoded = jwt.verify(incomingToken, secret)
-      incomingResult = { ok: true, payload: { Username: decoded.Username, Role: decoded.Role } }
-    } catch (e) {
-      incomingResult = { ok: false, error: e.message }
-    }
+    httpLoginBody = { fetchError: e.message }
   }
 
   context.res = {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      status: 'ok',
-      secretSource,
-      secretLen,
-      selfTestSign: !!selfToken,
-      selfTestVerify: selfVerified ? true : false,
-      selfTestVerifyErr: selfVerifyErr,
-      loginTest,
-      incomingTokenProvided: !!incomingToken,
-      incomingResult,
-      nodeVersion: process.version,
+      inProcessTest,
+      httpLoginStatus,
+      httpLoginBody,
+      httpDashStatus,
+      httpDashBody,
       timestamp: new Date().toISOString()
     })
   }
