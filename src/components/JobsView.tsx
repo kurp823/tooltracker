@@ -433,13 +433,27 @@ export const JobsView: React.FC<JobsViewProps> = ({
   const validJobs = useMemo(() => {
     const seen = new Set<string>();
     const unique: DrillingJob[] = [];
+    let afterFilter = 0;
+    let droppedByDedup = 0;
+    let droppedByEmptyKey = 0;
+    let firstDropSample: any = null;
 
     jobs
       .filter((j) => j && j.id && !j.id.toUpperCase().includes('TEST') && !j.id.toUpperCase().includes('DUMMY'))
       .forEach((j) => {
+        afterFilter++;
         const stdId = formatStandardJobId(j.id);
         const normKey = normalizeJobKey(stdId || j.id);
-        if (!normKey || seen.has(normKey)) return;
+        if (!normKey) {
+          droppedByEmptyKey++;
+          if (!firstDropSample) firstDropSample = { reason: 'emptyKey', id: j.id, stdId, normKey };
+          return;
+        }
+        if (seen.has(normKey)) {
+          droppedByDedup++;
+          if (!firstDropSample) firstDropSample = { reason: 'dedup', id: j.id, stdId, normKey };
+          return;
+        }
         seen.add(normKey);
 
         const resolvedClient = resolveJobClient(j.client, j.contract, undefined, j.rig);
@@ -450,6 +464,15 @@ export const JobsView: React.FC<JobsViewProps> = ({
           client: resolvedClient || j.client || 'ADNOC DRILLING COMPANY P.J.S.C.',
         });
       });
+
+    console.log('[DEBUG-VALIDJOBS]', {
+      rawJobsLen: jobs.length,
+      afterFilter,
+      droppedByEmptyKey,
+      droppedByDedup,
+      uniqueLen: unique.length,
+      firstDropSample,
+    });
 
     return unique;
   }, [jobs]);
