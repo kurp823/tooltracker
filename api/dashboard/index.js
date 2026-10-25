@@ -19,12 +19,27 @@ module.exports = async function (context, req) {
         (SELECT COUNT(*) FROM tbl_MaintenanceJobs WHERE Status IN ('Open','In Progress')) AS pendingMaintenance,
         (SELECT COUNT(*) FROM tbl_Invoices WHERE Status IN ('Draft','Submitted'))       AS pendingInvoices,
         (
-          SELECT COUNT(DISTINCT il.SystemID)
+          -- "In field" = tool on an Approved delivery ticket for a job,
+          -- with no matching receiving-ticket line (by Serial/AssetNo) for
+          -- that same job yet. tbl_DeliveryTicketLines/tbl_ReceivingTicketLines
+          -- store Serial/AssetNo directly (freeform, no SystemID FK, no
+          -- ReturnedDate column) — see api/delivery-tickets and
+          -- api/receiving-tickets for the confirmed real schema.
+          SELECT COUNT(DISTINCT COALESCE(NULLIF(dtl.SerialNumber, ''), NULLIF(dtl.AssetNo, '')))
           FROM   tbl_DeliveryTicketLines dtl
-          JOIN   tbl_DeliveryTickets     dt  ON dtl.DTID   = dt.DTID
-          JOIN   tbl_Inventory           il  ON dtl.SystemID = il.SystemID
-          WHERE  dtl.ReturnedDate IS NULL
-            AND  dt.Status = 'Approved'
+          JOIN   tbl_DeliveryTickets     dt ON dtl.DTID = dt.DTID
+          WHERE  dt.Status = 'Approved'
+            AND  COALESCE(NULLIF(dtl.SerialNumber, ''), NULLIF(dtl.AssetNo, '')) IS NOT NULL
+            AND  NOT EXISTS (
+                   SELECT 1
+                   FROM   tbl_ReceivingTicketLines rtl
+                   JOIN   tbl_ReceivingTickets     rt ON rtl.RTID = rt.RTID
+                   WHERE  rt.JobID = dt.JobID
+                     AND  (
+                            (NULLIF(rtl.SerialNumber, '') IS NOT NULL AND rtl.SerialNumber = dtl.SerialNumber)
+                         OR (NULLIF(rtl.AssetNo, '')      IS NOT NULL AND rtl.AssetNo      = dtl.AssetNo)
+                          )
+                 )
         ) AS inFieldTools
     `)
 
