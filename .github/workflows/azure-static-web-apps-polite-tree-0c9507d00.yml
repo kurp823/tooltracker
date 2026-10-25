@@ -20,33 +20,6 @@ jobs:
           submodules: true
           lfs: false
 
-      # ── Build frontend ──────────────────────────────────────────────────────
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install frontend dependencies
-        run: npm install
-
-      - name: Build frontend
-        run: npm run build
-        # Produces dist/ which the SWA action will upload as the static site
-
-      # ── Install API packages explicitly ─────────────────────────────────────
-      # Oryx (the Azure build engine) requires package-lock.json to run
-      # npm ci reliably.  Without it, packages may be silently skipped and
-      # the Azure Function host crashes at startup with a 500/Content-Length:0.
-      # We pre-install here and set skip_api_build:true so the exact same
-      # node_modules directory is deployed without Oryx interference.
-      - name: Install API dependencies
-        run: npm install --production --prefix api
-
-      # ── Deploy to Azure Static Web Apps ─────────────────────────────────────
-      # NOTE: SQL credentials are NOT in this file.
-      # Set them in Azure Portal → Static Web Apps → polite-tree-0c9507d00
-      #   → Configuration → Application settings
-      # They live entirely within Azure — GitHub never sees them.
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
@@ -57,8 +30,9 @@ jobs:
           app_location: "/"
           api_location: "api"
           output_location: "dist"
-          skip_app_build: true   # we already built dist/ above
-          skip_api_build: true   # we already ran npm install in api/ above
+          # NOTE: SQL credentials are NOT passed here.
+          # Set them in Azure Portal → Static Web Apps → Configuration → Application settings.
+          # They are stored and read entirely within Azure — GitHub never sees them.
 
   pr_build_check:
     if: github.event_name == 'pull_request' && github.event.action != 'closed'
