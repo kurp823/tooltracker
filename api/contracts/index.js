@@ -34,14 +34,33 @@ module.exports = async function (context, req) {
   if (method === 'GET' && !id) {
     try {
       const result = await query(
-        `SELECT c.ContractID, c.ContractRef AS ContractNumber,
-                c.Client + ' - ' + c.ContractRef AS ContractName,
-                NULL AS ClientID, c.Client AS ClientName,
-                c.StartDate, c.EndDate, c.Status, c.Currency,
-                c.Notes AS Description,
+        // Returns the real tbl_Contracts columns. This previously selected
+        // invented aliases (ContractName built as "Client - Ref", a ClientID
+        // that does not exist on the table) and silently dropped PBGNumber,
+        // PBGValue, PBGIssueDate, PBGExpiryDate, ContractValue, PONumber and
+        // InvoicedToDate — so the register had no PBG details even though
+        // 13 contracts carry them.
+        `SELECT c.ContractID,
+                c.ContractRef      AS ContractNumber,
+                c.Client           AS ClientName,
+                c.PONumber,
+                c.Currency,
+                c.StartDate,
+                c.EndDate,
+                c.Status,
+                c.Notes            AS Description,
+                c.ContractValue,
+                c.InvoicedToDate,
+                c.PBGNumber,
+                c.PBGValue,
+                c.PBGIssueDate,
+                c.PBGExpiryDate,
                 CASE WHEN c.Status = 'Active' THEN 1 ELSE 0 END AS IsActive
          FROM   tbl_Contracts c
-         ORDER  BY c.ContractRef`
+         ORDER  BY CASE WHEN c.Status = 'Active' THEN 0
+                        WHEN c.Status = 'Closed' THEN 1
+                        ELSE 2 END,
+                  c.ContractRef`
       )
       return jsonResponse(context, 200, result.recordset)
     } catch (err) {
