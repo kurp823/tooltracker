@@ -12,7 +12,7 @@ module.exports = async function (context, req) {
     const result = await query(
       `SELECT s.SupplierID, s.SupplierName, s.ContactName, s.Email, s.Phone,
               s.Country, s.IsActive,
-              (SELECT COUNT(*) FROM tbl_Tools WHERE SupplierID = s.SupplierID) AS ToolCount
+              (SELECT COUNT(*) FROM tbl_Inventory WHERE SupplierID = s.SupplierID) AS ToolCount
          FROM tbl_Suppliers s
         ORDER BY s.SupplierName`,
       []

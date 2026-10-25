@@ -14,9 +14,9 @@ module.exports = async function (context, req) {
   if (id && sub === 'lines') {
     if (method === 'GET') {
       const result = await query(
-        `SELECT il.*, t.SerialNumber, t.AssetNo, t.Description AS ToolDescription
+        `SELECT il.*, t.Serial AS SerialNumber, t.AssetNo, t.ShortDesc AS ToolDescription
            FROM tbl_InvoiceLines il
-           LEFT JOIN tbl_Tools t ON il.ToolID = t.ToolID
+           LEFT JOIN tbl_Inventory t ON il.ToolID = t.SystemID
           WHERE il.InvoiceID = @id
           ORDER BY il.LineNumber`,
         [{ name: 'id', value: Number(id) }]
