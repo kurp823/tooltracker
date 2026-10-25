@@ -4,6 +4,16 @@
 const { query, jsonResponse, requireAuth } = require('../db')
 
 module.exports = async function (context, req) {
+  // DEBUG: if ?debug=headers, dump what we receive before auth
+  if (req.query && req.query.debug === 'headers') {
+    return jsonResponse(context, 200, {
+      hasAuthHeader: !!req.headers['authorization'],
+      authHeaderLen: (req.headers['authorization'] || '').length,
+      authHeaderPrefix: (req.headers['authorization'] || '').substring(0, 15),
+      allHeaderKeys: Object.keys(req.headers),
+    })
+  }
+
   const user = requireAuth(context, req)
   if (!user) return
 
