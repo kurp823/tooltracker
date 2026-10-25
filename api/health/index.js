@@ -92,6 +92,19 @@ const PROBES = {
   'inv-sample': `SELECT TOP 10 SystemID, AssetNo, OEMSerial, ShortDesc FROM tbl_Inventory ORDER BY SystemID`,
   'all-tables': `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME`,
   'remarks-distinct': `SELECT remarks, COUNT(*) AS n FROM tbl_DeliveryTicketLines GROUP BY remarks ORDER BY n DESC`,
+  'reserved-dts': `SELECT d.jobNumber, d.dtNumber, d.deliveryDate, d.createdAt, d.createdBy, COUNT(*) AS lineCount
+         FROM tbl_DeliveryTicketLines l
+         JOIN tbl_DeliveryTickets d ON d.dtNumber = l.dtNumber
+         WHERE l.remarks = 'Reserved in Checklist'
+         GROUP BY d.jobNumber, d.dtNumber, d.deliveryDate, d.createdAt, d.createdBy
+         ORDER BY d.createdAt DESC`,
+  'emd-serial-sample': `SELECT TOP 15 serial, COUNT(*) AS n FROM tbl_DeliveryTicketLines
+         WHERE serial LIKE 'EMD-%' GROUP BY serial ORDER BY n DESC`,
+  'serial-formats': `SELECT
+           SUM(CASE WHEN serial LIKE 'EMD-%' THEN 1 ELSE 0 END) AS emdFormat,
+           SUM(CASE WHEN serial IS NULL OR serial = '' THEN 1 ELSE 0 END) AS blankOrNull,
+           COUNT(*) AS total
+         FROM tbl_DeliveryTicketLines`,
 }
 
 module.exports = async function (context, req) {
