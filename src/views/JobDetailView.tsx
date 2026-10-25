@@ -113,7 +113,7 @@ const WORKSPACE_TABS = [
 
 type Tab = typeof WORKSPACE_TABS[number]['id']
 
-const STATUS_OPTIONS: JobStatus[]     = ['Open','Active','Completed','Cancelled','On Hold']
+const STATUS_OPTIONS: JobStatus[]     = ['Open','Ongoing','Draft Invoice Submitted','Completed','JobCompleted']
 const INVOICING_OPTS: InvoicingType[] = ['PerJob','PerDay','Lump Sum']
 const CURRENCY_OPTS                   = ['USD','AED','SAR','OMR']
 const DT_STATUS_OPTS                  = ['Draft','Submitted','Approved','Rejected']
