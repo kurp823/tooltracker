@@ -22,6 +22,22 @@ import { toDateInput } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
 import type { Job, JobStatus, InvoicingType } from '../types'
 
+// Historical job numbers were entered in inconsistent formats across screens
+// (e.g. "Job-026-01836" on tbl_Jobs vs "JOB-26-01836" on tbl_DeliveryTickets —
+// same job, different casing and zero-padding). Compare job numbers by their
+// normalized form (upper-cased, each dash-separated numeric segment stripped
+// of leading zeros) rather than exact string equality, so a job's tickets
+// are found regardless of which format they were saved in.
+function normalizeJobId(id: string | null | undefined): string {
+  if (!id) return ''
+  return id
+    .trim()
+    .toUpperCase()
+    .split('-')
+    .map(seg => (/^\d+$/.test(seg) ? String(parseInt(seg, 10)) : seg))
+    .join('-')
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface InvItem {
@@ -601,7 +617,8 @@ function DTHeaderTab({
     setLoading(true)
     try {
       const all = await api.get<DTRecord[]>('/delivery-tickets')
-      const jobDTs = all.filter((d: DTRecord) => d.JobID === jobId)
+      const normJobId = normalizeJobId(jobId)
+      const jobDTs = all.filter((d: DTRecord) => normalizeJobId(d.JobID) === normJobId)
       setDts(jobDTs)
       if (jobDTs.length > 0) {
         const target = focusDTID
