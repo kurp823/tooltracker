@@ -3,6 +3,16 @@
  * GET  /api/clients       — list
  * POST /api/clients       — create
  * PUT  /api/clients/{id}  — update
+ *
+ * Real tbl_Clients columns (confirmed via INFORMATION_SCHEMA):
+ *   id, clientCode, clientName, invoicingType, standbyCapDays, currency,
+ *   requiresDraftApproval, contactName, contactEmail, contactPhone,
+ *   address, notes, active, createdBy, createdAt, updatedAt
+ * (No ClientID/ShortName/Country/ContactPerson/IsActive — those don't
+ * exist. SQL aliases output back to the PascalCase names the frontend
+ * already expects, so no frontend changes are needed. "Country" has no
+ * real counterpart and comes back null; "ShortName" is mapped to the
+ * real clientCode column.)
  */
 const { sql, query, jsonResponse, requireAuth } = require('../db')
 
@@ -16,10 +26,12 @@ module.exports = async function (context, req) {
   if (method === 'GET') {
     try {
       const result = await query(
-        `SELECT ClientID, ClientName, ShortName, Country, Address,
-                ContactPerson, ContactEmail, ContactPhone, IsActive
+        `SELECT id AS ClientID, clientName AS ClientName, clientCode AS ShortName,
+                NULL AS Country, address AS Address,
+                contactName AS ContactPerson, contactEmail AS ContactEmail,
+                contactPhone AS ContactPhone, active AS IsActive
          FROM   tbl_Clients
-         ORDER  BY ClientName`
+         ORDER  BY clientName`
       )
       return jsonResponse(context, 200, result.recordset)
     } catch (err) {
@@ -34,18 +46,22 @@ module.exports = async function (context, req) {
     const b = req.body || {}
     if (!b.ClientName)
       return jsonResponse(context, 400, { error: 'ClientName required' })
+
+    const code = (b.ShortName || b.ClientName).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)
+
     try {
       await query(
-        `INSERT INTO tbl_Clients (ClientName, ShortName, Country, Address, ContactPerson, ContactEmail, ContactPhone, IsActive)
-         VALUES (@name, @short, @country, @addr, @contact, @email, @phone, 1)`,
+        `INSERT INTO tbl_Clients (clientCode, clientName, address, contactName, contactEmail, contactPhone, currency, active, createdBy, createdAt)
+         VALUES (@code, @name, @addr, @contact, @email, @phone, @currency, 1, @by, GETDATE())`,
         [
-          { name: 'name',    type: sql.NVarChar, value: b.ClientName },
-          { name: 'short',   type: sql.NVarChar, value: b.ShortName      || null },
-          { name: 'country', type: sql.NVarChar, value: b.Country        || null },
-          { name: 'addr',    type: sql.NVarChar, value: b.Address        || null },
-          { name: 'contact', type: sql.NVarChar, value: b.ContactPerson  || null },
-          { name: 'email',   type: sql.NVarChar, value: b.ContactEmail   || null },
-          { name: 'phone',   type: sql.NVarChar, value: b.ContactPhone   || null },
+          { name: 'code',     type: sql.NVarChar, value: code },
+          { name: 'name',     type: sql.NVarChar, value: b.ClientName },
+          { name: 'addr',     type: sql.NVarChar, value: b.Address        || null },
+          { name: 'contact',  type: sql.NVarChar, value: b.ContactPerson  || null },
+          { name: 'email',    type: sql.NVarChar, value: b.ContactEmail   || null },
+          { name: 'phone',    type: sql.NVarChar, value: b.ContactPhone   || null },
+          { name: 'currency', type: sql.NVarChar, value: b.Country        || 'USD' },
+          { name: 'by',       type: sql.NVarChar, value: user.Username },
         ]
       )
       return jsonResponse(context, 201, { success: true })
@@ -62,15 +78,13 @@ module.exports = async function (context, req) {
     try {
       await query(
         `UPDATE tbl_Clients SET
-           ClientName = @name, ShortName = @short, Country = @country,
-           Address = @addr, ContactPerson = @contact,
-           ContactEmail = @email, ContactPhone = @phone, IsActive = @active
-         WHERE ClientID = @id`,
+           clientName = @name, address = @addr, contactName = @contact,
+           contactEmail = @email, contactPhone = @phone, active = @active,
+           updatedAt = GETDATE()
+         WHERE id = @id`,
         [
           { name: 'id',      type: sql.Int,      value: parseInt(id) },
           { name: 'name',    type: sql.NVarChar, value: b.ClientName },
-          { name: 'short',   type: sql.NVarChar, value: b.ShortName      || null },
-          { name: 'country', type: sql.NVarChar, value: b.Country        || null },
           { name: 'addr',    type: sql.NVarChar, value: b.Address        || null },
           { name: 'contact', type: sql.NVarChar, value: b.ContactPerson  || null },
           { name: 'email',   type: sql.NVarChar, value: b.ContactEmail   || null },

@@ -1,6 +1,23 @@
 'use strict'
 const { query, jsonResponse, requireAuth } = require('../db')
 
+// Real tbl_Invoices columns (confirmed via INFORMATION_SCHEMA):
+//   id, invoiceNumber, invoiceType, clientCode, contract, jobNumber, rig,
+//   well, poNumber, invoiceDate, periodFrom, periodTo, currency, subtotal,
+//   vatPercent, vatAmount, totalAmount, status, submittedDate, approvedDate,
+//   paidDate, paidAmount, notes, attachmentRef, createdBy, createdAt,
+//   updatedAt, legalInvoiceNumber, legalInvoiceDate, legalEnteredBy,
+//   legalEnteredAt, lockStage, lockedAt, lockedBy, rowver
+// Real tbl_InvoiceLines columns:
+//   id, invoiceNumber, jobNumber, lineItemRef, serial, toolDescription,
+//   standbyDays, opsDays, standbyRate, opsRate, standbyAmount, opsAmount,
+//   redressAmount, otherAmount, otherDesc, lineTotal, remarks, rowver
+// (No numeric InvoiceID/JobID FK to tbl_Jobs — jobNumber/clientCode are
+// plain text. Lines are keyed by invoiceNumber, not a numeric InvoiceID,
+// same pattern as Delivery/Receiving Tickets. No DueDate/FiscalYear
+// columns — those come back null/derived. SQL aliases output back to the
+// PascalCase names the frontend already expects.)
+
 module.exports = async function (context, req) {
   const user   = requireAuth(context, req)
   if (!user) return
@@ -11,14 +28,18 @@ module.exports = async function (context, req) {
   const method = req.method.toUpperCase()
 
   // ── /invoices/{id}/lines ─────────────────────────────────────────────────
+  // `id` here is the invoice's numeric id — lines are keyed by invoiceNumber.
   if (id && sub === 'lines') {
     if (method === 'GET') {
       const result = await query(
-        `SELECT il.*, t.Serial AS SerialNumber, t.AssetNo, t.ShortDesc AS ToolDescription
-           FROM tbl_InvoiceLines il
-           LEFT JOIN tbl_Inventory t ON il.ToolID = t.SystemID
-          WHERE il.InvoiceID = @id
-          ORDER BY il.LineNumber`,
+        `SELECT l.id AS LineID, l.invoiceNumber AS InvoiceID, l.lineItemRef AS LineNumber,
+                l.serial AS SerialNumber, NULL AS AssetNo, l.toolDescription AS ToolDescription,
+                (ISNULL(l.standbyDays,0) + ISNULL(l.opsDays,0)) AS Quantity,
+                COALESCE(l.opsRate, l.standbyRate) AS UnitRate,
+                l.lineTotal AS LineAmount, l.remarks AS Notes
+           FROM tbl_InvoiceLines l
+          WHERE l.invoiceNumber = (SELECT invoiceNumber FROM tbl_Invoices WHERE id = @id)
+          ORDER BY l.id`,
         [{ name: 'id', value: Number(id) }]
       )
       return jsonResponse(context, 200, result.recordset)
@@ -31,42 +52,45 @@ module.exports = async function (context, req) {
       const b = req.body
       const r = await query(
         `INSERT INTO tbl_InvoiceLines
-           (InvoiceID, LineNumber, ToolID, Description, Quantity, UnitRate, LineAmount, Notes)
-         OUTPUT INSERTED.LineID
-         VALUES (@inv,
-                 COALESCE((SELECT MAX(LineNumber) FROM tbl_InvoiceLines WHERE InvoiceID=@inv),0)+1,
-                 @tool, @desc, @qty, @rate, @amount, @notes)`,
+           (invoiceNumber, jobNumber, lineItemRef, serial, toolDescription, opsDays, opsRate, lineTotal, remarks)
+         OUTPUT INSERTED.id
+         VALUES (
+           (SELECT invoiceNumber FROM tbl_Invoices WHERE id = @id),
+           (SELECT jobNumber FROM tbl_Invoices WHERE id = @id),
+           @ref, @serial, @desc, @qty, @rate, @amount, @notes
+         )`,
         [
-          { name: 'inv',    value: Number(id)         },
-          { name: 'tool',   value: b.ToolID || null    },
-          { name: 'desc',   value: b.Description || null },
-          { name: 'qty',    value: b.Quantity || 1      },
-          { name: 'rate',   value: b.UnitRate || null    },
-          { name: 'amount', value: b.LineAmount || null  },
-          { name: 'notes',  value: b.Notes || null       },
+          { name: 'id',     value: Number(id)            },
+          { name: 'ref',    value: b.ItemCode || null     },
+          { name: 'serial', value: b.SerialNumber || null },
+          { name: 'desc',   value: b.ToolDescription || null },
+          { name: 'qty',    value: b.Quantity || 1          },
+          { name: 'rate',   value: b.UnitRate || null        },
+          { name: 'amount', value: b.LineAmount || null       },
+          { name: 'notes',  value: b.Notes || null            },
         ]
       )
 
       // Recalculate TotalAmount
       await query(
         `UPDATE tbl_Invoices
-            SET TotalAmount = (SELECT COALESCE(SUM(LineAmount),0) FROM tbl_InvoiceLines WHERE InvoiceID=@id)
-          WHERE InvoiceID = @id`,
+            SET totalAmount = (SELECT COALESCE(SUM(lineTotal),0) FROM tbl_InvoiceLines WHERE invoiceNumber = tbl_Invoices.invoiceNumber)
+          WHERE id = @id`,
         [{ name: 'id', value: Number(id) }]
       )
 
-      return jsonResponse(context, 201, { LineID: r.recordset[0].LineID })
+      return jsonResponse(context, 201, { LineID: r.recordset[0].id })
     }
 
     if (method === 'DELETE' && subId) {
       if (!['Admin','Billing','Finance'].includes(user.Role))
         return jsonResponse(context, 403, { error: 'Forbidden' })
-      await query('DELETE FROM tbl_InvoiceLines WHERE LineID = @lid',
+      await query('DELETE FROM tbl_InvoiceLines WHERE id = @lid',
         [{ name: 'lid', value: Number(subId) }])
       await query(
         `UPDATE tbl_Invoices
-            SET TotalAmount = (SELECT COALESCE(SUM(LineAmount),0) FROM tbl_InvoiceLines WHERE InvoiceID=@id)
-          WHERE InvoiceID = @id`,
+            SET totalAmount = (SELECT COALESCE(SUM(lineTotal),0) FROM tbl_InvoiceLines WHERE invoiceNumber = tbl_Invoices.invoiceNumber)
+          WHERE id = @id`,
         [{ name: 'id', value: Number(id) }]
       )
       return jsonResponse(context, 200, { ok: true })
@@ -76,13 +100,14 @@ module.exports = async function (context, req) {
   // ── GET list ─────────────────────────────────────────────────────────────
   if (!id && method === 'GET') {
     const result = await query(
-      `SELECT i.InvoiceID, i.InvoiceNumber, i.JobID, i.InvoiceDate, i.DueDate,
-              i.Currency, i.TotalAmount, i.Status, i.FiscalYear, i.CreatedDate,
-              c.ClientName AS Client
+      `SELECT i.id AS InvoiceID, i.invoiceNumber AS InvoiceNumber, i.jobNumber AS JobID,
+              i.invoiceDate AS InvoiceDate, NULL AS DueDate,
+              i.currency AS Currency, i.totalAmount AS TotalAmount, i.status AS Status,
+              YEAR(i.invoiceDate) AS FiscalYear, i.createdAt AS CreatedDate,
+              c.clientName AS Client
          FROM tbl_Invoices i
-         LEFT JOIN tbl_Jobs j   ON i.JobID = j.JobID
-         LEFT JOIN tbl_Clients c ON j.ClientID = c.ClientID
-        ORDER BY i.InvoiceDate DESC, i.CreatedDate DESC`,
+         LEFT JOIN tbl_Clients c ON i.clientCode = c.clientCode
+        ORDER BY i.invoiceDate DESC, i.createdAt DESC`,
       []
     )
     return jsonResponse(context, 200, result.recordset)
@@ -91,11 +116,16 @@ module.exports = async function (context, req) {
   // ── GET single ───────────────────────────────────────────────────────────
   if (id && !sub && method === 'GET') {
     const result = await query(
-      `SELECT i.*, c.ClientName AS Client
+      `SELECT i.id AS InvoiceID, i.invoiceNumber AS InvoiceNumber, i.jobNumber AS JobID,
+              i.invoiceDate AS InvoiceDate, NULL AS DueDate,
+              i.currency AS Currency, i.subtotal AS Subtotal, i.vatPercent AS VatPercent,
+              i.vatAmount AS VatAmount, i.totalAmount AS TotalAmount, i.status AS Status,
+              YEAR(i.invoiceDate) AS FiscalYear, i.notes AS Notes,
+              i.createdAt AS CreatedDate, i.createdBy AS CreatedBy,
+              c.clientName AS Client
          FROM tbl_Invoices i
-         LEFT JOIN tbl_Jobs j   ON i.JobID = j.JobID
-         LEFT JOIN tbl_Clients c ON j.ClientID = c.ClientID
-        WHERE i.InvoiceID = @id`,
+         LEFT JOIN tbl_Clients c ON i.clientCode = c.clientCode
+        WHERE i.id = @id`,
       [{ name: 'id', value: Number(id) }]
     )
     if (!result.recordset.length) return jsonResponse(context, 404, { error: 'Not found' })
@@ -112,34 +142,33 @@ module.exports = async function (context, req) {
 
     const yr = new Date().getFullYear()
     const lastRow = await query(
-      `SELECT TOP 1 InvoiceNumber FROM tbl_Invoices
-        WHERE InvoiceNumber LIKE 'INV-${yr}-%'
-        ORDER BY InvoiceNumber DESC`, []
+      `SELECT TOP 1 invoiceNumber FROM tbl_Invoices
+        WHERE invoiceNumber LIKE 'INV-${yr}-%'
+        ORDER BY invoiceNumber DESC`, []
     )
     let seq = 1
     if (lastRow.recordset.length) {
-      const parts = lastRow.recordset[0].InvoiceNumber.split('-')
+      const parts = lastRow.recordset[0].invoiceNumber.split('-')
       seq = parseInt(parts[parts.length - 1], 10) + 1
     }
     const InvoiceNumber = `INV-${yr}-${String(seq).padStart(5, '0')}`
 
     const r = await query(
       `INSERT INTO tbl_Invoices
-         (InvoiceNumber, JobID, InvoiceDate, DueDate, Currency, FiscalYear, TotalAmount, Status, Notes, CreatedBy, CreatedDate)
-       OUTPUT INSERTED.InvoiceID
-       VALUES (@num, @job, @date, @due, @currency, @fy, 0, 'Draft', @notes, @by, GETDATE())`,
+         (invoiceNumber, jobNumber, clientCode, invoiceDate, currency, subtotal, vatAmount, totalAmount, status, notes, createdBy, createdAt)
+       OUTPUT INSERTED.id
+       VALUES (@num, @job, @client, @date, @currency, 0, 0, 0, 'Draft', @notes, @by, GETDATE())`,
       [
         { name: 'num',      value: InvoiceNumber           },
         { name: 'job',      value: b.JobID                 },
+        { name: 'client',   value: b.ClientCode || null    },
         { name: 'date',     value: b.InvoiceDate || new Date().toISOString().split('T')[0] },
-        { name: 'due',      value: b.DueDate || null       },
         { name: 'currency', value: b.Currency || 'USD'     },
-        { name: 'fy',       value: b.FiscalYear || yr      },
         { name: 'notes',    value: b.Notes || null          },
         { name: 'by',       value: user.Username            },
       ]
     )
-    return jsonResponse(context, 201, { InvoiceID: r.recordset[0].InvoiceID, InvoiceNumber })
+    return jsonResponse(context, 201, { InvoiceID: r.recordset[0].id, InvoiceNumber })
   }
 
   // ── PUT update ───────────────────────────────────────────────────────────
@@ -150,13 +179,12 @@ module.exports = async function (context, req) {
     const b = req.body
     await query(
       `UPDATE tbl_Invoices
-          SET InvoiceDate = @date, DueDate = @due, Status = @status,
-              Currency = @currency, Notes = @notes
-        WHERE InvoiceID = @id`,
+          SET invoiceDate = @date, status = @status,
+              currency = @currency, notes = @notes, updatedAt = GETDATE()
+        WHERE id = @id`,
       [
         { name: 'id',       value: Number(id)          },
         { name: 'date',     value: b.InvoiceDate || null },
-        { name: 'due',      value: b.DueDate || null    },
         { name: 'status',   value: b.Status || null     },
         { name: 'currency', value: b.Currency || null   },
         { name: 'notes',    value: b.Notes || null      },
