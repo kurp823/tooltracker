@@ -190,9 +190,17 @@ module.exports = async function (context, req) {
   if (method === 'GET' && sub === 'tools') {
     try {
       const result = await query(
+        // tbl_Inventory has no Category/CategoryID columns (confirmed via
+        // INFORMATION_SCHEMA) — selecting them made this 500 even once
+        // tbl_JobTools existed. Resolve the live asset details instead, and
+        // fall back to the snapshot stored on the job-tool row.
         `SELECT jt.JobToolID, jt.JobID, jt.SystemID, jt.Serial, jt.AssetNo,
                 jt.ShortDesc, jt.Size, jt.IsEmdad, jt.AddedDate, jt.AddedBy, jt.Notes,
-                i.Category, i.CategoryID
+                COALESCE(NULLIF(i.AssetNo, ''),   jt.AssetNo)   AS LiveAssetNo,
+                COALESCE(NULLIF(i.ShortDesc, ''), jt.ShortDesc) AS LiveShortDesc,
+                COALESCE(NULLIF(i.Size, ''),      jt.Size)      AS LiveSize,
+                i.Status   AS ToolStatus,
+                i.Location AS ToolLocation
          FROM   tbl_JobTools jt
          LEFT   JOIN tbl_Inventory i ON jt.SystemID = i.SystemID
          WHERE  jt.JobID = @id
@@ -293,6 +301,28 @@ module.exports = async function (context, req) {
     } catch (err) {
       context.log.error(err)
       return jsonResponse(context, 500, { error: 'Failed to add personnel' })
+    }
+  }
+
+  // ── DELETE /api/jobs/{id}/personnel/{pid} ─────────────────────────────────
+  // Documented in this file's header but never implemented, so a crew member
+  // could be added and never removed.
+  if (method === 'DELETE' && sub === 'personnel' && subId) {
+    if (!['Admin', 'Operations'].includes(user.Role)) {
+      return jsonResponse(context, 403, { error: 'Insufficient permissions' })
+    }
+    try {
+      await query(
+        `DELETE FROM tbl_JobPersonnel WHERE id = @pid AND JobID = @jid`,
+        [
+          { name: 'pid', type: sql.Int,      value: parseInt(subId) },
+          { name: 'jid', type: sql.NVarChar, value: jobId },
+        ]
+      )
+      return jsonResponse(context, 200, { success: true })
+    } catch (err) {
+      context.log.error(err)
+      return jsonResponse(context, 500, { error: 'Failed to remove personnel' })
     }
   }
 
