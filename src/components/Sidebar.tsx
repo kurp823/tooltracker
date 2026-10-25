@@ -1,431 +1,156 @@
-import React, { useState, useEffect } from 'react';
-import { NavModule, User } from '../types';
-import { canViewModule } from '../services/permissionService';
-import { KeyRound } from 'lucide-react';
+import React, { useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
+import {
+  LayoutDashboard, Briefcase, Package, Users, FileText,
+  Truck, RotateCcw, ClipboardCheck, Wrench, DoorOpen,
+  Receipt, Building2, BarChart3, Settings, ChevronDown,
+  ChevronRight, BookOpen, Factory, Tag
+} from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
+import type { UserRole } from '../types'
 
-interface SidebarProps {
-  activeView?: NavModule;
-  onNavigate?: (mod: NavModule) => void;
-  pendingCalloutsCount?: number;
-  pendingSignedDTsCount?: number;
-  onRigToolsCount?: number;
-  pendingInspectionsCount?: number;
-  pendingMaintenanceCount?: number;
-  currentModule?: NavModule;
-  onSelectModule?: (mod: NavModule) => void;
-  user?: User | null;
-  onLogout?: () => void;
-  onChangePassword?: () => void;
-  isCollapsed?: boolean;
-  onToggleCollapse?: () => void;
+interface NavItem {
+  label: string
+  to: string
+  icon: React.ReactNode
+  roles?: UserRole[]
+  children?: NavItem[]
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({
-  activeView,
-  onNavigate,
-  pendingCalloutsCount = 0,
-  pendingSignedDTsCount = 0,
-  pendingInspectionsCount = 0,
-  pendingMaintenanceCount = 0,
-  currentModule,
-  onSelectModule,
-  user,
-  onLogout,
-  onChangePassword,
-  isCollapsed = false,
-  onToggleCollapse,
-}) => {
-  const current = activeView || currentModule || 'dashboard';
-  const handleNav = onNavigate || onSelectModule || (() => {});
+const NAV: NavItem[] = [
+  { label: 'Dashboard',   to: '/',             icon: <LayoutDashboard size={18} /> },
+  { label: 'Jobs',        to: '/jobs',         icon: <Briefcase size={18} />,
+    roles: ['Admin','Operations','QAQC','Billing','Finance','CostController','Executive'] },
+  {
+    label: 'Operations', to: '#ops', icon: <Factory size={18} />,
+    roles: ['Admin','Operations'],
+    children: [
+      { label: 'Delivery Tickets',  to: '/delivery-tickets',  icon: <Truck size={18} /> },
+      { label: 'Receiving Tickets', to: '/receiving-tickets', icon: <RotateCcw size={18} /> },
+      { label: 'Utilization',       to: '/utilization',       icon: <BarChart3 size={18} /> },
+      { label: 'Gate Pass',         to: '/gate-pass',         icon: <DoorOpen size={18} /> },
+    ],
+  },
+  {
+    label: 'Technical', to: '#tech', icon: <Wrench size={18} />,
+    roles: ['Admin','Operations','QAQC','ThirdParty'],
+    children: [
+      { label: 'Inspection',   to: '/inspection',   icon: <ClipboardCheck size={18} /> },
+      { label: 'Maintenance',  to: '/maintenance',  icon: <Wrench size={18} /> },
+    ],
+  },
+  {
+    label: 'Finance', to: '#finance', icon: <Receipt size={18} />,
+    roles: ['Admin','Billing','Finance','CostController','Executive'],
+    children: [
+      { label: 'Invoices',   to: '/invoices',   icon: <FileText size={18} /> },
+    ],
+  },
+  { label: 'Inventory',  to: '/inventory',  icon: <Package size={18} />,
+    roles: ['Admin','Operations'] },
+  {
+    label: 'Master Data', to: '#master', icon: <BookOpen size={18} />,
+    roles: ['Admin','Operations','Billing'],
+    children: [
+      { label: 'Clients',   to: '/clients',   icon: <Building2 size={18} /> },
+      { label: 'Contracts', to: '/contracts', icon: <FileText size={18} /> },
+      { label: 'Suppliers', to: '/suppliers', icon: <Building2 size={18} /> },
+      { label: 'Categories & Sizes', to: '/categories', icon: <Tag size={18} /> },
+    ],
+  },
+  { label: 'Users',      to: '/users',      icon: <Users size={18} />,
+    roles: ['Admin'] },
+  { label: 'Settings',   to: '/settings',   icon: <Settings size={18} />,
+    roles: ['Admin'] },
+]
 
-  // Dynamic Permissions revision loaded from localStorage with default fallback
-  const [, setPermRevision] = useState(0);
+function NavGroup({ item, depth = 0 }: { item: NavItem; depth?: number }) {
+  const location = useLocation()
+  const { hasRole } = useAuth()
+  const [open, setOpen] = useState(() =>
+    item.children?.some(c => location.pathname.startsWith(c.to)) ?? false
+  )
 
-  useEffect(() => {
-    const handlePermissionsChange = () => {
-      setPermRevision((r) => r + 1);
-    };
-    window.addEventListener('permissions_updated', handlePermissionsChange);
-    window.addEventListener('users_updated', handlePermissionsChange);
-    window.addEventListener('storage', handlePermissionsChange);
-    return () => {
-      window.removeEventListener('permissions_updated', handlePermissionsChange);
-      window.removeEventListener('users_updated', handlePermissionsChange);
-      window.removeEventListener('storage', handlePermissionsChange);
-    };
-  }, []);
+  if (item.roles && !hasRole(...item.roles)) return null
 
-  const isAllowed = (id: NavModule) => {
-    if (id === 'settings' && user?.role !== 'Admin') return false;
-    if (user?.role === 'Admin') return true;
-    return canViewModule(user, id);
-  };
-
-  interface NavItem {
-    id: NavModule;
-    label: string;
-    icon: string;
-    badge?: number | null;
-    badgeColor?: string;
+  if (item.children) {
+    return (
+      <div>
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+                     text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+        >
+          {item.icon}
+          <span className="flex-1 text-left">{item.label}</span>
+          {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        </button>
+        {open && (
+          <div className="ml-4 mt-0.5 border-l border-gray-200 pl-2 flex flex-col gap-0.5">
+            {item.children.map(child => (
+              <NavGroup key={child.to} item={child} depth={depth + 1} />
+            ))}
+          </div>
+        )}
+      </div>
+    )
   }
-
-  interface NavSection {
-    id: string;
-    title: string;
-    icon: string;
-    adminOnly?: boolean;
-    items: NavItem[];
-  }
-
-  const navSections: NavSection[] = [
-    {
-      id: 'operations',
-      title: 'Operations Module',
-      icon: '⚙️',
-      items: [
-        { id: 'dashboard', label: 'Operations Dashboard', icon: '📊' },
-        { id: 'jobs', label: 'Drilling Jobs', icon: '⚡' },
-        { id: 'job-tools-list', label: 'Job Tools List', icon: '📋' },
-        { id: 'tool-history', label: 'Tool Movement History', icon: '⏱️' },
-        { id: 'gatepass', label: 'Security Gate Pass', icon: '🛡️' },
-      ],
-    },
-    {
-      id: 'inventory',
-      title: 'Inventory Module',
-      icon: '📦',
-      items: [
-        { id: 'inventory-dash', label: 'Inventory Dashboard', icon: '📊' },
-        { id: 'inventory', label: 'Assets and Inventory', icon: '🧰' },
-        { id: 'categories-sizes', label: 'Tool Categories & Sizes', icon: '🏷️' },
-        { id: 'po-management', label: 'PO & Goods Inward (GRN)', icon: '📑' },
-        { id: 'sub-rental-inward', label: 'Third-Party Rental Inward', icon: '🚚' },
-        { id: 'consumables', label: 'Consumables & Store (SIV)', icon: '🧴' },
-      ],
-    },
-    {
-      id: 'workshop',
-      title: 'Workshop Handling',
-      icon: '🏭',
-      items: [
-        {
-          id: 'callouts',
-          label: 'Rig Callouts',
-          icon: '📣',
-          badge: pendingCalloutsCount > 0 ? pendingCalloutsCount : null,
-          badgeColor: 'bg-amber-400 text-amber-950',
-        },
-        { id: 'dt', label: 'Delivery Tickets', icon: '🚚' },
-        { id: 'rt', label: 'Receiving Tickets', icon: '📥' },
-      ],
-    },
-    {
-      id: 'maintenance',
-      title: 'Maintenance & QC Module',
-      icon: '🔬',
-      items: [
-        { id: 'maintenance-dash', label: 'Maintenance & QC Dashboard', icon: '📊' },
-        {
-          id: 'inspection',
-          label: 'QC Inspection Bay',
-          icon: '🔍',
-          badge: pendingInspectionsCount > 0 ? pendingInspectionsCount : null,
-          badgeColor: 'bg-rose-400 text-rose-950',
-        },
-        {
-          id: 'maintenance',
-          label: 'Maintenance Orders',
-          icon: '🔧',
-          badge: pendingMaintenanceCount > 0 ? pendingMaintenanceCount : null,
-          badgeColor: 'bg-amber-400 text-amber-950',
-        },
-      ],
-    },
-    {
-      id: 'billing',
-      title: 'Billing & Cost Control',
-      icon: '💳',
-      items: [
-        { id: 'billing-dash', label: 'Billing Dashboard', icon: '📊' },
-        { id: 'invoicing', label: 'Invoicing', icon: '📄' },
-        { id: 'tool-revenue-report', label: 'Tool Revenue & Utilization Report', icon: '💰' },
-        { id: 'subcontractor-rentals', label: 'Sub-Contractor Rentals', icon: '🤝' },
-        { id: 'monthly-expenses', label: 'Monthly Expense Grid & P&L', icon: '📈' },
-      ],
-    },
-    {
-      id: 'contracts',
-      title: 'Contracts Module',
-      icon: '📄',
-      items: [
-        { id: 'contract-dash', label: 'Contracts Dashboard', icon: '📊' },
-        { id: 'contracts', label: 'Master Contract Register', icon: '📋' },
-      ],
-    },
-    {
-      id: 'admin',
-      title: 'Administration',
-      icon: '🔒',
-      adminOnly: true,
-      items: [
-        { id: 'data-management', label: 'System Database Inspector', icon: '🗄️' },
-        { id: 'settings', label: 'Global Configurations', icon: '⚙️' },
-      ],
-    },
-  ];
-
-  // Accordion state
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
-    return {
-      operations: true,
-      inventory: false,
-      maintenance: false,
-      billing: false,
-      contracts: false,
-      admin: false,
-    };
-  });
-
-  // Auto-expand section containing active view
-  useEffect(() => {
-    const parentSection = navSections.find((sec) =>
-      sec.items.some((item) => item.id === current)
-    );
-    if (parentSection && !openSections[parentSection.id]) {
-      setOpenSections((prev) => ({ ...prev, [parentSection.id]: true }));
-    }
-  }, [current]);
-
-  const toggleSection = (sectionId: string) => {
-    setOpenSections((prev) => ({
-      ...prev,
-      [sectionId]: !prev[sectionId],
-    }));
-  };
-
-  // User initials
-  const userName = user?.name || 'Ravi Parapu';
-  const userRole = user?.role || 'Admin';
-  const userInitial = userName.trim().charAt(0).toUpperCase() || 'U';
 
   return (
-    <aside
-      className={`${
-        isCollapsed ? 'w-16' : 'w-64'
-      } bg-[#0b192c] text-white flex flex-col justify-between border-r border-[#182944] no-print shrink-0 transition-all duration-300 ease-in-out select-none`}
+    <NavLink
+      to={item.to}
+      className={({ isActive }) =>
+        `sidebar-link ${isActive ? 'active' : ''}`
+      }
+      end={item.to === '/'}
     >
-      {/* Top Header / Branding area in sidebar */}
-      <div className="p-3 border-b border-[#182944] flex items-center justify-between">
-        {!isCollapsed ? (
-          <div>
-            <div className="font-bold text-[11px] text-white tracking-wider flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-              <span>OPERATIONS PLATFORM</span>
-            </div>
-            <div className="text-[9px] text-slate-400 font-medium">Tool Fleet &amp; Dispatch</div>
-          </div>
-        ) : (
-          <div className="mx-auto font-black text-xs text-amber-400">EMDAD</div>
-        )}
+      {item.icon}
+      {item.label}
+    </NavLink>
+  )
+}
 
-        {onToggleCollapse && (
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#152741] transition cursor-pointer"
-            title={isCollapsed ? 'Expand Navigation Sidebar' : 'Collapse Navigation Sidebar'}
-          >
-            <span className="text-xs font-mono">{isCollapsed ? '▶' : '◀'}</span>
-          </button>
-        )}
+export function Sidebar() {
+  const { user } = useAuth()
+
+  return (
+    <aside className="w-60 shrink-0 h-screen bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+      {/* Logo */}
+      <div className="px-4 py-5 border-b border-gray-200">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center shrink-0">
+            <Package size={16} className="text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-gray-900 leading-tight">Tool Tracker</p>
+            <p className="text-xs text-gray-500 leading-tight">Emdad</p>
+          </div>
+        </div>
       </div>
 
-      {/* Navigation Sections Area */}
-      <nav className="flex-1 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
-        {navSections.map((section) => {
-          if (section.adminOnly && user?.role !== 'Admin') return null;
-
-          const visibleItems = section.items.filter((item) => isAllowed(item.id));
-          if (visibleItems.length === 0) return null;
-
-          const isOpen = Boolean(openSections[section.id]);
-          const containsActive = visibleItems.some((item) => item.id === current);
-
-          if (isCollapsed) {
-            // Collapsed Rail View: Display only icons
-            return (
-              <div key={section.id} className="space-y-1 pt-1 border-t border-white/5 first:border-0 first:pt-0">
-                {visibleItems.map((item) => {
-                  const isActive = current === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => handleNav(item.id)}
-                      title={`${item.label} (${section.title})`}
-                      className={`w-full h-10 flex items-center justify-center rounded-lg text-sm transition relative cursor-pointer ${
-                        isActive
-                          ? 'bg-amber-400 text-[#0b192c] font-black shadow-md'
-                          : 'text-slate-300 hover:bg-[#152741] hover:text-white'
-                      }`}
-                    >
-                      <span>{item.icon}</span>
-                      {item.badge !== undefined && item.badge !== null && item.badge > 0 && (
-                        <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400"></span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          }
-
-          // Expanded Accordion View
-          return (
-            <div key={section.id} className="rounded-lg border border-white/5 bg-[#0f213a]/50 overflow-hidden">
-              {/* Section Header */}
-              <button
-                type="button"
-                onClick={() => toggleSection(section.id)}
-                className={`w-full px-2.5 py-1.5 flex items-center justify-between text-left transition cursor-pointer ${
-                  containsActive
-                    ? 'bg-white/5 text-amber-300 font-bold'
-                    : 'text-slate-300 hover:bg-white/5 hover:text-white'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs">{section.icon}</span>
-                  <span className="text-[10px] font-black uppercase tracking-wider">
-                    {section.title}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-1.5">
-                  {section.adminOnly && (
-                    <span className="text-[8px] bg-amber-500/20 text-amber-300 px-1 py-0.2 rounded font-mono font-bold">
-                      Admin
-                    </span>
-                  )}
-                  <span className="text-[9px] text-slate-400 font-mono">
-                    {isOpen ? '▲' : '▼'}
-                  </span>
-                </div>
-              </button>
-
-              {/* Sub-items */}
-              {isOpen && (
-                <div className="px-1.5 py-1 space-y-0.5 bg-black/20 border-t border-white/5">
-                  {visibleItems.map((item) => {
-                    const isActive = current === item.id;
-
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => handleNav(item.id)}
-                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-semibold transition cursor-pointer ${
-                          isActive
-                            ? 'bg-amber-400 text-[#0b192c] font-bold shadow-xs'
-                            : 'text-slate-200 hover:bg-white/10 hover:text-white'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-2 truncate">
-                          <span className="text-xs shrink-0">{item.icon}</span>
-                          <span className="truncate">{item.label}</span>
-                        </div>
-
-                        {item.badge !== undefined && item.badge !== null && item.badge > 0 && (
-                          <span
-                            className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black shrink-0 ${
-                              isActive ? 'bg-[#0b192c] text-white' : item.badgeColor || 'bg-white/20 text-white'
-                            }`}
-                          >
-                            {item.badge}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-0.5">
+        {NAV.map(item => (
+          <NavGroup key={item.to} item={item} />
+        ))}
       </nav>
 
-      {/* User Profile & Logout Bottom Footer */}
-      <div className="p-2.5 border-t border-[#182944] bg-[#081322]">
-        {!isCollapsed ? (
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center space-x-2 min-w-0">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-400 to-amber-600 flex items-center justify-center font-bold text-[#0b192c] text-xs shrink-0 shadow-xs">
-                {userInitial}
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-bold text-white truncate" title={userName}>
-                  {userName}
-                </div>
-                <div className="flex items-center space-x-1">
-                  <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-[#182944] text-amber-300">
-                    {userRole}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1 shrink-0">
-              {onChangePassword && (
-                <button
-                  type="button"
-                  onClick={onChangePassword}
-                  className="p-1.5 text-slate-300 hover:text-amber-300 hover:bg-amber-400/10 rounded border border-slate-700/50 hover:border-amber-400/40 transition cursor-pointer"
-                  title="Change Password"
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                </button>
-              )}
-              {onLogout && (
-                <button
-                  type="button"
-                  onClick={onLogout}
-                  className="px-2 py-1 text-[11px] font-bold text-slate-300 hover:text-rose-300 hover:bg-rose-500/10 rounded border border-slate-700/50 hover:border-rose-500/30 transition cursor-pointer"
-                  title="Sign out of system"
-                >
-                  Sign Out
-                </button>
-              )}
-            </div>
+      {/* User info */}
+      <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 bg-brand-100 rounded-full flex items-center justify-center shrink-0">
+            <span className="text-xs font-semibold text-brand-700">
+              {(user?.FullName || user?.Username || 'U').charAt(0).toUpperCase()}
+            </span>
           </div>
-        ) : (
-          <div className="flex flex-col items-center gap-2">
-            <div
-              className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-400 to-amber-600 flex items-center justify-center font-bold text-[#0b192c] text-xs shadow-xs"
-              title={`${userName} (${userRole})`}
-            >
-              {userInitial}
-            </div>
-            {onChangePassword && (
-              <button
-                type="button"
-                onClick={onChangePassword}
-                className="text-slate-400 hover:text-amber-300 transition cursor-pointer p-1"
-                title="Change Password"
-              >
-                <KeyRound className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {onLogout && (
-              <button
-                type="button"
-                onClick={onLogout}
-                className="text-[10px] text-slate-400 hover:text-rose-300 transition cursor-pointer p-1"
-                title="Sign Out"
-              >
-                🚪
-              </button>
-            )}
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-gray-900 truncate">
+              {user?.FullName || user?.Username}
+            </p>
+            <p className="text-xs text-gray-500">{user?.Role}</p>
           </div>
-        )}
+        </div>
       </div>
     </aside>
-  );
-};
+  )
+}
