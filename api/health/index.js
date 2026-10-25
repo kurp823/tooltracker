@@ -1,63 +1,37 @@
 /**
- * GET /api/health — Full end-to-end diagnostic (no credentials needed)
- * Signs a token server-side, then calls dashboard/stats via HTTP with it.
- * TEMPORARY — remove after debugging.
+ * GET /api/health?tables=tbl_Jobs,tbl_GatePasses,tbl_DailyFieldLogs
+ * Returns real column names for the requested tables (or a default set).
+ * TEMPORARY — remove after schema audit.
  */
 const { query: dbQuery } = require('../db')
 
 module.exports = async function (context, req) {
-  const jwt = require('jsonwebtoken')
-  const SECRET = 'tt-secret-key-change-in-prod'
+  const defaultTables = [
+    'tbl_Jobs', 'tbl_DeliveryTickets', 'tbl_DeliveryTicketLines',
+    'tbl_ReceivingTickets', 'tbl_ReceivingTicketLines',
+    'tbl_GatePasses', 'tbl_GatePass', 'tbl_GatePassItems', 'tbl_GatePassLines',
+    'tbl_DailyFieldLogs', 'tbl_Clients', 'tbl_Inventory'
+  ]
+  const tables = (req.query.tables ? req.query.tables.split(',') : defaultTables)
 
-  // Step 1: Get a real user from DB and sign a token
-  let token = null, signInfo = null
-  try {
-    const result = await dbQuery(
-      'SELECT TOP 1 UserID, Username, FullName, Role FROM tbl_Users WHERE Active = 1', []
-    )
-    const u = result.recordset[0]
-    if (u) {
-      token = jwt.sign(
-        { UserID: u.UserID, Username: u.Username, FullName: u.FullName, Role: u.Role, MustChangePassword: false },
-        SECRET, { expiresIn: '12h' }
+  const results = {}
+  for (const t of tables) {
+    try {
+      const r = await dbQuery(
+        `SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @t ORDER BY ORDINAL_POSITION`,
+        [{ name: 't', value: t }]
       )
-      signInfo = { user: u.Username, tokenLen: token.length }
-    }
-  } catch (e) {
-    signInfo = { error: e.message }
-  }
-
-  // Step 2: Verify the token locally (should always work)
-  let localVerify = null
-  if (token) {
-    try {
-      const d = jwt.verify(token, SECRET)
-      localVerify = { ok: true, username: d.Username }
+      results[t] = r.recordset.length
+        ? r.recordset.map(c => c.COLUMN_NAME + ':' + c.DATA_TYPE)
+        : 'TABLE_NOT_FOUND'
     } catch (e) {
-      localVerify = { ok: false, error: e.message }
-    }
-  }
-
-  // Step 3: Call dashboard/stats via HTTP with the token
-  let httpDash = null
-  if (token) {
-    const host = req.headers['host']
-    const proto = req.headers['x-forwarded-proto'] || 'https'
-    const url = proto + '://' + host + '/api/dashboard/stats'
-    try {
-      const resp = await fetch(url, {
-        headers: { 'Authorization': 'Bearer ' + token }
-      })
-      const body = await resp.text()
-      httpDash = { status: resp.status, body: body.substring(0, 500) }
-    } catch (e) {
-      httpDash = { fetchError: e.message }
+      results[t] = 'ERROR:' + e.message
     }
   }
 
   context.res = {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ signInfo, localVerify, httpDash, ts: new Date().toISOString() })
+    body: JSON.stringify(results, null, 2)
   }
 }
