@@ -22,16 +22,6 @@ async function scalar(sqlText) {
 }
 
 module.exports = async function (context, req) {
-  // TEMP DIAGNOSTIC (?hdr=1): report which header NAMES actually reach the
-  // function, to confirm whether Azure SWA forwards our custom auth header.
-  // Names only — never values, so no token is ever exposed. Remove after.
-  if (req.query && req.query.hdr === '1') {
-    return jsonResponse(context, 200, {
-      headerNames: Object.keys(req.headers || {}).sort(),
-      hasXAuthToken: Object.keys(req.headers || {}).some(h => h.toLowerCase() === 'x-auth-token'),
-    })
-  }
-
   const user = requireAuth(context, req)
   if (!user) return
 
