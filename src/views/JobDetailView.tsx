@@ -38,6 +38,7 @@ interface InvItem {
 
 interface ChecklistItem {
   _id: string           // client-side only temp ID
+  SystemID: string       // real tbl_Inventory join key — sent to the API, never shown
   AssetNo: string
   Serial: string
   Description: string
@@ -375,6 +376,7 @@ function ChecklistTab({
   function handleInsert(invItems: InvItem[]) {
     const newItems: ChecklistItem[] = invItems.map(inv => ({
       _id:         `${inv.AssetNo}-${Date.now()}-${Math.random()}`,
+      SystemID:    inv.SystemID,    // real Inventory join key
       AssetNo:     inv.AssetNo,     // ← always AssetNo, never SystemID
       Serial:      inv.Serial || '',
       Description: inv.ShortDesc,
@@ -406,8 +408,7 @@ function ChecklistTab({
       // 2 — Save each checked item as a DT line (AssetNo stored in line)
       await Promise.all(checkedItems.map(item =>
         api.post(`/delivery-tickets/${dtRes.DTID}/lines`, {
-          AssetNo:         item.AssetNo,         // ← AssetNo, not SystemID
-          Serial:          item.Serial,
+          SystemID:        item.SystemID,        // real Inventory join key
           ToolDescription: item.Description,
           SizeName:        item.Size,
           Quantity:        item.Qty,
@@ -887,7 +888,7 @@ function DTHeaderTab({
                   lines.map((line, idx) => (
                     <tr key={line.LineID} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="table-td text-gray-500">{idx + 1}</td>
-                      <td className="table-td font-medium text-gray-900">{line.SerialNumber || line.AssetNo || '—'}</td>
+                      <td className="table-td font-medium text-gray-900">{line.AssetNo || '—'}</td>
                       <td className="table-td text-gray-700">{line.ToolDescription}</td>
                       <td className="table-td text-center">{line.Quantity}</td>
                       <td className="table-td text-gray-400 text-xs">{line.Notes || '—'}</td>
@@ -1251,7 +1252,7 @@ function ReturnTicketTab({
                   lines.map((line, idx) => (
                     <tr key={line.LineID} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="table-td text-gray-500">{idx + 1}</td>
-                      <td className="table-td font-medium text-gray-900">{line.SerialNumber || line.AssetNo || '—'}</td>
+                      <td className="table-td font-medium text-gray-900">{line.AssetNo || '—'}</td>
                       <td className="table-td text-gray-700">{line.ToolDescription}</td>
                       <td className="table-td text-center">{line.Quantity}</td>
                       <td className="table-td"><span className="text-green-600 text-xs">{line.Condition || '—'}</span></td>

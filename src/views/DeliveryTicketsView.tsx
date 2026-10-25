@@ -132,7 +132,7 @@ function ToolPickerModal({
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-medium text-sm text-gray-900">
-                    {item.Serial || item.AssetNo || item.SystemID}
+                    {item.Serial || item.AssetNo || '—'}
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5">{item.ShortDesc}</p>
                 </div>
@@ -298,8 +298,7 @@ function DTDetailPanel({
   const handleAddTool = async (item: InventoryItem) => {
     try {
       await api.post(`/delivery-tickets/${dt.DTID}/lines`, {
-        Serial: item.Serial || item.AssetNo,
-        AssetNo: item.AssetNo,
+        SystemID: item.SystemID,
         ToolDescription: item.ShortDesc,
         SizeName: item.SizeName,
         Quantity: 1,
@@ -439,7 +438,7 @@ function DTDetailPanel({
                   <tr key={line.LineID} className="table-tr">
                     <td className="table-td text-xs text-gray-400">{line.LineNumber}</td>
                     <td className="table-td text-xs font-mono">
-                      {line.SerialNumber || line.AssetNo || '—'}
+                      {line.AssetNo || '—'}
                     </td>
                     <td className="table-td text-xs text-gray-600 max-w-[140px] truncate">
                       {line.ToolDescription || '—'}

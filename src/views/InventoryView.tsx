@@ -21,7 +21,7 @@ export function InventoryView() {
         const q = search.toLowerCase()
         return (
           (i.SystemID || '').toLowerCase().includes(q) ||
-          (i.OEMSerial || '').toLowerCase().includes(q) ||
+          (i.Serial || '').toLowerCase().includes(q) ||
           (i.AssetNo  || '').toLowerCase().includes(q) ||
           (i.ShortDesc|| '').toLowerCase().includes(q)
         )
@@ -56,7 +56,7 @@ export function InventoryView() {
           <input
             type="text"
             className="input pl-9"
-            placeholder="Search system ID, serial, asset no, description…"
+            placeholder="Search asset no, serial, description…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -87,8 +87,8 @@ export function InventoryView() {
           <table className="w-full">
             <thead>
               <tr>
-                <th className="table-th">System ID</th>
-                <th className="table-th">Serial / Asset</th>
+                <th className="table-th">Asset No</th>
+                <th className="table-th">Serial</th>
                 <th className="table-th">Description</th>
                 <th className="table-th">Category</th>
                 <th className="table-th">Size</th>
@@ -107,10 +107,9 @@ export function InventoryView() {
               ) : (
                 filtered.map(item => (
                   <tr key={item.SystemID} className="table-tr">
-                    <td className="table-td font-mono text-xs font-medium text-brand-600">{item.SystemID}</td>
+                    <td className="table-td font-mono text-xs font-medium text-brand-600">{item.AssetNo || '—'}</td>
                     <td className="table-td text-xs">
-                      {item.OEMSerial && <div>{item.OEMSerial}</div>}
-                      {item.AssetNo && <div className="text-gray-400">{item.AssetNo}</div>}
+                      {item.Serial || <span className="text-gray-400">—</span>}
                     </td>
                     <td className="table-td font-medium">{item.ShortDesc}</td>
                     <td className="table-td text-gray-500">{(item as any).CategoryName || '—'}</td>
