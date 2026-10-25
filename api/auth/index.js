@@ -6,14 +6,24 @@ const { sql, query, jsonResponse } = require('../db')
 const bcrypt = require('bcryptjs')
 const jwt    = require('jsonwebtoken')
 
-// Hardcoded secret shared between auth (sign) and db.js (verify).
-// Using a single constant eliminates cross-instance env-var drift that
-// was causing 401 bounce-backs after every login.
-const JWT_SECRET  = 'tt-secret-key-change-in-prod'
+// The signing secret comes ONLY from the environment — never hardcoded.
+// A hardcoded constant lived here previously, which meant tokens were signed
+// with a value committed to this repo while db.js verified against
+// process.env.JWT_SECRET. The two never matched, which is the real source of
+// the "JWT secret mismatch" 401s (not cross-instance env drift) and what led
+// to signature verification being bypassed entirely. A repo-visible signing
+// key also lets anyone mint their own Role:'Admin' token.
+const JWT_SECRET  = process.env.JWT_SECRET
 const JWT_EXPIRES = '12h'
 
 module.exports = async function (context, req) {
   const method = req.method.toUpperCase()
+
+  // Fail closed rather than falling back to a guessable key.
+  if (!JWT_SECRET) {
+    context.log.error('JWT_SECRET is not configured — cannot issue tokens')
+    return jsonResponse(context, 500, { error: 'Server auth is not configured' })
+  }
 
   // ── POST /api/auth  (login) ──────────────────────────────────────────────
   if (method === 'POST') {

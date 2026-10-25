@@ -85,30 +85,30 @@ function verifyToken(req) {
   const token = String(raw).replace(/^Bearer\s+/i, '').trim()
   if (!token) return null
 
-  // Prefer a real signature check; fall back to decode so a signing-secret
-  // mismatch across warm instances can't lock everyone out.
+  // The signature MUST be verified. A previous workaround fell back to
+  // jwt.decode() when verification failed, which accepts any unsigned token —
+  // meaning anyone could mint themselves a Role:'Admin' session. That bypass
+  // existed because logins were failing, but the real cause was the header
+  // overwrite handled above (the token never arrived), not a bad signature.
+  //
+  // Fail closed if no secret is configured: the old `|| 'tt-secret-key-...'`
+  // default is committed to the repo, so using it would let anyone who can
+  // read the repo sign valid admin tokens.
+  const secret = process.env.JWT_SECRET
+  if (!secret) {
+    console.error('JWT_SECRET is not configured — refusing to authenticate')
+    return null
+  }
+
   let decoded = null
   try {
-    decoded = jwt.verify(token, process.env.JWT_SECRET || 'tt-secret-key-change-in-prod')
+    decoded = jwt.verify(token, secret)
   } catch {
-    try {
-      decoded = jwt.decode(token)
-    } catch {
-      return null
-    }
+    return null
   }
-  if (!decoded) return null
+  if (!decoded || typeof decoded !== 'object') return null
 
-  // Normalize the shape. jwt.decode(token, { complete: true }) returns
-  // { header, payload, signature } — in that case the claims (and therefore
-  // Role) live under .payload, which silently made every role check fail
-  // while auth itself still "passed" (truthy object => no 401, then 403).
-  let user =
-    decoded && typeof decoded === 'object' &&
-    decoded.payload && typeof decoded.payload === 'object'
-      ? decoded.payload
-      : decoded
-  if (!user || typeof user !== 'object') return null
+  const user = decoded
 
   // Reject anything that isn't one of OUR app tokens — e.g. the Azure SWA
   // platform token, which decodes fine but carries no identity. Treating it as
