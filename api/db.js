@@ -40,7 +40,16 @@ async function query(queryText, params = []) {
   const pool    = await getPool()
   const request = pool.request()
   for (const { name, type, value } of params) {
-    request.input(name, type, value)
+    // mssql's .input() has two overloads: (name, value) and (name, type, value).
+    // Passing an explicit `undefined` as the type argument crashes internally
+    // ("Cannot read properties of undefined (reading 'type')") rather than
+    // being treated as "no type given" — so omit the argument entirely when
+    // callers don't specify a type (many endpoints pass only name/value).
+    if (type === undefined) {
+      request.input(name, value)
+    } else {
+      request.input(name, type, value)
+    }
   }
   return request.query(queryText)
 }
