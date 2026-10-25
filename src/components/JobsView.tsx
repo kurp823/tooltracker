@@ -432,6 +432,15 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
   // Filter out any dummy test jobs and resolve accurate client name & standard Job ID format
   const validJobs = useMemo(() => {
+    try {
+      return computeValidJobs(jobs);
+    } catch (e: any) {
+      console.error('[DEBUG-VALIDJOBS-THROW]', e && e.message, e && e.stack);
+      return [];
+    }
+  }, [jobs]);
+
+  function computeValidJobs(jobs: DrillingJob[]) {
     const seen = new Set<string>();
     const unique: DrillingJob[] = [];
     let afterFilter = 0;
@@ -476,7 +485,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
     });
 
     return unique;
-  }, [jobs]);
+  }
 
   // Distinct rigs for quick filter dropdown with natural numeric collation
   const uniqueRigs = useMemo(() => {
