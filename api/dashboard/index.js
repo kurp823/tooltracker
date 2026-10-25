@@ -30,7 +30,11 @@ module.exports = async function (context, req) {
   const defs = {
     activeJobs:      `SELECT COUNT(*) FROM tbl_Jobs WHERE Status = 'Ongoing'`,
     openJobs:        `SELECT COUNT(*) FROM tbl_Jobs WHERE Status = 'Open'`,
-    totalActiveJobs: `SELECT COUNT(*) FROM tbl_Jobs WHERE Status NOT IN ('Completed','Cancelled')`,
+    // Real statuses in tbl_Jobs (confirmed from the live data):
+    //   Completed 3675, Ongoing 55, JobCompleted 47,
+    //   'Draft Invoice Submitted' 42, Open 4, 'Waiting on Signed Docs' 1.
+    // 'JobCompleted' is a finished job too and must not count as active.
+    totalActiveJobs: `SELECT COUNT(*) FROM tbl_Jobs WHERE Status NOT IN ('Completed','JobCompleted','Cancelled')`,
     totalJobs:       `SELECT COUNT(*) FROM tbl_Jobs`,
     totalInventory:  `SELECT COUNT(*) FROM tbl_Inventory`,
     pendingInspections: `SELECT COUNT(*) FROM tbl_InspectionRecords WHERE status = 'Pending'`,
