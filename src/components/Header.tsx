@@ -17,6 +17,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/utilization':        'Utilization',
   '/gate-pass':          'Gate Pass',
   '/tool-history':       'Tool Movement History',
+  '/job-tools-list':     'Job - Tools List',
   '/inspection':         'Inspection',
   '/maintenance':        'Maintenance',
   '/invoices':           'Invoices',
