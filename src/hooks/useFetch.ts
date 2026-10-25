@@ -10,7 +10,12 @@ interface FetchState<T> {
 
 export function useFetch<T>(path: string | null): FetchState<T> {
   const [data, setData]       = useState<T | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  // Start in the loading state whenever there's a path to fetch — the
+  // effect below fires it on mount, but only AFTER the first render.
+  // If isLoading started false, components that do `const s = stats!`
+  // (DashboardView, etc.) would read null on that very first render
+  // and crash before the fetch ever goes out.
+  const [isLoading, setIsLoading] = useState(!!path)
   const [error, setError]     = useState<string | null>(null)
   const mountedRef = useRef(true)
   const countRef   = useRef(0)
