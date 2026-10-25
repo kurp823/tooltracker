@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Briefcase, Package, Users, FileText,
   Truck, RotateCcw, ClipboardCheck, Wrench, DoorOpen,
   Receipt, Building2, BarChart3, Settings, ChevronDown,
-  ChevronRight, BookOpen, Factory
+  ChevronRight, BookOpen, Factory, Tag
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import type { UserRole } from '../types'
@@ -55,6 +55,7 @@ const NAV: NavItem[] = [
       { label: 'Clients',   to: '/clients',   icon: <Building2 size={18} /> },
       { label: 'Contracts', to: '/contracts', icon: <FileText size={18} /> },
       { label: 'Suppliers', to: '/suppliers', icon: <Building2 size={18} /> },
+      { label: 'Categories & Sizes', to: '/categories', icon: <Tag size={18} /> },
     ],
   },
   { label: 'Users',      to: '/users',      icon: <Users size={18} />,
