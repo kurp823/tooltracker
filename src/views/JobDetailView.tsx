@@ -77,11 +77,12 @@ interface DTRecord {
 
 interface DTLine {
   LineID: number
-  AssetNo: string
+  AssetNo?: string
+  SerialNumber?: string
   ToolDescription: string
-  SizeName: string
+  SizeName?: string
   Quantity: number
-  Condition: string
+  Condition?: string
   Notes: string
 }
 
@@ -855,11 +856,9 @@ function DTHeaderTab({
               <thead>
                 <tr>
                   <th className="table-th">#</th>
-                  <th className="table-th">Asset No</th>
+                  <th className="table-th">Serial / Asset</th>
                   <th className="table-th">Description</th>
-                  <th className="table-th">Size</th>
                   <th className="table-th text-center">Qty</th>
-                  <th className="table-th">Condition</th>
                   <th className="table-th">Notes</th>
                   {canEdit && <th className="table-th"></th>}
                 </tr>
@@ -867,7 +866,7 @@ function DTHeaderTab({
               <tbody>
                 {lines.length === 0 ? (
                   <tr>
-                    <td colSpan={canEdit ? 8 : 7} className="table-td text-center py-8 text-gray-400">
+                    <td colSpan={canEdit ? 6 : 5} className="table-td text-center py-8 text-gray-400">
                       No tools on this delivery ticket yet.
                     </td>
                   </tr>
@@ -875,13 +874,9 @@ function DTHeaderTab({
                   lines.map((line, idx) => (
                     <tr key={line.LineID} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="table-td text-gray-500">{idx + 1}</td>
-                      <td className="table-td font-medium text-gray-900">{line.AssetNo || '—'}</td>
+                      <td className="table-td font-medium text-gray-900">{line.SerialNumber || line.AssetNo || '—'}</td>
                       <td className="table-td text-gray-700">{line.ToolDescription}</td>
-                      <td className="table-td text-gray-500">{line.SizeName}</td>
                       <td className="table-td text-center">{line.Quantity}</td>
-                      <td className="table-td">
-                        <span className="text-green-600 text-xs">{line.Condition}</span>
-                      </td>
                       <td className="table-td text-gray-400 text-xs">{line.Notes || '—'}</td>
                       {canEdit && (
                         <td className="table-td">
