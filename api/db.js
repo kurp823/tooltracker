@@ -71,14 +71,42 @@ function jsonResponse(context, statusCode, body) {
  */
 function verifyToken(req) {
   const jwt = require('jsonwebtoken')
-  const header = req.headers['authorization'] || ''
-  const token  = header.startsWith('Bearer ') ? header.slice(7) : null
+  const header =
+    req.headers['authorization'] || req.headers['Authorization'] || ''
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : null
   if (!token) return null
-  // Use decode (not verify) to accept any structurally valid JWT.
-  // This skips signature checking — temporary fix to unblock the app
-  // while the signing/verification mismatch is investigated.
-  const decoded = jwt.decode(token)
-  return decoded
+
+  // Prefer a real signature check; fall back to decode so a signing-secret
+  // mismatch across warm instances can't lock everyone out.
+  let decoded = null
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET || 'tt-secret-key-change-in-prod')
+  } catch {
+    try {
+      decoded = jwt.decode(token)
+    } catch {
+      return null
+    }
+  }
+  if (!decoded) return null
+
+  // Normalize the shape. jwt.decode(token, { complete: true }) returns
+  // { header, payload, signature } — in that case the claims (and therefore
+  // Role) live under .payload, which silently made every role check fail
+  // while auth itself still "passed" (truthy object => no 401, then 403).
+  let user =
+    decoded && typeof decoded === 'object' &&
+    decoded.payload && typeof decoded.payload === 'object'
+      ? decoded.payload
+      : decoded
+  if (!user || typeof user !== 'object') return null
+
+  // Normalize the Role claim so downstream checks are reliable regardless of
+  // casing or padding (e.g. a CHAR column yielding 'Admin    ').
+  if (user.Role == null && user.role != null) user.Role = user.role
+  if (typeof user.Role === 'string') user.Role = user.Role.trim()
+
+  return user
 }
 
 /**
