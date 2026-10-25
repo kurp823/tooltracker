@@ -11,6 +11,22 @@
 const { query: dbQuery } = require('../db')
 
 module.exports = async function (context, req) {
+  if (req.query.probe === 'identity-check') {
+    try {
+      const r = await dbQuery(
+        `SELECT t.name AS TableName, c.name AS ColumnName, c.is_identity AS IsIdentity
+           FROM sys.columns c JOIN sys.tables t ON t.object_id = c.object_id
+          WHERE t.name IN ('tbl_ToolCategories','tbl_ToolSizes')
+            AND c.name IN ('CategoryID','SizeID')`,
+        []
+      )
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(r.recordset, null, 2) }
+    } catch (e) {
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: e.message }) }
+    }
+    return
+  }
+
   if (req.query.tables) {
     const tables = req.query.tables.split(',')
     const results = {}
