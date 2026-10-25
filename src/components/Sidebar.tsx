@@ -28,6 +28,7 @@ const NAV: NavItem[] = [
       { label: 'Delivery Tickets',  to: '/delivery-tickets',  icon: <Truck size={18} /> },
       { label: 'Receiving Tickets', to: '/receiving-tickets', icon: <RotateCcw size={18} /> },
       { label: 'Utilization',       to: '/utilization',       icon: <BarChart3 size={18} /> },
+      { label: 'Job Tools List',    to: '/job-tools-list',    icon: <FileText size={18} /> },
       { label: 'Tool History',      to: '/tool-history',      icon: <History size={18} /> },
       { label: 'Gate Pass',         to: '/gate-pass',         icon: <DoorOpen size={18} /> },
     ],

@@ -480,3 +480,30 @@ export interface JobPersonnel {
   DemobDate: string | null
   Notes: string | null
 }
+
+// ─── Tool movement / Job tools list report ───────────────────────────────────
+
+export interface ToolMovement {
+  TicketNo: string
+  DateOut: string | null
+  Item: number | null
+  PartNo: string | null
+  Serial: string | null
+  Description: string | null
+  Size: string | null
+  Qty: number | null
+  RgtNo: string | null
+  DateIn: string | null
+  Comments: string | null
+  Condition: string | null
+  Supplier: string | null
+  JobID: string | null
+  Rig: string | null
+  Well: string | null
+  PONumber: string | null
+  OpsDays: number | null
+  StandbyDays: number | null
+  OpsAmount: number | null
+  StandbyAmount: number | null
+  TotalAmount: number | null
+}
