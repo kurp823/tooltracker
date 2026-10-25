@@ -246,6 +246,7 @@ export const JobsView: React.FC<JobsViewProps> = ({
   customSizes,
   isSyncing,
 }) => {
+  console.log('[DEBUG-RENDER-JOBSVIEW]', { jobsPropLen: Array.isArray(jobs) ? jobs.length : typeof jobs, ts: Date.now() });
   const { canEdit, isReadOnly } = useModulePermission(user, 'jobs');
   const [tab, setTab] = useState<'all' | JobStageKey>('all');
   const [search, setSearch] = useState('');
