@@ -613,8 +613,16 @@ export const App: React.FC = () => {
       try {
         const res = await fetchAllModulesLive();
         clearTimeout(syncTimeout);
-        if (res.success && res.data) {
-          // Success: reset consecutive failure counter
+        if (res.data) {
+          // fetchAllModulesLive() already merges per-module fallbacks (seed data /
+          // supplemental fetches) into res.data even when some OTHER module failed
+          // (e.g. contracts/callouts/gatePasses/inspections/maintenance returning
+          // HTTP 500 from the backend). A failure in one module must never discard
+          // good data that was actually fetched for the others — previously this
+          // whole block was gated on `res.success` (an all-modules-must-succeed
+          // flag), which silently dropped a successfully-fetched Jobs list whenever
+          // any unrelated module errored. Apply the data unconditionally; only the
+          // connection badge/toast below reflects whether it was a full or partial sync.
           pollFailCountRef.current = 0;
           setIsInitializing(false);
 
@@ -636,7 +644,7 @@ export const App: React.FC = () => {
           setMaintenance(res.data.maintenance);
 
           setDbStatus({
-            isConnected: true,
+            isConnected: res.success,
             source: (res.source as string) === 'failed' ? 'local-cache' : res.source,
             lastChecked: new Date().toLocaleTimeString(),
             message: res.message,
@@ -644,7 +652,7 @@ export const App: React.FC = () => {
           });
           setSyncStatus('saved');
           if (!isSilent) {
-            showToast(res.message, 'success');
+            showToast(res.message, res.success ? 'success' : 'info');
           }
         } else {
           // Failure: for silent background polls, only flip the badge after 2+ consecutive failures
