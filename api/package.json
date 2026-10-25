@@ -2,7 +2,6 @@
   "name": "tooltracker-api",
   "version": "1.0.0",
   "description": "Azure Functions API for Tool Tracker",
-  "main": "index.js",
   "scripts": {
     "start": "func start"
   },
