@@ -33,7 +33,21 @@ module.exports = async function (context, req) {
                 l.qty AS Quantity, l.condition AS Condition,
                 l.usedStatus AS UsedStatus, l.routedTo AS RoutedTo, l.remarks AS Notes
            FROM tbl_ReceivingTicketLines l
-           LEFT JOIN tbl_Inventory i ON i.SystemID = l.serial
+           OUTER APPLY (
+             -- `serial` on ticket lines mostly holds the ASSET NUMBER, not the
+             -- SystemID (inventory: SystemID 'EMD-5794' / AssetNo 'STB578-01';
+             -- line serials read 'STB578-09'). Joining on SystemID alone missed
+             -- ~72%% of lines. Match any key, prefer SystemID, take one row.
+             SELECT TOP 1 i2.AssetNo, i2.ShortDesc, i2.[Size], i2.IsEmdad,
+                          i2.Supplier, i2.Ownership
+             FROM   tbl_Inventory i2
+             WHERE  i2.SystemID = l.serial
+                OR  i2.AssetNo  = l.serial
+                OR  NULLIF(i2.OEMSerial, '') = l.serial
+             ORDER BY CASE WHEN i2.SystemID = l.serial THEN 0
+                           WHEN i2.AssetNo  = l.serial THEN 1
+                           ELSE 2 END
+           ) i
           WHERE l.rtNumber = (SELECT rtNumber FROM tbl_ReceivingTickets WHERE id = @id)
           ORDER BY l.itemNo`,
         [{ name: 'id', value: Number(id) }]
