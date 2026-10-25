@@ -1345,12 +1345,52 @@ function UtilizationTab({ jobId }: { jobId: string }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      // Fetch the whole month (not filtered server-side by jobId — historical
-      // job-number formats don't match exactly) and filter client-side by
-      // normalized job number, same fix as the Delivery Ticket tab.
-      const res = await api.get<{ rows: (UtilRow & { jobId: string })[] }>(`/utilization?year=${year}&month=${month}`)
       const normJobId = normalizeJobId(jobId)
-      setRows((res.rows || []).filter(r => normalizeJobId(r.jobId) === normJobId))
+
+      // 1) Existing utilization logs for the month. Fetched whole-month (not
+      // filtered server-side by jobId — historical job-number formats don't
+      // match exactly) then filtered client-side, same as the DT tab.
+      const res = await api.get<{ rows: (UtilRow & { jobId: string })[] }>(`/utilization?year=${year}&month=${month}`)
+      const logRows: UtilRow[] = (res.rows || [])
+        .filter(r => normalizeJobId(r.jobId) === normJobId)
+        .map(({ label, toolId, days }) => ({ label, toolId, days }))
+
+      // 2) Seed a row for every tool dispatched on this job's Delivery
+      // Tickets. A utilization row otherwise only exists once a day has
+      // already been marked, so freshly-delivered tools were invisible here
+      // and could never be marked at all — which is what this tab is for.
+      const dtRows: UtilRow[] = []
+      try {
+        const allDTs = await api.get<DTRecord[]>('/delivery-tickets')
+        const jobDTs = allDTs.filter(d => normalizeJobId(d.JobID) === normJobId)
+        const lineSets = await Promise.all(
+          jobDTs.map(d =>
+            api.get<DTLine[]>(`/delivery-tickets/${d.DTID}/lines`).catch(() => [] as DTLine[])
+          )
+        )
+        const seen = new Set<string>()
+        for (const lines of lineSets) {
+          for (const l of lines) {
+            const toolId = l.SerialNumber ?? l.AssetNo ?? null
+            const key = String(toolId ?? '')
+            if (!key || seen.has(key)) continue
+            seen.add(key)
+            const label = [l.AssetNo || l.SerialNumber, l.ToolDescription]
+              .filter(Boolean)
+              .join(' – ')
+            dtRows.push({ label: label || `Tool ${key}`, toolId, days: {} })
+          }
+        }
+      } catch {
+        // DT lookup is best-effort — never block the sheet on it.
+      }
+
+      // 3) Merge: rows with logs win; DT tools without logs get empty rows.
+      const haveTool = new Set(logRows.map(r => String(r.toolId ?? '')))
+      setRows([
+        ...logRows,
+        ...dtRows.filter(r => !haveTool.has(String(r.toolId ?? ''))),
+      ])
     } catch {
       showToast('Failed to load utilization', 'error')
     } finally {
