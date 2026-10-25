@@ -55,6 +55,11 @@ module.exports = async function (context, req) {
     })
   } catch (err) {
     context.log.error('Dashboard stats error:', err)
-    return jsonResponse(context, 500, { error: 'Failed to load dashboard stats' })
+    // TEMP DIAGNOSTIC: surface the real SQL error so we can pinpoint the
+    // remaining bad table/column. Remove after fixing.
+    return jsonResponse(context, 500, {
+      error: 'Failed to load dashboard stats',
+      _debug: { message: err.message, number: err.number, code: err.code },
+    })
   }
 }
