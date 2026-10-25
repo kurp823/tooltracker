@@ -6,7 +6,15 @@ const { sql, query, jsonResponse } = require('../db')
 const bcrypt = require('bcryptjs')
 const jwt    = require('jsonwebtoken')
 
-const JWT_SECRET  = process.env.JWT_SECRET || 'tt-secret-key-change-in-prod'
+// Read live on every request — NOT cached at module scope. Azure Functions
+// reuses warm worker processes across invocations, so a module-level
+// constant here would keep signing tokens with whatever JWT_SECRET value
+// was in effect the moment this worker last cold-started. That silently
+// diverges from db.js's verifyToken(), which already reads
+// process.env.JWT_SECRET fresh on every call — any settings change or
+// scale-out event would otherwise produce tokens signed with one secret
+// and verified against another, with every login rejected until all warm
+// instances happened to recycle.
 const JWT_EXPIRES = '12h'
 
 module.exports = async function (context, req) {
@@ -72,7 +80,11 @@ module.exports = async function (context, req) {
         MustChangePassword: !!user.MustChangePassword,
       }
 
-      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES })
+      const token = jwt.sign(
+        payload,
+        process.env.JWT_SECRET || 'tt-secret-key-change-in-prod',
+        { expiresIn: JWT_EXPIRES }
+      )
 
       return jsonResponse(context, 200, { user: payload, token })
     } catch (err) {
