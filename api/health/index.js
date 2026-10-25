@@ -1,91 +1,63 @@
 /**
- * GET /api/health — Full end-to-end diagnostic
- * 1. Signs a token (same as auth/index.js)
- * 2. Verifies it in-process (same as db.js)
- * 3. Calls POST /api/auth via HTTP (real network path)
- * 4. Calls GET /api/dashboard/stats with that token via HTTP
- * Reports everything. TEMPORARY — remove after debugging.
+ * GET /api/health — Full end-to-end diagnostic (no credentials needed)
+ * Signs a token server-side, then calls dashboard/stats via HTTP with it.
+ * TEMPORARY — remove after debugging.
  */
-const { sql, query: dbQuery } = require('../db')
+const { query: dbQuery } = require('../db')
 
 module.exports = async function (context, req) {
   const jwt = require('jsonwebtoken')
-  const secret = 'tt-secret-key-change-in-prod'
+  const SECRET = 'tt-secret-key-change-in-prod'
 
-  // 1. In-process sign+verify
-  let inProcessTest = 'untested'
+  // Step 1: Get a real user from DB and sign a token
+  let token = null, signInfo = null
   try {
-    const t = jwt.sign({ test: true }, secret, { expiresIn: '1m' })
-    jwt.verify(t, secret)
-    inProcessTest = 'ok'
+    const result = await dbQuery(
+      'SELECT TOP 1 UserID, Username, FullName, Role FROM tbl_Users WHERE Active = 1', []
+    )
+    const u = result.recordset[0]
+    if (u) {
+      token = jwt.sign(
+        { UserID: u.UserID, Username: u.Username, FullName: u.FullName, Role: u.Role, MustChangePassword: false },
+        SECRET, { expiresIn: '12h' }
+      )
+      signInfo = { user: u.Username, tokenLen: token.length }
+    }
   } catch (e) {
-    inProcessTest = 'FAIL:' + e.message
+    signInfo = { error: e.message }
   }
 
-  // 2. Full HTTP round-trip: login then dashboard
-  const host = req.headers['host'] || 'polite-tree-0c9507d00.2.azurestaticapps.net'
-  const proto = req.headers['x-forwarded-proto'] || 'https'
-  const baseUrl = proto + '://' + host
-
-  let httpLoginStatus = null, httpLoginBody = null
-  let httpDashStatus = null, httpDashBody = null
-  let tokenFromLogin = null
-
-  try {
-    // Call POST /api/auth
-    const loginResp = await fetch(baseUrl + '/api/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'ravi', password: req.query.p || '' })
-    })
-    httpLoginStatus = loginResp.status
-    const loginText = await loginResp.text()
+  // Step 2: Verify the token locally (should always work)
+  let localVerify = null
+  if (token) {
     try {
-      const parsed = JSON.parse(loginText)
-      httpLoginBody = {
-        hasToken: !!parsed.token,
-        tokenLen: parsed.token ? parsed.token.length : 0,
-        user: parsed.user ? parsed.user.Username : null
-      }
-      tokenFromLogin = parsed.token || null
+      const d = jwt.verify(token, SECRET)
+      localVerify = { ok: true, username: d.Username }
     } catch (e) {
-      httpLoginBody = { raw: loginText.substring(0, 200) }
+      localVerify = { ok: false, error: e.message }
     }
+  }
 
-    // Call GET /api/dashboard/stats with the token
-    if (tokenFromLogin) {
-      // First verify the token ourselves
-      let localVerify = 'untested'
-      try {
-        jwt.verify(tokenFromLogin, secret)
-        localVerify = 'ok'
-      } catch (e) {
-        localVerify = 'FAIL:' + e.message
-      }
-
-      const dashResp = await fetch(baseUrl + '/api/dashboard/stats', {
-        headers: { 'Authorization': 'Bearer ' + tokenFromLogin }
+  // Step 3: Call dashboard/stats via HTTP with the token
+  let httpDash = null
+  if (token) {
+    const host = req.headers['host']
+    const proto = req.headers['x-forwarded-proto'] || 'https'
+    const url = proto + '://' + host + '/api/dashboard/stats'
+    try {
+      const resp = await fetch(url, {
+        headers: { 'Authorization': 'Bearer ' + token }
       })
-      httpDashStatus = dashResp.status
-      const dashText = await dashResp.text()
-      httpDashBody = dashText.substring(0, 500)
-
-      httpLoginBody.localVerifyOfToken = localVerify
+      const body = await resp.text()
+      httpDash = { status: resp.status, body: body.substring(0, 500) }
+    } catch (e) {
+      httpDash = { fetchError: e.message }
     }
-  } catch (e) {
-    httpLoginBody = { fetchError: e.message }
   }
 
   context.res = {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      inProcessTest,
-      httpLoginStatus,
-      httpLoginBody,
-      httpDashStatus,
-      httpDashBody,
-      timestamp: new Date().toISOString()
-    })
+    body: JSON.stringify({ signInfo, localVerify, httpDash, ts: new Date().toISOString() })
   }
 }
