@@ -64,7 +64,7 @@ module.exports = async function (context, req) {
       return jsonResponse(context, 403, { error: 'Admin only' })
     try {
       const result = await query(
-        `SELECT UserID, Username, FullName, Role, IsActive,
+        `SELECT UserID, Username, FullName, Role, Active,
                 MustChangePassword, LastLogin, CreatedDate
          FROM   tbl_Users
          ORDER  BY FullName`
@@ -86,7 +86,7 @@ module.exports = async function (context, req) {
     try {
       const hash = await bcrypt.hash(b.Password, 12)
       await query(
-        `INSERT INTO tbl_Users (Username, PasswordHash, FullName, Role, IsActive, MustChangePassword, CreatedDate)
+        `INSERT INTO tbl_Users (Username, PasswordHash, FullName, Role, Active, MustChangePassword, CreatedDate)
          VALUES (@u, @h, @fn, @role, 1, 1, GETDATE())`,
         [
           { name: 'u',    type: sql.NVarChar, value: b.Username },
@@ -111,12 +111,12 @@ module.exports = async function (context, req) {
     const b = req.body || {}
     try {
       await query(
-        `UPDATE tbl_Users SET FullName = @fn, Role = @role, IsActive = @active
+        `UPDATE tbl_Users SET FullName = @fn, Role = @role, Active = @active
          WHERE  UserID = @id`,
         [
           { name: 'fn',     type: sql.NVarChar, value: b.FullName },
           { name: 'role',   type: sql.NVarChar, value: b.Role },
-          { name: 'active', type: sql.Bit,      value: b.IsActive ? 1 : 0 },
+          { name: 'active', type: sql.Bit,      value: b.Active ? 1 : 0 },
           { name: 'id',     type: sql.Int,      value: parseInt(id) },
         ]
       )
