@@ -7,9 +7,15 @@ async function request<T = unknown>(
   options: RequestInit = {}
 ): Promise<T> {
   const token = localStorage.getItem('tt_token')
+  // Azure Static Web Apps overwrites the Authorization header on requests to
+  // its managed Functions with its own platform token, so our app token must
+  // travel in a custom header that SWA leaves untouched. Authorization is kept
+  // as well for local dev / non-SWA hosts.
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(token
+      ? { Authorization: `Bearer ${token}`, 'X-Auth-Token': token }
+      : {}),
     ...options.headers,
   }
 
