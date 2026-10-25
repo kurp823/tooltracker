@@ -27,25 +27,25 @@ module.exports = async function (context, req) {
 
     try {
       const result = await query(
-        `SELECT PasswordHash FROM tbl_Users WHERE UserID = @id`,
+        `SELECT Password FROM tbl_Users WHERE UserID = @id`,
         [{ name: 'id', type: sql.Int, value: parseInt(userId) }]
       )
       if (!result.recordset.length)
         return jsonResponse(context, 404, { error: 'User not found' })
 
-      const { PasswordHash } = result.recordset[0]
+      const { Password: currentHash } = result.recordset[0]
       let ok = false
-      if (PasswordHash && PasswordHash.startsWith('$2')) {
-        ok = await bcrypt.compare(currentPassword, PasswordHash)
+      if (currentHash && currentHash.startsWith('$2')) {
+        ok = await bcrypt.compare(currentPassword, currentHash)
       } else {
-        ok = PasswordHash === currentPassword
+        ok = currentHash === currentPassword
       }
       if (!ok && user.Role !== 'Admin')
         return jsonResponse(context, 401, { error: 'Current password is incorrect' })
 
       const newHash = await bcrypt.hash(newPassword, 12)
       await query(
-        `UPDATE tbl_Users SET PasswordHash = @h, MustChangePassword = 0 WHERE UserID = @id`,
+        `UPDATE tbl_Users SET Password = @h, MustChangePassword = 0 WHERE UserID = @id`,
         [
           { name: 'h',  type: sql.NVarChar, value: newHash },
           { name: 'id', type: sql.Int,      value: parseInt(userId) },
@@ -86,7 +86,7 @@ module.exports = async function (context, req) {
     try {
       const hash = await bcrypt.hash(b.Password, 12)
       await query(
-        `INSERT INTO tbl_Users (Username, PasswordHash, FullName, Role, Active, MustChangePassword, CreatedDate)
+        `INSERT INTO tbl_Users (Username, Password, FullName, Role, Active, MustChangePassword, CreatedDate)
          VALUES (@u, @h, @fn, @role, 1, 1, GETDATE())`,
         [
           { name: 'u',    type: sql.NVarChar, value: b.Username },
@@ -124,7 +124,7 @@ module.exports = async function (context, req) {
       if (b.NewPassword) {
         const hash = await bcrypt.hash(b.NewPassword, 12)
         await query(
-          `UPDATE tbl_Users SET PasswordHash = @h, MustChangePassword = 1 WHERE UserID = @id`,
+          `UPDATE tbl_Users SET Password = @h, MustChangePassword = 1 WHERE UserID = @id`,
           [
             { name: 'h',  type: sql.NVarChar, value: hash },
             { name: 'id', type: sql.Int,      value: parseInt(id) },

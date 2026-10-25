@@ -22,7 +22,7 @@ module.exports = async function (context, req) {
 
     try {
       const result = await query(
-        `SELECT UserID, Username, FullName, Role, PasswordHash,
+        `SELECT UserID, Username, FullName, Role, Password,
                 MustChangePassword, Active
          FROM   tbl_Users
          WHERE  Username = @u`,
@@ -37,15 +37,15 @@ module.exports = async function (context, req) {
 
       // Compare password — supports both bcrypt hashes and plain text (legacy)
       let passwordOk = false
-      if (user.PasswordHash && user.PasswordHash.startsWith('$2')) {
-        passwordOk = await bcrypt.compare(password, user.PasswordHash)
+      if (user.Password && user.Password.startsWith('$2')) {
+        passwordOk = await bcrypt.compare(password, user.Password)
       } else {
         // Legacy plain-text comparison (migrate on first login)
-        passwordOk = user.PasswordHash === password
+        passwordOk = user.Password === password
         if (passwordOk) {
           const newHash = await bcrypt.hash(password, 12)
           await query(
-            `UPDATE tbl_Users SET PasswordHash = @h WHERE UserID = @id`,
+            `UPDATE tbl_Users SET Password = @h WHERE UserID = @id`,
             [
               { name: 'h',  type: sql.NVarChar, value: newHash },
               { name: 'id', type: sql.Int,      value: user.UserID },
