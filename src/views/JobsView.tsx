@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext'
 import type { Job, JobStatus } from '../types'
 
 const STATUS_OPTIONS: (JobStatus | 'All')[] = [
-  'All', 'Open', 'Active', 'Completed', 'Cancelled', 'On Hold'
+  'All', 'Open', 'Ongoing', 'Draft Invoice Submitted', 'Completed', 'JobCompleted'
 ]
 
 export function JobsView() {

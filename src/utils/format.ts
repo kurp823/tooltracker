@@ -66,9 +66,9 @@ export function formatNumber(val: number | null | undefined, decimals = 0): stri
 export function statusBadgeClass(status: string): string {
   const s = (status || '').toLowerCase()
   if (s === 'open')        return 'status-open'
-  if (s === 'active')      return 'status-active'
-  if (s === 'closed' || s === 'completed') return 'status-completed'
-  if (s === 'draft')       return 'status-draft'
+  if (s === 'ongoing' || s === 'active') return 'status-active'
+  if (s === 'closed' || s === 'completed' || s === 'jobcompleted') return 'status-completed'
+  if (s === 'draft' || s === 'draft invoice submitted') return 'status-draft'
   if (s === 'pending')     return 'status-pending'
   if (s === 'cancelled')   return 'status-cancelled'
   return 'bg-gray-100 text-gray-600'

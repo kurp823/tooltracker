@@ -28,7 +28,10 @@ export interface AuthUser extends User {
 
 // ─── Job ────────────────────────────────────────────────────────────────────
 
-export type JobStatus = 'Open' | 'Active' | 'Completed' | 'Cancelled' | 'On Hold'
+// Real tbl_Jobs.Status values (confirmed live, 3824 jobs):
+// Completed (3675), Ongoing (55), JobCompleted (47),
+// Draft Invoice Submitted (42), Open (5)
+export type JobStatus = 'Open' | 'Ongoing' | 'Completed' | 'JobCompleted' | 'Draft Invoice Submitted'
 export type InvoicingType = 'PerJob' | 'PerDay' | 'Lump Sum'
 
 export interface Job {
