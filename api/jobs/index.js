@@ -40,15 +40,31 @@ module.exports = async function (context, req) {
 
   // ── GET /api/jobs  (list) ─────────────────────────────────────────────────
   if (method === 'GET' && !jobId) {
+    // ?search= and ?limit= let a type-ahead picker query the 3,824 jobs
+    // without pulling the whole table into the browser on every keystroke.
+    const { search, limit } = req.query || {}
+    const params = []
+    let where = ''
+    if (search) {
+      where = `WHERE JobID LIKE @q OR Client LIKE @q OR Rig LIKE @q OR Well LIKE @q OR Contract LIKE @q`
+      params.push({ name: 'q', type: sql.NVarChar, value: `%${search}%` })
+    }
+    let top = parseInt(limit, 10)
+    if (!Number.isFinite(top) || top <= 0) top = 0
+    const topClause = top > 0 ? `TOP (@top)` : ''
+    if (top > 0) params.push({ name: 'top', type: sql.Int, value: Math.min(top, 5000) })
+
     try {
       const result = await query(`
-        SELECT JobID, Client, Rig, Well, Contract, PONumber, ClientRef,
+        SELECT ${topClause}
+               JobID, Client, Rig, Well, Contract, PONumber, ClientRef,
                ServiceType, HoleSection, MobDate, DemobDate,
                Status, InvoicingType, Currency, FiscalYear,
                CreatedDate, CreatedBy, UpdatedAt
         FROM   tbl_Jobs
+        ${where}
         ORDER  BY CreatedDate DESC
-      `)
+      `, params)
       return jsonResponse(context, 200, result.recordset)
     } catch (err) {
       context.log.error(err)

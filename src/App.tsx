@@ -14,7 +14,7 @@ import { JobsView }           from './views/JobsView'
 import { JobDetailView }      from './views/JobDetailView'
 import { InventoryView }      from './views/InventoryView'
 import { ToolHistoryView }    from './views/ToolHistoryView'
-import { JobToolsListView }   from './views/JobToolsListView'
+import { JobHistoryView }     from './views/JobHistoryView'
 import { DeliveryTicketsView }  from './views/DeliveryTicketsView'
 import { ReceivingTicketsView } from './views/ReceivingTicketsView'
 import { UtilizationView }    from './views/UtilizationView'
@@ -83,7 +83,7 @@ export default function App() {
               {/* Inventory */}
               <Route path="inventory" element={<InventoryView />} />
               <Route path="tool-history" element={<ToolHistoryView />} />
-              <Route path="job-tools-list" element={<JobToolsListView />} />
+              <Route path="job-tools-list" element={<JobHistoryView />} />
 
               {/* Operations */}
               <Route path="delivery-tickets"  element={<DeliveryTicketsView />} />
