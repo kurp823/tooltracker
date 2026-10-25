@@ -86,7 +86,16 @@ module.exports = async function (context, req) {
         { expiresIn: JWT_EXPIRES }
       )
 
-      return jsonResponse(context, 200, { user: payload, token })
+      // DEBUG: Verify the token we just signed to confirm round-trip works
+      let _debugVerify = 'untested'
+      try {
+        jwt.verify(token, process.env.JWT_SECRET || 'tt-secret-key-change-in-prod')
+        _debugVerify = 'ok'
+      } catch (e) {
+        _debugVerify = 'FAIL:' + e.message
+      }
+
+      return jsonResponse(context, 200, { user: payload, token, _debugVerify, _secretLen: (process.env.JWT_SECRET || 'tt-secret-key-change-in-prod').length })
     } catch (err) {
       context.log.error('Login error:', err)
       return jsonResponse(context, 500, { error: 'Server error during login' })
