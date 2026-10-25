@@ -246,7 +246,6 @@ export const JobsView: React.FC<JobsViewProps> = ({
   customSizes,
   isSyncing,
 }) => {
-  console.log('[DEBUG-RENDER-JOBSVIEW]', { jobsPropLen: Array.isArray(jobs) ? jobs.length : typeof jobs, ts: Date.now() });
   const { canEdit, isReadOnly } = useModulePermission(user, 'jobs');
   const [tab, setTab] = useState<'all' | JobStageKey>('all');
   const [search, setSearch] = useState('');
@@ -432,38 +431,15 @@ export const JobsView: React.FC<JobsViewProps> = ({
 
   // Filter out any dummy test jobs and resolve accurate client name & standard Job ID format
   const validJobs = useMemo(() => {
-    try {
-      return computeValidJobs(jobs);
-    } catch (e: any) {
-      console.error('[DEBUG-VALIDJOBS-THROW]', e && e.message, e && e.stack);
-      return [];
-    }
-  }, [jobs]);
-
-  function computeValidJobs(jobs: DrillingJob[]) {
     const seen = new Set<string>();
     const unique: DrillingJob[] = [];
-    let afterFilter = 0;
-    let droppedByDedup = 0;
-    let droppedByEmptyKey = 0;
-    let firstDropSample: any = null;
 
     jobs
       .filter((j) => j && j.id && !j.id.toUpperCase().includes('TEST') && !j.id.toUpperCase().includes('DUMMY'))
       .forEach((j) => {
-        afterFilter++;
         const stdId = formatStandardJobId(j.id);
         const normKey = normalizeJobKey(stdId || j.id);
-        if (!normKey) {
-          droppedByEmptyKey++;
-          if (!firstDropSample) firstDropSample = { reason: 'emptyKey', id: j.id, stdId, normKey };
-          return;
-        }
-        if (seen.has(normKey)) {
-          droppedByDedup++;
-          if (!firstDropSample) firstDropSample = { reason: 'dedup', id: j.id, stdId, normKey };
-          return;
-        }
+        if (!normKey || seen.has(normKey)) return;
         seen.add(normKey);
 
         const resolvedClient = resolveJobClient(j.client, j.contract, undefined, j.rig);
@@ -475,17 +451,8 @@ export const JobsView: React.FC<JobsViewProps> = ({
         });
       });
 
-    console.log('[DEBUG-VALIDJOBS]', {
-      rawJobsLen: jobs.length,
-      afterFilter,
-      droppedByEmptyKey,
-      droppedByDedup,
-      uniqueLen: unique.length,
-      firstDropSample,
-    });
-
     return unique;
-  }
+  }, [jobs]);
 
   // Distinct rigs for quick filter dropdown with natural numeric collation
   const uniqueRigs = useMemo(() => {
