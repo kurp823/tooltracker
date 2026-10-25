@@ -36,7 +36,7 @@ export function InventoryView() {
   const subCount = items?.filter(i => !i.IsEmdad).length ?? 0
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col h-[calc(100vh-104px)] gap-3">
       {/* Summary chips */}
       <div className="flex gap-3 flex-wrap">
         <div className="card px-4 py-2 flex items-center gap-2">
@@ -80,12 +80,12 @@ export function InventoryView() {
       </div>
 
       {error && <div className="card p-3 text-red-600 text-sm">{error}</div>}
-      <p className="text-xs text-gray-500">Showing {filtered.length} of {items?.length ?? 0} items</p>
+      <p className="text-xs text-gray-500 shrink-0">Showing {filtered.length} of {items?.length ?? 0} items</p>
 
-      <div className="card overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="card flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-auto">
           <table className="w-full">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr>
                 <th className="table-th">Asset No</th>
                 <th className="table-th">Size</th>
