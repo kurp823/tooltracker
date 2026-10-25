@@ -49,7 +49,7 @@ function AddToolModal({
         UtilizationCode: code,
       })
       const label = [selected.Serial || selected.AssetNo, selected.ShortDesc]
-        .filter(Boolean).join(' – ') || selected.SystemID
+        .filter(Boolean).join(' – ') || selected.AssetNo || 'Unknown Tool'
       const newRow: UtilRow = {
         label,
         jobId,
@@ -97,7 +97,7 @@ function AddToolModal({
                   <button
                     key={item.SystemID}
                     className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b last:border-0 text-sm"
-                    onClick={() => { setSelected(item); setSearch(item.Serial || item.ShortDesc || item.SystemID) }}
+                    onClick={() => { setSelected(item); setSearch(item.Serial || item.AssetNo || item.ShortDesc || '') }}
                   >
                     <div className="font-medium text-gray-800">{item.Serial || item.AssetNo}</div>
                     <div className="text-gray-500 text-xs">{item.ShortDesc}</div>
@@ -109,7 +109,7 @@ function AddToolModal({
             {selected && (
               <div className="mt-1 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm">
                 <div className="font-medium text-green-800">{selected.Serial || selected.AssetNo}</div>
-                <div className="text-green-600 text-xs">{selected.ShortDesc} — {selected.SystemID}</div>
+                <div className="text-green-600 text-xs">{selected.ShortDesc} — {selected.AssetNo}</div>
               </div>
             )}
           </div>

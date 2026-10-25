@@ -9,6 +9,10 @@ const { query, jsonResponse, requireAuth } = require('../db')
 // Real tbl_ReceivingTicketLines columns:
 //   id, rtNumber, itemNo, serial, toolDescription, qty, usedStatus,
 //   condition, remarks, routedTo, routedAt, routedBy
+//
+// `serial` is used as the join key back to tbl_Inventory.SystemID — on
+// create we store the tool's SystemID there, and on read we resolve the
+// live AssetNo via a join (same pattern as delivery-tickets lines).
 
 module.exports = async function (context, req) {
   const user = requireAuth(context, req)
@@ -24,10 +28,12 @@ module.exports = async function (context, req) {
     if (method === 'GET') {
       const result = await query(
         `SELECT l.id AS LineID, l.rtNumber AS RTID, l.itemNo AS LineNumber,
-                l.serial AS SerialNumber, l.toolDescription AS ToolDescription,
+                l.serial AS SerialNumber, COALESCE(i.AssetNo, l.serial) AS AssetNo,
+                l.toolDescription AS ToolDescription,
                 l.qty AS Quantity, l.condition AS Condition,
                 l.usedStatus AS UsedStatus, l.routedTo AS RoutedTo, l.remarks AS Notes
            FROM tbl_ReceivingTicketLines l
+           LEFT JOIN tbl_Inventory i ON i.SystemID = l.serial
           WHERE l.rtNumber = (SELECT rtNumber FROM tbl_ReceivingTickets WHERE id = @id)
           ORDER BY l.itemNo`,
         [{ name: 'id', value: Number(id) }]
@@ -49,7 +55,7 @@ module.exports = async function (context, req) {
          )`,
         [
           { name: 'id',     value: Number(id) },
-          { name: 'serial', value: b.Serial          || null },
+          { name: 'serial', value: b.SystemID || b.Serial || null },
           { name: 'desc',   value: b.ToolDescription || null },
           { name: 'qty',    value: b.Quantity         || 1   },
           { name: 'cond',   value: b.Condition        || null },

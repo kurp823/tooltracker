@@ -105,7 +105,7 @@ function ToolPickerModal({
               onClick={() => { onSelect(item); onClose(); setSearch(''); setResults([]) }}>
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="font-medium text-sm text-gray-900">{item.Serial || item.AssetNo || item.SystemID}</p>
+                  <p className="font-medium text-sm text-gray-900">{item.Serial || item.AssetNo || '—'}</p>
                   <p className="text-xs text-gray-500 mt-0.5">{item.ShortDesc}</p>
                 </div>
                 <div className="text-right shrink-0">

@@ -11,6 +11,13 @@ const { query, jsonResponse, requireAuth } = require('../db')
 // (No AssetNo/Size/UnitRate/LineAmount/Condition columns on lines — those
 // fields don't exist in this schema.)
 //
+// `serial` is used as the join key back to tbl_Inventory.SystemID — on
+// create we store the tool's SystemID there (not its human AssetNo/Serial,
+// which can be edited later), and on read we resolve the *live* AssetNo via
+// a join so the displayed asset number always matches Inventory. Rows whose
+// `serial` doesn't match any SystemID (manual/free-text/legacy entries)
+// fall back to showing the raw stored value instead of nothing.
+//
 // SQL columns are aliased back to the PascalCase names the frontend already
 // expects, so no frontend changes are needed.
 
@@ -30,9 +37,11 @@ module.exports = async function (context, req) {
     if (method === 'GET') {
       const result = await query(
         `SELECT l.id AS LineID, l.dtNumber AS DTID, l.itemNo AS LineNumber,
-                l.serial AS SerialNumber, l.toolDescription AS ToolDescription,
+                l.serial AS SerialNumber, COALESCE(i.AssetNo, l.serial) AS AssetNo,
+                l.toolDescription AS ToolDescription,
                 l.qty AS Quantity, l.remarks AS Notes
            FROM tbl_DeliveryTicketLines l
+           LEFT JOIN tbl_Inventory i ON i.SystemID = l.serial
           WHERE l.dtNumber = (SELECT dtNumber FROM tbl_DeliveryTickets WHERE id = @id)
           ORDER BY l.itemNo`,
         [{ name: 'id', value: Number(id) }]
@@ -54,7 +63,7 @@ module.exports = async function (context, req) {
          )`,
         [
           { name: 'id',       value: Number(id) },
-          { name: 'serial',   value: b.Serial          || null },
+          { name: 'serial',   value: b.SystemID || b.Serial || null },
           { name: 'desc',     value: b.ToolDescription || null },
           { name: 'qty',      value: b.Quantity         || 1   },
           { name: 'notes',    value: b.Notes            || null },

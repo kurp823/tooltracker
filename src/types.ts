@@ -85,7 +85,7 @@ export interface InventoryItem {
   Status: InventoryStatus
   Ownership: string | null
   IsEmdad: boolean        // 1 = Own, 0 = Subcontract
-  OEMSerial: string | null
+  Serial: string | null
   Supplier: string | null
 }
 
