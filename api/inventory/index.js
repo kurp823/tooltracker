@@ -4,8 +4,39 @@
  * POST /api/inventory          — create item
  * GET  /api/inventory/{id}     — single item
  * PUT  /api/inventory/{id}     — update item
+ *
+ * Real tbl_Inventory columns (confirmed via INFORMATION_SCHEMA):
+ *   SystemID, AssetNo, Size, ShortDesc, Description, Qty, Location, Status,
+ *   Ownership, IsEmdad, OEMSerial, Supplier, AddedDate, AddedBy,
+ *   LastUpdated, LastUpdatedBy, rowver
+ *
+ * This endpoint previously selected Serial / CategoryID / SizeID / Condition /
+ * IsActive / SupplierID / PurchaseDate / PurchaseCost / Notes and joined
+ * tbl_ToolCategories, tbl_ToolSizes and tbl_Suppliers on FK columns — none of
+ * which exist here. Every list request therefore failed with
+ * "Invalid column name 'IsActive'", hiding all 5,094 rows behind a 500.
+ *
+ * Note: Size and Supplier are plain text on this table, not foreign keys, so
+ * there is nothing to join. There is no category column at all.
  */
 const { sql, query, jsonResponse, requireAuth } = require('../db')
+
+// The frontend's InventoryItem type expects `Serial`; the column is OEMSerial.
+const SELECT_COLS = `
+  i.SystemID,
+  i.AssetNo,
+  i.Size,
+  i.ShortDesc,
+  i.Description,
+  i.Qty,
+  i.Location,
+  i.Status,
+  i.Ownership,
+  i.IsEmdad,
+  i.OEMSerial AS Serial,
+  i.Supplier,
+  i.AddedDate,
+  i.LastUpdated`
 
 module.exports = async function (context, req) {
   const user = requireAuth(context, req)
@@ -16,43 +47,37 @@ module.exports = async function (context, req) {
 
   // ── GET list ───────────────────────────────────────────────────────────────
   if (method === 'GET' && !id) {
-    const { search, category, owner } = req.query || {}
+    const { search, owner, status, location } = req.query || {}
     try {
-      let where = ['1=1']
+      const where = ['1=1']
       const params = []
 
       if (search) {
-        where.push(`(i.SystemID LIKE @s OR i.Serial LIKE @s OR i.AssetNo LIKE @s OR i.ShortDesc LIKE @s)`)
+        where.push(`(i.SystemID LIKE @s OR i.OEMSerial LIKE @s OR i.AssetNo LIKE @s OR i.ShortDesc LIKE @s OR i.Description LIKE @s)`)
         params.push({ name: 's', type: sql.NVarChar, value: `%${search}%` })
       }
-      if (category) {
-        where.push(`i.CategoryID = @cat`)
-        params.push({ name: 'cat', type: sql.Int, value: parseInt(category) })
+      if (status) {
+        where.push(`i.Status = @st`)
+        params.push({ name: 'st', type: sql.NVarChar, value: status })
       }
-      if (owner === 'own')  {
-        where.push(`i.IsEmdad = 1`)
-      } else if (owner === 'sub') {
-        where.push(`i.IsEmdad = 0`)
+      if (location) {
+        where.push(`i.Location = @loc`)
+        params.push({ name: 'loc', type: sql.NVarChar, value: location })
       }
+      if (owner === 'own')      where.push(`i.IsEmdad = 1`)
+      else if (owner === 'sub') where.push(`i.IsEmdad = 0`)
 
       const result = await query(
-        `SELECT i.SystemID, i.Serial, i.AssetNo, i.ShortDesc,
-                i.CategoryID, c.CategoryName, i.SizeID, s.SizeName,
-                i.IsEmdad, i.Condition, i.Location, i.IsActive,
-                i.SupplierID, sup.SupplierName,
-                i.PurchaseDate, i.PurchaseCost, i.Notes
+        `SELECT ${SELECT_COLS}
          FROM   tbl_Inventory i
-         LEFT   JOIN tbl_ToolCategories c ON i.CategoryID = c.CategoryID
-         LEFT   JOIN tbl_ToolSizes      s ON i.SizeID     = s.SizeID
-         LEFT   JOIN tbl_Suppliers    sup ON i.SupplierID = sup.SupplierID
          WHERE  ${where.join(' AND ')}
-         ORDER  BY i.CategoryID, i.ShortDesc`,
+         ORDER  BY i.ShortDesc, i.AssetNo`,
         params
       )
       return jsonResponse(context, 200, result.recordset)
     } catch (err) {
-      context.log.error(err)
-      return jsonResponse(context, 500, { error: 'Failed to load inventory' })
+      context.log.error('Inventory list error:', err)
+      return jsonResponse(context, 500, { error: 'Failed to load inventory', detail: err.message })
     }
   }
 
@@ -60,11 +85,8 @@ module.exports = async function (context, req) {
   if (method === 'GET' && id) {
     try {
       const result = await query(
-        `SELECT i.*, c.CategoryName, s.SizeName, sup.SupplierName
+        `SELECT ${SELECT_COLS}
          FROM   tbl_Inventory i
-         LEFT   JOIN tbl_ToolCategories c   ON i.CategoryID = c.CategoryID
-         LEFT   JOIN tbl_ToolSizes      s   ON i.SizeID     = s.SizeID
-         LEFT   JOIN tbl_Suppliers      sup ON i.SupplierID = sup.SupplierID
          WHERE  i.SystemID = @id`,
         [{ name: 'id', type: sql.NVarChar, value: id }]
       )
@@ -72,7 +94,7 @@ module.exports = async function (context, req) {
         return jsonResponse(context, 404, { error: 'Item not found' })
       return jsonResponse(context, 200, result.recordset[0])
     } catch (err) {
-      context.log.error(err)
+      context.log.error('Inventory single error:', err)
       return jsonResponse(context, 500, { error: 'Failed to load item' })
     }
   }
@@ -88,33 +110,33 @@ module.exports = async function (context, req) {
     try {
       await query(
         `INSERT INTO tbl_Inventory
-           (SystemID, Serial, AssetNo, ShortDesc, CategoryID, SizeID,
-            IsEmdad, Condition, Location, IsActive, SupplierID,
-            PurchaseDate, PurchaseCost, Notes)
+           (SystemID, AssetNo, Size, ShortDesc, Description, Qty, Location,
+            Status, Ownership, IsEmdad, OEMSerial, Supplier,
+            AddedDate, AddedBy)
          VALUES
-           (@id, @serial, @asset, @desc, @cat, @size,
-            @isemdad, @cond, @loc, 1, @sup,
-            @pdate, @pcost, @notes)`,
+           (@id, @asset, @size, @desc, @descr, @qty, @loc,
+            @status, @own, @isemdad, @serial, @sup,
+            CAST(GETDATE() AS date), @by)`,
         [
-          { name: 'id',      type: sql.NVarChar, value: b.SystemID },
-          { name: 'serial',  type: sql.NVarChar, value: b.Serial       || null },
-          { name: 'asset',   type: sql.NVarChar, value: b.AssetNo      || null },
-          { name: 'desc',    type: sql.NVarChar, value: b.ShortDesc },
-          { name: 'cat',     type: sql.Int,      value: b.CategoryID   || null },
-          { name: 'size',    type: sql.Int,      value: b.SizeID       || null },
+          { name: 'id',      type: sql.VarChar,  value: b.SystemID },
+          { name: 'asset',   type: sql.VarChar,  value: b.AssetNo     || null },
+          { name: 'size',    type: sql.VarChar,  value: b.Size        || null },
+          { name: 'desc',    type: sql.VarChar,  value: b.ShortDesc },
+          { name: 'descr',   type: sql.VarChar,  value: b.Description || null },
+          { name: 'qty',     type: sql.Int,      value: b.Qty == null ? 1 : Number(b.Qty) },
+          { name: 'loc',     type: sql.VarChar,  value: b.Location    || null },
+          { name: 'status',  type: sql.VarChar,  value: b.Status      || 'Available' },
+          { name: 'own',     type: sql.VarChar,  value: b.Ownership   || null },
           { name: 'isemdad', type: sql.Bit,      value: b.IsEmdad ? 1 : 0 },
-          { name: 'cond',    type: sql.NVarChar, value: b.Condition    || null },
-          { name: 'loc',     type: sql.NVarChar, value: b.Location     || null },
-          { name: 'sup',     type: sql.Int,      value: b.SupplierID   || null },
-          { name: 'pdate',   type: sql.Date,     value: b.PurchaseDate ? new Date(b.PurchaseDate) : null },
-          { name: 'pcost',   type: sql.Decimal,  value: b.PurchaseCost || null },
-          { name: 'notes',   type: sql.NVarChar, value: b.Notes        || null },
+          { name: 'serial',  type: sql.VarChar,  value: b.Serial      || null },
+          { name: 'sup',     type: sql.VarChar,  value: b.Supplier    || null },
+          { name: 'by',      type: sql.VarChar,  value: user.Username || null },
         ]
       )
       return jsonResponse(context, 201, { success: true, SystemID: b.SystemID })
     } catch (err) {
-      context.log.error(err)
-      return jsonResponse(context, 500, { error: 'Failed to create inventory item' })
+      context.log.error('Inventory create error:', err)
+      return jsonResponse(context, 500, { error: 'Failed to create inventory item', detail: err.message })
     }
   }
 
@@ -127,33 +149,40 @@ module.exports = async function (context, req) {
     try {
       await query(
         `UPDATE tbl_Inventory SET
-           Serial = @serial, AssetNo = @asset, ShortDesc = @desc,
-           CategoryID = @cat, SizeID = @size, IsEmdad = @isemdad,
-           Condition = @cond, Location = @loc, IsActive = @active,
-           SupplierID = @sup, PurchaseDate = @pdate,
-           PurchaseCost = @pcost, Notes = @notes
+           AssetNo     = @asset,
+           Size        = @size,
+           ShortDesc   = @desc,
+           Description = @descr,
+           Qty         = @qty,
+           Location    = @loc,
+           Status      = @status,
+           Ownership   = @own,
+           IsEmdad     = @isemdad,
+           OEMSerial   = @serial,
+           Supplier    = @sup,
+           LastUpdated = GETDATE(),
+           LastUpdatedBy = @by
          WHERE SystemID = @id`,
         [
-          { name: 'id',      type: sql.NVarChar, value: id },
-          { name: 'serial',  type: sql.NVarChar, value: b.Serial       || null },
-          { name: 'asset',   type: sql.NVarChar, value: b.AssetNo      || null },
-          { name: 'desc',    type: sql.NVarChar, value: b.ShortDesc    || null },
-          { name: 'cat',     type: sql.Int,      value: b.CategoryID   || null },
-          { name: 'size',    type: sql.Int,      value: b.SizeID       || null },
+          { name: 'id',      type: sql.VarChar,  value: id },
+          { name: 'asset',   type: sql.VarChar,  value: b.AssetNo     || null },
+          { name: 'size',    type: sql.VarChar,  value: b.Size        || null },
+          { name: 'desc',    type: sql.VarChar,  value: b.ShortDesc   || null },
+          { name: 'descr',   type: sql.VarChar,  value: b.Description || null },
+          { name: 'qty',     type: sql.Int,      value: b.Qty == null ? null : Number(b.Qty) },
+          { name: 'loc',     type: sql.VarChar,  value: b.Location    || null },
+          { name: 'status',  type: sql.VarChar,  value: b.Status      || null },
+          { name: 'own',     type: sql.VarChar,  value: b.Ownership   || null },
           { name: 'isemdad', type: sql.Bit,      value: b.IsEmdad ? 1 : 0 },
-          { name: 'cond',    type: sql.NVarChar, value: b.Condition    || null },
-          { name: 'loc',     type: sql.NVarChar, value: b.Location     || null },
-          { name: 'active',  type: sql.Bit,      value: b.IsActive ? 1 : 0 },
-          { name: 'sup',     type: sql.Int,      value: b.SupplierID   || null },
-          { name: 'pdate',   type: sql.Date,     value: b.PurchaseDate ? new Date(b.PurchaseDate) : null },
-          { name: 'pcost',   type: sql.Decimal,  value: b.PurchaseCost || null },
-          { name: 'notes',   type: sql.NVarChar, value: b.Notes        || null },
+          { name: 'serial',  type: sql.VarChar,  value: b.Serial      || null },
+          { name: 'sup',     type: sql.VarChar,  value: b.Supplier    || null },
+          { name: 'by',      type: sql.VarChar,  value: user.Username || null },
         ]
       )
       return jsonResponse(context, 200, { success: true })
     } catch (err) {
-      context.log.error(err)
-      return jsonResponse(context, 500, { error: 'Failed to update item' })
+      context.log.error('Inventory update error:', err)
+      return jsonResponse(context, 500, { error: 'Failed to update item', detail: err.message })
     }
   }
 
