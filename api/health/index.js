@@ -83,6 +83,13 @@ const PROBES = {
          FROM tbl_Jobs ORDER BY CreatedDate DESC`,
   'jobs-01836': `SELECT DISTINCT JobID FROM tbl_Jobs WHERE JobID LIKE '%01836%'`,
   'dt-01836': `SELECT DISTINCT jobNumber FROM tbl_DeliveryTickets WHERE jobNumber LIKE '%01836%'`,
+  'dtlines-01830': `SELECT TOP 10 l.id, l.dtNumber, l.itemNo, l.serial, l.toolDescription, l.qty, l.remarks
+         FROM tbl_DeliveryTicketLines l
+         WHERE l.dtNumber IN (SELECT dtNumber FROM tbl_DeliveryTickets WHERE jobNumber = 'JOB-26-01830')
+         ORDER BY l.itemNo`,
+  'inv-emd6364': `SELECT TOP 5 SystemID, AssetNo, OEMSerial, ShortDesc FROM tbl_Inventory
+         WHERE SystemID = 'EMD-6364' OR AssetNo = 'EMD-6364' OR OEMSerial = 'EMD-6364'`,
+  'inv-sample': `SELECT TOP 10 SystemID, AssetNo, OEMSerial, ShortDesc FROM tbl_Inventory ORDER BY SystemID`,
 }
 
 module.exports = async function (context, req) {
