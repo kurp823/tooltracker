@@ -23,7 +23,7 @@ module.exports = async function (context, req) {
     try {
       const result = await query(
         `SELECT UserID, Username, FullName, Role, PasswordHash,
-                MustChangePassword, IsActive
+                MustChangePassword, Active
          FROM   tbl_Users
          WHERE  Username = @u`,
         [{ name: 'u', type: sql.NVarChar, value: username }]
@@ -31,7 +31,7 @@ module.exports = async function (context, req) {
 
       const user = result.recordset[0]
 
-      if (!user || !user.IsActive) {
+      if (!user || !user.Active) {
         return jsonResponse(context, 401, { error: 'Invalid username or password' })
       }
 
