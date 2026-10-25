@@ -22,6 +22,7 @@ import { InvoicesView }       from './views/InvoicesView'
 import { ClientsView }        from './views/ClientsView'
 import { ContractsView }      from './views/ContractsView'
 import { SuppliersView }      from './views/SuppliersView'
+import { CategoriesSizesView } from './views/CategoriesSizesView'
 import { UsersView }          from './views/UsersView'
 import { SettingsView }       from './views/SettingsView'
 
@@ -95,6 +96,7 @@ export default function App() {
               <Route path="clients"   element={<ClientsView />} />
               <Route path="contracts" element={<ContractsView />} />
               <Route path="suppliers" element={<SuppliersView />} />
+              <Route path="categories" element={<CategoriesSizesView />} />
 
               {/* Admin */}
               <Route
