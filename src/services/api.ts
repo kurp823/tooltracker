@@ -3305,10 +3305,22 @@ export async function fetchAllModulesLive(): Promise<AllModulesLiveResult> {
       : (isPureSql ? [] : INITIAL_INVENTORY);
   invList = mergeInventoryWithCustomTools(invList, customTools);
 
+  // IMPORTANT: always start from a fresh array copy here, never the shared
+  // MASTER_JOBS module-level constant (or primaryRes.data.jobs) directly.
+  // The block below does `jobsList.push(sj)` to merge in supplemental jobs —
+  // if jobsList were the same object reference as MASTER_JOBS, that push
+  // would mutate the shared constant in place on every poll. Downstream,
+  // React's `setJobs(res.data.jobs)` would then receive the EXACT SAME
+  // array reference every single call once it had been populated once,
+  // so any useMemo/useEffect keyed on `[jobs]` (e.g. JobsView's validJobs)
+  // would see an unchanged dependency and never recompute again, even
+  // though the shared array kept growing from 0 to thousands of rows
+  // behind the scenes. This was the root cause of the Jobs Register
+  // showing "0 Total Jobs" forever despite jobs genuinely being fetched.
   let jobsList: any[] =
     primaryRes.data?.jobs && primaryRes.data.jobs.length > 0
-      ? primaryRes.data.jobs
-      : MASTER_JOBS;
+      ? [...primaryRes.data.jobs]
+      : [...MASTER_JOBS];
 
   // Merge supplemental jobs (from dedicated getjobs call) into the primary list.
   // This captures any jobs above the GET_ALL_DATA SQL row cap (e.g. JOB-26-01814+).
