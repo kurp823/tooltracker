@@ -71,9 +71,18 @@ function jsonResponse(context, statusCode, body) {
  */
 function verifyToken(req) {
   const jwt = require('jsonwebtoken')
-  const header =
-    req.headers['authorization'] || req.headers['Authorization'] || ''
-  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : null
+  // IMPORTANT: Azure Static Web Apps overwrites the Authorization header on
+  // requests to its managed Functions with its OWN platform token (claims:
+  // nbf/exp/iat/iss/aud only). Our app token never reached the function, and
+  // because that platform token still decodes to a valid object, auth
+  // "passed" while user.Role was undefined — so every role check returned 403
+  // for even an Admin user. We therefore read our token from a custom header
+  // that SWA passes through untouched, and fall back to Authorization for
+  // non-SWA hosts / local dev.
+  const pick = (name) => req.headers[name] || req.headers[name.toLowerCase()] || ''
+  const raw = pick('x-auth-token') || pick('authorization')
+  if (!raw) return null
+  const token = String(raw).replace(/^Bearer\s+/i, '').trim()
   if (!token) return null
 
   // Prefer a real signature check; fall back to decode so a signing-secret
@@ -100,6 +109,11 @@ function verifyToken(req) {
       ? decoded.payload
       : decoded
   if (!user || typeof user !== 'object') return null
+
+  // Reject anything that isn't one of OUR app tokens — e.g. the Azure SWA
+  // platform token, which decodes fine but carries no identity. Treating it as
+  // authenticated is what produced role-less sessions and blanket 403s.
+  if (user.UserID == null && user.Username == null && user.Role == null) return null
 
   // Normalize the Role claim so downstream checks are reliable regardless of
   // casing or padding (e.g. a CHAR column yielding 'Admin    ').
