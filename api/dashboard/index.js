@@ -10,35 +10,31 @@ module.exports = async function (context, req) {
   try {
     const result = await query(`
       SELECT
-        (SELECT COUNT(*) FROM tbl_Jobs WHERE Status = 'Active')    AS activeJobs,
+        (SELECT COUNT(*) FROM tbl_Jobs WHERE Status = 'Ongoing')   AS activeJobs,
         (SELECT COUNT(*) FROM tbl_Jobs WHERE Status = 'Open')      AS openJobs,
         (SELECT COUNT(*) FROM tbl_Jobs WHERE Status NOT IN ('Completed','Cancelled')) AS totalActiveJobs,
         (SELECT COUNT(*) FROM tbl_Jobs)                            AS totalJobs,
         (SELECT COUNT(*) FROM tbl_Inventory WHERE IsActive = 1)    AS totalInventory,
-        (SELECT COUNT(*) FROM tbl_Inspections WHERE Status = 'Pending') AS pendingInspections,
-        (SELECT COUNT(*) FROM tbl_MaintenanceJobs WHERE Status IN ('Open','In Progress')) AS pendingMaintenance,
-        (SELECT COUNT(*) FROM tbl_Invoices WHERE Status IN ('Draft','Submitted'))       AS pendingInvoices,
+        (SELECT COUNT(*) FROM tbl_InspectionRecords WHERE status = 'Pending') AS pendingInspections,
+        (SELECT COUNT(*) FROM tbl_MaintenanceJobs WHERE status IN ('Open','In Progress')) AS pendingMaintenance,
+        (SELECT COUNT(*) FROM tbl_Invoices WHERE status IN ('Draft','Submitted'))       AS pendingInvoices,
         (
-          -- "In field" = tool on an Approved delivery ticket for a job,
-          -- with no matching receiving-ticket line (by Serial/AssetNo) for
-          -- that same job yet. tbl_DeliveryTicketLines/tbl_ReceivingTicketLines
-          -- store Serial/AssetNo directly (freeform, no SystemID FK, no
-          -- ReturnedDate column) — see api/delivery-tickets and
-          -- api/receiving-tickets for the confirmed real schema.
-          SELECT COUNT(DISTINCT COALESCE(NULLIF(dtl.SerialNumber, ''), NULLIF(dtl.AssetNo, '')))
+          -- "In field" = a tool serial that went out on a delivery ticket and
+          -- has NOT come back on a receiving ticket for the same job.
+          -- Real schema (see api/delivery-tickets & api/receiving-tickets):
+          --   lines carry  serial  + dtNumber/rtNumber
+          --   headers carry dtNumber/rtNumber + jobNumber
+          -- There is no SerialNumber/AssetNo/DTID/JobID column on these tables.
+          SELECT COUNT(DISTINCT dtl.serial)
           FROM   tbl_DeliveryTicketLines dtl
-          JOIN   tbl_DeliveryTickets     dt ON dtl.DTID = dt.DTID
-          WHERE  dt.Status = 'Approved'
-            AND  COALESCE(NULLIF(dtl.SerialNumber, ''), NULLIF(dtl.AssetNo, '')) IS NOT NULL
+          JOIN   tbl_DeliveryTickets     dt ON dtl.dtNumber = dt.dtNumber
+          WHERE  NULLIF(dtl.serial, '') IS NOT NULL
             AND  NOT EXISTS (
                    SELECT 1
                    FROM   tbl_ReceivingTicketLines rtl
-                   JOIN   tbl_ReceivingTickets     rt ON rtl.RTID = rt.RTID
-                   WHERE  rt.JobID = dt.JobID
-                     AND  (
-                            (NULLIF(rtl.SerialNumber, '') IS NOT NULL AND rtl.SerialNumber = dtl.SerialNumber)
-                         OR (NULLIF(rtl.AssetNo, '')      IS NOT NULL AND rtl.AssetNo      = dtl.AssetNo)
-                          )
+                   JOIN   tbl_ReceivingTickets     rt ON rtl.rtNumber = rt.rtNumber
+                   WHERE  rt.jobNumber = dt.jobNumber
+                     AND  rtl.serial   = dtl.serial
                  )
         ) AS inFieldTools
     `)
