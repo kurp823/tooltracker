@@ -125,7 +125,7 @@ module.exports = async function (context, req) {
         FROM      tbl_DeliveryTicketLines dtl
         JOIN      tbl_DeliveryTickets     dt ON dtl.dtNumber = dt.dtNumber
         OUTER APPLY (
-          -- Despite the comment in api/delivery-tickets, the `serial` column
+          -- Despite the comment in api/delivery-tickets, the 'serial' column
           -- on ticket lines mostly holds the ASSET NUMBER, not the SystemID:
           -- inventory keys look like SystemID 'EMD-5794' / AssetNo 'STB578-01',
           -- while line serials read 'STB578-09', 'ADSE1144', 'CX0697'.

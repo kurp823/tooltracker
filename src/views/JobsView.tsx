@@ -48,7 +48,7 @@ export function JobsView() {
   if (isLoading) return <PageLoader />
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col h-[calc(100vh-104px)] gap-3">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Search */}
@@ -111,10 +111,10 @@ export function JobsView() {
       </p>
 
       {/* Table */}
-      <div className="card overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="card flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-auto">
           <table className="w-full">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr>
                 <th className="table-th">Job ID</th>
                 <th className="table-th">Client</th>

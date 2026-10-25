@@ -34,10 +34,10 @@ module.exports = async function (context, req) {
                 l.usedStatus AS UsedStatus, l.routedTo AS RoutedTo, l.remarks AS Notes
            FROM tbl_ReceivingTicketLines l
            OUTER APPLY (
-             -- `serial` on ticket lines mostly holds the ASSET NUMBER, not the
+             -- 'serial' on ticket lines mostly holds the ASSET NUMBER, not the
              -- SystemID (inventory: SystemID 'EMD-5794' / AssetNo 'STB578-01';
              -- line serials read 'STB578-09'). Joining on SystemID alone missed
-             -- ~72%% of lines. Match any key, prefer SystemID, take one row.
+             -- ~72% of lines. Match any key, prefer SystemID, take one row.
              SELECT TOP 1 i2.AssetNo, i2.ShortDesc, i2.[Size], i2.IsEmdad,
                           i2.Supplier, i2.Ownership
              FROM   tbl_Inventory i2
