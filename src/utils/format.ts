@@ -1,5 +1,22 @@
 // Formatting utilities
 
+// Historical job numbers were saved in inconsistent formats across tables
+// (e.g. "Job-026-01836" on tbl_Jobs vs "JOB-26-01836" on tbl_DeliveryTickets/
+// tbl_DailyFieldLogs — same job, different casing and zero-padding).
+// Compare job numbers by this normalized form — upper-cased, each
+// dash-separated numeric segment stripped of leading zeros — rather than
+// exact string equality, so a job's records are found regardless of which
+// format they were saved in.
+export function normalizeJobId(id: string | null | undefined): string {
+  if (!id) return ''
+  return id
+    .trim()
+    .toUpperCase()
+    .split('-')
+    .map(seg => (/^\d+$/.test(seg) ? String(parseInt(seg, 10)) : seg))
+    .join('-')
+}
+
 export function formatDate(val: string | null | undefined): string {
   if (!val) return '—'
   try {
