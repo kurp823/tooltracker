@@ -90,6 +90,8 @@ const PROBES = {
   'inv-emd6364': `SELECT TOP 5 SystemID, AssetNo, OEMSerial, ShortDesc FROM tbl_Inventory
          WHERE SystemID = 'EMD-6364' OR AssetNo = 'EMD-6364' OR OEMSerial = 'EMD-6364'`,
   'inv-sample': `SELECT TOP 10 SystemID, AssetNo, OEMSerial, ShortDesc FROM tbl_Inventory ORDER BY SystemID`,
+  'all-tables': `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME`,
+  'remarks-distinct': `SELECT remarks, COUNT(*) AS n FROM tbl_DeliveryTicketLines GROUP BY remarks ORDER BY n DESC`,
 }
 
 module.exports = async function (context, req) {
