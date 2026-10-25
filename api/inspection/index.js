@@ -1,6 +1,22 @@
 'use strict'
 const { query, jsonResponse, requireAuth } = require('../db')
 
+// NOTE: the table this code originally assumed, `tbl_Inspections`, does
+// not exist. There are two real candidates — `tbl_Inspection` (tied to a
+// specific receiving-ticket workflow: WONumber/RTNumber/FromRTBatchID)
+// and `tbl_InspectionRecords` (a standalone certification/QC record:
+// serial, asset, jobNumber, inspectionType, result, qcApprovedBy, etc).
+// The frontend's fields (InspectionType, Result, Status, Inspector,
+// Notes, CreatedBy/CreatedDate) match tbl_InspectionRecords far more
+// closely, so this endpoint is built against that table. There is no
+// InspectionNumber column — a display number is derived from id.
+//
+// Real tbl_InspectionRecords columns (confirmed via INFORMATION_SCHEMA):
+//   id, serial, asset, jobNumber, rtNumber, inspectionType, inspectionDate,
+//   nextDueDate, certNumber, inspector, inspectionCompany, standard, result,
+//   findings, actions, qcApprovedBy, qcApprovedDate, vendorOrderRef, cost,
+//   status, attachmentRef, notes, createdBy, createdAt, updatedAt
+
 module.exports = async function (context, req) {
   const user   = requireAuth(context, req)
   if (!user) return
@@ -11,12 +27,14 @@ module.exports = async function (context, req) {
   // ── GET list ─────────────────────────────────────────────────────────────
   if (!id && method === 'GET') {
     const result = await query(
-      `SELECT i.InspectionID, i.InspectionNumber, i.JobID,
-              i.SerialNumber, i.AssetNo, i.ToolDescription, i.SizeName,
-              i.InspectionType, i.InspectionDate, i.Inspector,
-              i.Result, i.Status, i.Notes, i.CreatedDate, i.CreatedBy
-         FROM tbl_Inspections i
-        ORDER BY i.InspectionDate DESC, i.CreatedDate DESC`,
+      `SELECT i.id AS InspectionID, 'INS-' + CAST(i.id AS varchar) AS InspectionNumber,
+              i.jobNumber AS JobID, i.serial AS SerialNumber, i.asset AS AssetNo,
+              NULL AS ToolDescription, NULL AS SizeName,
+              i.inspectionType AS InspectionType, i.inspectionDate AS InspectionDate,
+              i.inspector AS Inspector, i.result AS Result, i.status AS Status,
+              i.notes AS Notes, i.createdAt AS CreatedDate, i.createdBy AS CreatedBy
+         FROM tbl_InspectionRecords i
+        ORDER BY i.inspectionDate DESC, i.createdAt DESC`,
       []
     )
     return jsonResponse(context, 200, result.recordset)
@@ -25,7 +43,14 @@ module.exports = async function (context, req) {
   // ── GET single ───────────────────────────────────────────────────────────
   if (id && method === 'GET') {
     const result = await query(
-      `SELECT i.* FROM tbl_Inspections i WHERE i.InspectionID = @id`,
+      `SELECT i.id AS InspectionID, 'INS-' + CAST(i.id AS varchar) AS InspectionNumber,
+              i.jobNumber AS JobID, i.serial AS SerialNumber, i.asset AS AssetNo,
+              i.inspectionType AS InspectionType, i.inspectionDate AS InspectionDate,
+              i.inspector AS Inspector, i.inspectionCompany AS InspectionCompany,
+              i.standard AS Standard, i.result AS Result, i.findings AS Findings,
+              i.actions AS Actions, i.status AS Status, i.certNumber AS CertNumber,
+              i.notes AS Notes, i.createdAt AS CreatedDate, i.createdBy AS CreatedBy
+         FROM tbl_InspectionRecords i WHERE i.id = @id`,
       [{ name: 'id', value: Number(id) }]
     )
     if (!result.recordset.length) return jsonResponse(context, 404, { error: 'Not found' })
@@ -38,32 +63,15 @@ module.exports = async function (context, req) {
       return jsonResponse(context, 403, { error: 'Forbidden' })
 
     const b = req.body
-    const yr = new Date().getFullYear()
-    const lastRow = await query(
-      `SELECT TOP 1 InspectionNumber FROM tbl_Inspections
-        WHERE InspectionNumber LIKE 'INS-${yr}-%'
-        ORDER BY InspectionNumber DESC`, []
-    )
-    let seq = 1
-    if (lastRow.recordset.length) {
-      const parts = lastRow.recordset[0].InspectionNumber.split('-')
-      seq = parseInt(parts[parts.length - 1], 10) + 1
-    }
-    const InspectionNumber = `INS-${yr}-${String(seq).padStart(5, '0')}`
-
     const r = await query(
-      `INSERT INTO tbl_Inspections
-         (InspectionNumber, JobID, SerialNumber, AssetNo, ToolDescription, SizeName,
-          InspectionType, InspectionDate, Inspector, Result, Status, Notes, CreatedBy, CreatedDate)
-       OUTPUT INSERTED.InspectionID
-       VALUES (@num, @job, @serial, @asset, @desc, @size, @type, @date, @inspector, @result, 'Open', @notes, @by, GETDATE())`,
+      `INSERT INTO tbl_InspectionRecords
+         (jobNumber, serial, asset, inspectionType, inspectionDate, inspector, result, status, notes, createdBy, createdAt)
+       OUTPUT INSERTED.id
+       VALUES (@job, @serial, @asset, @type, @date, @inspector, @result, 'Open', @notes, @by, GETDATE())`,
       [
-        { name: 'num',       value: InspectionNumber               },
         { name: 'job',       value: b.JobID           || null      },
         { name: 'serial',    value: b.SerialNumber    || null      },
         { name: 'asset',     value: b.AssetNo         || null      },
-        { name: 'desc',      value: b.ToolDescription || null      },
-        { name: 'size',      value: b.SizeName        || null      },
         { name: 'type',      value: b.InspectionType  || null      },
         { name: 'date',      value: b.InspectionDate  || new Date().toISOString().split('T')[0] },
         { name: 'inspector', value: b.Inspector || user.FullName || user.Username },
@@ -72,7 +80,8 @@ module.exports = async function (context, req) {
         { name: 'by',        value: user.Username                  },
       ]
     )
-    return jsonResponse(context, 201, { InspectionID: r.recordset[0].InspectionID, InspectionNumber })
+    const newId = r.recordset[0].id
+    return jsonResponse(context, 201, { InspectionID: newId, InspectionNumber: `INS-${newId}` })
   }
 
   // ── PUT update ───────────────────────────────────────────────────────────
@@ -82,10 +91,10 @@ module.exports = async function (context, req) {
 
     const b = req.body
     await query(
-      `UPDATE tbl_Inspections
-          SET InspectionDate = @date, Inspector = @inspector, Result = @result,
-              Status = @status, Notes = @notes
-        WHERE InspectionID = @id`,
+      `UPDATE tbl_InspectionRecords
+          SET inspectionDate = @date, inspector = @inspector, result = @result,
+              status = @status, notes = @notes, updatedAt = GETDATE()
+        WHERE id = @id`,
       [
         { name: 'id',        value: Number(id)           },
         { name: 'date',      value: b.InspectionDate || null },
