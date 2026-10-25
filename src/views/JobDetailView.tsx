@@ -1316,7 +1316,7 @@ function ReturnTicketTab({
       {pickerOpen && activeRT && (
         <ToolPickerModal
           jobId={jobId}
-          existingAssetNos={new Set(lines.map(l => l.AssetNo).filter(Boolean))}
+          existingAssetNos={new Set(lines.map(l => l.AssetNo).filter((a): a is string => Boolean(a)))}
           onInsert={handleInsertTools}
           onClose={() => setPickerOpen(false)}
         />
