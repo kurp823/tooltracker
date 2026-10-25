@@ -17,6 +17,23 @@ export default {
           900: '#1e3a8a',
           950: '#172554',
         },
+        // Sidebar / chrome — matches the operations platform look of the
+        // previous app: deep navy shell with amber accents.
+        navy: {
+          700: '#1b3a5c',
+          800: '#143152',
+          850: '#102944',
+          900: '#0f2440',
+          950: '#0b1c33',
+        },
+        accent: {
+          300: '#fbd38d',
+          400: '#f6ad55',
+          500: '#f0b429',
+          600: '#d69e2e',
+          700: '#b7791f',
+        },
+        canvas: '#dfe5ef',
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
