@@ -13,7 +13,7 @@ module.exports = async function (context, req) {
   // ── /gate-passes/{id}/items ──────────────────────────────────────────────
   if (id && sub === 'items') {
     if (method === 'GET') {
-      const rows = await query(
+      const result = await query(
         `SELECT gi.ItemID, gi.GatePassID, gi.LineNumber,
                 gi.SerialNumber, gi.AssetNo, gi.Description AS ToolDescription,
                 gi.Quantity, gi.Notes
@@ -22,7 +22,7 @@ module.exports = async function (context, req) {
           ORDER BY gi.LineNumber`,
         [{ name: 'id', value: Number(id) }]
       )
-      return jsonResponse(context, 200, rows)
+      return jsonResponse(context, 200, result.recordset)
     }
 
     if (method === 'POST') {
@@ -44,7 +44,7 @@ module.exports = async function (context, req) {
           { name: 'notes',  value: b.Notes           || null },
         ]
       )
-      return jsonResponse(context, 201, { ItemID: r[0].ItemID })
+      return jsonResponse(context, 201, { ItemID: r.recordset[0].ItemID })
     }
 
     if (method === 'DELETE' && subId) {
@@ -58,7 +58,7 @@ module.exports = async function (context, req) {
 
   // ── GET list ─────────────────────────────────────────────────────────────
   if (!id && method === 'GET') {
-    const rows = await query(
+    const result = await query(
       `SELECT g.GatePassID, g.GatePassNumber, g.JobID, g.Direction,
               g.PassDate, g.Status, g.CreatedDate,
               (SELECT COUNT(*) FROM tbl_GatePassItems WHERE GatePassID = g.GatePassID) AS ItemCount
@@ -66,17 +66,17 @@ module.exports = async function (context, req) {
         ORDER BY g.CreatedDate DESC`,
       []
     )
-    return jsonResponse(context, 200, rows)
+    return jsonResponse(context, 200, result.recordset)
   }
 
   // ── GET single ───────────────────────────────────────────────────────────
   if (id && !sub && method === 'GET') {
-    const rows = await query(
+    const result = await query(
       `SELECT g.* FROM tbl_GatePasses g WHERE g.GatePassID = @id`,
       [{ name: 'id', value: Number(id) }]
     )
-    if (!rows.length) return jsonResponse(context, 404, { error: 'Not found' })
-    return jsonResponse(context, 200, rows[0])
+    if (!result.recordset.length) return jsonResponse(context, 404, { error: 'Not found' })
+    return jsonResponse(context, 200, result.recordset[0])
   }
 
   // ── POST create ──────────────────────────────────────────────────────────
@@ -97,8 +97,8 @@ module.exports = async function (context, req) {
         ORDER BY GatePassNumber DESC`, []
     )
     let seq = 1
-    if (lastRow.length) {
-      const parts = lastRow[0].GatePassNumber.split('-')
+    if (lastRow.recordset.length) {
+      const parts = lastRow.recordset[0].GatePassNumber.split('-')
       seq = parseInt(parts[parts.length - 1], 10) + 1
     }
     const GatePassNumber = `GP-${yr}-${String(seq).padStart(5, '0')}`
@@ -116,7 +116,7 @@ module.exports = async function (context, req) {
         { name: 'by',    value: user.Username   },
       ]
     )
-    return jsonResponse(context, 201, { GatePassID: r[0].GatePassID, GatePassNumber })
+    return jsonResponse(context, 201, { GatePassID: r.recordset[0].GatePassID, GatePassNumber })
   }
 
   // ── PUT update ───────────────────────────────────────────────────────────

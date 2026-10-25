@@ -10,7 +10,7 @@ module.exports = async function (context, req) {
 
   // ── GET list ─────────────────────────────────────────────────────────────
   if (!id && method === 'GET') {
-    const rows = await query(
+    const result = await query(
       `SELECT i.InspectionID, i.InspectionNumber, i.JobID,
               i.SerialNumber, i.AssetNo, i.ToolDescription, i.SizeName,
               i.InspectionType, i.InspectionDate, i.Inspector,
@@ -19,17 +19,17 @@ module.exports = async function (context, req) {
         ORDER BY i.InspectionDate DESC, i.CreatedDate DESC`,
       []
     )
-    return jsonResponse(context, 200, rows)
+    return jsonResponse(context, 200, result.recordset)
   }
 
   // ── GET single ───────────────────────────────────────────────────────────
   if (id && method === 'GET') {
-    const rows = await query(
+    const result = await query(
       `SELECT i.* FROM tbl_Inspections i WHERE i.InspectionID = @id`,
       [{ name: 'id', value: Number(id) }]
     )
-    if (!rows.length) return jsonResponse(context, 404, { error: 'Not found' })
-    return jsonResponse(context, 200, rows[0])
+    if (!result.recordset.length) return jsonResponse(context, 404, { error: 'Not found' })
+    return jsonResponse(context, 200, result.recordset[0])
   }
 
   // ── POST create ──────────────────────────────────────────────────────────
@@ -45,8 +45,8 @@ module.exports = async function (context, req) {
         ORDER BY InspectionNumber DESC`, []
     )
     let seq = 1
-    if (lastRow.length) {
-      const parts = lastRow[0].InspectionNumber.split('-')
+    if (lastRow.recordset.length) {
+      const parts = lastRow.recordset[0].InspectionNumber.split('-')
       seq = parseInt(parts[parts.length - 1], 10) + 1
     }
     const InspectionNumber = `INS-${yr}-${String(seq).padStart(5, '0')}`
@@ -72,7 +72,7 @@ module.exports = async function (context, req) {
         { name: 'by',        value: user.Username                  },
       ]
     )
-    return jsonResponse(context, 201, { InspectionID: r[0].InspectionID, InspectionNumber })
+    return jsonResponse(context, 201, { InspectionID: r.recordset[0].InspectionID, InspectionNumber })
   }
 
   // ── PUT update ───────────────────────────────────────────────────────────

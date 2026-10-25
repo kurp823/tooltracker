@@ -13,7 +13,7 @@ module.exports = async function (context, req) {
   // ── /invoices/{id}/lines ─────────────────────────────────────────────────
   if (id && sub === 'lines') {
     if (method === 'GET') {
-      const rows = await query(
+      const result = await query(
         `SELECT il.*, t.SerialNumber, t.AssetNo, t.Description AS ToolDescription
            FROM tbl_InvoiceLines il
            LEFT JOIN tbl_Tools t ON il.ToolID = t.ToolID
@@ -21,7 +21,7 @@ module.exports = async function (context, req) {
           ORDER BY il.LineNumber`,
         [{ name: 'id', value: Number(id) }]
       )
-      return jsonResponse(context, 200, rows)
+      return jsonResponse(context, 200, result.recordset)
     }
 
     if (method === 'POST') {
@@ -55,7 +55,7 @@ module.exports = async function (context, req) {
         [{ name: 'id', value: Number(id) }]
       )
 
-      return jsonResponse(context, 201, { LineID: r[0].LineID })
+      return jsonResponse(context, 201, { LineID: r.recordset[0].LineID })
     }
 
     if (method === 'DELETE' && subId) {
@@ -75,7 +75,7 @@ module.exports = async function (context, req) {
 
   // ── GET list ─────────────────────────────────────────────────────────────
   if (!id && method === 'GET') {
-    const rows = await query(
+    const result = await query(
       `SELECT i.InvoiceID, i.InvoiceNumber, i.JobID, i.InvoiceDate, i.DueDate,
               i.Currency, i.TotalAmount, i.Status, i.FiscalYear, i.CreatedDate,
               c.ClientName AS Client
@@ -85,12 +85,12 @@ module.exports = async function (context, req) {
         ORDER BY i.InvoiceDate DESC, i.CreatedDate DESC`,
       []
     )
-    return jsonResponse(context, 200, rows)
+    return jsonResponse(context, 200, result.recordset)
   }
 
   // ── GET single ───────────────────────────────────────────────────────────
   if (id && !sub && method === 'GET') {
-    const rows = await query(
+    const result = await query(
       `SELECT i.*, c.ClientName AS Client
          FROM tbl_Invoices i
          LEFT JOIN tbl_Jobs j   ON i.JobID = j.JobID
@@ -98,8 +98,8 @@ module.exports = async function (context, req) {
         WHERE i.InvoiceID = @id`,
       [{ name: 'id', value: Number(id) }]
     )
-    if (!rows.length) return jsonResponse(context, 404, { error: 'Not found' })
-    return jsonResponse(context, 200, rows[0])
+    if (!result.recordset.length) return jsonResponse(context, 404, { error: 'Not found' })
+    return jsonResponse(context, 200, result.recordset[0])
   }
 
   // ── POST create ──────────────────────────────────────────────────────────
@@ -117,8 +117,8 @@ module.exports = async function (context, req) {
         ORDER BY InvoiceNumber DESC`, []
     )
     let seq = 1
-    if (lastRow.length) {
-      const parts = lastRow[0].InvoiceNumber.split('-')
+    if (lastRow.recordset.length) {
+      const parts = lastRow.recordset[0].InvoiceNumber.split('-')
       seq = parseInt(parts[parts.length - 1], 10) + 1
     }
     const InvoiceNumber = `INV-${yr}-${String(seq).padStart(5, '0')}`
@@ -139,7 +139,7 @@ module.exports = async function (context, req) {
         { name: 'by',       value: user.Username            },
       ]
     )
-    return jsonResponse(context, 201, { InvoiceID: r[0].InvoiceID, InvoiceNumber })
+    return jsonResponse(context, 201, { InvoiceID: r.recordset[0].InvoiceID, InvoiceNumber })
   }
 
   // ── PUT update ───────────────────────────────────────────────────────────

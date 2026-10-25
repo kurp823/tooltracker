@@ -9,7 +9,7 @@ module.exports = async function (context, req) {
   const method = req.method.toUpperCase()
 
   if (!id && method === 'GET') {
-    const rows = await query(
+    const result = await query(
       `SELECT s.SupplierID, s.SupplierName, s.ContactName, s.Email, s.Phone,
               s.Country, s.IsActive,
               (SELECT COUNT(*) FROM tbl_Tools WHERE SupplierID = s.SupplierID) AS ToolCount
@@ -17,16 +17,16 @@ module.exports = async function (context, req) {
         ORDER BY s.SupplierName`,
       []
     )
-    return jsonResponse(context, 200, rows)
+    return jsonResponse(context, 200, result.recordset)
   }
 
   if (id && method === 'GET') {
-    const rows = await query(
+    const result = await query(
       'SELECT * FROM tbl_Suppliers WHERE SupplierID = @id',
       [{ name: 'id', value: Number(id) }]
     )
-    if (!rows.length) return jsonResponse(context, 404, { error: 'Not found' })
-    return jsonResponse(context, 200, rows[0])
+    if (!result.recordset.length) return jsonResponse(context, 404, { error: 'Not found' })
+    return jsonResponse(context, 200, result.recordset[0])
   }
 
   if (!id && method === 'POST') {
@@ -46,7 +46,7 @@ module.exports = async function (context, req) {
         { name: 'country', value: b.Country || null  },
       ]
     )
-    return jsonResponse(context, 201, { SupplierID: r[0].SupplierID })
+    return jsonResponse(context, 201, { SupplierID: r.recordset[0].SupplierID })
   }
 
   if (id && method === 'PUT') {
