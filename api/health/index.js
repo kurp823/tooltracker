@@ -81,6 +81,8 @@ const PROBES = {
         ORDER BY g.GPDate DESC`,
   jobs: `SELECT JobID, Rig, Well, Client, Status, CreatedDate, CreatedBy, UpdatedAt
          FROM tbl_Jobs ORDER BY CreatedDate DESC`,
+  'jobs-01836': `SELECT DISTINCT JobID FROM tbl_Jobs WHERE JobID LIKE '%01836%'`,
+  'dt-01836': `SELECT DISTINCT jobNumber FROM tbl_DeliveryTickets WHERE jobNumber LIKE '%01836%'`,
 }
 
 module.exports = async function (context, req) {
@@ -92,7 +94,7 @@ module.exports = async function (context, req) {
       if (!sqlText) { results[name] = 'UNKNOWN_PROBE'; continue }
       try {
         const r = await dbQuery(sqlText, [])
-        results[name] = { ok: true, rowCount: r.recordset.length, sample: r.recordset[0] || null }
+        results[name] = { ok: true, rowCount: r.recordset.length, sample: r.recordset[0] || null, rows: r.recordset.slice(0, 15) }
       } catch (e) {
         results[name] = { ok: false, error: e.message }
       }
