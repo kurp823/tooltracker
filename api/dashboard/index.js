@@ -22,6 +22,16 @@ async function scalar(sqlText) {
 }
 
 module.exports = async function (context, req) {
+  // TEMP DIAGNOSTIC (?hdr=1): report which header NAMES actually reach the
+  // function, to confirm whether Azure SWA forwards our custom auth header.
+  // Names only — never values, so no token is ever exposed. Remove after.
+  if (req.query && req.query.hdr === '1') {
+    return jsonResponse(context, 200, {
+      headerNames: Object.keys(req.headers || {}).sort(),
+      hasXAuthToken: Object.keys(req.headers || {}).some(h => h.toLowerCase() === 'x-auth-token'),
+    })
+  }
+
   const user = requireAuth(context, req)
   if (!user) return
 
@@ -75,18 +85,7 @@ module.exports = async function (context, req) {
     issues.recentJobs = err.message
   }
 
-  // TEMP DIAGNOSTIC: show exactly what the server sees for the caller, so we
-  // can pinpoint why role checks reject an Admin token. Claims only, no token.
-  const _auth = {
-    typeofUser: typeof user,
-    claims: user && typeof user === 'object' ? Object.keys(user) : null,
-    Role_json: JSON.stringify(user && user.Role),
-    Role_type: typeof (user && user.Role),
-    passesCheck: ['Admin', 'Operations'].includes(user && user.Role),
-    hasPayloadProp: !!(user && user.payload),
-  }
-
-  const body = { ...stats, recentJobs, _auth }
+  const body = { ...stats, recentJobs }
   if (Object.keys(issues).length) body._schemaIssues = issues
 
   return jsonResponse(context, 200, body)
