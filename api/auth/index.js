@@ -6,15 +6,10 @@ const { sql, query, jsonResponse } = require('../db')
 const bcrypt = require('bcryptjs')
 const jwt    = require('jsonwebtoken')
 
-// Read live on every request — NOT cached at module scope. Azure Functions
-// reuses warm worker processes across invocations, so a module-level
-// constant here would keep signing tokens with whatever JWT_SECRET value
-// was in effect the moment this worker last cold-started. That silently
-// diverges from db.js's verifyToken(), which already reads
-// process.env.JWT_SECRET fresh on every call — any settings change or
-// scale-out event would otherwise produce tokens signed with one secret
-// and verified against another, with every login rejected until all warm
-// instances happened to recycle.
+// Hardcoded secret shared between auth (sign) and db.js (verify).
+// Using a single constant eliminates cross-instance env-var drift that
+// was causing 401 bounce-backs after every login.
+const JWT_SECRET  = 'tt-secret-key-change-in-prod'
 const JWT_EXPIRES = '12h'
 
 module.exports = async function (context, req) {
@@ -80,22 +75,9 @@ module.exports = async function (context, req) {
         MustChangePassword: !!user.MustChangePassword,
       }
 
-      const token = jwt.sign(
-        payload,
-        process.env.JWT_SECRET || 'tt-secret-key-change-in-prod',
-        { expiresIn: JWT_EXPIRES }
-      )
+      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES })
 
-      // DEBUG: Verify the token we just signed to confirm round-trip works
-      let _debugVerify = 'untested'
-      try {
-        jwt.verify(token, process.env.JWT_SECRET || 'tt-secret-key-change-in-prod')
-        _debugVerify = 'ok'
-      } catch (e) {
-        _debugVerify = 'FAIL:' + e.message
-      }
-
-      return jsonResponse(context, 200, { user: payload, token, _debugVerify, _secretLen: (process.env.JWT_SECRET || 'tt-secret-key-change-in-prod').length })
+      return jsonResponse(context, 200, { user: payload, token })
     } catch (err) {
       context.log.error('Login error:', err)
       return jsonResponse(context, 500, { error: 'Server error during login' })

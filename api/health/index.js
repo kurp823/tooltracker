@@ -10,8 +10,8 @@ const bcrypt = require('bcryptjs')
 module.exports = async function (context, req) {
   const jwt = require('jsonwebtoken')
 
-  const secret = process.env.JWT_SECRET || 'tt-secret-key-change-in-prod'
-  const secretSource = process.env.JWT_SECRET ? 'env' : 'fallback'
+  const secret = 'tt-secret-key-change-in-prod'
+  const secretSource = 'hardcoded'
   const secretLen = secret.length
 
   // Self-test: sign then verify
@@ -51,13 +51,13 @@ module.exports = async function (context, req) {
       // Sign exactly as auth/index.js does
       const loginToken = jwt.sign(
         payload,
-        process.env.JWT_SECRET || 'tt-secret-key-change-in-prod',
+        'tt-secret-key-change-in-prod',
         { expiresIn: '12h' }
       )
       // Verify exactly as db.js does
       let verifyResult = null
       try {
-        const decoded = jwt.verify(loginToken, process.env.JWT_SECRET || 'tt-secret-key-change-in-prod')
+        const decoded = jwt.verify(loginToken, 'tt-secret-key-change-in-prod')
         verifyResult = { ok: true, username: decoded.Username }
       } catch (e) {
         verifyResult = { ok: false, error: e.message }

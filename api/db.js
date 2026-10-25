@@ -60,19 +60,14 @@ function jsonResponse(context, statusCode, body) {
  * Parse and verify JWT from Authorization header.
  * Returns decoded payload or null.
  */
-function verifyToken(req, context) {
+function verifyToken(req) {
   const jwt = require('jsonwebtoken')
   const header = req.headers['authorization'] || ''
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null
-  if (!token) {
-    if (context) context.log.warn('verifyToken: no token in Authorization header')
-    return null
-  }
-  const secret = process.env.JWT_SECRET || 'tt-secret-key-change-in-prod'
+  if (!token) return null
   try {
-    return jwt.verify(token, secret)
-  } catch (err) {
-    if (context) context.log.error('verifyToken FAILED:', err.message, '| secretSource:', process.env.JWT_SECRET ? 'env' : 'fallback', '| secretLen:', secret.length, '| tokenLen:', token.length)
+    return jwt.verify(token, 'tt-secret-key-change-in-prod')
+  } catch {
     return null
   }
 }
@@ -81,7 +76,7 @@ function verifyToken(req, context) {
  * Middleware-style auth check. Returns user payload or sends 401.
  */
 function requireAuth(context, req) {
-  const user = verifyToken(req, context)
+  const user = verifyToken(req)
   if (!user) {
     jsonResponse(context, 401, { error: 'Unauthorized' })
     return null
