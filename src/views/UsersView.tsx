@@ -26,6 +26,9 @@ export function UsersView() {
   const [editing, setEditing]  = useState<Partial<User & { NewPassword?: string }> | null>(null)
   const [isNew,   setIsNew]    = useState(false)
   const [saving,  setSaving]   = useState(false)
+  // Shown once after create/reissue — the code is hashed server-side and can
+  // never be retrieved again, only replaced by issuing a new one.
+  const [issued,  setIssued]   = useState<{ username: string; code: string } | null>(null)
 
   const { data: users, isLoading, error, refetch } = useFetch<User[]>('/users')
 
@@ -34,19 +37,27 @@ export function UsersView() {
     setSaving(true)
     try {
       if (isNew) {
-        await api('/users', {
+        const res = await api<{ activationCode?: string }>('/users', {
           method: 'POST',
           body: JSON.stringify({
             Username: editing.Username,
             FullName: editing.FullName,
             Role:     editing.Role,
-            Password: (editing as any).Password,
           }),
         })
-        showToast('User created — they must change password on first login', 'success')
+        showToast('User created', 'success')
+        if (res?.activationCode) {
+          setIssued({ username: editing.Username || '', code: res.activationCode })
+        }
       } else {
-        await api(`/users/${editing.UserID}`, { method: 'PUT', body: JSON.stringify(editing) })
+        const res = await api<{ activationCode?: string }>(`/users/${editing.UserID}`, {
+          method: 'PUT',
+          body: JSON.stringify(editing),
+        })
         showToast('User updated', 'success')
+        if (res?.activationCode) {
+          setIssued({ username: editing.Username || editing.FullName || '', code: res.activationCode })
+        }
       }
       setEditing(null)
       refetch()
@@ -154,18 +165,26 @@ export function UsersView() {
               </select>
             </div>
             {isNew ? (
-              <div>
-                <label className="label">Initial Password *</label>
-                <input type="password" className="input"
-                  onChange={e => setEditing(p => ({ ...p!, Password: e.target.value }))} />
-                <p className="text-xs text-gray-400 mt-1">User must change on first login</p>
+              <div className="col-span-2 rounded-lg bg-brand-50 border border-brand-200 p-3">
+                <p className="text-sm text-brand-900 font-medium">No password needed</p>
+                <p className="text-xs text-brand-800 mt-1">
+                  A one-time activation code is generated when you create this user.
+                  Give it to them and they set their own password — you never see it.
+                </p>
               </div>
             ) : (
               <>
-                <div>
-                  <label className="label">Reset Password (optional)</label>
-                  <input type="password" className="input" placeholder="Leave blank to keep current"
-                    onChange={e => setEditing(p => ({ ...p!, NewPassword: e.target.value }))} />
+                <div className="col-span-2 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3">
+                  <input type="checkbox" id="ureissue" className="mt-0.5"
+                    checked={!!(editing as any).ReissueCode}
+                    onChange={e => setEditing(p => ({ ...p!, ReissueCode: e.target.checked } as any))} />
+                  <label htmlFor="ureissue" className="text-sm text-amber-900">
+                    Issue a new activation code
+                    <span className="block text-xs text-amber-800 mt-0.5">
+                      Use if the code was lost or the user is locked out. Their current
+                      password stops working until they activate again.
+                    </span>
+                  </label>
                 </div>
                 <div className="col-span-2 flex items-center gap-2">
                   <input type="checkbox" id="uactive" checked={!!editing.Active}
@@ -174,6 +193,46 @@ export function UsersView() {
                 </div>
               </>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {/* One-time activation code reveal */}
+      {issued && (
+        <Modal
+          open={!!issued}
+          title="Activation code"
+          onClose={() => setIssued(null)}
+          footer={
+            <div className="flex justify-end">
+              <button className="btn-primary" onClick={() => setIssued(null)}>Done</button>
+            </div>
+          }
+        >
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Give this code to <span className="font-medium">{issued.username}</span>. They
+              enter it on the <span className="font-medium">Activate your account</span> screen
+              and choose their own password.
+            </p>
+            <div className="rounded-lg border-2 border-dashed border-brand-300 bg-brand-50 p-4 text-center">
+              <div className="font-mono text-2xl tracking-widest text-brand-900 select-all">
+                {issued.code}
+              </div>
+            </div>
+            <button
+              className="btn-secondary w-full justify-center"
+              onClick={() => {
+                navigator.clipboard?.writeText(issued.code)
+                showToast('Code copied', 'success')
+              }}
+            >
+              Copy code
+            </button>
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+              This is shown only once — it is stored hashed and cannot be retrieved again.
+              If it's lost, edit the user and issue a new code.
+            </p>
           </div>
         </Modal>
       )}
