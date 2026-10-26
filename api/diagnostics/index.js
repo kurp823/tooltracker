@@ -364,6 +364,298 @@ const CHECKS = [
   },
   {
     /*
+     * ---------------------------------------------------------------------
+     * Row-level sets behind the review workbook.
+     *
+     * The counts tell you how big each problem is; these tell you which tool,
+     * which job and which ticket, which is what you need to act on one.
+     * All read-only.
+     * ---------------------------------------------------------------------
+     *
+     * (1) Outstanding on a LIVE job and present in inventory. The ones
+     *     reading 'Good' are offerable to a second job right now.
+     */
+    name: 'reviewOnRigLive',
+    sql: `WITH jobs AS (
+            SELECT JobID, Status, Client, Rig, Well, ServiceType,
+                   TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS jobSeq
+              FROM tbl_Jobs
+          ),
+          dtl AS (
+            SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   t.jobNumber, t.dtNumber, t.deliveryDate, t.rig, t.well, t.clientCode,
+                   l.serial, l.toolDescription, l.qty
+              FROM tbl_DeliveryTicketLines l
+              JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          rtl AS (
+            SELECT DISTINCT
+                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   l.serial
+              FROM tbl_ReceivingTicketLines l
+              JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          outstanding AS (
+            SELECT d.*,
+                   ROW_NUMBER() OVER (PARTITION BY d.jobSeq, d.serial
+                                          ORDER BY d.deliveryDate DESC, d.dtNumber DESC) AS rn
+              FROM dtl d
+             WHERE d.jobSeq IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM rtl
+                                WHERE rtl.jobSeq = d.jobSeq AND rtl.serial = d.serial)
+          ),
+          LIVE_SET AS (SELECT 1 AS x)
+          SELECT COALESCE(i.AssetNo, o.serial)   AS AssetNo,
+                 i.SystemID                      AS SystemID,
+                 COALESCE(i.ShortDesc, '')       AS Category,
+                 COALESCE(i.Size, '')            AS Size,
+                 COALESCE(i.Description, CAST(o.toolDescription AS NVARCHAR(400))) AS Description,
+                 i.Status                        AS CurrentInvStatus,
+                 COALESCE(i.Location, '')        AS CurrentLocation,
+                 COALESCE(i.Supplier, '')        AS Supplier,
+                 o.jobNumber                     AS JobNo,
+                 j.Status                        AS JobStatus,
+                 COALESCE(j.Client, o.clientCode, '') AS Client,
+                 COALESCE(o.rig, j.Rig, '')      AS Rig,
+                 COALESCE(o.well, j.Well, '')    AS Well,
+                 o.dtNumber                      AS DTNo,
+                 CONVERT(VARCHAR(10), o.deliveryDate, 23) AS DTDate,
+                 o.qty                           AS Qty
+            FROM outstanding o
+            JOIN jobs j ON j.jobSeq = o.jobSeq
+            JOIN tbl_Inventory i ON i.SystemID = o.serial OR i.AssetNo = o.serial
+           WHERE o.rn = 1
+             AND j.Status IN ('Ongoing', 'Draft Invoice Submitted', 'Open', 'Waiting on Signed Docs')
+           ORDER BY i.Status, o.jobNumber, COALESCE(i.AssetNo, o.serial)`,
+  },
+  {
+    // (2) Outstanding on a LIVE job but no inventory record at all. These are
+    //     the tools the catalogue does not know exist.
+    name: 'reviewNotInInventory',
+    sql: `WITH jobs AS (
+            SELECT JobID, Status, Client, Rig, Well, ServiceType,
+                   TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS jobSeq
+              FROM tbl_Jobs
+          ),
+          dtl AS (
+            SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   t.jobNumber, t.dtNumber, t.deliveryDate, t.rig, t.well, t.clientCode,
+                   l.serial, l.toolDescription, l.qty
+              FROM tbl_DeliveryTicketLines l
+              JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          rtl AS (
+            SELECT DISTINCT
+                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   l.serial
+              FROM tbl_ReceivingTicketLines l
+              JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          outstanding AS (
+            SELECT d.*,
+                   ROW_NUMBER() OVER (PARTITION BY d.jobSeq, d.serial
+                                          ORDER BY d.deliveryDate DESC, d.dtNumber DESC) AS rn
+              FROM dtl d
+             WHERE d.jobSeq IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM rtl
+                                WHERE rtl.jobSeq = d.jobSeq AND rtl.serial = d.serial)
+          ),
+          LIVE_SET AS (SELECT 1 AS x)
+          SELECT o.serial                        AS AssetNo,
+                 CAST(o.toolDescription AS NVARCHAR(400)) AS DescriptionOnTicket,
+                 o.jobNumber                     AS JobNo,
+                 j.Status                        AS JobStatus,
+                 COALESCE(j.Client, o.clientCode, '') AS Client,
+                 COALESCE(o.rig, j.Rig, '')      AS Rig,
+                 COALESCE(o.well, j.Well, '')    AS Well,
+                 o.dtNumber                      AS DTNo,
+                 CONVERT(VARCHAR(10), o.deliveryDate, 23) AS DTDate,
+                 o.qty                           AS Qty
+            FROM outstanding o
+            JOIN jobs j ON j.jobSeq = o.jobSeq
+           WHERE o.rn = 1
+             AND j.Status IN ('Ongoing', 'Draft Invoice Submitted', 'Open', 'Waiting on Signed Docs')
+             AND NOT EXISTS (SELECT 1 FROM tbl_Inventory i
+                              WHERE i.SystemID = o.serial OR i.AssetNo = o.serial)
+           ORDER BY o.jobNumber, o.serial`,
+  },
+  {
+    // (3) Outstanding on a job that is already CLOSED — one row per job, so
+    //     you can see at a glance which jobs were closed without a return.
+    name: 'reviewClosedJobsSummary',
+    sql: `WITH jobs AS (
+            SELECT JobID, Status, Client, Rig, Well, ServiceType,
+                   TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS jobSeq
+              FROM tbl_Jobs
+          ),
+          dtl AS (
+            SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   t.jobNumber, t.dtNumber, t.deliveryDate, t.rig, t.well, t.clientCode,
+                   l.serial, l.toolDescription, l.qty
+              FROM tbl_DeliveryTicketLines l
+              JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          rtl AS (
+            SELECT DISTINCT
+                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   l.serial
+              FROM tbl_ReceivingTicketLines l
+              JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          outstanding AS (
+            SELECT d.*,
+                   ROW_NUMBER() OVER (PARTITION BY d.jobSeq, d.serial
+                                          ORDER BY d.deliveryDate DESC, d.dtNumber DESC) AS rn
+              FROM dtl d
+             WHERE d.jobSeq IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM rtl
+                                WHERE rtl.jobSeq = d.jobSeq AND rtl.serial = d.serial)
+          ),
+          LIVE_SET AS (SELECT 1 AS x),
+          rtCount AS (
+            SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   COUNT(DISTINCT t.rtNumber) AS rtTickets,
+                   COUNT(l.id)                AS rtLines,
+                   MAX(CASE WHEN t.rtNumber LIKE 'DUMMY%' THEN 1 ELSE 0 END) AS hasDummy
+              FROM tbl_ReceivingTickets t
+              LEFT JOIN tbl_ReceivingTicketLines l ON l.rtNumber = t.rtNumber
+             GROUP BY TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT)
+          )
+          SELECT o.jobNumber                     AS JobNo,
+                 j.Status                        AS JobStatus,
+                 COALESCE(j.Client, '')          AS Client,
+                 COALESCE(j.Rig, '')             AS Rig,
+                 COALESCE(j.Well, '')            AS Well,
+                 COUNT(*)                        AS ToolsOutstanding,
+                 COALESCE(c.rtTickets, 0)        AS RTTicketsOnJob,
+                 COALESCE(c.rtLines, 0)          AS RTLinesOnJob,
+                 CASE WHEN COALESCE(c.hasDummy, 0) = 1 THEN 'Yes' ELSE 'No' END AS ClosedWithDummyRT
+            FROM outstanding o
+            JOIN jobs j ON j.jobSeq = o.jobSeq
+            LEFT JOIN rtCount c ON c.jobSeq = o.jobSeq
+           WHERE o.rn = 1
+             AND j.Status NOT IN ('Ongoing', 'Draft Invoice Submitted', 'Open', 'Waiting on Signed Docs')
+           GROUP BY o.jobNumber, j.Status, j.Client, j.Rig, j.Well,
+                    c.rtTickets, c.rtLines, c.hasDummy
+           ORDER BY COUNT(*) DESC`,
+  },
+  {
+    // (4) The same closed-job set, tool by tool.
+    name: 'reviewClosedJobsDetail',
+    sql: `WITH jobs AS (
+            SELECT JobID, Status, Client, Rig, Well, ServiceType,
+                   TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS jobSeq
+              FROM tbl_Jobs
+          ),
+          dtl AS (
+            SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   t.jobNumber, t.dtNumber, t.deliveryDate, t.rig, t.well, t.clientCode,
+                   l.serial, l.toolDescription, l.qty
+              FROM tbl_DeliveryTicketLines l
+              JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          rtl AS (
+            SELECT DISTINCT
+                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   l.serial
+              FROM tbl_ReceivingTicketLines l
+              JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          outstanding AS (
+            SELECT d.*,
+                   ROW_NUMBER() OVER (PARTITION BY d.jobSeq, d.serial
+                                          ORDER BY d.deliveryDate DESC, d.dtNumber DESC) AS rn
+              FROM dtl d
+             WHERE d.jobSeq IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM rtl
+                                WHERE rtl.jobSeq = d.jobSeq AND rtl.serial = d.serial)
+          ),
+          LIVE_SET AS (SELECT 1 AS x)
+          SELECT COALESCE(i.AssetNo, o.serial)   AS AssetNo,
+                 COALESCE(i.ShortDesc, '')       AS Category,
+                 COALESCE(i.Size, '')            AS Size,
+                 COALESCE(i.Description, CAST(o.toolDescription AS NVARCHAR(400))) AS Description,
+                 CASE WHEN i.SystemID IS NULL THEN 'Not in inventory'
+                      ELSE COALESCE(i.Status, '') END AS CurrentInvStatus,
+                 o.jobNumber                     AS JobNo,
+                 j.Status                        AS JobStatus,
+                 COALESCE(j.Client, o.clientCode, '') AS Client,
+                 COALESCE(o.rig, j.Rig, '')      AS Rig,
+                 o.dtNumber                      AS DTNo,
+                 CONVERT(VARCHAR(10), o.deliveryDate, 23) AS DTDate,
+                 o.qty                           AS Qty
+            FROM outstanding o
+            JOIN jobs j ON j.jobSeq = o.jobSeq
+            LEFT JOIN tbl_Inventory i ON i.SystemID = o.serial OR i.AssetNo = o.serial
+           WHERE o.rn = 1
+             AND j.Status NOT IN ('Ongoing', 'Draft Invoice Submitted', 'Open', 'Waiting on Signed Docs')
+           ORDER BY o.jobNumber, COALESCE(i.AssetNo, o.serial)`,
+  },
+  {
+    // (5) Every job status string actually in use, with how many jobs carry
+    //     it. 'JobCompleted' and 'Completed' are the same thing spelt twice.
+    name: 'reviewJobStatusVocabulary',
+    sql: `SELECT COALESCE(NULLIF(LTRIM(RTRIM(Status)), ''), '(blank)') AS JobStatus,
+                 COUNT(*) AS Jobs,
+                 MIN(JobID) AS ExampleJob,
+                 CONVERT(VARCHAR(10), MIN(CreatedDate), 23) AS EarliestCreated,
+                 CONVERT(VARCHAR(10), MAX(CreatedDate), 23) AS LatestCreated
+            FROM tbl_Jobs
+           GROUP BY COALESCE(NULLIF(LTRIM(RTRIM(Status)), ''), '(blank)')
+           ORDER BY COUNT(*) DESC`,
+  },
+  {
+    // (6) Received against a job it was never dispatched on. Often legitimate
+    //     (kit moves rig to rig) but it is also where mis-keyed job numbers
+    //     surface, so it is worth an eye.
+    name: 'reviewReceivedNoDispatch',
+    sql: `WITH dtl AS (
+            SELECT DISTINCT
+                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   l.serial
+              FROM tbl_DeliveryTicketLines l
+              JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          rtl AS (
+            SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   t.jobNumber, t.rtNumber, t.receivingDate, t.rig,
+                   l.serial, l.toolDescription, l.usedStatus, l.routedTo,
+                   ROW_NUMBER() OVER (PARTITION BY
+                        TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT),
+                        l.serial ORDER BY t.receivingDate DESC, l.id DESC) AS rn
+              FROM tbl_ReceivingTicketLines l
+              JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          )
+          SELECT COALESCE(i.AssetNo, r.serial)   AS AssetNo,
+                 COALESCE(i.ShortDesc, '')       AS Category,
+                 COALESCE(i.Description, CAST(r.toolDescription AS NVARCHAR(400))) AS Description,
+                 r.jobNumber                     AS ReceivedOnJob,
+                 j.Status                        AS JobStatus,
+                 r.rtNumber                      AS RTNo,
+                 CONVERT(VARCHAR(10), r.receivingDate, 23) AS RTDate,
+                 COALESCE(r.rig, '')             AS Rig,
+                 COALESCE(r.usedStatus, '')      AS UsedStatus,
+                 COALESCE(r.routedTo, '')        AS RoutedTo
+            FROM rtl r
+            LEFT JOIN tbl_Jobs j ON TRY_CAST(RIGHT(j.JobID, CHARINDEX('-', REVERSE(j.JobID) + '-') - 1) AS INT) = r.jobSeq
+            LEFT JOIN tbl_Inventory i ON i.SystemID = r.serial OR i.AssetNo = r.serial
+           WHERE r.rn = 1
+             AND r.jobSeq IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM dtl WHERE dtl.jobSeq = r.jobSeq AND dtl.serial = r.serial)
+           ORDER BY r.jobNumber, COALESCE(i.AssetNo, r.serial)`,
+  },
+  {
+    /*
      * The live-job slice of stillOnRig, resolved against the catalogue.
      *
      * This is the set a backfill would touch, so it reports current inventory
