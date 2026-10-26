@@ -356,6 +356,69 @@ const MIGRATIONS = [
           ON dbo.tbl_DeliveryTicketLines (dtNumber, serial) INCLUDE (id, qty);`,
   },
   {
+    /*
+     * Mark equipment that is physically on a rig.
+     *
+     * Nothing ever wrote tbl_Inventory.Status for historic tickets, so a tool
+     * dispatched to a rig on a live job still reads 'Good' and the tool picker
+     * will happily offer it to a second job. This closes that gap for the
+     * existing data; the dispatch endpoint already does it for new tickets.
+     *
+     * Scope is deliberately narrow:
+     *   - Live jobs only. Equipment outstanding on a CLOSED job is missing
+     *     paperwork, not kit on a rig — the job would not have been closed
+     *     with the tools still out. Marking those 'On Rig' would strand them
+     *     out of the picker.
+     *   - 'Good' rows only. DBR, Inspection, Maintenance and Lost in Hole
+     *     each belong to another workflow and are left exactly as they are.
+     *
+     * Idempotent: a second run matches nothing, because the rows it changed
+     * no longer read 'Good'.
+     */
+    name: 'seed:backfill-on-rig',
+    sql: `
+      WITH live AS (
+        SELECT TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS jobSeq
+          FROM tbl_Jobs
+         WHERE Status IN ('Ongoing', 'Draft Invoice Submitted', 'Open', 'Waiting on Signed Docs')
+      ),
+      dt AS (
+        SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+               l.serial, t.rig, t.deliveryDate
+          FROM tbl_DeliveryTicketLines l
+          JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
+         WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+      ),
+      rt AS (
+        SELECT DISTINCT
+               TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+               l.serial
+          FROM tbl_ReceivingTicketLines l
+          JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
+         WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+      ),
+      outstanding AS (
+        SELECT dt.serial, dt.rig,
+               ROW_NUMBER() OVER (PARTITION BY dt.serial
+                                      ORDER BY dt.deliveryDate DESC) AS rn
+          FROM dt
+         WHERE dt.jobSeq IN (SELECT jobSeq FROM live WHERE jobSeq IS NOT NULL)
+           AND NOT EXISTS (SELECT 1 FROM rt
+                            WHERE rt.jobSeq = dt.jobSeq AND rt.serial = dt.serial)
+      ),
+      latest AS (
+        -- One row per asset. A serial outstanding on more than one live job is
+        -- wherever its most recent dispatch sent it.
+        SELECT serial, rig FROM outstanding WHERE rn = 1
+      )
+      UPDATE i
+         SET Status   = 'On Rig',
+             Location = COALESCE(l.rig, i.Location)
+        FROM tbl_Inventory i
+        JOIN latest l ON i.SystemID = l.serial OR i.AssetNo = l.serial
+       WHERE i.Status = 'Good';`,
+  },
+  {
     name: 'seed:dedupe-ticket-lines',
     sql: `
       SET XACT_ABORT ON;
