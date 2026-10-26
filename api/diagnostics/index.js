@@ -1,6 +1,27 @@
 'use strict'
 const { query, jsonResponse, requireAuth, jobKey } = require('../db')
 
+/*
+ * Strip an invoice-revision suffix from a raw job id.
+ *
+ * Job-023-00002-1 (credit note CN-21023) and Job-023-00002-2 (re-invoice
+ * FSH-02666) are revisions against Job-023-00002 — the same physical job, same
+ * rig and well. Keying tickets on the full id splits one job in two, so a tool
+ * dispatched under the base id and returned under a revision reads as still
+ * outstanding.
+ *
+ * The LIKE deliberately requires the five-digit-sequence shape, so
+ * Job-023-23-351 — a different layout, not a revision — is left alone.
+ */
+const baseId = (col) =>
+  `CASE WHEN ${col} LIKE 'Job-[0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9]-%' ` +
+  `THEN LEFT(${col}, LEN(${col}) - CHARINDEX('-', REVERSE(${col}))) ELSE ${col} END`
+
+/** Rig and well as written vary in case, spacing, dashes and brackets. */
+const loose = (col) =>
+  `UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(` +
+  `COALESCE(LTRIM(RTRIM(${col})), ''),' ',''),'-',''),'(',''),')',''),'.',''))`
+
 /**
  * GET /api/diagnostics — read-only integrity counts. Admin only.
  *
@@ -755,6 +776,79 @@ const CHECKS = [
                  (SELECT COUNT(*) FROM g WHERE jobsSharingIt > 1)       AS SequencesSharedByManyJobs,
                  (SELECT SUM(jobsSharingIt) FROM g WHERE jobsSharingIt > 1) AS JobsAffected,
                  (SELECT MAX(jobsSharingIt) FROM g)                     AS WorstCase`,
+  },
+  {
+    /*
+     * Does a mismatched ticket's rig+well belong to some OTHER job?
+     *
+     * If it does, the ticket is on the wrong job and could be moved instead of
+     * removed, keeping its dispatch lines. If no such job exists, the rig/well
+     * on the ticket is simply wrong data and there is nothing to preserve.
+     */
+    name: 'mismatchDTOtherJob',
+    sql: `WITH jobs AS (
+            SELECT JobID, Rig, Well, LegalInvoiceNumber, Status, ${jobKey('JobID')} AS jobKey
+              FROM tbl_Jobs
+          ),
+          inv AS (
+            SELECT * FROM jobs
+             WHERE Status = 'Completed'
+               AND NULLIF(LTRIM(RTRIM(LegalInvoiceNumber)), '') IS NOT NULL
+          ),
+          dt AS (
+            SELECT t.dtNumber, t.rig, t.well, ${jobKey('t.jobNumber')} AS jobKey,
+                   (SELECT COUNT(*) FROM tbl_DeliveryTicketLines l
+                     WHERE l.dtNumber = t.dtNumber) AS Lines
+              FROM tbl_DeliveryTickets t
+          )
+          SELECT j.JobID AS JobNo, d.dtNumber AS DTNo, d.Lines AS DTLines,
+                 COALESCE(j.Rig, '') AS JobRig, COALESCE(j.Well, '') AS JobWell,
+                 COALESCE(d.rig, '') AS DTRig,  COALESCE(d.well, '') AS DTWell,
+                 (SELECT COUNT(*) FROM jobs o
+                   WHERE ${loose('o.Rig')} = ${loose('d.rig')}
+                     AND ${loose('o.Well')} = ${loose('d.well')}) AS JobsMatchingDTRigWell,
+                 (SELECT TOP 1 o.JobID FROM jobs o
+                   WHERE ${loose('o.Rig')} = ${loose('d.rig')}
+                     AND ${loose('o.Well')} = ${loose('d.well')}
+                   ORDER BY o.JobID) AS ExampleOtherJob
+            FROM dt d
+            JOIN inv j ON j.jobKey = d.jobKey
+           WHERE ${loose('j.Rig')} <> ${loose('d.rig')}
+              OR ${loose('j.Well')} <> ${loose('d.well')}
+           ORDER BY d.Lines DESC`,
+  },
+  {
+    // How much of the outstanding count is just the -1/-2 revision split.
+    name: 'suffixSplitEffect',
+    sql: `WITH dtl AS (
+            SELECT ${jobKey('t.jobNumber')} AS fullKey,
+                   ${jobKey(baseId('t.jobNumber'))} AS baseKey,
+                   l.serial
+              FROM tbl_DeliveryTicketLines l
+              JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          rtl AS (
+            SELECT DISTINCT ${jobKey('t.jobNumber')} AS fullKey,
+                   ${jobKey(baseId('t.jobNumber'))} AS baseKey,
+                   l.serial
+              FROM tbl_ReceivingTicketLines l
+              JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          )
+          SELECT (SELECT COUNT(*) FROM (
+                    SELECT DISTINCT d.fullKey, d.serial FROM dtl d
+                     WHERE NOT EXISTS (SELECT 1 FROM rtl r
+                                        WHERE r.fullKey = d.fullKey AND r.serial = d.serial)) x)
+                   AS OutstandingByFullJobId,
+                 (SELECT COUNT(*) FROM (
+                    SELECT DISTINCT d.baseKey, d.serial FROM dtl d
+                     WHERE NOT EXISTS (SELECT 1 FROM rtl r
+                                        WHERE r.baseKey = d.baseKey AND r.serial = d.serial)) x)
+                   AS OutstandingByBaseJobId,
+                 (SELECT COUNT(*) FROM tbl_Jobs
+                   WHERE JobID LIKE 'Job-[0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9]-%')
+                   AS SuffixedJobs`,
   },
   {
     name: 'reviewJobStatusVocabulary',
