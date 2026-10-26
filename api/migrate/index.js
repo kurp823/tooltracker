@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth } = require('../db')
+const { query, jsonResponse, requireAuth, jobKey } = require('../db')
 
 /**
  * POST /api/migrate  — create missing tables (Admin only, idempotent)
@@ -378,12 +378,12 @@ const MIGRATIONS = [
     name: 'seed:backfill-on-rig',
     sql: `
       WITH live AS (
-        SELECT TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS jobSeq
+        SELECT ${jobKey('JobID')} AS jobKey
           FROM tbl_Jobs
          WHERE Status IN ('Ongoing', 'Draft Invoice Submitted', 'Open', 'Waiting on Signed Docs')
       ),
       dt AS (
-        SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+        SELECT ${jobKey('t.jobNumber')} AS jobKey,
                l.serial, t.rig, t.deliveryDate
           FROM tbl_DeliveryTicketLines l
           JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
@@ -391,7 +391,7 @@ const MIGRATIONS = [
       ),
       rt AS (
         SELECT DISTINCT
-               TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+               ${jobKey('t.jobNumber')} AS jobKey,
                l.serial
           FROM tbl_ReceivingTicketLines l
           JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
@@ -402,9 +402,9 @@ const MIGRATIONS = [
                ROW_NUMBER() OVER (PARTITION BY dt.serial
                                       ORDER BY dt.deliveryDate DESC) AS rn
           FROM dt
-         WHERE dt.jobSeq IN (SELECT jobSeq FROM live WHERE jobSeq IS NOT NULL)
+         WHERE dt.jobKey IN (SELECT jobKey FROM live WHERE NULLIF(jobKey, '') IS NOT NULL)
            AND NOT EXISTS (SELECT 1 FROM rt
-                            WHERE rt.jobSeq = dt.jobSeq AND rt.serial = dt.serial)
+                            WHERE rt.jobKey = dt.jobKey AND rt.serial = dt.serial)
       ),
       latest AS (
         -- One row per asset. A serial outstanding on more than one live job is

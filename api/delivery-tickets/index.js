@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth } = require('../db')
+const { query, jsonResponse, requireAuth, jobKey, jobKeyOf } = require('../db')
 
 // Real tbl_DeliveryTickets columns (confirmed via INFORMATION_SCHEMA):
 //   id, dtNumber, jobNumber, clientCode, deliveryDate, rig, well, poNumber,
@@ -196,8 +196,8 @@ module.exports = async function (context, req) {
     const listParams = []
     let jobFilter = ''
     if (jobQ) {
-      jobFilter = `WHERE TRY_CAST(RIGHT(d.jobNumber, CHARINDEX('-', REVERSE(d.jobNumber) + '-') - 1) AS INT) = @jobseq`
-      listParams.push({ name: 'jobseq', value: Number(String(jobQ).replace(/.*-/, '')) || -1 })
+      jobFilter = `WHERE ${jobKey('d.jobNumber')} = @jobkey`
+      listParams.push({ name: 'jobkey', value: jobKeyOf(jobQ) })
     }
     const result = await query(
       `SELECT d.id AS DTID, d.dtNumber AS DTNumber, d.jobNumber AS JobID,

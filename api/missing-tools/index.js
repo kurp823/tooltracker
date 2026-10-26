@@ -1,5 +1,5 @@
 'use strict'
-const { sql, query, jsonResponse, requireAuth } = require('../db')
+const { sql, query, jsonResponse, requireAuth, jobKey } = require('../db')
 
 /**
  * Tools on live jobs that have no inventory record.
@@ -53,15 +53,17 @@ module.exports = async function (context, req) {
         // Job numbers are stored in two shapes ('Job-026-01836' on the job,
         // 'JOB-26-01836' on the ticket). Stripping non-digits does NOT make
         // them comparable — that gives 02601836 vs 2601836, and the leading
-        // zero silently dropped every such job, CX0697's included. The
-        // trailing sequence never resets across years, so it is the key.
+        // zero silently dropped every such job, CX0697's included. Matching on
+        // the trailing sequence instead was also wrong: it repeats across
+        // years, so one sequence covered up to 53 unrelated jobs. jobKey()
+        // normalises the whole id; see api/db.js.
         //
         // Shape matters for speed too: filter the 3,700 tickets first, then
         // seek their lines by dtNumber. Joining on a computed expression
         // against all 47,106 lines took 14 seconds.
         `WITH live AS (
            SELECT DISTINCT
-                  TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS seq
+                  ${jobKey('JobID')} AS jobKey
              FROM tbl_Jobs
             WHERE Status IN (${statusList})
          ),
@@ -69,9 +71,8 @@ module.exports = async function (context, req) {
            SELECT dt.dtNumber, dt.jobNumber, dt.rig, dt.deliveryDate
              FROM tbl_DeliveryTickets dt
              JOIN live l
-               ON l.seq = TRY_CAST(
-                    RIGHT(dt.jobNumber, CHARINDEX('-', REVERSE(dt.jobNumber) + '-') - 1) AS INT)
-            WHERE l.seq IS NOT NULL
+               ON l.jobKey = ${jobKey('dt.jobNumber')}
+            WHERE NULLIF(l.jobKey, '') IS NOT NULL
          ),
          dispatched AS (
            SELECT dtl.serial                AS AssetNo,
@@ -82,11 +83,9 @@ module.exports = async function (context, req) {
                   MAX(lt.rig)               AS Rig,
                   MAX(lt.jobNumber)         AS JobNumber,
                   MAX(lt.dtNumber)          AS DTNumber,
-                  -- Carried as a plain INT so the return lookup below compares
-                  -- numbers rather than re-deriving the sequence per row.
-                  MAX(TRY_CAST(
-                    RIGHT(lt.jobNumber, CHARINDEX('-', REVERSE(lt.jobNumber) + '-') - 1) AS INT
-                  )) AS JobSeq
+                  -- Carried along so the return lookup below compares a ready
+                  -- key rather than re-deriving it per row.
+                  MAX(${jobKey('lt.jobNumber')}) AS JobKey
              FROM liveTickets lt
              JOIN tbl_DeliveryTicketLines dtl ON dtl.dtNumber = lt.dtNumber
             WHERE NULLIF(LTRIM(RTRIM(dtl.serial)), '') IS NOT NULL
@@ -110,11 +109,10 @@ module.exports = async function (context, req) {
            SELECT rl.serial,
                   rh.rtNumber,
                   rh.receivingDate,
-                  l.seq
+                  l.jobKey
              FROM tbl_ReceivingTickets rh
              JOIN live l
-               ON l.seq = TRY_CAST(
-                    RIGHT(rh.jobNumber, CHARINDEX('-', REVERSE(rh.jobNumber) + '-') - 1) AS INT)
+               ON l.jobKey = ${jobKey('rh.jobNumber')}
              JOIN tbl_ReceivingTicketLines rl ON rl.rtNumber = rh.rtNumber
          )
          SELECT d.AssetNo,
@@ -136,7 +134,7 @@ module.exports = async function (context, req) {
              SELECT TOP 1 lr.rtNumber
                FROM liveReturns lr
               WHERE lr.serial = d.AssetNo
-                AND lr.seq    = d.JobSeq
+                AND lr.jobKey = d.JobKey
               ORDER BY lr.receivingDate DESC
            ) rt
           -- No inventory row under any of the three identifying keys.

@@ -140,4 +140,36 @@ function requireAuth(context, req) {
   return user
 }
 
-module.exports = { sql, getPool, query, jsonResponse, verifyToken, requireAuth }
+/*
+ * Matching a ticket's jobNumber to tbl_Jobs.JobID.
+ *
+ * The job number is written six different ways across the data:
+ *   Job-###-#####      job-###-#####      JOB-###-#####
+ *   Job-###-##-###     Job-###-#####-#    Job-###-#####-##
+ * so a plain string compare misses, and an earlier attempt matched on the
+ * trailing sequence alone. That was wrong: 3,824 jobs use only 1,824 distinct
+ * trailing sequences, 502 of them shared by more than one job, so sequence 2
+ * alone covered 53 unrelated jobs and tickets were cross-attributed between
+ * them. It also truncated the 630 ids carrying a -1 / -01 suffix.
+ *
+ * Normalise the WHOLE id instead: upper-case it and drop a zero that sits
+ * immediately after a dash, repeatedly, so Job-026-01836 and JOB-26-01836
+ * both become JOB-26-1836 while Job-023-23-351 keeps all three segments.
+ * Verified over production: 3,824 jobs -> 3,824 distinct keys, no collisions.
+ *
+ * Five passes clear up to five leading zeros, which is more than any segment
+ * here carries. Safe because no segment is entirely zeros.
+ */
+const jobKey = (col) =>
+  `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(` +
+  `UPPER(LTRIM(RTRIM(${col})))` +
+  `,'-0','-'),'-0','-'),'-0','-'),'-0','-'),'-0','-')`
+
+/** The same normalisation in JS, for values passed as parameters. */
+function jobKeyOf(value) {
+  let s = String(value == null ? '' : value).toUpperCase().trim()
+  for (let i = 0; i < 5; i++) s = s.split('-0').join('-')
+  return s
+}
+
+module.exports = { sql, getPool, query, jsonResponse, verifyToken, requireAuth, jobKey, jobKeyOf }

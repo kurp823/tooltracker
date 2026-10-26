@@ -104,9 +104,11 @@ module.exports = async function (context, req) {
         ${where}
         -- Newest job first. CreatedDate is NULL on the newer rows, and a DESC
         -- sort puts NULLs last in SQL Server, which pushed the newest jobs to
-        -- the bottom and showed 2017/2018 jobs first. The trailing sequence in
-        -- Job-YYY-NNNNN never resets across years, so it is the reliable key.
-        ORDER  BY TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) DESC,
+        -- the bottom and showed 2017/2018 jobs first. Sort on the YEAR segment
+        -- (always characters 5-7, in every id format here) and then on the id
+        -- itself, which is zero-padded and so sorts correctly within a year.
+        -- The trailing sequence alone is NOT a key: it repeats across years.
+        ORDER  BY TRY_CAST(SUBSTRING(JobID, 5, 3) AS INT) DESC,
                   JobID DESC
       `, params)
       return jsonResponse(context, 200, result.recordset)
