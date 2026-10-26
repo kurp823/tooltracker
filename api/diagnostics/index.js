@@ -193,6 +193,52 @@ const CHECKS = [
            ORDER BY l.rtNumber, l.serial, l.itemNo`,
   },
   {
+    /*
+     * The sampled 'differing' groups differed only in `remarks`: one row blank,
+     * its twin echoing the usedStatus ('Used' / 'Not Used') back into remarks.
+     * That is not a second real entry, it is the same line imported twice with
+     * the usage string copied into a second column.
+     *
+     * This measures that across the whole table instead of from a sample:
+     *   differOnlyByRemarks  — identical on description, qty, usage, condition
+     *                          and routing; only remarks vary.
+     *   echoPattern          — of those, groups whose remarks values are only
+     *                          ever blank or a copy of usedStatus.
+     * A group matching echoPattern carries no information in the extra rows.
+     */
+    name: 'differingOnlyByRemarksRT',
+    sql: `WITH g AS (
+            SELECT rtNumber, serial,
+                   COUNT(*) AS n,
+                   COUNT(DISTINCT CAST(CONCAT(
+                     LEFT(COALESCE(CAST(toolDescription AS NVARCHAR(4000)), '~'), 150), '|',
+                     COALESCE(CAST(qty AS NVARCHAR(20)), '~'), '|',
+                     COALESCE(usedStatus, '~'), '|',
+                     LEFT(COALESCE(CAST(condition AS NVARCHAR(4000)), '~'), 80), '|',
+                     COALESCE(routedTo, '~')
+                   ) AS NVARCHAR(500))) AS shapesIgnoringRemarks,
+                   COUNT(DISTINCT LEFT(COALESCE(CAST(remarks AS NVARCHAR(4000)), '~'), 150)) AS remarkVariants,
+                   SUM(CASE
+                         WHEN NULLIF(LTRIM(RTRIM(CAST(remarks AS NVARCHAR(4000)))), '') IS NULL
+                           OR LTRIM(RTRIM(CAST(remarks AS NVARCHAR(4000)))) = LTRIM(RTRIM(COALESCE(usedStatus, '')))
+                         THEN 0 ELSE 1 END) AS rowsWithRealRemarks
+              FROM tbl_ReceivingTicketLines
+             WHERE NULLIF(LTRIM(RTRIM(serial)), '') IS NOT NULL
+             GROUP BY rtNumber, serial
+            HAVING COUNT(*) > 1
+          )
+          SELECT
+            COUNT(*) AS duplicateGroups,
+            SUM(CASE WHEN shapesIgnoringRemarks = 1 AND remarkVariants > 1 THEN 1 ELSE 0 END) AS differOnlyByRemarks,
+            SUM(CASE WHEN shapesIgnoringRemarks = 1 AND remarkVariants > 1 AND rowsWithRealRemarks = 0
+                     THEN 1 ELSE 0 END) AS echoPatternGroups,
+            SUM(CASE WHEN shapesIgnoringRemarks = 1 AND remarkVariants > 1 AND rowsWithRealRemarks = 0
+                     THEN n - 1 ELSE 0 END) AS echoPatternRedundantRows,
+            SUM(CASE WHEN shapesIgnoringRemarks > 1 THEN 1 ELSE 0 END) AS genuinelyDifferentGroups,
+            SUM(CASE WHEN shapesIgnoringRemarks > 1 THEN n - 1 ELSE 0 END) AS genuinelyDifferentRedundantRows
+          FROM g`,
+  },
+  {
     // Are the duplicates and the orphans the same rows, or separate problems?
     name: 'duplicateVsOrphanOverlap',
     sql: `SELECT
