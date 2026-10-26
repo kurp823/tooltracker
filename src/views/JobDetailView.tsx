@@ -20,7 +20,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import { toDateInput, normalizeJobId } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
-import type { Job, JobStatus, InvoicingType } from '../types'
+import type { Job, JobStatus, InvoicingType, ToolMovement } from '../types'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -104,7 +104,22 @@ interface RTLine {
 }
 
 interface UtilCell { code: '1' | 'S'; logId: number }
-interface UtilRow { label: string; toolId: string | number | null; days: Record<number, UtilCell> }
+/**
+ * One row per DISPATCH CYCLE, not per tool: a tool that goes out, comes back
+ * and goes out again on the same job is two separate charge periods, and the
+ * days of one must not be enterable against the other. `dateOut`/`dateIn`
+ * bound the window in which a day can be marked at all.
+ */
+interface UtilRow {
+  label: string
+  toolId: string | number | null
+  days: Record<number, UtilCell>
+  dtNumber: string | null
+  dateOut: string | null
+  dateIn: string | null
+  assetNo?: string | null
+  size?: string | null
+}
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -648,9 +663,10 @@ function DTHeaderTab({
   const loadDTs = useCallback(async () => {
     setLoading(true)
     try {
-      const all = await api.get<DTRecord[]>('/delivery-tickets')
-      const normJobId = normalizeJobId(jobId)
-      const jobDTs = all.filter((d: DTRecord) => normalizeJobId(d.JobID) === normJobId)
+      // Filtered server-side. This used to pull all 3,700 delivery tickets
+      // to find the handful on this job; ?job= matches on the trailing job
+      // sequence, which is format-proof.
+      const jobDTs = await api.get<DTRecord[]>(`/delivery-tickets?job=${encodeURIComponent(jobId)}`)
       setDts(jobDTs)
       if (jobDTs.length > 0) {
         const target = focusDTID
@@ -1082,9 +1098,9 @@ function ReturnTicketTab({
   const loadRTs = useCallback(async () => {
     setLoading(true)
     try {
-      const all = await api.get<RTRecord[]>('/receiving-tickets')
-      const normJobId = normalizeJobId(jobId)
-      const jobRTs = all.filter((r: RTRecord) => normalizeJobId(r.JobID) === normJobId)
+      // Filtered server-side, as with the DT tab — this pulled all 3,451
+      // receiving tickets to find the handful on this job.
+      const jobRTs = await api.get<RTRecord[]>(`/receiving-tickets?job=${encodeURIComponent(jobId)}`)
       setRts(jobRTs)
       if (jobRTs.length > 0) selectRT(jobRTs[0])
     } catch {
@@ -1354,60 +1370,75 @@ function UtilizationTab({ jobId }: { jobId: string }) {
   const [month, setMonth] = useState(today.getMonth() + 1)
   const [rows,    setRows]    = useState<UtilRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [saving,  setSaving]  = useState(0)
 
   const daysInMonth = new Date(year, month, 0).getDate()
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1)
   const monthName = new Date(year, month - 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' })
+
+  const dayOf = (d: number) => `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+
+  /**
+   * A day can only be marked between the tool going out on its delivery ticket
+   * and coming back on the matching receiving ticket. A tool that hasn't
+   * returned is open-ended up to today — nothing can be marked in the future.
+   */
+  const inWindow = useCallback((row: UtilRow, d: number) => {
+    const day = dayOf(d)
+    const out = (row.dateOut || '').slice(0, 10)
+    const back = (row.dateIn || '').slice(0, 10)
+    const cap = new Date().toISOString().slice(0, 10)
+    if (!out) return false
+    if (day < out) return false
+    if (back) return day <= back
+    return day <= cap
+  }, [year, month])
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const normJobId = normalizeJobId(jobId)
 
-      // 1) Existing utilization logs for the month. Fetched whole-month (not
-      // filtered server-side by jobId — historical job-number formats don't
-      // match exactly) then filtered client-side, same as the DT tab.
-      const res = await api.get<{ rows: (UtilRow & { jobId: string })[] }>(`/utilization?year=${year}&month=${month}`)
-      const logRows: UtilRow[] = (res.rows || [])
-        .filter(r => normalizeJobId(r.jobId) === normJobId)
-        .map(({ label, toolId, days }) => ({ label, toolId, days }))
+      /*
+       * The dispatch cycles come straight from /api/tool-history, which already
+       * returns one row per DT line paired with its matching RT — exactly the
+       * DT->RT cycle this sheet charges against, with the two dates on it.
+       *
+       * This replaces fetching all 3,700 delivery tickets and then every one
+       * of their line sets on each month change, which is what made this tab
+       * appear not to work at all.
+       */
+      const [cycles, logs] = await Promise.all([
+        api.get<ToolMovement[]>(`/tool-history?job=${encodeURIComponent(jobId)}&limit=2000`)
+          .catch(() => [] as ToolMovement[]),
+        api.get<{ rows: (UtilRow & { jobId: string })[] }>(`/utilization?year=${year}&month=${month}`)
+          .catch(() => ({ rows: [] })),
+      ])
 
-      // 2) Seed a row for every tool dispatched on this job's Delivery
-      // Tickets. A utilization row otherwise only exists once a day has
-      // already been marked, so freshly-delivered tools were invisible here
-      // and could never be marked at all — which is what this tab is for.
-      const dtRows: UtilRow[] = []
-      try {
-        const allDTs = await api.get<DTRecord[]>('/delivery-tickets')
-        const jobDTs = allDTs.filter(d => normalizeJobId(d.JobID) === normJobId)
-        const lineSets = await Promise.all(
-          jobDTs.map(d =>
-            api.get<DTLine[]>(`/delivery-tickets/${d.DTID}/lines`).catch(() => [] as DTLine[])
-          )
-        )
-        const seen = new Set<string>()
-        for (const lines of lineSets) {
-          for (const l of lines) {
-            const toolId = l.SerialNumber ?? l.AssetNo ?? null
-            const key = String(toolId ?? '')
-            if (!key || seen.has(key)) continue
-            seen.add(key)
-            const label = [l.AssetNo || l.SerialNumber, l.ToolDescription]
-              .filter(Boolean)
-              .join(' – ')
-            dtRows.push({ label: label || `Tool ${key}`, toolId, days: {} })
-          }
-        }
-      } catch {
-        // DT lookup is best-effort — never block the sheet on it.
+      const marks = new Map<string, Record<number, UtilCell>>()
+      for (const r of (logs.rows || [])) {
+        if (normalizeJobId(r.jobId) !== normJobId) continue
+        marks.set(`${r.dtNumber ?? ''}|${String(r.toolId ?? '')}`, r.days)
       }
 
-      // 3) Merge: rows with logs win; DT tools without logs get empty rows.
-      const haveTool = new Set(logRows.map(r => String(r.toolId ?? '')))
-      setRows([
-        ...logRows,
-        ...dtRows.filter(r => !haveTool.has(String(r.toolId ?? ''))),
-      ])
+      const built: UtilRow[] = (cycles || []).map(c => {
+        const serial = c.Serial ?? c.PartNo ?? null
+        const key = `${c.TicketNo ?? ''}|${String(serial ?? '')}`
+        return {
+          label: [c.PartNo || serial, c.Description].filter(Boolean).join(' – ') || String(serial ?? ''),
+          toolId: serial,
+          dtNumber: c.TicketNo ?? null,
+          dateOut: c.DateOut ?? null,
+          dateIn: c.DateIn ?? null,
+          assetNo: c.PartNo ?? null,
+          size: c.Size ?? null,
+          days: marks.get(key) || {},
+        }
+      })
+
+      // Newest dispatch first, so the run being worked on is at the top.
+      built.sort((a, b) => String(b.dateOut || '').localeCompare(String(a.dateOut || '')))
+      setRows(built)
     } catch {
       showToast('Failed to load utilization', 'error')
     } finally {
@@ -1417,98 +1448,157 @@ function UtilizationTab({ jobId }: { jobId: string }) {
 
   useEffect(() => { load() }, [load])
 
-  async function handleCellClick(rowIdx: number, day: number) {
+  /**
+   * Typed entry, not click-cycling: '1' for operating, 'S' for standby,
+   * anything else clears the day. The cursor stays busy until the write lands,
+   * so a typed day is never silently lost.
+   */
+  async function setCell(rowIdx: number, day: number, raw: string) {
     if (!canEdit) return
     const row = rows[rowIdx]
+    if (!inWindow(row, day)) return
+
+    const v = (raw || '').trim().toUpperCase()
+    const code: '1' | 'S' | null = v === '1' ? '1' : v === 'S' ? 'S' : null
     const current = row.days[day]
-    const nextCode: '1' | 'S' | null = !current ? '1' : current.code === '1' ? 'S' : null
+    if (current && current.code === code) return
+
+    const apply = (next: UtilCell | null) =>
+      setRows(prev => prev.map((r, i) => {
+        if (i !== rowIdx) return r
+        const d = { ...r.days }
+        if (next) d[day] = next
+        else delete d[day]
+        return { ...r, days: d }
+      }))
+
+    setSaving(n => n + 1)
+    document.body.style.cursor = 'wait'
     try {
-      if (!current) {
-        const logDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-        const res = await api.post<{ LogID: number }>('/utilization', {
-          JobID: jobId, ToolID: row.toolId, LogDate: logDate, UtilizationCode: '1',
-        })
-        setRows(prev => prev.map((r, i) => i !== rowIdx ? r : { ...r, days: { ...r.days, [day]: { code: '1', logId: res.LogID } } }))
-      } else if (nextCode) {
-        await api.put(`/utilization/${current.logId}`, { UtilizationCode: nextCode })
-        setRows(prev => prev.map((r, i) => i !== rowIdx ? r : { ...r, days: { ...r.days, [day]: { code: nextCode, logId: current.logId } } }))
-      } else {
+      if (!code && current) {
         await api.delete(`/utilization/${current.logId}`)
-        setRows(prev => prev.map((r, i) => {
-          if (i !== rowIdx) return r
-          const newDays = { ...r.days }
-          delete newDays[day]
-          return { ...r, days: newDays }
-        }))
+        apply(null)
+      } else if (code && !current) {
+        const res = await api.post<{ LogID: number }>('/utilization', {
+          JobID: jobId,
+          DTNumber: row.dtNumber,   // keys the revenue rollup — must be stored
+          ToolID: row.toolId,
+          LogDate: dayOf(day),
+          UtilizationCode: code,
+        })
+        apply({ code, logId: res.LogID })
+      } else if (code && current) {
+        await api.put(`/utilization/${current.logId}`, { UtilizationCode: code })
+        apply({ code, logId: current.logId })
       }
     } catch {
-      showToast('Failed to update — try again', 'error')
+      showToast('Failed to save — try again', 'error')
+    } finally {
+      document.body.style.cursor = ''
+      setSaving(n => n - 1)
     }
+  }
+
+  /** Arrow keys and Enter move through the sheet like a spreadsheet. */
+  function onKey(e: React.KeyboardEvent<HTMLInputElement>, rowIdx: number, day: number) {
+    const go = (r: number, d: number) => {
+      const el = document.querySelector<HTMLInputElement>(`[data-util="${r}-${d}"]`)
+      if (el) { el.focus(); el.select() }
+    }
+    if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); go(rowIdx, day + 1) }
+    else if (e.key === 'ArrowLeft')  { e.preventDefault(); go(rowIdx, day - 1) }
+    else if (e.key === 'ArrowDown')  { e.preventDefault(); go(rowIdx + 1, day) }
+    else if (e.key === 'ArrowUp')    { e.preventDefault(); go(rowIdx - 1, day) }
   }
 
   function prevMonth() { if (month === 1) { setYear(y => y - 1); setMonth(12) } else setMonth(m => m - 1) }
   function nextMonth() { if (month === 12) { setYear(y => y + 1); setMonth(1) } else setMonth(m => m + 1) }
 
+  const totals = rows.reduce((a, r) => {
+    for (const d of Object.values(r.days)) {
+      if (d.code === '1') a.ops++
+      else if (d.code === 'S') a.sb++
+    }
+    return a
+  }, { ops: 0, sb: 0 })
+
   if (loading) return (
-    <div className="card p-12 flex items-center justify-center">
+    <div className="bg-white border border-gray-300 rounded py-12 flex items-center justify-center">
       <Spinner size="md" />
     </div>
   )
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-1 card px-2 py-1">
-          <button onClick={prevMonth} className="p-1 hover:bg-gray-100 rounded transition-colors">‹</button>
-          <span className="text-sm font-medium px-2 min-w-40 text-center">{monthName}</span>
-          <button onClick={nextMonth} className="p-1 hover:bg-gray-100 rounded transition-colors">›</button>
+    <div className="flex flex-col gap-1.5">
+      <div className="screen-bar">
+        <div className="flex items-center gap-0.5 border border-gray-300 rounded bg-white">
+          <button onClick={prevMonth} className="px-1.5 h-[24px] hover:bg-gray-100">‹</button>
+          <span className="text-[12px] font-semibold px-2 min-w-[130px] text-center">{monthName}</span>
+          <button onClick={nextMonth} className="px-1.5 h-[24px] hover:bg-gray-100">›</button>
         </div>
-        {!canEdit && <span className="text-gray-400 italic text-xs">View only</span>}
-        <p className="text-xs text-gray-400 ml-auto">
-          Rows come from tools dispatched on this job's Delivery Tickets. Click a day to mark 1 (Operations) / S (Standby).
-        </p>
+        <span className="text-[11px] text-gray-500">
+          {rows.length} dispatch cycle{rows.length === 1 ? '' : 's'} · {totals.ops} operating · {totals.sb} standby
+        </span>
+        {saving > 0 && <span className="text-[11px] text-amber-700 font-semibold">Saving…</span>}
+        {!canEdit && <span className="text-[11px] text-gray-400 italic">View only</span>}
+        <span className="ml-auto text-[10px] text-gray-400">
+          Type <strong>1</strong> operating or <strong>S</strong> standby. Only days between the DT and RT dates accept entry.
+        </span>
       </div>
 
-      <div className="card overflow-auto">
-        <table className="text-xs border-collapse select-none" style={{ minWidth: `${200 + daysInMonth * 30}px` }}>
-          <thead>
-            <tr className="bg-gray-50">
-              <th className="text-left px-3 py-2.5 font-semibold text-gray-600 w-48 sticky left-0 z-10 bg-gray-50 border-b border-gray-200">
-                Tool
-              </th>
+      <div className="bg-white border border-gray-300 rounded overflow-auto">
+        <table className="text-[11px] border-collapse" style={{ minWidth: `${340 + daysInMonth * 24}px` }}>
+          <thead className="sticky top-0 z-20">
+            <tr>
+              <th className="table-th sticky left-0 z-30 bg-navy-head w-[150px]">Tool</th>
+              <th className="table-th">DT No</th>
+              <th className="table-th">Out</th>
+              <th className="table-th">In</th>
               {days.map(d => (
-                <th key={d} className="text-center px-0 py-2.5 w-7 font-medium border-b border-gray-200 text-gray-500">{d}</th>
+                <th key={d} className="table-th !px-0 w-6 text-center">{d}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={daysInMonth + 1} className="text-center text-gray-400 py-12">
-                  No utilization logged for {monthName} on this job.
+                <td colSpan={daysInMonth + 4} className="table-td text-center text-gray-400 py-10">
+                  No tools have been dispatched on this job yet, so there is nothing to charge.
                 </td>
               </tr>
             ) : (
               rows.map((row, rowIdx) => (
-                <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                  <td className="px-3 py-1.5 sticky left-0 z-10 bg-inherit border-b border-gray-100 font-medium text-gray-800 truncate max-w-[11rem]">
+                <tr key={`${row.dtNumber}-${row.toolId}-${rowIdx}`} className="border-b border-gray-100">
+                  <td className="table-td sticky left-0 z-10 bg-white font-medium truncate max-w-[150px]"
+                      title={row.label}>
                     {row.label}
+                  </td>
+                  <td className="table-td font-mono text-gray-500">{row.dtNumber || '—'}</td>
+                  <td className="table-td text-gray-500">{(row.dateOut || '').slice(0, 10) || '—'}</td>
+                  <td className="table-td text-gray-500">
+                    {(row.dateIn || '').slice(0, 10) || <span className="text-amber-600">on rig</span>}
                   </td>
                   {days.map(d => {
                     const cell = row.days[d]
+                    const open = inWindow(row, d)
                     return (
-                      <td
-                        key={d}
-                        className={`text-center px-0 py-1 border-b border-gray-100 ${canEdit ? 'cursor-pointer' : ''}`}
-                        onClick={() => handleCellClick(rowIdx, d)}
-                      >
-                        {cell?.code === '1' ? (
-                          <span className="inline-flex items-center justify-center w-6 h-6 rounded font-bold text-xs bg-blue-500 text-white">1</span>
-                        ) : cell?.code === 'S' ? (
-                          <span className="inline-flex items-center justify-center w-6 h-6 rounded font-bold text-xs bg-amber-400 text-white">S</span>
-                        ) : canEdit ? (
-                          <span className="inline-flex items-center justify-center w-6 h-6 rounded text-gray-200 hover:bg-gray-100 hover:text-gray-400 text-xs font-bold">+</span>
-                        ) : null}
+                      <td key={d}
+                          className={`p-0 border-l border-gray-100 ${open ? '' : 'bg-gray-100'}`}>
+                        <input
+                          data-util={`${rowIdx}-${d}`}
+                          className={`w-6 h-[22px] text-center text-[11px] font-bold border-0 bg-transparent
+                                      focus:outline-none focus:ring-1 focus:ring-brand-500
+                                      ${cell?.code === '1' ? 'text-blue-700' : ''}
+                                      ${cell?.code === 'S' ? 'text-amber-700' : ''}
+                                      ${open ? '' : 'cursor-not-allowed'}`}
+                          value={cell?.code ?? ''}
+                          maxLength={1}
+                          disabled={!canEdit || !open}
+                          title={open ? undefined : 'Outside this tool’s DT–RT window'}
+                          onChange={e => setCell(rowIdx, d, e.target.value)}
+                          onFocus={e => e.target.select()}
+                          onKeyDown={e => onKey(e, rowIdx, d)}
+                        />
                       </td>
                     )
                   })}
@@ -1521,20 +1611,6 @@ function UtilizationTab({ jobId }: { jobId: string }) {
     </div>
   )
 }
-
-// ─── Job Header Tab (Details) ─────────────────────────────────────────────────
-
-/**
- * Type-to-filter picker for a job field. A plain <select> is wrong here —
- * there are 1,939 wells and 211 rigs — but a datalist keeps the existing value
- * typeable while still offering the real list, so a job can't quietly be saved
- * against a spelling that exists nowhere else.
- *
- * Declared at module scope and called as a function, not rendered as <Picker/>
- * inside the tab: a component defined during render is a new type on every
- * render, so React would unmount and remount the input and it would lose focus
- * after each keystroke.
- */
 function jobPicker({
   field, list, required, value, onChange, disabled,
 }: {

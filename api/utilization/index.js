@@ -34,7 +34,7 @@ module.exports = async function (context, req) {
     const jobId = qs.jobId || null
 
     const result = await query(
-      `SELECT d.LogID, d.JobID, d.ToolSerial,
+      `SELECT d.LogID, d.JobID, d.ToolSerial, d.DTNumber,
               d.LogDate, d.StatusType,
               i.AssetNo   AS AssetNo,
               i.ShortDesc AS ToolDescription
@@ -55,10 +55,13 @@ module.exports = async function (context, req) {
       ]
     )
 
-    // Group into rows keyed by (JobID + ToolSerial)
+    // Grouped per DISPATCH CYCLE — (JobID + DTNumber + ToolSerial) — not per
+    // tool. The same tool can go out, come back and go out again on one job,
+    // and those are separate charge periods; collapsing them into one row made
+    // the second run look like a continuation of the first.
     const rowMap = new Map()
     for (const r of result.recordset) {
-      const key = `${r.JobID}|${r.ToolSerial ?? 'null'}`
+      const key = `${r.JobID}|${r.DTNumber ?? ''}|${r.ToolSerial ?? 'null'}`
 
       const serial = r.ToolSerial || r.AssetNo || ''
       const desc   = r.ToolDescription || ''
@@ -68,7 +71,10 @@ module.exports = async function (context, req) {
       const day = new Date(r.LogDate).getDate()
 
       if (!rowMap.has(key)) {
-        rowMap.set(key, { label, jobId: r.JobID, toolId: r.ToolSerial, days: {} })
+        rowMap.set(key, {
+          label, jobId: r.JobID, toolId: r.ToolSerial,
+          dtNumber: r.DTNumber || null, days: {},
+        })
       }
       rowMap.get(key).days[day] = { code: r.StatusType, logId: r.LogID }
     }
@@ -88,11 +94,16 @@ module.exports = async function (context, req) {
       return jsonResponse(context, 400, { error: 'UtilizationCode must be "1" or "S"' })
 
     const r = await query(
-      `INSERT INTO tbl_DailyFieldLogs (JobID, ToolSerial, LogDate, StatusType, CreatedDate)
+      // DTNumber is written here now. It was being left NULL, and the revenue
+      // rollup in /api/tool-history joins the logs on (ToolSerial, DTNumber) —
+      // so every day marked through this app was invisible to the operating
+      // and standby totals it is supposed to feed.
+      `INSERT INTO tbl_DailyFieldLogs (JobID, DTNumber, ToolSerial, LogDate, StatusType, CreatedDate)
        OUTPUT INSERTED.LogID
-       VALUES (@job, @tool, @date, @code, GETDATE())`,
+       VALUES (@job, @dt, @tool, @date, @code, GETDATE())`,
       [
         { name: 'job',  value: b.JobID          },
+        { name: 'dt',   value: b.DTNumber || null },
         { name: 'tool', value: b.ToolID != null ? String(b.ToolID) : null },
         { name: 'date', value: b.LogDate         },
         { name: 'code', value: b.UtilizationCode },
