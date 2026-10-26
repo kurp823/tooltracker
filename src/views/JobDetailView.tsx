@@ -663,9 +663,10 @@ function DTHeaderTab({
   const loadDTs = useCallback(async () => {
     setLoading(true)
     try {
-      const all = await api.get<DTRecord[]>('/delivery-tickets')
-      const normJobId = normalizeJobId(jobId)
-      const jobDTs = all.filter((d: DTRecord) => normalizeJobId(d.JobID) === normJobId)
+      // Filtered server-side. This used to pull all 3,700 delivery tickets
+      // to find the handful on this job; ?job= matches on the trailing job
+      // sequence, which is format-proof.
+      const jobDTs = await api.get<DTRecord[]>(`/delivery-tickets?job=${encodeURIComponent(jobId)}`)
       setDts(jobDTs)
       if (jobDTs.length > 0) {
         const target = focusDTID
@@ -1097,9 +1098,9 @@ function ReturnTicketTab({
   const loadRTs = useCallback(async () => {
     setLoading(true)
     try {
-      const all = await api.get<RTRecord[]>('/receiving-tickets')
-      const normJobId = normalizeJobId(jobId)
-      const jobRTs = all.filter((r: RTRecord) => normalizeJobId(r.JobID) === normJobId)
+      // Filtered server-side, as with the DT tab — this pulled all 3,451
+      // receiving tickets to find the handful on this job.
+      const jobRTs = await api.get<RTRecord[]>(`/receiving-tickets?job=${encodeURIComponent(jobId)}`)
       setRts(jobRTs)
       if (jobRTs.length > 0) selectRT(jobRTs[0])
     } catch {

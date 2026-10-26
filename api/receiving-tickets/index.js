@@ -99,6 +99,13 @@ module.exports = async function (context, req) {
 
   // ── GET list ─────────────────────────────────────────────────────────────
   if (!id && method === 'GET') {
+    const jobQ = String((req.query || {}).job || '').trim()
+    const listParams = []
+    let jobFilter = ''
+    if (jobQ) {
+      jobFilter = `WHERE TRY_CAST(RIGHT(r.jobNumber, CHARINDEX('-', REVERSE(r.jobNumber) + '-') - 1) AS INT) = @jobseq`
+      listParams.push({ name: 'jobseq', value: Number(String(jobQ).replace(/.*-/, '')) || -1 })
+    }
     const result = await query(
       `SELECT r.id AS RTID, r.rtNumber AS RTNumber, r.jobNumber AS JobID,
               r.receivingDate AS RTDate, r.status AS Status,
@@ -110,8 +117,12 @@ module.exports = async function (context, req) {
          FROM tbl_ReceivingTickets r
          LEFT JOIN tbl_Clients c ON r.clientCode = c.clientCode
         -- Newest first by receiving date; createdAt is NULL on imported history.
+        -- ?job= filters server-side. The job file previously pulled every
+        -- ticket in the table to find the handful on one job. Matched on the
+        -- trailing sequence because job numbers are stored in two formats.
+        ${jobFilter}
         ORDER BY r.receivingDate DESC, r.rtNumber DESC`,
-      []
+      listParams
     )
     return jsonResponse(context, 200, result.recordset)
   }
