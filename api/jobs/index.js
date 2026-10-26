@@ -42,7 +42,43 @@ module.exports = async function (context, req) {
   if (method === 'GET' && !jobId) {
     // ?search= and ?limit= let a type-ahead picker query the 3,824 jobs
     // without pulling the whole table into the browser on every keystroke.
-    const { search, limit } = req.query || {}
+    const { search, limit, facets } = req.query || {}
+
+    // ?facets=1 — the distinct values actually in use, for the job header's
+    // Client / Rig / Well / Contract / Service Type pickers. Those were
+    // free-text inputs, which is how the same rig ends up spelled three ways.
+    // Returned as five short lists rather than making the browser pull all
+    // 3,824 jobs to derive them.
+    if (['1', 'true', 'yes'].includes(String(facets).toLowerCase())) {
+      try {
+        const r = await query(
+          `SELECT 'Client' AS field, Client AS value FROM tbl_Jobs
+            WHERE NULLIF(LTRIM(RTRIM(Client)), '') IS NOT NULL GROUP BY Client
+           UNION ALL
+           SELECT 'Rig', Rig FROM tbl_Jobs
+            WHERE NULLIF(LTRIM(RTRIM(Rig)), '') IS NOT NULL GROUP BY Rig
+           UNION ALL
+           SELECT 'Well', Well FROM tbl_Jobs
+            WHERE NULLIF(LTRIM(RTRIM(Well)), '') IS NOT NULL GROUP BY Well
+           UNION ALL
+           SELECT 'Contract', Contract FROM tbl_Jobs
+            WHERE NULLIF(LTRIM(RTRIM(Contract)), '') IS NOT NULL GROUP BY Contract
+           UNION ALL
+           SELECT 'ServiceType', ServiceType FROM tbl_Jobs
+            WHERE NULLIF(LTRIM(RTRIM(ServiceType)), '') IS NOT NULL GROUP BY ServiceType
+           ORDER BY field, value`, []
+        )
+        const out = { Client: [], Rig: [], Well: [], Contract: [], ServiceType: [] }
+        for (const row of r.recordset) {
+          if (out[row.field]) out[row.field].push(row.value)
+        }
+        return jsonResponse(context, 200, out)
+      } catch (err) {
+        context.log.error('Job facets error:', err)
+        return jsonResponse(context, 500, { error: 'Failed to load job facets', detail: err.message })
+      }
+    }
+
     const params = []
     let where = ''
     if (search) {
