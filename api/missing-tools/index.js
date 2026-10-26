@@ -81,11 +81,41 @@ module.exports = async function (context, req) {
                   COUNT(DISTINCT lt.dtNumber) AS Dispatches,
                   MAX(lt.rig)               AS Rig,
                   MAX(lt.jobNumber)         AS JobNumber,
-                  MAX(lt.dtNumber)          AS DTNumber
+                  MAX(lt.dtNumber)          AS DTNumber,
+                  -- Carried as a plain INT so the return lookup below compares
+                  -- numbers rather than re-deriving the sequence per row.
+                  MAX(TRY_CAST(
+                    RIGHT(lt.jobNumber, CHARINDEX('-', REVERSE(lt.jobNumber) + '-') - 1) AS INT
+                  )) AS JobSeq
              FROM liveTickets lt
              JOIN tbl_DeliveryTicketLines dtl ON dtl.dtNumber = lt.dtNumber
             WHERE NULLIF(LTRIM(RTRIM(dtl.serial)), '') IS NOT NULL
             GROUP BY dtl.serial
+         ),
+         -- Every identifying key in inventory, flattened once. The previous
+         -- shape ran three correlated lookups per candidate asset; as one
+         -- materialised set it is a single pass.
+         invKeys AS (
+           SELECT SystemID  AS k FROM tbl_Inventory WHERE NULLIF(SystemID, '')  IS NOT NULL
+           UNION
+           SELECT AssetNo     FROM tbl_Inventory WHERE NULLIF(AssetNo, '')    IS NOT NULL
+           UNION
+           SELECT OEMSerial   FROM tbl_Inventory WHERE NULLIF(OEMSerial, '')  IS NOT NULL
+         ),
+         -- Returns on the live jobs only. Computing the job sequence per row
+         -- of all 58,392 receiving-ticket lines was the 15 seconds: it can use
+         -- no index. Filtering the 3,451 ticket headers first and seeking
+         -- their lines by rtNumber gives the same answer from a small set.
+         liveReturns AS (
+           SELECT rl.serial,
+                  rh.rtNumber,
+                  rh.receivingDate,
+                  l.seq
+             FROM tbl_ReceivingTickets rh
+             JOIN live l
+               ON l.seq = TRY_CAST(
+                    RIGHT(rh.jobNumber, CHARINDEX('-', REVERSE(rh.jobNumber) + '-') - 1) AS INT)
+             JOIN tbl_ReceivingTicketLines rl ON rl.rtNumber = rh.rtNumber
          )
          SELECT d.AssetNo,
                 d.Description,
@@ -98,35 +128,19 @@ module.exports = async function (context, req) {
                 CASE WHEN rt.rtNumber IS NULL THEN 1 ELSE 0 END AS StillOnRig,
                 rt.rtNumber AS ReturnedOn
            FROM dispatched d
-           -- No inventory row under ANY of the three identifying keys.
-           OUTER APPLY (
-             SELECT TOP 1 1 AS found
-             FROM (
-               SELECT 1 AS found FROM tbl_Inventory a WHERE a.SystemID = d.AssetNo
-               UNION ALL
-               SELECT 1 FROM tbl_Inventory b
-                WHERE b.AssetNo = d.AssetNo AND NULLIF(b.AssetNo, '') IS NOT NULL
-               UNION ALL
-               SELECT 1 FROM tbl_Inventory c
-                WHERE c.OEMSerial = d.AssetNo AND NULLIF(c.OEMSerial, '') IS NOT NULL
-             ) u
-           ) inv
            -- Returned on THIS job, not on any job ever. Matching across all
            -- history marked a tool returned because it came back from a
            -- different job years earlier, which collapsed "still on a rig"
-           -- from 137 down to 1.
+           -- from 138 down to 1.
            OUTER APPLY (
-             SELECT TOP 1 rh.rtNumber
-               FROM tbl_ReceivingTicketLines rl
-               JOIN tbl_ReceivingTickets     rh ON rl.rtNumber = rh.rtNumber
-              WHERE rl.serial = d.AssetNo
-                AND TRY_CAST(RIGHT(rh.jobNumber,
-                      CHARINDEX('-', REVERSE(rh.jobNumber) + '-') - 1) AS INT)
-                  = TRY_CAST(RIGHT(d.JobNumber,
-                      CHARINDEX('-', REVERSE(d.JobNumber) + '-') - 1) AS INT)
-              ORDER BY rh.receivingDate DESC
+             SELECT TOP 1 lr.rtNumber
+               FROM liveReturns lr
+              WHERE lr.serial = d.AssetNo
+                AND lr.seq    = d.JobSeq
+              ORDER BY lr.receivingDate DESC
            ) rt
-          WHERE inv.found IS NULL
+          -- No inventory row under any of the three identifying keys.
+          WHERE NOT EXISTS (SELECT 1 FROM invKeys ik WHERE ik.k = d.AssetNo)
             ${onRigOnly ? 'AND rt.rtNumber IS NULL' : ''}
           ORDER BY d.LastDateOut DESC, d.AssetNo`,
         statusParams
