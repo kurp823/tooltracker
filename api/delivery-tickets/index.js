@@ -27,6 +27,45 @@ const { query, jsonResponse, requireAuth } = require('../db')
  */
 const nz = (v) => (v === undefined ? null : v === '' ? '' : v)
 
+/**
+ * Set a tool's status/location by whichever key the ticket line carries.
+ * Ticket lines hold the AssetNo about as often as the SystemID, so match on
+ * either. Best-effort: a ticket line must still save if this fails.
+ */
+async function setInventoryStatus(key, status, location) {
+  const k = String(key || '').trim()
+  if (!k) return
+  try {
+    await query(
+      `UPDATE tbl_Inventory
+          SET Status = @status,
+              Location = COALESCE(@loc, Location),
+              LastUpdated = GETDATE()
+        WHERE SystemID = @k OR AssetNo = @k`,
+      [
+        { name: 'k',      value: k },
+        { name: 'status', value: status },
+        { name: 'loc',    value: location || null },
+      ]
+    )
+  } catch (err) {
+    // Deliberately swallowed — never fail the ticket over the status mirror.
+  }
+}
+
+/** The rig a delivery ticket is going to, used as the tool's location. */
+async function rigOfTicket(ticketId) {
+  try {
+    const r = await query(
+      'SELECT TOP 1 rig FROM tbl_DeliveryTickets WHERE id = @id',
+      [{ name: 'id', value: ticketId }]
+    )
+    return (r.recordset[0] && r.recordset[0].rig) || null
+  } catch {
+    return null
+  }
+}
+
 module.exports = async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
@@ -106,14 +145,47 @@ module.exports = async function (context, req) {
           { name: 'notes',    value: b.Notes            || null },
         ]
       )
+
+      // Dispatching a tool takes it out of the base catalogue. Nothing wrote
+      // tbl_Inventory.Status before, so a tool sitting on a rig still read
+      // 'Good' at Emdad Base and could be picked for a second job at the same
+      // time. Location follows the ticket's rig so the catalogue says where
+      // the tool actually is.
+      await setInventoryStatus(
+        b.SystemID || b.Serial,
+        'On Rig',
+        await rigOfTicket(Number(id))
+      )
+
       return jsonResponse(context, 201, { LineID: r.recordset[0].id })
     }
 
     if (method === 'DELETE' && subId) {
       if (!['Admin','Operations'].includes(user.Role))
         return jsonResponse(context, 403, { error: 'Forbidden' })
+      // Read the serial before deleting, so the tool can be put back in the
+      // catalogue — removing a line from a ticket un-dispatches the tool, and
+      // leaving it 'On Rig' would make it unpickable forever.
+      const gone = await query(
+        'SELECT TOP 1 serial FROM tbl_DeliveryTicketLines WHERE id = @lid',
+        [{ name: 'lid', value: Number(subId) }]
+      )
       await query('DELETE FROM tbl_DeliveryTicketLines WHERE id = @lid',
         [{ name: 'lid', value: Number(subId) }])
+
+      const serial = gone.recordset[0] && gone.recordset[0].serial
+      if (serial) {
+        // Only undo our own 'On Rig' mark — never overwrite a DBR or a
+        // workshop status someone set for a real reason.
+        try {
+          await query(
+            `UPDATE tbl_Inventory
+                SET Status = 'Good', Location = 'Emdad Base', LastUpdated = GETDATE()
+              WHERE (SystemID = @k OR AssetNo = @k) AND Status = 'On Rig'`,
+            [{ name: 'k', value: String(serial) }]
+          )
+        } catch { /* best-effort */ }
+      }
       return jsonResponse(context, 200, { ok: true })
     }
   }
