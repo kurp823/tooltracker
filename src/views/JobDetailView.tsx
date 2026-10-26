@@ -7,7 +7,7 @@
  *  4. Lazy tab loading — each tab fetches its own data only when activated
  *  5. Explicit Save button only — no auto-save
  */
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Save, Plus, Trash2, Search,
@@ -34,6 +34,7 @@ interface InvItem {
   AssetNo: string       // physical label — always use this
   Serial: string
   ShortDesc: string     // this IS the category name in tbl_Inventory
+  Description: string | null  // the long free-text description
   Size: string
   Supplier: string
   Ownership: string
@@ -143,6 +144,30 @@ const RT_STATUS_OPTS                  = ['Draft','Submitted','Approved','Rejecte
 
 // ─── Tool Picker Modal ────────────────────────────────────────────────────────
 
+/**
+ * Status groups. Everything is shown, not just Good — a supervisor who can see
+ * that the tool he needs is sitting in inspection or maintenance can push it
+ * through the workshop and still make the mobilisation. Hiding those rows hid
+ * exactly the information needed to act on them, and made the tool look as
+ * though it did not exist.
+ */
+const PICK_STATUS_STYLE: Record<string, string> = {
+  good: 'bg-green-100 text-green-700',
+  'on rig': 'bg-blue-100 text-blue-700',
+  inspection: 'bg-amber-100 text-amber-800',
+  maintenance: 'bg-amber-100 text-amber-800',
+  redress: 'bg-amber-100 text-amber-800',
+  repair: 'bg-amber-100 text-amber-800',
+  dbr: 'bg-red-100 text-red-700',
+  scrap: 'bg-red-100 text-red-700',
+}
+const pickStatusClass = (s: string | null | undefined) =>
+  PICK_STATUS_STYLE[String(s || '').trim().toLowerCase()] || 'bg-gray-100 text-gray-600'
+
+/** Ready to mobilise as-is. Anything else needs a workshop step first. */
+const isMobilisable = (s: string | null | undefined) =>
+  String(s || '').trim().toLowerCase() === 'good'
+
 function ToolPickerModal({
   jobId,
   existingAssetNos,
@@ -154,57 +179,87 @@ function ToolPickerModal({
   onInsert: (items: InvItem[]) => void
   onClose: () => void
 }) {
-  const [search,   setSearch]   = useState('')
+  const [category, setCategory] = useState('')
   const [size,     setSize]     = useState('')
+  const [assetQ,   setAssetQ]   = useState('')
+  const [onlyReady, setOnlyReady] = useState(false)
   const [items,    setItems]    = useState<InvItem[]>([])
   const [loading,  setLoading]  = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())  // keyed by AssetNo
 
   /*
-   * This picker showed nothing at all. It filtered on `Condition === 'Good'`
-   * and `Location === 'Base'`, but tbl_Inventory has no Condition column and
-   * its Location reads 'Emdad Base' — so both tests were false for all 5,094
-   * rows and every tool was excluded. It also read SizeName and SupplierName,
-   * which the API returns as Size and Supplier, so size filtering and the
-   * supplier column were dead too.
-   *
-   * The real availability signal is Status: 'Good' on 5,072 rows and 'DBR'
-   * (damaged beyond repair) on 22. A tool already out on a rig carries 'On
-   * Rig', so excluding anything that isn't 'Good' covers both.
+   * Every tool, whatever its status — only those already on this checklist are
+   * excluded. The availability rule used to be a hard filter here; it is now a
+   * visible column, because the status is the useful part.
    */
   useEffect(() => {
     setLoading(true)
     api.get<InvItem[]>('/inventory')
       .then((all: InvItem[]) => {
-        setItems(
-          (all || []).filter((i: InvItem) =>
-            String(i.Status || '').trim().toLowerCase() === 'good' &&
-            !existingAssetNos.has(i.AssetNo)
-          )
-        )
+        setItems((all || []).filter((i: InvItem) => !existingAssetNos.has(i.AssetNo)))
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [existingAssetNos])
 
-  const filtered = items.filter((i: InvItem) => {
-    const q = search.toLowerCase()
-    const matchSearch = !q ||
-      (i.AssetNo   || '').toLowerCase().includes(q) ||
-      (i.ShortDesc || '').toLowerCase().includes(q) ||
-      (i.Serial    || '').toLowerCase().includes(q)
-    const matchSize = !size || i.Size === size
-    return matchSearch && matchSize
-  })
-
-  const sizes = Array.from(new Set(items.map((i: InvItem) => i.Size).filter(Boolean))).sort()
-
   /*
-   * Only render a slice. With the availability filter fixed this list is 5,072
-   * tools, and putting all of them in the modal's DOM made opening the picker
-   * slow enough to look broken. Nobody scrolls 5,072 rows — they search or
-   * filter by size — so cap the render and say so when it is capped.
+   * Category and size are both taken from inventory itself, and size is scoped
+   * to the chosen category — a 26" junk mill and a 2-7/8" magnet have no sizes
+   * in common, so offering all 204 sizes against any category is just noise.
+   * (tbl_Inventory.ShortDesc *is* the category name; it matches
+   * tbl_ToolCategories on 128 of 129 values.)
+   *
+   * Deriving these from inventory rather than the masters is deliberate here:
+   * this picker chooses tools that exist, so a category with nothing in stock
+   * would be a dead end. The masters drive the *entry* screens, where stock is
+   * created.
    */
+  const categories = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const i of items) {
+      const c = (i.ShortDesc || '').trim()
+      if (c) m.set(c, (m.get(c) || 0) + 1)
+    }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  }, [items])
+
+  const sizesForCategory = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const i of items) {
+      if (category && (i.ShortDesc || '').trim() !== category) continue
+      const s = (i.Size || '').trim()
+      if (s) m.set(s, (m.get(s) || 0) + 1)
+    }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
+  }, [items, category])
+
+  // Changing category can strand the chosen size on a value that category
+  // doesn't have, which would show an empty list with no obvious cause.
+  useEffect(() => {
+    if (size && !sizesForCategory.some(([s]) => s === size)) setSize('')
+  }, [sizesForCategory, size])
+
+  const filtered = useMemo(() => {
+    const q = assetQ.trim().toLowerCase()
+    const out = items.filter((i: InvItem) => {
+      if (category && (i.ShortDesc || '').trim() !== category) return false
+      if (size && (i.Size || '').trim() !== size) return false
+      if (onlyReady && !isMobilisable(i.Status)) return false
+      if (q && !(i.AssetNo || '').toLowerCase().includes(q)
+            && !(i.Serial || '').toLowerCase().includes(q)) return false
+      return true
+    })
+    // Ready-to-go first, so the tools that need no workshop step are on top.
+    return out.sort((a, b) => {
+      const ra = isMobilisable(a.Status) ? 0 : 1
+      const rb = isMobilisable(b.Status) ? 0 : 1
+      if (ra !== rb) return ra - rb
+      return (a.AssetNo || '').localeCompare(b.AssetNo || '', undefined, { numeric: true })
+    })
+  }, [items, category, size, assetQ, onlyReady])
+
+  // Render a slice: the full catalogue is 5,094 rows and putting all of them in
+  // the modal's DOM made opening it slow enough to look broken.
   const RENDER_CAP = 200
   const shownItems = filtered.slice(0, RENDER_CAP)
   const capped = filtered.length > RENDER_CAP
@@ -219,130 +274,146 @@ function ToolPickerModal({
   }
 
   function toggleAll() {
-    if (selected.size === shownItems.length) {
-      setSelected(new Set())
+    if (shownItems.every(i => selected.has(i.AssetNo))) {
+      setSelected(prev => {
+        const next = new Set(prev)
+        shownItems.forEach(i => next.delete(i.AssetNo))
+        return next
+      })
     } else {
-      setSelected(new Set(shownItems.map(i => i.AssetNo)))
+      setSelected(prev => new Set([...prev, ...shownItems.map(i => i.AssetNo)]))
     }
   }
 
+  const selectedItems = items.filter(i => selected.has(i.AssetNo))
+  const notReady = selectedItems.filter(i => !isMobilisable(i.Status))
+
   function handleInsert() {
-    const toInsert = filtered.filter(i => selected.has(i.AssetNo))
-    onInsert(toInsert)
+    if (notReady.length) {
+      const names = notReady.slice(0, 5).map(i => `${i.AssetNo} (${i.Status})`).join(', ')
+      const more = notReady.length > 5 ? ` and ${notReady.length - 5} more` : ''
+      if (!window.confirm(
+        `${notReady.length} of the selected tools are not in Good status yet:\n\n${names}${more}\n\n` +
+        `They can be staged on the checklist, but they must clear the workshop before the ` +
+        `delivery ticket is raised. Add them anyway?`
+      )) return
+    }
+    onInsert(selectedItems)
   }
 
+  /* Fixed column widths — the header and body were laid out independently, so
+   * the columns did not line up once a long description appeared. */
+  const COLW = ['36px', '150px', 'auto', '90px', '56px', '130px', '110px']
+
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-16 px-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[80vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-10 px-4">
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-6xl h-[86vh] flex flex-col overflow-hidden">
         {/* Modal header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-gray-900 text-white rounded-t-xl">
-          <div>
-            <p className="text-xs text-gray-400 uppercase tracking-wider">itemsselect</p>
-            <p className="font-semibold">Tool Assignment Picker</p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
-            <X size={18} />
+        <div className="flex items-center gap-2 px-3 h-[34px] bg-navy-head text-white shrink-0">
+          <span className="text-[13px] font-bold tracking-wide">TOOL ASSIGNMENT PICKER</span>
+          <span className="text-[11px] text-slate-300">Job {jobId}</span>
+          <button onClick={onClose} className="ml-auto hover:text-accent-400">
+            <X size={15} />
           </button>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3 px-5 py-3 border-b border-gray-100 bg-gray-50">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <span className="text-xs font-semibold text-gray-500 uppercase shrink-0">Category:</span>
-            <div className="relative flex-1 min-w-48">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                className="input pl-8 py-1.5 text-xs"
-                placeholder="Search or select category (All Categories)…"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-gray-500 uppercase shrink-0">Tool Size:</span>
-            <select className="input py-1.5 text-xs w-32"
-              value={size} onChange={e => setSize(e.target.value)}>
-              <option value="">All Sizes</option>
-              {sizes.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div className="text-xs text-gray-500 ml-auto">
-            Matching Tools: <strong>{filtered.length}</strong>
-            {capped && <span className="text-amber-700 font-semibold ml-2">showing first {RENDER_CAP} — search or filter by size to narrow</span>}
-          </div>
-        </div>
+        {/* Filters — category drives size */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 border-b border-gray-300 bg-gray-50 shrink-0">
+          <span className="field-label">Category</span>
+          <select className="field-input w-56" value={category} onChange={e => setCategory(e.target.value)}>
+            <option value="">All categories ({items.length})</option>
+            {categories.map(([c, n]) => <option key={c} value={c}>{c} ({n})</option>)}
+          </select>
 
-        {/* Condition banner */}
-        <div className="px-5 py-2 bg-green-50 border-b border-green-100 flex items-start gap-2">
-          <span className="text-green-600 text-xs mt-0.5">✓</span>
-          <p className="text-xs text-green-700">
-            <strong>Base & Good Condition Filter Active:</strong> Only tools in verified Good / Accepted condition
-            appear for mobilization. Tools on rig, in repair/redress, in inspection, or already assigned to this
-            checklist are strictly excluded.
-          </p>
-          <span className="ml-auto text-xs text-green-600 shrink-0">Job: {jobId}</span>
+          <span className="field-label">Size</span>
+          <select className="field-input w-36" value={size} onChange={e => setSize(e.target.value)}
+                  disabled={sizesForCategory.length === 0}>
+            <option value="">
+              {category ? `All sizes in this category (${sizesForCategory.length})` : 'All sizes'}
+            </option>
+            {sizesForCategory.map(([s, n]) => <option key={s} value={s}>{s} ({n})</option>)}
+          </select>
+
+          <span className="field-label">Asset No</span>
+          <div className="relative w-44">
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input className="field-input !pl-6" placeholder="Exact or partial"
+                   value={assetQ} onChange={e => setAssetQ(e.target.value)} />
+          </div>
+
+          <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-600">
+            <input type="checkbox" checked={onlyReady} onChange={e => setOnlyReady(e.target.checked)} />
+            Ready to mobilise only
+          </label>
+
+          <span className="ml-auto text-[11px] text-gray-600">
+            <strong>{filtered.length}</strong> matching
+            {capped && <span className="text-amber-700 font-semibold ml-1.5">· showing first {RENDER_CAP}</span>}
+          </span>
         </div>
 
         {/* Table */}
-        <div className="overflow-auto flex-1">
+        <div className="flex-1 min-h-0 overflow-auto">
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Spinner size="md" />
-            </div>
+            <div className="h-full flex items-center justify-center"><Spinner size="md" /></div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white border-b border-gray-200">
+            <table className="w-full text-[12px] border-collapse table-fixed">
+              <colgroup>{COLW.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
+              <thead className="sticky top-0 z-10">
                 <tr>
-                  <th className="table-th w-10">
-                    <button onClick={toggleAll}>
-                      {selected.size === shownItems.length && shownItems.length > 0
-                        ? <CheckSquare size={15} className="text-brand-600" />
-                        : <Square size={15} className="text-gray-400" />
-                      }
+                  <th className="table-th !px-1 text-center">
+                    <button onClick={toggleAll} title="Select all listed">
+                      {shownItems.length > 0 && shownItems.every(i => selected.has(i.AssetNo))
+                        ? <CheckSquare size={14} className="text-accent-400" />
+                        : <Square size={14} className="text-slate-300" />}
                     </button>
                   </th>
                   <th className="table-th">Asset No</th>
-                  <th className="table-th">Description</th>
+                  <th className="table-th">Description / Category</th>
                   <th className="table-th">Size</th>
-                  <th className="table-th text-center">DTQTY</th>
-                  <th className="table-th">Supplier</th>
-                  <th className="table-th">Ins_Date</th>
-                  <th className="table-th">Condition</th>
+                  <th className="table-th !text-right">Qty</th>
+                  <th className="table-th">Owner</th>
+                  <th className="table-th">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="table-td text-center py-12 text-gray-400">
-                      No tools match the current filters
+                    <td colSpan={7} className="table-td text-center py-10 text-gray-400">
+                      No tools match these filters.
                     </td>
                   </tr>
                 ) : (
                   shownItems.map(item => {
                     const isSelected = selected.has(item.AssetNo)
+                    const ready = isMobilisable(item.Status)
                     return (
                       <tr
                         key={item.AssetNo}
                         onClick={() => toggleRow(item.AssetNo)}
-                        className={`border-b border-gray-100 cursor-pointer transition-colors ${
-                          isSelected ? 'bg-yellow-50' : 'hover:bg-gray-50'
+                        className={`border-b border-gray-100 cursor-pointer ${
+                          isSelected ? 'bg-accent-50' : ready ? 'hover:bg-brand-50/40' : 'bg-amber-50/40 hover:bg-amber-50'
                         }`}
                       >
-                        <td className="table-td text-center">
+                        <td className="table-td !px-1 text-center">
                           {isSelected
-                            ? <CheckSquare size={15} className="text-brand-600 mx-auto" />
-                            : <Square size={15} className="text-gray-300 mx-auto" />
-                          }
+                            ? <CheckSquare size={14} className="text-brand-600 mx-auto" />
+                            : <Square size={14} className="text-gray-300 mx-auto" />}
                         </td>
-                        <td className="table-td font-medium text-gray-900">{item.AssetNo}</td>
-                        <td className="table-td text-gray-600 max-w-xs truncate">{item.ShortDesc}</td>
-                        <td className="table-td text-gray-500">{item.Size || '—'}</td>
-                        <td className="table-td text-center text-gray-600">1</td>
-                        <td className="table-td text-gray-500">{item.IsEmdad ? 'EMDAD' : (item.Ownership || item.Supplier || '—')}</td>
-                        <td className="table-td text-gray-400 text-xs">—</td>
+                        <td className="table-td font-mono font-medium truncate">{item.AssetNo}</td>
+                        <td className="table-td text-gray-600 truncate"
+                            title={item.Description || item.ShortDesc || ''}>
+                          {item.ShortDesc || item.Description || '—'}
+                        </td>
+                        <td className="table-td text-gray-500 truncate">{item.Size || '—'}</td>
+                        <td className="table-td text-right text-gray-600">{item.Qty ?? 1}</td>
+                        <td className="table-td text-gray-500 truncate">
+                          {item.IsEmdad ? 'EMDAD' : (item.Ownership || item.Supplier || '—')}
+                        </td>
                         <td className="table-td">
-                          <span className="text-green-600 font-medium text-xs">{(item.Status || '').toUpperCase()}</span>
+                          <span className={`badge ${pickStatusClass(item.Status)}`}>
+                            {item.Status || 'Unknown'}
+                          </span>
                         </td>
                       </tr>
                     )
@@ -354,21 +425,19 @@ function ToolPickerModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200 bg-gray-50">
-          <p className="text-sm text-gray-600">
-            Total matching items: <strong>{filtered.length}</strong>
-            {selected.size > 0 && (
-              <> | Selected: <strong className="text-brand-600">{selected.size}</strong></>
+        <div className="flex items-center gap-3 px-3 py-2 border-t border-gray-300 bg-gray-50 shrink-0">
+          <p className="text-[11px] text-gray-600">
+            Selected: <strong className="text-brand-600">{selected.size}</strong>
+            {notReady.length > 0 && (
+              <span className="text-amber-800 font-semibold ml-2">
+                · {notReady.length} need a workshop step first
+              </span>
             )}
           </p>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="btn-secondary text-xs py-1.5">Cancel</button>
-            <button
-              onClick={handleInsert}
-              disabled={selected.size === 0}
-              className="btn-primary text-xs py-1.5"
-            >
-              Insert Selected Tools ({selected.size})
+          <div className="ml-auto flex gap-1.5">
+            <button onClick={onClose} className="btn-mini">Cancel</button>
+            <button onClick={handleInsert} disabled={selected.size === 0} className="btn-accent">
+              Insert {selected.size || ''} tool{selected.size === 1 ? '' : 's'}
             </button>
           </div>
         </div>
@@ -376,9 +445,6 @@ function ToolPickerModal({
     </div>
   )
 }
-
-// ─── Checklist Tab ────────────────────────────────────────────────────────────
-
 function ChecklistTab({
   jobId,
   job,
