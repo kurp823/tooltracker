@@ -474,6 +474,47 @@ const MIGRATIONS = [
       COMMIT;`,
   },
   {
+    /*
+     * Staging table for a corrected DT/RT sheet.
+     *
+     * The sheet is the operator's own reconciliation: one row per dispatched
+     * tool, carrying the return ticket if it came back. It lands here first so
+     * it can be counted and compared against the live tables before anything
+     * is written, and so a bad import can be cleared and redone.
+     *
+     * Text columns throughout - the sheet is whatever Excel produced, and
+     * coercing dates or numbers on the way in would lose the rows that need
+     * looking at most.
+     */
+    name: 'seed:import-dtrt-staging',
+    sql: `
+      IF OBJECT_ID('dbo.tbl_ImportDTRT', 'U') IS NULL
+      CREATE TABLE dbo.tbl_ImportDTRT (
+        id         INT IDENTITY(1,1) PRIMARY KEY,
+        batchId    NVARCHAR(40)   NOT NULL,
+        rowNo      INT            NULL,
+        jobNum     NVARCHAR(60)   NULL,
+        dtNo       NVARCHAR(60)   NULL,
+        dtDate     NVARCHAR(40)   NULL,
+        sNo        NVARCHAR(20)   NULL,
+        partNum    NVARCHAR(120)  NULL,
+        partDesc   NVARCHAR(400)  NULL,
+        rtNo       NVARCHAR(60)   NULL,
+        rtDate     NVARCHAR(40)   NULL,
+        remark     NVARCHAR(120)  NULL,
+        rig        NVARCHAR(120)  NULL,
+        well       NVARCHAR(120)  NULL,
+        uploadedAt DATETIME2      NOT NULL DEFAULT SYSUTCDATETIME(),
+        uploadedBy NVARCHAR(100)  NULL
+      );
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ImportDTRT_batch')
+        CREATE INDEX IX_ImportDTRT_batch ON dbo.tbl_ImportDTRT (batchId)
+          INCLUDE (dtNo, partNum, rtNo);
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ImportDTRT_dtpart')
+        CREATE INDEX IX_ImportDTRT_dtpart ON dbo.tbl_ImportDTRT (dtNo, partNum);`,
+  },
+  {
     name: 'seed:dedupe-ticket-lines',
     sql: `
       SET XACT_ABORT ON;

@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Briefcase, Package, Users, FileText,
   Truck, RotateCcw, ClipboardCheck, Wrench, DoorOpen,
-  Receipt, Building2, BarChart3, Settings, ChevronDown,
+  Receipt, Building2, BarChart3, Settings, ChevronDown, Upload,
   ChevronRight, BookOpen, Factory, Tag, History, Boxes,
   ShoppingCart, PackagePlus, Database, LogOut, KeyRound,
   Gauge, ClipboardList, Coins, FileSpreadsheet, HardHat, PackageSearch
@@ -107,6 +107,7 @@ const MODULES: NavModule[] = [
     items: [
       { label: 'System Database Inspector', to: '/db-inspector', icon: <Database size={ICON} />, pending: true },
       { label: 'Users',                     to: '/users',        icon: <Users size={ICON} /> },
+      { label: 'Data Import',               to: '/data-import',  icon: <Upload size={ICON} /> },
       { label: 'Global Configurations',     to: '/settings',     icon: <Settings size={ICON} /> },
     ],
   },
