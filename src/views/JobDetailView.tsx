@@ -152,18 +152,22 @@ const RT_STATUS_OPTS                  = ['Draft','Submitted','Approved','Rejecte
  * exactly the information needed to act on them, and made the tool look as
  * though it did not exist.
  */
+/**
+ * Status is plain coloured text, as on the old app's grids — filled pills in
+ * every row of a dense table read as clutter rather than as information.
+ */
 const PICK_STATUS_STYLE: Record<string, string> = {
-  good: 'bg-green-100 text-green-700',
-  'on rig': 'bg-blue-100 text-blue-700',
-  inspection: 'bg-amber-100 text-amber-800',
-  maintenance: 'bg-amber-100 text-amber-800',
-  redress: 'bg-amber-100 text-amber-800',
-  repair: 'bg-amber-100 text-amber-800',
-  dbr: 'bg-red-100 text-red-700',
-  scrap: 'bg-red-100 text-red-700',
+  good: 'text-green-700',
+  'on rig': 'text-blue-700',
+  inspection: 'text-amber-700',
+  maintenance: 'text-amber-700',
+  redress: 'text-amber-700',
+  repair: 'text-amber-700',
+  dbr: 'text-red-600',
+  scrap: 'text-red-600',
 }
 const pickStatusClass = (s: string | null | undefined) =>
-  PICK_STATUS_STYLE[String(s || '').trim().toLowerCase()] || 'bg-gray-100 text-gray-600'
+  PICK_STATUS_STYLE[String(s || '').trim().toLowerCase()] || 'text-gray-500'
 
 /** Ready to mobilise as-is. Anything else needs a workshop step first. */
 const isMobilisable = (s: string | null | undefined) =>
@@ -397,13 +401,15 @@ function ToolPickerModal({
                 ) : (
                   shownItems.map(item => {
                     const isSelected = selected.has(item.AssetNo)
-                    const ready = isMobilisable(item.Status)
                     return (
                       <tr
                         key={item.AssetNo}
                         onClick={() => toggleRow(item.AssetNo)}
                         className={`border-b border-gray-100 cursor-pointer ${
-                          isSelected ? 'bg-accent-50' : ready ? 'hover:bg-brand-50/40' : 'bg-amber-50/40 hover:bg-amber-50'
+                          // No tinted rows either — the status column already
+                          // says what the row is, and a block of colour per row
+                          // made the table hard to read.
+                          isSelected ? 'bg-brand-50' : 'hover:bg-gray-50'
                         }`}
                       >
                         <td className="table-td !px-1 text-center">
@@ -422,7 +428,7 @@ function ToolPickerModal({
                           {item.IsEmdad ? 'EMDAD' : (item.Ownership || item.Supplier || '—')}
                         </td>
                         <td className="table-td">
-                          <span className={`badge ${pickStatusClass(item.Status)}`}>
+                          <span className={`font-semibold uppercase text-[11px] ${pickStatusClass(item.Status)}`}>
                             {item.Status || 'Unknown'}
                           </span>
                         </td>
