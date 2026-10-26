@@ -6,6 +6,7 @@ import {
 import { useRealtimeFetch } from '../hooks/useRealtimeFetch'
 import { useFetch }         from '../hooks/useFetch'
 import { useAuth }          from '../contexts/AuthContext'
+import { useRowWindow }  from '../components/useRowWindow'
 import { useToast }         from '../components/Toast'
 import { api }              from '../utils/api'
 import { formatDate, statusBadgeClass } from '../utils/format'
@@ -605,6 +606,10 @@ export function ReceivingTicketsView() {
     })
   }, [tickets, status, search])
 
+  // Render the register in slices; all 3,700+ rows in the DOM at once was
+  // most of the delay before first paint on these screens.
+  const { scrollRef, onScroll, visible, hasMore, shown, total } = useRowWindow(filtered)
+
   if (isLoading) return <PageLoader />
 
   return (
@@ -641,7 +646,9 @@ export function ReceivingTicketsView() {
               )}
             </select>
             <button onClick={refetch} className="btn-mini" title="Refresh"><RefreshCw size={12} /></button>
-            <span className="text-[11px] text-gray-500">{filtered.length} of {tickets?.length ?? 0}</span>
+            <span className="text-[11px] text-gray-500">
+              {hasMore ? `${shown} of ${total} shown` : `${total} ticket${total === 1 ? '' : 's'}`}
+            </span>
             {hasRole('Admin', 'Operations') && (
               <button className="btn-accent ml-auto" onClick={() => setShowCreate(true)}>
                 <Plus size={12} /> New RT
@@ -651,7 +658,8 @@ export function ReceivingTicketsView() {
 
           {error && <div className="card p-2 text-red-600 text-xs mb-1.5 shrink-0">{error}</div>}
 
-          <div className="flex-1 min-h-0 overflow-auto bg-white border border-gray-300 rounded">
+          <div ref={scrollRef} onScroll={onScroll}
+           className="flex-1 min-h-0 overflow-auto bg-white border border-gray-300 rounded">
             <table className="w-full border-collapse">
               <thead className="sticky top-0 z-10">
                 <tr>
@@ -676,8 +684,8 @@ export function ReceivingTicketsView() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map(t => (
-                    <tr key={t.RTID} className="table-tr" onClick={() => setSelected(t)}>
+                  visible.map(t => (
+                    <tr key={t.RTID} className="table-tr whitespace-nowrap" onClick={() => setSelected(t)}>
                       <td className="table-td font-mono font-medium text-brand-600">{t.RTNumber}</td>
                       <td className="table-td font-mono">{t.JobID}</td>
                       <td className="table-td text-gray-500 max-w-[180px] truncate"
