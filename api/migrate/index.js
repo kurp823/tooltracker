@@ -316,6 +316,98 @@ const MIGRATIONS = [
 
       COMMIT TRANSACTION;`,
   },
+
+  /*
+   * One-off data repair: remove the duplicate ticket lines that were confirmed
+   * to carry no information, keeping the earliest row of each group.
+   *
+   * tbl_ReceivingTicketLines held 58,392 rows against tbl_DeliveryTicketLines'
+   * 47,106 — impossible, since nothing can be received that was never
+   * dispatched. Measured cause: 20,460 duplicate rows, weighted three and a
+   * half times more heavily on the receiving side.
+   *
+   * ONLY these two cases are removed:
+   *   - every row in the group agrees on all meaningful columns
+   *   - the rows agree on everything except `remarks`, and remarks is only
+   *     ever blank or a literal copy of usedStatus (an import artefact that
+   *     wrote the usage string into a second column)
+   *
+   * DELIBERATELY NOT TOUCHED: 256 groups / 620 rows that differ on quantity,
+   * usage, condition, routing or description. Those may be real separate
+   * entries and are left for a human to judge.
+   *
+   * Keeps MIN(id), which also preserves the lower itemNo so the original
+   * 1..N sequence survives. Idempotent: once each group holds one row the
+   * HAVING COUNT(*) > 1 guard matches nothing.
+   */
+  {
+    name: 'seed:dedupe-ticket-lines',
+    sql: `
+      SET XACT_ABORT ON;
+      BEGIN TRANSACTION;
+
+      ----------------------------------------------- receiving ticket lines ---
+      WITH g AS (
+        SELECT rtNumber, serial,
+               COUNT(DISTINCT CAST(CONCAT(
+                 LEFT(COALESCE(CAST(toolDescription AS NVARCHAR(4000)), '~'), 150), '|',
+                 COALESCE(CAST(qty AS NVARCHAR(20)), '~'), '|',
+                 COALESCE(usedStatus, '~'), '|',
+                 LEFT(COALESCE(CAST(condition AS NVARCHAR(4000)), '~'), 80), '|',
+                 COALESCE(routedTo, '~')
+               ) AS NVARCHAR(500))) AS shapesIgnoringRemarks,
+               COUNT(DISTINCT LEFT(COALESCE(CAST(remarks AS NVARCHAR(4000)), '~'), 150)) AS remarkVariants,
+               SUM(CASE
+                     WHEN NULLIF(LTRIM(RTRIM(CAST(remarks AS NVARCHAR(4000)))), '') IS NULL
+                       OR LTRIM(RTRIM(CAST(remarks AS NVARCHAR(4000)))) = LTRIM(RTRIM(COALESCE(usedStatus, '')))
+                     THEN 0 ELSE 1 END) AS rowsWithRealRemarks
+          FROM tbl_ReceivingTicketLines
+         WHERE NULLIF(LTRIM(RTRIM(serial)), '') IS NOT NULL
+         GROUP BY rtNumber, serial
+        HAVING COUNT(*) > 1
+      ),
+      safe AS (
+        SELECT rtNumber, serial FROM g
+         WHERE shapesIgnoringRemarks = 1
+           AND (remarkVariants = 1 OR rowsWithRealRemarks = 0)
+      ),
+      keepers AS (
+        SELECT MIN(l.id) AS keepId
+          FROM tbl_ReceivingTicketLines l
+          JOIN safe s ON s.rtNumber = l.rtNumber AND s.serial = l.serial
+         GROUP BY l.rtNumber, l.serial
+      )
+      DELETE l
+        FROM tbl_ReceivingTicketLines l
+        JOIN safe s ON s.rtNumber = l.rtNumber AND s.serial = l.serial
+       WHERE l.id NOT IN (SELECT keepId FROM keepers);
+
+      ------------------------------------------------ delivery ticket lines ---
+      WITH gd AS (
+        SELECT dtNumber, serial
+          FROM tbl_DeliveryTicketLines
+         WHERE NULLIF(LTRIM(RTRIM(serial)), '') IS NOT NULL
+         GROUP BY dtNumber, serial
+        HAVING COUNT(*) > 1
+           AND COUNT(DISTINCT CAST(CONCAT(
+                 LEFT(COALESCE(CAST(toolDescription AS NVARCHAR(4000)), '~'), 150), '|',
+                 COALESCE(CAST(qty AS NVARCHAR(20)), '~'), '|',
+                 LEFT(COALESCE(CAST(remarks AS NVARCHAR(4000)), '~'), 150)
+               ) AS NVARCHAR(500))) = 1
+      ),
+      keepersD AS (
+        SELECT MIN(l.id) AS keepId
+          FROM tbl_DeliveryTicketLines l
+          JOIN gd ON gd.dtNumber = l.dtNumber AND gd.serial = l.serial
+         GROUP BY l.dtNumber, l.serial
+      )
+      DELETE l
+        FROM tbl_DeliveryTicketLines l
+        JOIN gd ON gd.dtNumber = l.dtNumber AND gd.serial = l.serial
+       WHERE l.id NOT IN (SELECT keepId FROM keepersD);
+
+      COMMIT TRANSACTION;`,
+  },
 ]
 
 module.exports = async function (context, req) {

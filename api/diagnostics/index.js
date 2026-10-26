@@ -311,6 +311,58 @@ const CHECKS = [
            ORDER BY l.rtNumber, l.serial, l.itemNo`,
   },
   {
+    /*
+     * Every row in a group that could NOT be classified as safely redundant.
+     * These are handed to the user to judge: the rows differ on something that
+     * may carry real meaning (quantity, usage, condition, routing, or the
+     * description), so no rule should decide them.
+     */
+    name: 'reviewRowsFull',
+    sql: `WITH g AS (
+            SELECT rtNumber, serial
+              FROM tbl_ReceivingTicketLines
+             WHERE NULLIF(LTRIM(RTRIM(serial)), '') IS NOT NULL
+             GROUP BY rtNumber, serial
+            HAVING COUNT(*) > 1
+               AND COUNT(DISTINCT CAST(CONCAT(
+                     LEFT(COALESCE(CAST(toolDescription AS NVARCHAR(4000)), '~'), 150), '|',
+                     COALESCE(CAST(qty AS NVARCHAR(20)), '~'), '|',
+                     COALESCE(usedStatus, '~'), '|',
+                     LEFT(COALESCE(CAST(condition AS NVARCHAR(4000)), '~'), 80), '|',
+                     COALESCE(routedTo, '~')
+                   ) AS NVARCHAR(500))) > 1
+          )
+          SELECT 'RT' AS side, l.rtNumber AS ticket, h.jobNumber AS job, l.itemNo, l.serial,
+                 LEFT(COALESCE(CAST(l.toolDescription AS NVARCHAR(MAX)), ''), 80) AS descr,
+                 l.qty, l.usedStatus,
+                 LEFT(COALESCE(CAST(l.condition AS NVARCHAR(MAX)), ''), 40) AS cond,
+                 l.routedTo,
+                 LEFT(COALESCE(CAST(l.remarks AS NVARCHAR(MAX)), ''), 60) AS remarks
+            FROM tbl_ReceivingTicketLines l
+            JOIN g ON g.rtNumber = l.rtNumber AND g.serial = l.serial
+            LEFT JOIN tbl_ReceivingTickets h ON h.rtNumber = l.rtNumber
+          UNION ALL
+          SELECT 'DT', l.dtNumber, h.jobNumber, l.itemNo, l.serial,
+                 LEFT(COALESCE(CAST(l.toolDescription AS NVARCHAR(MAX)), ''), 80),
+                 l.qty, NULL, NULL, NULL,
+                 LEFT(COALESCE(CAST(l.remarks AS NVARCHAR(MAX)), ''), 60)
+            FROM tbl_DeliveryTicketLines l
+            JOIN (
+              SELECT dtNumber, serial
+                FROM tbl_DeliveryTicketLines
+               WHERE NULLIF(LTRIM(RTRIM(serial)), '') IS NOT NULL
+               GROUP BY dtNumber, serial
+              HAVING COUNT(*) > 1
+                 AND COUNT(DISTINCT CAST(CONCAT(
+                       LEFT(COALESCE(CAST(toolDescription AS NVARCHAR(4000)), '~'), 150), '|',
+                       COALESCE(CAST(qty AS NVARCHAR(20)), '~'), '|',
+                       LEFT(COALESCE(CAST(remarks AS NVARCHAR(4000)), '~'), 150)
+                     ) AS NVARCHAR(500))) > 1
+            ) gd ON gd.dtNumber = l.dtNumber AND gd.serial = l.serial
+            LEFT JOIN tbl_DeliveryTickets h ON h.dtNumber = l.dtNumber
+           ORDER BY side, ticket, serial, itemNo`,
+  },
+  {
     // Are the duplicates and the orphans the same rows, or separate problems?
     name: 'duplicateVsOrphanOverlap',
     sql: `SELECT
