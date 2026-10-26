@@ -139,18 +139,17 @@ module.exports = async function (context, req) {
     const b = req.body
     if (!b.JobID) return jsonResponse(context, 400, { error: 'JobID required' })
 
-    const yr = new Date().getFullYear()
+    // Continue the single historic DT-NNNNN series (3,380 tickets up to
+    // DT-03436). Only plain 5-digit numbers count towards the next sequence —
+    // the 305 DT-DUMMY-* placeholders and the TEST rows are left untouched and
+    // are deliberately excluded here so they can never shift the numbering.
     const lastRow = await query(
-      `SELECT TOP 1 dtNumber FROM tbl_DeliveryTickets
-        WHERE dtNumber LIKE 'DT-${yr}-%'
-        ORDER BY dtNumber DESC`, []
+      `SELECT MAX(TRY_CAST(SUBSTRING(dtNumber, 4, 10) AS INT)) AS maxSeq
+         FROM tbl_DeliveryTickets
+        WHERE dtNumber LIKE 'DT-[0-9][0-9][0-9][0-9][0-9]'`, []
     )
-    let seq = 1
-    if (lastRow.recordset.length) {
-      const parts = lastRow.recordset[0].dtNumber.split('-')
-      seq = parseInt(parts[parts.length - 1], 10) + 1
-    }
-    const DTNumber = `DT-${yr}-${String(seq).padStart(5, '0')}`
+    const seq = Number(lastRow.recordset[0]?.maxSeq || 0) + 1
+    const DTNumber = `DT-${String(seq).padStart(5, '0')}`
 
     const r = await query(
       `INSERT INTO tbl_DeliveryTickets (dtNumber, jobNumber, deliveryDate, status, notes, createdBy, createdAt)

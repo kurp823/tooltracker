@@ -132,18 +132,16 @@ module.exports = async function (context, req) {
     const b = req.body
     if (!b.JobID) return jsonResponse(context, 400, { error: 'JobID required' })
 
-    const yr = new Date().getFullYear()
+    // Continue the single historic RT-NNNNN series. Only plain 5-digit numbers
+    // count towards the next sequence; placeholder and TEST rows are left as
+    // they are and excluded here so they can never shift the numbering.
     const lastRow = await query(
-      `SELECT TOP 1 rtNumber FROM tbl_ReceivingTickets
-        WHERE rtNumber LIKE 'RT-${yr}-%'
-        ORDER BY rtNumber DESC`, []
+      `SELECT MAX(TRY_CAST(SUBSTRING(rtNumber, 4, 10) AS INT)) AS maxSeq
+         FROM tbl_ReceivingTickets
+        WHERE rtNumber LIKE 'RT-[0-9][0-9][0-9][0-9][0-9]'`, []
     )
-    let seq = 1
-    if (lastRow.recordset.length) {
-      const parts = lastRow.recordset[0].rtNumber.split('-')
-      seq = parseInt(parts[parts.length - 1], 10) + 1
-    }
-    const RTNumber = `RT-${yr}-${String(seq).padStart(5, '0')}`
+    const seq = Number(lastRow.recordset[0]?.maxSeq || 0) + 1
+    const RTNumber = `RT-${String(seq).padStart(5, '0')}`
 
     const r = await query(
       `INSERT INTO tbl_ReceivingTickets (rtNumber, jobNumber, receivingDate, status, notes, createdBy, createdAt)
