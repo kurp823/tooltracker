@@ -6,7 +6,7 @@ import {
   Receipt, Building2, BarChart3, Settings, ChevronDown,
   ChevronRight, BookOpen, Factory, Tag, History, Boxes,
   ShoppingCart, PackagePlus, Database, LogOut, KeyRound,
-  Gauge, ClipboardList, Coins, FileSpreadsheet, HardHat
+  Gauge, ClipboardList, Coins, FileSpreadsheet, HardHat, PackageSearch
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import type { UserRole } from '../types'
@@ -59,6 +59,7 @@ const MODULES: NavModule[] = [
     items: [
       { label: 'Inventory Dashboard',       to: '/inventory-dashboard', icon: <Gauge size={ICON} />, pending: true },
       { label: 'Assets and Inventory',      to: '/inventory',           icon: <Package size={ICON} /> },
+      { label: 'Not in Inventory',          to: '/missing-tools',       icon: <PackageSearch size={ICON} /> },
       { label: 'Tool Categories & Sizes',   to: '/categories',          icon: <Tag size={ICON} /> },
       { label: 'PO & Goods Inward (GRN)',   to: '/po-grn',              icon: <ShoppingCart size={ICON} />, pending: true },
       { label: 'Third-Party Rental Inward', to: '/sub-rental-inward',   icon: <PackagePlus size={ICON} />, pending: true },
