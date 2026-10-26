@@ -20,6 +20,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import { toDateInput, normalizeJobId } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
+import { ComboBox } from '../components/ComboBox'
 import type { Job, JobStatus, InvoicingType, ToolMovement } from '../types'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -319,20 +320,30 @@ function ToolPickerModal({
 
         {/* Filters — category drives size */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 border-b border-gray-300 bg-gray-50 shrink-0">
+          {/* Type-to-search rather than a native dropdown: 130 categories and
+              204 sizes are too many to find by scrolling a popup. */}
           <span className="field-label">Category</span>
-          <select className="field-input w-56" value={category} onChange={e => setCategory(e.target.value)}>
-            <option value="">All categories ({items.length})</option>
-            {categories.map(([c, n]) => <option key={c} value={c}>{c} ({n})</option>)}
-          </select>
+          <ComboBox
+            className="w-56"
+            value={category}
+            onChange={setCategory}
+            options={categories.map(([c, n]) => ({ value: c, label: c, count: n }))}
+            allLabel={`All categories (${items.length})`}
+            placeholder="Type a category…"
+          />
 
           <span className="field-label">Size</span>
-          <select className="field-input w-36" value={size} onChange={e => setSize(e.target.value)}
-                  disabled={sizesForCategory.length === 0}>
-            <option value="">
-              {category ? `All sizes in this category (${sizesForCategory.length})` : 'All sizes'}
-            </option>
-            {sizesForCategory.map(([s, n]) => <option key={s} value={s}>{s} ({n})</option>)}
-          </select>
+          <ComboBox
+            className="w-40"
+            value={size}
+            onChange={setSize}
+            options={sizesForCategory.map(([s, n]) => ({ value: s, label: s, count: n }))}
+            allLabel={category
+              ? `All sizes in this category (${sizesForCategory.length})`
+              : `All sizes (${sizesForCategory.length})`}
+            placeholder="Type a size…"
+            disabled={sizesForCategory.length === 0}
+          />
 
           <span className="field-label">Asset No</span>
           <div className="relative w-44">
