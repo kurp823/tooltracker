@@ -184,10 +184,13 @@ module.exports = async function (context, req) {
       return jsonResponse(context, 403, { error: 'Admin only' })
 
     try {
+      // tbl_Contracts has ContractID and ContractRef; 'ContractNumber' is only
+      // an alias in this file's SELECT, so referencing it here threw.
+      // tbl_Jobs.Contract holds either the id or the ref depending on vintage.
       const inUse = await query(
         `SELECT COUNT(*) AS n FROM tbl_Jobs
           WHERE Contract = @id
-             OR Contract = (SELECT TOP 1 ContractNumber FROM tbl_Contracts WHERE ContractID = @id)`,
+             OR Contract = (SELECT TOP 1 ContractRef FROM tbl_Contracts WHERE ContractID = @id)`,
         [{ name: 'id', type: sql.VarChar, value: id }]
       )
       const n = Number(inUse.recordset[0]?.n || 0)
