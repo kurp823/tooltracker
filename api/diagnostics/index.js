@@ -363,6 +363,85 @@ const CHECKS = [
            ORDER BY side, ticket, serial, itemNo`,
   },
   {
+    /*
+     * What is actually still on a rig.
+     *
+     * The raw gap between the two line tables does NOT answer this: orphan
+     * lines belong to no job at all, and a tool can go out on one job and come
+     * back on another, so the difference of 96 rows is not a count of
+     * outstanding equipment.
+     *
+     * The real measure is per job: a dispatch line with no receiving line for
+     * the same job and the same serial. Split by whether the job is still live,
+     * because equipment showing as outstanding on a CLOSED job is a data
+     * problem, not kit on a rig.
+     */
+    name: 'stillOnRig',
+    sql: `WITH dt AS (
+            SELECT DISTINCT
+                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   l.serial
+              FROM tbl_DeliveryTicketLines l
+              JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          rt AS (
+            SELECT DISTINCT
+                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   l.serial
+              FROM tbl_ReceivingTicketLines l
+              JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          outstanding AS (
+            SELECT dt.jobSeq, dt.serial
+              FROM dt
+             WHERE dt.jobSeq IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM rt
+                                WHERE rt.jobSeq = dt.jobSeq AND rt.serial = dt.serial)
+          ),
+          jobs AS (
+            SELECT TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS jobSeq,
+                   MAX(Status) AS Status
+              FROM tbl_Jobs
+             GROUP BY TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT)
+          )
+          SELECT COALESCE(j.Status, '(no matching job)') AS jobStatus,
+                 COUNT(*)                     AS toolsOutstanding,
+                 COUNT(DISTINCT o.jobSeq)     AS jobsAffected
+            FROM outstanding o
+            LEFT JOIN jobs j ON j.jobSeq = o.jobSeq
+           GROUP BY COALESCE(j.Status, '(no matching job)')
+           ORDER BY COUNT(*) DESC`,
+  },
+  {
+    // The reverse: received on a job it was never dispatched on. A tool can
+    // legitimately come back on a different job, so this is context for the
+    // number above rather than an error on its own.
+    name: 'receivedWithoutDispatchOnSameJob',
+    sql: `WITH dt AS (
+            SELECT DISTINCT
+                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   l.serial
+              FROM tbl_DeliveryTicketLines l
+              JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          rt AS (
+            SELECT DISTINCT
+                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   l.serial
+              FROM tbl_ReceivingTicketLines l
+              JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          )
+          SELECT COUNT(*) AS receivedWithNoDispatchOnThatJob
+            FROM rt
+           WHERE rt.jobSeq IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM dt
+                              WHERE dt.jobSeq = rt.jobSeq AND dt.serial = rt.serial)`,
+  },
+  {
     // Are the duplicates and the orphans the same rows, or separate problems?
     name: 'duplicateVsOrphanOverlap',
     sql: `SELECT
