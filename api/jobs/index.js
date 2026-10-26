@@ -60,6 +60,9 @@ module.exports = async function (context, req) {
                JobID, Client, Rig, Well, Contract, PONumber, ClientRef,
                ServiceType, HoleSection, MobDate, DemobDate,
                Status, InvoicingType, Currency, FiscalYear,
+               -- Job value and legal invoice no: both on the old register and
+               -- needed by the executive dashboard, alongside ServiceType.
+               InvoiceAmount, NetInvoiceAmount, LegalInvoiceNumber,
                CreatedDate, CreatedBy, UpdatedAt
         FROM   tbl_Jobs
         ${where}
