@@ -14,6 +14,11 @@ const config = {
     trustServerCertificate: false,
     enableArithAbort:       true,
   },
+  // mssql defaults requestTimeout to 15s, which is too short for an index
+  // build or a data migration over 58,000 rows — both were killed at exactly
+  // 15,000ms. Raised here because node-mssql applies it from the pool config;
+  // setting it on an individual Request has no effect.
+  requestTimeout: 180000,
   pool: {
     max:              10,
     min:              0,
@@ -36,14 +41,9 @@ async function getPool() {
  * @param {Array}  params     - [{ name, type, value }]
  * @returns {Promise<sql.IResult>}
  */
-async function query(queryText, params = [], opts = {}) {
+async function query(queryText, params = []) {
   const pool    = await getPool()
   const request = pool.request()
-  // mssql defaults to a 15s request timeout. That is right for app queries —
-  // a slow screen should fail fast — but a one-off data migration over 58,000
-  // rows legitimately takes longer, so the migrate endpoint raises it per call
-  // rather than globally.
-  if (opts.timeout) request.timeout = opts.timeout
   for (const { name, type, value } of params) {
     // mssql's .input() has two overloads: (name, value) and (name, type, value).
     // Passing an explicit `undefined` as the type argument crashes internally

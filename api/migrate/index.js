@@ -387,14 +387,20 @@ const MIGRATIONS = [
            AND (remarkVariants = 1 OR rowsWithRealRemarks = 0)
       ),
       ranked AS (
+        -- EXISTS rather than JOIN: a CTE that joins another table is not
+        -- updatable ("the modification affects multiple base tables"), so the
+        -- row source has to resolve to tbl_ReceivingTicketLines alone.
         SELECT l.id,
                ROW_NUMBER() OVER (PARTITION BY l.rtNumber, l.serial ORDER BY l.id) AS rn
           FROM tbl_ReceivingTicketLines l
-          JOIN safe s ON s.rtNumber = l.rtNumber AND s.serial = l.serial
+         WHERE EXISTS (SELECT 1 FROM safe s
+                        WHERE s.rtNumber = l.rtNumber AND s.serial = l.serial)
       )
-      -- One pass. The previous NOT IN (SELECT ... FROM keepers) re-evaluated
-      -- the keeper set per row and timed out at 15s over 58,000 rows.
-      DELETE FROM ranked WHERE rn > 1;
+      -- Delete by id from the base table. One pass; the earlier
+      -- NOT IN (SELECT keepId FROM keepers) re-evaluated the keeper set per
+      -- row and was killed at 15s over 58,000 rows.
+      DELETE FROM tbl_ReceivingTicketLines
+       WHERE id IN (SELECT id FROM ranked WHERE rn > 1);
 
       ------------------------------------------------ delivery ticket lines ---
       WITH gd AS (
@@ -413,9 +419,11 @@ const MIGRATIONS = [
         SELECT l.id,
                ROW_NUMBER() OVER (PARTITION BY l.dtNumber, l.serial ORDER BY l.id) AS rn
           FROM tbl_DeliveryTicketLines l
-          JOIN gd ON gd.dtNumber = l.dtNumber AND gd.serial = l.serial
+         WHERE EXISTS (SELECT 1 FROM gd
+                        WHERE gd.dtNumber = l.dtNumber AND gd.serial = l.serial)
       )
-      DELETE FROM rankedD WHERE rn > 1;
+      DELETE FROM tbl_DeliveryTicketLines
+       WHERE id IN (SELECT id FROM rankedD WHERE rn > 1);
 
       COMMIT TRANSACTION;`,
   },
@@ -437,7 +445,7 @@ module.exports = async function (context, req) {
       // Data seeds are idempotent by their own guards and create no object,
       // so the table-existence check below does not apply to them.
       if (m.name.startsWith('seed:')) {
-        await query(m.sql, [], { timeout: 180000 })
+        await query(m.sql)
         results[m.name] = 'applied'
         continue
       }
@@ -452,7 +460,7 @@ module.exports = async function (context, req) {
         continue
       }
 
-      await query(m.sql, [], { timeout: 180000 })
+      await query(m.sql)
 
       const after = await query(
         `SELECT CASE WHEN OBJECT_ID('dbo.${m.name}', 'U') IS NULL THEN 0 ELSE 1 END AS present`
