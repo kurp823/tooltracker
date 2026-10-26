@@ -24,16 +24,23 @@ import type { Job, JobStatus, InvoicingType } from '../types'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+/**
+ * Exactly what /api/inventory returns. The previous shape invented SizeName,
+ * SupplierName, CategoryName and Condition — none of which exist — which is
+ * why the tool picker came up empty and showed no size or supplier.
+ */
 interface InvItem {
   SystemID: string      // internal key — NEVER show in UI
   AssetNo: string       // physical label — always use this
   Serial: string
-  ShortDesc: string
-  SizeName: string
-  SupplierName: string
-  CategoryName: string
-  Condition: string
+  ShortDesc: string     // this IS the category name in tbl_Inventory
+  Size: string
+  Supplier: string
+  Ownership: string
+  IsEmdad: boolean
+  Status: string        // 'Good' | 'DBR' | 'On Rig'
   Location: string
+  Qty: number
 }
 
 interface ChecklistItem {
@@ -138,18 +145,28 @@ function ToolPickerModal({
   const [loading,  setLoading]  = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())  // keyed by AssetNo
 
-  // Load inventory: Base + Good/Accepted condition only
+  /*
+   * This picker showed nothing at all. It filtered on `Condition === 'Good'`
+   * and `Location === 'Base'`, but tbl_Inventory has no Condition column and
+   * its Location reads 'Emdad Base' — so both tests were false for all 5,094
+   * rows and every tool was excluded. It also read SizeName and SupplierName,
+   * which the API returns as Size and Supplier, so size filtering and the
+   * supplier column were dead too.
+   *
+   * The real availability signal is Status: 'Good' on 5,072 rows and 'DBR'
+   * (damaged beyond repair) on 22. A tool already out on a rig carries 'On
+   * Rig', so excluding anything that isn't 'Good' covers both.
+   */
   useEffect(() => {
     setLoading(true)
     api.get<InvItem[]>('/inventory')
       .then((all: InvItem[]) => {
-        // Filter: Base location + Good/Accepted condition only (rule: field tools excluded)
-        const available = all.filter((i: InvItem) =>
-          (i.Condition === 'Good' || i.Condition === 'Accepted') &&
-          i.Location === 'Base' &&
-          !existingAssetNos.has(i.AssetNo)   // exclude already on checklist
+        setItems(
+          (all || []).filter((i: InvItem) =>
+            String(i.Status || '').trim().toLowerCase() === 'good' &&
+            !existingAssetNos.has(i.AssetNo)
+          )
         )
-        setItems(available)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -158,14 +175,14 @@ function ToolPickerModal({
   const filtered = items.filter((i: InvItem) => {
     const q = search.toLowerCase()
     const matchSearch = !q ||
-      i.AssetNo.toLowerCase().includes(q) ||
-      i.ShortDesc.toLowerCase().includes(q) ||
-      (i.Serial || '').toLowerCase().includes(q)
-    const matchSize = !size || i.SizeName === size
+      (i.AssetNo   || '').toLowerCase().includes(q) ||
+      (i.ShortDesc || '').toLowerCase().includes(q) ||
+      (i.Serial    || '').toLowerCase().includes(q)
+    const matchSize = !size || i.Size === size
     return matchSearch && matchSize
   })
 
-  const sizes = Array.from(new Set(items.map((i: InvItem) => i.SizeName).filter(Boolean))).sort()
+  const sizes = Array.from(new Set(items.map((i: InvItem) => i.Size).filter(Boolean))).sort()
 
   function toggleRow(assetNo: string) {
     setSelected(prev => {
@@ -294,12 +311,12 @@ function ToolPickerModal({
                         </td>
                         <td className="table-td font-medium text-gray-900">{item.AssetNo}</td>
                         <td className="table-td text-gray-600 max-w-xs truncate">{item.ShortDesc}</td>
-                        <td className="table-td text-gray-500">{item.SizeName}</td>
+                        <td className="table-td text-gray-500">{item.Size || '—'}</td>
                         <td className="table-td text-center text-gray-600">1</td>
-                        <td className="table-td text-gray-500">{item.SupplierName || '—'}</td>
+                        <td className="table-td text-gray-500">{item.IsEmdad ? 'EMDAD' : (item.Ownership || item.Supplier || '—')}</td>
                         <td className="table-td text-gray-400 text-xs">—</td>
                         <td className="table-td">
-                          <span className="text-green-600 font-medium text-xs">{item.Condition?.toUpperCase()}</span>
+                          <span className="text-green-600 font-medium text-xs">{(item.Status || '').toUpperCase()}</span>
                         </td>
                       </tr>
                     )
@@ -380,10 +397,10 @@ function ChecklistTab({
       AssetNo:     inv.AssetNo,     // ← always AssetNo, never SystemID
       Serial:      inv.Serial || '',
       Description: inv.ShortDesc,
-      Size:        inv.SizeName,
-      Supplier:    inv.SupplierName || '',
+      Size:        inv.Size,
+      Supplier:    inv.IsEmdad ? 'EMDAD' : (inv.Ownership || inv.Supplier || ''),
       Qty:         1,
-      Condition:   inv.Condition,
+      Condition:   inv.Status,
       checked:     false,
     }))
     setItems(prev => [...prev, ...newItems])
@@ -1136,9 +1153,9 @@ function ReturnTicketTab({
         api.post(`/receiving-tickets/${activeRT.RTID}/lines`, {
           SystemID:        inv.SystemID,        // real Inventory join key — resolved to AssetNo on GET
           ToolDescription: inv.ShortDesc,
-          SizeName:        inv.SizeName,
+          SizeName:        inv.Size,
           Quantity:        1,
-          Condition:       inv.Condition || 'Good',
+          Condition:       inv.Status || 'Good',
           UsedStatus:      'Used',
         })
       ))
@@ -1656,6 +1673,234 @@ function JobHeaderTab({
 
 // ─── Placeholder Tab ──────────────────────────────────────────────────────────
 
+/**
+ * Technical Details — was a "Coming in next build phase" placeholder.
+ *
+ * Every field here is a real tbl_Jobs column that the job PUT already writes
+ * and that nothing in the app could previously reach: the hole section, and
+ * the whole job lifecycle from first dispatch through to the legal invoice.
+ * HoleSection is blank on 3,819 of 3,824 jobs, which is exactly why it needs
+ * somewhere to be entered.
+ */
+function TechnicalTab({
+  form, set, canEdit,
+}: {
+  form: Partial<Job>
+  set: (f: keyof Job, v: unknown) => void
+  canEdit: boolean
+}) {
+  const f = (field: keyof Job) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+      set(field, e.target.value)
+
+  const txt = (field: keyof Job, label: string) => (
+    <React.Fragment key={String(field)}>
+      <span className="field-label">{label}</span>
+      <input className="field-input" value={(form[field] as string) || ''}
+             onChange={f(field)} disabled={!canEdit} />
+    </React.Fragment>
+  )
+  const date = (field: keyof Job, label: string) => (
+    <React.Fragment key={String(field)}>
+      <span className="field-label">{label}</span>
+      <input type="date" className="field-input" value={toDateInput(form[field] as string)}
+             onChange={f(field)} disabled={!canEdit} />
+    </React.Fragment>
+  )
+  const money = (field: keyof Job, label: string) => (
+    <React.Fragment key={String(field)}>
+      <span className="field-label">{label}</span>
+      <input type="number" className="field-input text-right" value={(form[field] as number) ?? ''}
+             onChange={f(field)} disabled={!canEdit} placeholder="0.00" />
+    </React.Fragment>
+  )
+
+  const grid = 'field-row px-2 py-1.5 grid-cols-[auto_1fr] md:grid-cols-[auto_1fr_auto_1fr] xl:grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto_1fr]'
+
+  return (
+    <div className="space-y-1.5">
+      <div className="bg-white border border-gray-300 rounded">
+        <div className="px-2 h-[22px] flex items-center bg-gray-100 border-b border-gray-300
+                        text-[10px] font-bold uppercase tracking-wider text-gray-600">
+          Well &amp; Hole
+        </div>
+        <div className={grid}>
+          {txt('HoleSection', 'Hole Section')}
+          {txt('ServiceType', 'Service Type')}
+          {txt('Rig', 'Rig')}
+          {txt('Well', 'Well')}
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-300 rounded">
+        <div className="px-2 h-[22px] flex items-center bg-gray-100 border-b border-gray-300
+                        text-[10px] font-bold uppercase tracking-wider text-gray-600">
+          Job Lifecycle
+        </div>
+        <div className={grid}>
+          {date('FirstDtDate', 'First DT')}
+          {date('LastRtDate', 'Last RT')}
+          {date('DocsSignedDate', 'Docs Signed')}
+          {date('SubmittedToBillingDate', 'To Billing')}
+          {date('DraftInvoicedDate', 'Draft Invoiced')}
+          {txt('DraftInvoiceNumber', 'Draft Inv No')}
+          {date('SesSubmittedDate', 'SES Submitted')}
+          {txt('SesNumber', 'SES No')}
+          {date('FinalInvoicedDate', 'Final Invoiced')}
+          {txt('LegalInvoiceNumber', 'Legal Inv No')}
+          {date('InvoiceDate', 'Invoice Date')}
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-300 rounded">
+        <div className="px-2 h-[22px] flex items-center bg-gray-100 border-b border-gray-300
+                        text-[10px] font-bold uppercase tracking-wider text-gray-600">
+          Values
+        </div>
+        <div className={grid}>
+          {money('InvoiceAmount', 'Job Value')}
+          {money('NetInvoiceAmount', 'Net Invoice')}
+          {money('NetSubcontract', 'Net Subcontract')}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Roles offered for crew. Free text stays possible via the datalist. */
+const CREW_ROLES = [
+  'Supervisor', 'Tool Pusher', 'Fishing Supervisor', 'Operator',
+  'Technician', 'Rigger', 'Workshop Coordinator', 'Engineer',
+] as const
+
+/**
+ * Manpower / Crew — was a placeholder. tbl_JobPersonnel and its GET/POST/
+ * DELETE endpoints already existed; only the screen was missing, so crew
+ * could never be recorded against a job.
+ */
+function ManpowerTab({ jobId, canEdit }: { jobId: string; canEdit: boolean }) {
+  const { showToast } = useToast()
+  const { data: crew, isLoading, refetch } =
+    useFetch<Array<Record<string, unknown>>>(`/jobs/${jobId}/personnel`)
+
+  const blank = { Name: '', Role: '', MobDate: '', DemobDate: '', Notes: '' }
+  const [draft, setDraft] = useState(blank)
+  const [busy, setBusy] = useState(false)
+
+  const add = async () => {
+    if (!draft.Name.trim()) { showToast('Name is required', 'error'); return }
+    setBusy(true)
+    document.body.style.cursor = 'wait'
+    try {
+      await api.post(`/jobs/${jobId}/personnel`, draft)
+      setDraft(blank)
+      showToast('Crew member added', 'success')
+      refetch()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to add crew member', 'error')
+    } finally {
+      document.body.style.cursor = ''
+      setBusy(false)
+    }
+  }
+
+  const remove = async (pid: unknown, name: unknown) => {
+    if (!window.confirm(`Remove ${name || 'this crew member'} from the job?`)) return
+    try {
+      await api.delete(`/jobs/${jobId}/personnel/${pid}`)
+      showToast('Removed', 'success')
+      refetch()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to remove', 'error')
+    }
+  }
+
+  const str = (v: unknown) => (v == null || v === '' ? '—' : String(v))
+
+  return (
+    <div className="space-y-1.5">
+      {canEdit && (
+        <div className="bg-white border border-gray-300 rounded">
+          <div className="px-2 h-[22px] flex items-center bg-gray-100 border-b border-gray-300
+                          text-[10px] font-bold uppercase tracking-wider text-gray-600">
+            Add crew member
+          </div>
+          <div className="field-row px-2 py-1.5 grid-cols-[auto_1fr] lg:grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto_1fr_auto]">
+            <span className="field-label">Name *</span>
+            <input className="field-input" value={draft.Name}
+                   onChange={e => setDraft(d => ({ ...d, Name: e.target.value }))} />
+
+            <span className="field-label">Role</span>
+            <input className="field-input" list="dl-crew-role" value={draft.Role}
+                   onChange={e => setDraft(d => ({ ...d, Role: e.target.value }))} />
+            <datalist id="dl-crew-role">
+              {CREW_ROLES.map(r => <option key={r} value={r} />)}
+            </datalist>
+
+            <span className="field-label">Mob</span>
+            <input type="date" className="field-input" value={draft.MobDate}
+                   onChange={e => setDraft(d => ({ ...d, MobDate: e.target.value }))} />
+
+            <span className="field-label">Demob</span>
+            <input type="date" className="field-input" value={draft.DemobDate}
+                   onChange={e => setDraft(d => ({ ...d, DemobDate: e.target.value }))} />
+
+            <button className="btn-accent" onClick={add} disabled={busy || !draft.Name.trim()}>
+              {busy ? <Spinner size="sm" /> : <Plus size={12} />} Add
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white border border-gray-300 rounded overflow-hidden">
+        <div className="px-2 h-[22px] flex items-center bg-gray-100 border-b border-gray-300
+                        text-[10px] font-bold uppercase tracking-wider text-gray-600">
+          Crew on this job ({crew?.length ?? 0})
+        </div>
+        {isLoading ? (
+          <div className="py-8 flex justify-center"><Spinner size="md" /></div>
+        ) : !crew?.length ? (
+          <div className="py-8 text-center text-gray-400 text-xs">
+            No crew recorded against this job yet.
+          </div>
+        ) : (
+          <table className="w-full text-[12px] border-collapse">
+            <thead>
+              <tr>
+                <th className="table-th">Name</th>
+                <th className="table-th">Role</th>
+                <th className="table-th">Mob Date</th>
+                <th className="table-th">Demob Date</th>
+                <th className="table-th">Notes</th>
+                {canEdit && <th className="table-th w-8"></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {crew.map((p, i) => (
+                <tr key={String(p.id ?? i)} className="border-b border-gray-100 hover:bg-brand-50/40">
+                  <td className="table-td font-medium">{str(p.Name)}</td>
+                  <td className="table-td text-gray-600">{str(p.Role)}</td>
+                  <td className="table-td text-gray-500">{toDateInput(p.MobDate as string) || '—'}</td>
+                  <td className="table-td text-gray-500">{toDateInput(p.DemobDate as string) || '—'}</td>
+                  <td className="table-td text-gray-500">{str(p.Notes)}</td>
+                  {canEdit && (
+                    <td className="table-td">
+                      <button onClick={() => remove(p.id, p.Name)}
+                              className="text-gray-300 hover:text-red-500" title="Remove">
+                        <Trash2 size={12} />
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function PlaceholderTab({ label }: { label: string }) {
   return (
     <div className="card p-12 text-center">
@@ -1801,10 +2046,10 @@ export function JobDetailView() {
           <JobHeaderTab form={form} set={set} canEdit={canEdit} isNew={isNew} />
         )}
         {tab === 'technical' && !isNew && (
-          <PlaceholderTab label="Technical Details" />
+          <TechnicalTab form={form} set={set} canEdit={canEdit} />
         )}
         {tab === 'manpower' && !isNew && (
-          <PlaceholderTab label="Manpower / Crew" />
+          <ManpowerTab jobId={id!} canEdit={canEdit} />
         )}
         {tab === 'checklist' && !isNew && (
           <ChecklistTab

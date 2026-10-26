@@ -205,6 +205,11 @@ module.exports = async function (context, req) {
            DraftInvoiceNumber = @din, SesSubmittedDate = @ses,
            SesNumber = @sesno, FinalInvoicedDate = @fid,
            LegalInvoiceNumber = @lin, InvoiceDate = @invdt,
+           -- Job value was editable on the header but absent from this list,
+           -- so typing it saved nothing and the field silently reverted.
+           InvoiceAmount    = @invamt,
+           NetInvoiceAmount = @netamt,
+           NetSubcontract   = @netsub,
            UpdatedAt = GETDATE()
          WHERE  JobID = @id`,
         [
@@ -218,6 +223,12 @@ module.exports = async function (context, req) {
           { name: 'erp',      type: sql.NVarChar, value: b.ERPRef || null },
           { name: 'svctype',  type: sql.NVarChar, value: b.ServiceType || null },
           { name: 'hole',     type: sql.NVarChar, value: b.HoleSection || null },
+          { name: 'invamt',   type: sql.Decimal(18, 2),
+            value: b.InvoiceAmount    === '' || b.InvoiceAmount    == null ? null : Number(b.InvoiceAmount) },
+          { name: 'netamt',   type: sql.Decimal(18, 2),
+            value: b.NetInvoiceAmount === '' || b.NetInvoiceAmount == null ? null : Number(b.NetInvoiceAmount) },
+          { name: 'netsub',   type: sql.Decimal(18, 2),
+            value: b.NetSubcontract   === '' || b.NetSubcontract   == null ? null : Number(b.NetSubcontract) },
           { name: 'status',   type: sql.NVarChar, value: b.Status || 'Open' },
           { name: 'invtype',  type: sql.NVarChar, value: b.InvoicingType || 'PerJob' },
           { name: 'currency', type: sql.NVarChar, value: b.Currency || 'USD' },
