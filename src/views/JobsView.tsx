@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react'
+import { useRowWindow }  from '../components/useRowWindow'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Search, Filter, RefreshCw } from 'lucide-react'
 import { useFetch } from '../hooks/useFetch'
@@ -45,6 +46,10 @@ export function JobsView() {
     })
   }, [jobs, statusFilter, yearFilter, search])
 
+  // Render the register in slices; all 3,700+ rows in the DOM at once was
+  // most of the delay before first paint on these screens.
+  const { scrollRef, onScroll, visible, hasMore, shown, total } = useRowWindow(filtered)
+
   if (isLoading) return <PageLoader />
 
   return (
@@ -87,7 +92,7 @@ export function JobsView() {
         </button>
 
         <span className="text-[11px] text-gray-500">
-          {filtered.length} of {jobs?.length ?? 0}
+          {hasMore ? `${shown} of ${total} shown` : `${total} job${total === 1 ? '' : 's'}`}
         </span>
 
         {hasRole('Admin', 'Operations') && (
@@ -100,7 +105,8 @@ export function JobsView() {
       {error && <div className="card p-2 text-red-600 text-xs shrink-0">{error}</div>}
 
       {/* Table — nowrap everywhere; a wrapped Job ID made every row 3 lines tall */}
-      <div className="flex-1 min-h-0 overflow-auto bg-white border border-gray-300 rounded">
+      <div ref={scrollRef} onScroll={onScroll}
+           className="flex-1 min-h-0 overflow-auto bg-white border border-gray-300 rounded">
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-10">
             <tr>
@@ -126,7 +132,7 @@ export function JobsView() {
                 </td>
               </tr>
             ) : (
-              filtered.map(job => (
+              visible.map(job => (
                 <tr
                   key={job.JobID}
                   className="table-tr whitespace-nowrap"
