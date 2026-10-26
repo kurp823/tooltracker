@@ -239,6 +239,78 @@ const CHECKS = [
           FROM g`,
   },
   {
+    /*
+     * The 256 groups that genuinely differ, classified by WHICH field differs.
+     * 620 individual rows is too many to eyeball; what matters is whether the
+     * difference is a quantity (likely two real entries), a usage or condition
+     * (a judgement someone recorded), or a description (probably the same tool
+     * written two ways). The category decides the handling, not the row.
+     */
+    name: 'reviewGroupBreakdown',
+    sql: `WITH g AS (
+            SELECT 'RT' AS side, rtNumber AS ticket, serial, COUNT(*) AS n,
+                   COUNT(DISTINCT CAST(qty AS NVARCHAR(20)))                                  AS qtyVariants,
+                   COUNT(DISTINCT COALESCE(usedStatus, '~'))                                  AS usageVariants,
+                   COUNT(DISTINCT LEFT(COALESCE(CAST(condition AS NVARCHAR(4000)), '~'), 80))  AS condVariants,
+                   COUNT(DISTINCT COALESCE(routedTo, '~'))                                    AS routeVariants,
+                   COUNT(DISTINCT LEFT(COALESCE(CAST(toolDescription AS NVARCHAR(4000)), '~'), 150)) AS descVariants
+              FROM tbl_ReceivingTicketLines
+             WHERE NULLIF(LTRIM(RTRIM(serial)), '') IS NOT NULL
+             GROUP BY rtNumber, serial
+            HAVING COUNT(*) > 1
+               AND COUNT(DISTINCT CAST(CONCAT(
+                     LEFT(COALESCE(CAST(toolDescription AS NVARCHAR(4000)), '~'), 150), '|',
+                     COALESCE(CAST(qty AS NVARCHAR(20)), '~'), '|',
+                     COALESCE(usedStatus, '~'), '|',
+                     LEFT(COALESCE(CAST(condition AS NVARCHAR(4000)), '~'), 80), '|',
+                     COALESCE(routedTo, '~')
+                   ) AS NVARCHAR(500))) > 1
+            UNION ALL
+            SELECT 'DT', dtNumber, serial, COUNT(*),
+                   COUNT(DISTINCT CAST(qty AS NVARCHAR(20))), 1, 1, 1,
+                   COUNT(DISTINCT LEFT(COALESCE(CAST(toolDescription AS NVARCHAR(4000)), '~'), 150))
+              FROM tbl_DeliveryTicketLines
+             WHERE NULLIF(LTRIM(RTRIM(serial)), '') IS NOT NULL
+             GROUP BY dtNumber, serial
+            HAVING COUNT(*) > 1
+               AND COUNT(DISTINCT CAST(CONCAT(
+                     LEFT(COALESCE(CAST(toolDescription AS NVARCHAR(4000)), '~'), 150), '|',
+                     COALESCE(CAST(qty AS NVARCHAR(20)), '~')
+                   ) AS NVARCHAR(400))) > 1
+          )
+          SELECT side,
+                 SUM(CASE WHEN qtyVariants  > 1 THEN 1 ELSE 0 END) AS qtyDiffers,
+                 SUM(CASE WHEN usageVariants> 1 THEN 1 ELSE 0 END) AS usageDiffers,
+                 SUM(CASE WHEN condVariants > 1 THEN 1 ELSE 0 END) AS conditionDiffers,
+                 SUM(CASE WHEN routeVariants> 1 THEN 1 ELSE 0 END) AS routingDiffers,
+                 SUM(CASE WHEN descVariants > 1 THEN 1 ELSE 0 END) AS descriptionDiffers,
+                 COUNT(*)      AS groups,
+                 SUM(n) - COUNT(*) AS redundantRows
+            FROM g
+           GROUP BY side`,
+  },
+  {
+    // A handful of real rows from each kind of difference, to sanity-check the
+    // classification above rather than trust it.
+    name: 'reviewSamples',
+    sql: `WITH g AS (
+            SELECT TOP 6 rtNumber, serial
+              FROM tbl_ReceivingTicketLines
+             WHERE NULLIF(LTRIM(RTRIM(serial)), '') IS NOT NULL
+             GROUP BY rtNumber, serial
+            HAVING COUNT(*) > 1
+               AND (COUNT(DISTINCT CAST(qty AS NVARCHAR(20))) > 1
+                 OR COUNT(DISTINCT COALESCE(usedStatus, '~')) > 1)
+             ORDER BY rtNumber DESC
+          )
+          SELECT l.rtNumber, l.itemNo, l.serial, l.qty, l.usedStatus,
+                 LEFT(COALESCE(CAST(l.condition AS NVARCHAR(MAX)), ''), 30) AS cond,
+                 LEFT(COALESCE(CAST(l.remarks AS NVARCHAR(MAX)), ''), 40)   AS remarks
+            FROM tbl_ReceivingTicketLines l
+            JOIN g ON g.rtNumber = l.rtNumber AND g.serial = l.serial
+           ORDER BY l.rtNumber, l.serial, l.itemNo`,
+  },
+  {
     // Are the duplicates and the orphans the same rows, or separate problems?
     name: 'duplicateVsOrphanOverlap',
     sql: `SELECT
