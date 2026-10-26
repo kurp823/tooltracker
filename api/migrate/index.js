@@ -206,6 +206,33 @@ const MIGRATIONS = [
          WHERE UPPER(LTRIM(RTRIM(x.supplierName))) = UPPER(s.nm)
       )`,
   },
+  {
+    name: 'seed:inventory-lookup-indexes',
+    sql: `
+      -- Ticket lines reference a tool by SystemID, AssetNo or OEMSerial.
+      -- Only SystemID (the key) was indexed, so resolving a line by the other
+      -- two scanned the whole table for every row. These make the lookup
+      -- index-seekable.
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_tbl_Inventory_AssetNo'
+                       AND object_id = OBJECT_ID('dbo.tbl_Inventory'))
+        CREATE INDEX IX_tbl_Inventory_AssetNo ON dbo.tbl_Inventory (AssetNo);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_tbl_Inventory_OEMSerial'
+                       AND object_id = OBJECT_ID('dbo.tbl_Inventory'))
+        CREATE INDEX IX_tbl_Inventory_OEMSerial ON dbo.tbl_Inventory (OEMSerial);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_tbl_DTL_serial'
+                       AND object_id = OBJECT_ID('dbo.tbl_DeliveryTicketLines'))
+        CREATE INDEX IX_tbl_DTL_serial ON dbo.tbl_DeliveryTicketLines (serial);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_tbl_RTL_serial'
+                       AND object_id = OBJECT_ID('dbo.tbl_ReceivingTicketLines'))
+        CREATE INDEX IX_tbl_RTL_serial ON dbo.tbl_ReceivingTicketLines (serial);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_tbl_DFL_tool_dt'
+                       AND object_id = OBJECT_ID('dbo.tbl_DailyFieldLogs'))
+        CREATE INDEX IX_tbl_DFL_tool_dt ON dbo.tbl_DailyFieldLogs (ToolSerial, DTNumber);`,
+  },
 ]
 
 module.exports = async function (context, req) {
