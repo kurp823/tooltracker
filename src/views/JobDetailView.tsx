@@ -1243,7 +1243,8 @@ function ReturnTicketTab({
   const [dateIn,   setDateIn]   = useState(() => new Date().toISOString().split('T')[0])
 
   const day = (v: string | null | undefined) => (v ? String(v).split('T')[0] : '')
-  const locked = Boolean(activeRT && String((activeRT as Record<string, unknown>).LockStage || '').trim())
+  // LockStage is on RTRecord, so read it directly — no cast needed.
+  const locked = Boolean(activeRT && String(activeRT.LockStage || '').trim())
 
   const loadRTs = useCallback(async () => {
     setLoading(true)
