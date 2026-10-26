@@ -87,6 +87,11 @@ interface RTRecord {
   RTDate: string
   LinkedDT?: string
   ManifestNumber?: string
+  VehicleVessel?: string
+  EmdadRep?: string
+  ClientSignDate?: string
+  /** Set when the ticket is confirmed; a locked ticket is read-only. */
+  LockStage?: string
   Status: string
   Notes: string
   CreatedBy: string
@@ -140,8 +145,10 @@ type Tab = typeof WORKSPACE_TABS[number]['id']
 const STATUS_OPTIONS: JobStatus[]     = ['Open','Ongoing','Draft Invoice Submitted','Completed','JobCompleted']
 const INVOICING_OPTS: InvoicingType[] = ['PerJob','PerDay','Lump Sum']
 const CURRENCY_OPTS                   = ['USD','AED','SAR','OMR']
-const DT_STATUS_OPTS                  = ['Draft','Submitted','Approved','Rejected']
-const RT_STATUS_OPTS                  = ['Draft','Submitted','Approved','Rejected']
+// Real tbl_DeliveryTickets statuses: Closed 2,116, Signed 1,569, blank 15.
+// 'Draft/Submitted/Approved/Rejected' appear on none of the 3,700 tickets.
+// Receiving tickets no longer carry a free status — it follows the lock.
+const DT_STATUS_OPTS                  = ['', 'Signed', 'Closed']
 
 // ─── Tool Picker Modal ────────────────────────────────────────────────────────
 
@@ -982,7 +989,7 @@ function DTHeaderTab({
                   value={form.Status}
                   onChange={e => setForm(p => ({ ...p, Status: e.target.value }))}
                   disabled={!canEdit}>
-                  {DT_STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
+                  {DT_STATUS_OPTS.map(s => <option key={s} value={s}>{s || 'Not set'}</option>)}
                 </select>
               </div>
             </div>
@@ -1165,6 +1172,49 @@ function DTHeaderTab({
 
 // ─── Return Ticket Tab ─────────────────────────────────────────────────────────
 
+/** What a returned tool can be marked as, and what each implies downstream. */
+const USED_STATES = ['USED', 'NOT USED', 'LIH'] as const
+const ROUTE_LABEL: Record<string, string> = {
+  USED: 'Inspection Bay',
+  'NOT USED': 'Available Inventory',
+  LIH: 'Lost in Hole',
+}
+/** Normalise whatever the imported history stored into one of the three states. */
+function normUsed(v: string | null | undefined): string {
+  const u = String(v || '').trim().toUpperCase()
+  if (u === 'LIH' || u.includes('LOST')) return 'LIH'
+  if (u === 'USED') return 'USED'
+  if (u === 'NOT USED' || u === 'NOTUSED') return 'NOT USED'
+  return ''
+}
+
+/** A dispatched tool on this job that no receiving ticket has taken back yet. */
+interface PendingReturn {
+  TicketNo: string
+  DateOut: string | null
+  ItemNo: number
+  Serial: string
+  AssetNo: string
+  Description: string | null
+  Size: string | null
+  Qty: number
+}
+
+/**
+ * Return Ticket — the backload desk, rebuilt to the old app's flow.
+ *
+ * Bottom: every tool dispatched on this job that is still out, filtered by
+ * delivery ticket. Tick them and move them up.
+ * Top: the manifest being built. Each line is marked USED / NOT USED / LIH,
+ * and that single choice decides everything downstream — used goes to the
+ * inspection bay, unused goes back to available inventory, lost-in-hole leaves
+ * the catalogue. Then the header is filled and the ticket is confirmed, which
+ * locks it.
+ *
+ * It previously showed only an RT's existing lines, read-only, with no way to
+ * pull a dispatched tool back or to record what state it came back in — so the
+ * cycle could never be closed from this screen.
+ */
 function ReturnTicketTab({
   jobId,
   job,
@@ -1176,27 +1226,33 @@ function ReturnTicketTab({
   const { showToast } = useToast()
   const canEdit = hasRole('Admin', 'Operations')
 
-  const [rts,       setRts]      = useState<RTRecord[]>([])
-  const [activeRT,  setActiveRT] = useState<RTRecord | null>(null)
-  const [lines,     setLines]    = useState<RTLine[]>([])
-  const [loading,   setLoading]  = useState(true)
-  const [saving,    setSaving]   = useState(false)
-  const [form, setForm] = useState({
-    RTDate: new Date().toISOString().split('T')[0],
-    Status: 'Draft',
-    Notes:  '',
-  })
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [adding,      setAdding]    = useState(false)
+  const [rts,      setRts]      = useState<RTRecord[]>([])
+  const [activeRT, setActiveRT] = useState<RTRecord | null>(null)
+  const [lines,    setLines]    = useState<RTLine[]>([])
+  const [pending,  setPending]  = useState<PendingReturn[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [saving,   setSaving]   = useState(false)
+  const [busy,     setBusy]     = useState(false)
+
+  const [form, setForm] = useState<Record<string, string>>({})
+  const [dirty, setDirty] = useState(false)
+
+  // Backload selection
+  const [dtFilter, setDtFilter] = useState('')
+  const [checked,  setChecked]  = useState<Set<string>>(new Set())
+  const [dateIn,   setDateIn]   = useState(() => new Date().toISOString().split('T')[0])
+
+  const day = (v: string | null | undefined) => (v ? String(v).split('T')[0] : '')
+  // LockStage is on RTRecord, so read it directly — no cast needed.
+  const locked = Boolean(activeRT && String(activeRT.LockStage || '').trim())
 
   const loadRTs = useCallback(async () => {
     setLoading(true)
     try {
-      // Filtered server-side, as with the DT tab — this pulled all 3,451
-      // receiving tickets to find the handful on this job.
       const jobRTs = await api.get<RTRecord[]>(`/receiving-tickets?job=${encodeURIComponent(jobId)}`)
-      setRts(jobRTs)
-      if (jobRTs.length > 0) selectRT(jobRTs[0])
+      setRts(jobRTs || [])
+      if (jobRTs?.length) selectRT(jobRTs[0])
+      else { setActiveRT(null); setLines([]) }
     } catch {
       showToast('Failed to load return tickets', 'error')
     } finally {
@@ -1208,252 +1264,405 @@ function ReturnTicketTab({
 
   async function selectRT(rt: RTRecord) {
     setActiveRT(rt)
-    setForm({ RTDate: rt.RTDate?.split('T')[0] || '', Status: rt.Status || 'Draft', Notes: rt.Notes || '' })
-    try {
-      const ln = await api.get<RTLine[]>(`/receiving-tickets/${rt.RTID}/lines`)
-      setLines(ln)
-    } catch {
-      setLines([])
-    }
+    setChecked(new Set())
+    setDirty(false)
+    const full = await api.get<RTRecord>(`/receiving-tickets/${rt.RTID}`).catch(() => rt)
+    const f = (full || rt) as unknown as Record<string, string | null>
+    setForm({
+      RTDate:         day(f.RTDate),
+      LinkedDT:       (f.LinkedDT as string) || '',
+      ManifestNumber: (f.ManifestNumber as string) || '',
+      VehicleVessel:  (f.VehicleVessel as string) || '',
+      EmdadRep:       (f.EmdadRep as string) || '',
+      ClientSignDate: day(f.ClientSignDate),
+      Notes:          (f.Notes as string) || '',
+    })
+    setActiveRT(prev => ({ ...(prev as RTRecord), ...(full as RTRecord) }))
+
+    const [ln, pd] = await Promise.all([
+      api.get<RTLine[]>(`/receiving-tickets/${rt.RTID}/lines`).catch(() => [] as RTLine[]),
+      api.get<PendingReturn[]>(`/receiving-tickets/${rt.RTID}/pending`).catch(() => [] as PendingReturn[]),
+    ])
+    setLines(ln || [])
+    setPending(pd || [])
   }
 
-  async function handleSave() {
-    if (!activeRT) return
-    setSaving(true)
-    try {
-      await api.put(`/receiving-tickets/${activeRT.RTID}`, form)
-      showToast('Return ticket saved', 'success')
-      loadRTs()
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Save failed', 'error')
-    } finally {
-      setSaving(false)
-    }
-  }
+  const set = (k: string, v: string) => { setForm(p => ({ ...p, [k]: v })); setDirty(true) }
 
-  async function handleNewRT() {
+  // Delivery tickets that still have something outstanding.
+  const dtOptions = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const p of pending) m.set(p.TicketNo, (m.get(p.TicketNo) || 0) + 1)
+    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]))
+  }, [pending])
+
+  const pendingShown = useMemo(
+    () => (dtFilter ? pending.filter(p => p.TicketNo === dtFilter) : pending),
+    [pending, dtFilter]
+  )
+
+  const unmarked = lines.filter(l => !normUsed(l.UsedStatus)).length
+
+  async function createRT() {
+    setBusy(true)
+    document.body.style.cursor = 'wait'
     try {
-      const res = await api.post<{ RTID: number; RTNumber: string }>('/receiving-tickets', {
-        JobID:  jobId,
-        RTDate: new Date().toISOString().split('T')[0],
+      const r = await api.post<{ RTID: number; RTNumber: string }>('/receiving-tickets', {
+        JobID: jobId, RTDate: dateIn,
       })
-      showToast(`${res.RTNumber} created`, 'success')
-      loadRTs()
+      showToast(`${r.RTNumber} created`, 'success')
+      await loadRTs()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to create RT', 'error')
-    }
+    } finally { document.body.style.cursor = ''; setBusy(false) }
+  }
+
+  /** Move the ticked dispatched tools onto this ticket. */
+  async function moveToRT() {
+    if (!activeRT || checked.size === 0) return
+    setBusy(true)
+    document.body.style.cursor = 'wait'
+    try {
+      const res = await api.post<{ received: number }>(`/receiving-tickets/${activeRT.RTID}/receive`, {
+        serials: [...checked],
+        dateIn,
+        dtNumber: dtFilter || pendingShown[0]?.TicketNo,
+      })
+      showToast(`${res.received} tool(s) moved onto ${activeRT.RTNumber}`, 'success')
+      setChecked(new Set())
+      await selectRT(activeRT)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to move tools', 'error')
+    } finally { document.body.style.cursor = ''; setBusy(false) }
+  }
+
+  /** USED / NOT USED / LIH — routing and inventory status follow from it. */
+  async function setUsage(line: RTLine, used: string) {
+    if (!activeRT) return
+    setBusy(true)
+    document.body.style.cursor = 'wait'
+    try {
+      await api.put(`/receiving-tickets/${activeRT.RTID}/lines/${line.LineID}`, { UsedStatus: used })
+      setLines(prev => prev.map(l => l.LineID === line.LineID
+        ? { ...l, UsedStatus: used, RoutedTo: ROUTE_LABEL[used], Condition: used === 'USED' ? 'Inspection' : used === 'LIH' ? 'Lost in Hole' : 'Available' }
+        : l))
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update', 'error')
+    } finally { document.body.style.cursor = ''; setBusy(false) }
   }
 
   async function removeLine(lineId: number) {
     if (!activeRT) return
     try {
       await api.delete(`/receiving-tickets/${activeRT.RTID}/lines/${lineId}`)
-      setLines(prev => prev.filter(l => l.LineID !== lineId))
-      showToast('Line removed', 'success')
+      await selectRT(activeRT)
     } catch {
       showToast('Failed to remove line', 'error')
     }
   }
 
-  async function handleInsertTools(invItems: InvItem[]) {
+  async function saveHeader() {
     if (!activeRT) return
-    setAdding(true)
+    setSaving(true)
+    document.body.style.cursor = 'wait'
     try {
-      await Promise.all(invItems.map(inv =>
-        api.post(`/receiving-tickets/${activeRT.RTID}/lines`, {
-          SystemID:        inv.SystemID,        // real Inventory join key — resolved to AssetNo on GET
-          ToolDescription: inv.ShortDesc,
-          SizeName:        inv.Size,
-          Quantity:        1,
-          Condition:       inv.Status || 'Good',
-          UsedStatus:      'Used',
-        })
-      ))
-      const ln = await api.get<RTLine[]>(`/receiving-tickets/${activeRT.RTID}/lines`)
-      setLines(ln)
-      setPickerOpen(false)
-      showToast(`${invItems.length} tool(s) added to ${activeRT.RTNumber}`, 'success')
+      await api.put(`/receiving-tickets/${activeRT.RTID}`, form)
+      setDirty(false)
+      showToast('Return ticket saved', 'success')
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to add tool(s)', 'error')
-    } finally {
-      setAdding(false)
-    }
+      showToast(err instanceof Error ? err.message : 'Save failed', 'error')
+    } finally { document.body.style.cursor = ''; setSaving(false) }
+  }
+
+  async function confirmAndLock() {
+    if (!activeRT) return
+    if (!window.confirm(
+      `Confirm ${activeRT.RTNumber} with ${lines.length} tool(s)?\n\n` +
+      `Used tools route to the QC inspection bay, unused tools return to available inventory, ` +
+      `and lost-in-hole tools leave the catalogue.\n\nThe ticket is locked after this.`
+    )) return
+    setBusy(true)
+    document.body.style.cursor = 'wait'
+    try {
+      if (dirty) await api.put(`/receiving-tickets/${activeRT.RTID}`, form)
+      await api.post(`/receiving-tickets/${activeRT.RTID}/lock`, {})
+      showToast(`${activeRT.RTNumber} confirmed and locked`, 'success')
+      setDirty(false)
+      await loadRTs()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to confirm', 'error')
+    } finally { document.body.style.cursor = ''; setBusy(false) }
   }
 
   if (loading) return (
-    <div className="card p-12 flex items-center justify-center">
+    <div className="bg-white border border-gray-300 rounded py-12 flex items-center justify-center">
       <Spinner size="md" />
     </div>
   )
 
+  const editable = canEdit && !locked
+
   return (
-    <div className="space-y-4">
-      {/* RT Selector */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Select Return Ticket:</span>
-          {rts.length === 0 ? (
-            <span className="text-sm text-gray-400 italic">No RT Generated</span>
-          ) : (
-            <select
-              className="input py-1.5 text-sm w-auto"
-              value={activeRT?.RTID || ''}
-              onChange={e => {
-                const rt = rts.find(r => r.RTID === Number(e.target.value))
-                if (rt) selectRT(rt)
-              }}
-            >
-              {rts.map(r => (
-                <option key={r.RTID} value={r.RTID}>
-                  {r.RTNumber} — {r.Status}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
+    <div className="flex flex-col gap-1.5">
+      {/* Toolbar */}
+      <div className="screen-bar">
+        <span className="field-label">Return Ticket</span>
+        <select
+          className="field-input w-44"
+          value={activeRT?.RTID ?? ''}
+          onChange={e => {
+            const rt = rts.find(r => String(r.RTID) === e.target.value)
+            if (rt) selectRT(rt)
+          }}
+        >
+          {rts.length === 0 && <option value="">No return tickets yet</option>}
+          {rts.map(r => <option key={r.RTID} value={r.RTID}>{r.RTNumber}</option>)}
+        </select>
+
         {canEdit && (
-          <button onClick={handleNewRT} className="btn-secondary text-xs py-1.5">
-            <Plus size={13} /> New RT
+          <button className="btn-mini" onClick={createRT} disabled={busy}>
+            <Plus size={12} /> New RT
           </button>
         )}
-        {activeRT && canEdit && (
-          <button onClick={handleSave} disabled={saving} className="btn-primary text-xs py-1.5 ml-auto">
-            {saving ? <><Spinner size="sm" /> Saving…</> : <><Save size={13} /> Save RT</>}
-          </button>
+
+        {locked
+          ? <span className="text-[11px] font-semibold text-green-700">Confirmed &amp; locked</span>
+          : activeRT && <span className="text-[11px] text-amber-700 font-semibold">Draft — not confirmed</span>}
+
+        {activeRT && (
+          <span className="text-[11px] text-gray-500">
+            {lines.length} received · {pending.length} still out
+            {unmarked > 0 && <span className="text-amber-700 font-semibold"> · {unmarked} unmarked</span>}
+          </span>
+        )}
+
+        {activeRT && editable && (
+          <div className="ml-auto flex gap-1.5">
+            <button className="btn-mini" onClick={saveHeader} disabled={saving || !dirty}>
+              {saving ? <Spinner size="sm" /> : <Save size={12} />} {dirty ? 'Save' : 'Saved'}
+            </button>
+            <button className="btn-accent" onClick={confirmAndLock}
+                    disabled={busy || lines.length === 0 || unmarked > 0}
+                    title={unmarked > 0 ? `${unmarked} line(s) still need usage marked` : 'Confirm and lock this ticket'}>
+              Confirm &amp; Lock
+            </button>
+          </div>
         )}
       </div>
 
-      {rts.length === 0 && (
-        <div className="card p-4 border-amber-200 bg-amber-50 flex items-start gap-3">
-          <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
-          <p className="text-sm text-amber-700">
-            <strong>No Return Ticket Yet:</strong> Once equipment returns from Rig <strong>{job.Rig}</strong>,
-            click <strong>"+ New RT"</strong> above to log the receipt and route each tool
-            (back to yard, to inspection, or to maintenance).
-          </p>
+      {!activeRT ? (
+        <div className="bg-white border border-gray-300 rounded py-10 text-center text-gray-400 text-xs">
+          No return ticket on this job yet. Create one to start receiving tools back.
         </div>
-      )}
-
-      {activeRT && (
+      ) : (
         <>
-          <div className="card p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-sm text-gray-800">Return / Receiving Manifest</h3>
-              <span className="badge text-xs bg-blue-100 text-blue-700">{activeRT.RTNumber}</span>
+          {/* Header — carried values read-only, the rest from the printed ticket */}
+          <div className="bg-white border border-gray-300 rounded">
+            <div className="px-2 h-[22px] flex items-center justify-between bg-gray-100 border-b border-gray-300">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-600">
+                Receiving manifest
+              </span>
+              <span className="font-mono text-[11px] font-bold text-brand-700">{activeRT.RTNumber}</span>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-              <div>
-                <label className="label">Job Number</label>
-                <input className="input py-1.5 text-xs bg-gray-50" value={jobId} readOnly />
-              </div>
-              <div>
-                <label className="label">Linked DT</label>
-                <input className="input py-1.5 text-xs bg-gray-50" value={activeRT.LinkedDT || '—'} readOnly />
-              </div>
-              <div>
-                <label className="label">Receiving Date</label>
-                <input type="date" className="input py-1.5 text-xs"
-                  value={form.RTDate}
-                  onChange={e => setForm(p => ({ ...p, RTDate: e.target.value }))}
-                  disabled={!canEdit} />
-              </div>
-              <div>
-                <label className="label">Status</label>
-                <select className="input py-1.5 text-xs"
-                  value={form.Status}
-                  onChange={e => setForm(p => ({ ...p, Status: e.target.value }))}
-                  disabled={!canEdit}>
-                  {RT_STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="mt-3">
-              <label className="label">Notes</label>
-              <textarea
-                className="input text-xs py-2 min-h-16 resize-y"
-                value={form.Notes}
-                onChange={e => setForm(p => ({ ...p, Notes: e.target.value }))}
-                disabled={!canEdit}
-              />
+            <div className="field-row px-2 py-1.5 grid-cols-[auto_1fr] md:grid-cols-[auto_1fr_auto_1fr] xl:grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto_1fr]">
+              <span className="field-label">Customer</span>
+              <div className="field-value" title={job.Client || ''}>{job.Client || '—'}</div>
+
+              <span className="field-label">Contract</span>
+              <div className="field-value">{job.Contract || '—'}</div>
+
+              <span className="field-label">Rig / Well</span>
+              <div className="field-value">{[job.Rig, job.Well].filter(Boolean).join(' / ') || '—'}</div>
+
+              <span className="field-label">Date</span>
+              <input type="date" className="field-input" value={form.RTDate ?? ''} disabled={!editable}
+                     onChange={e => set('RTDate', e.target.value)} />
+
+              <span className="field-label">Shipped Via</span>
+              <input className="field-input" value={form.VehicleVessel ?? ''} disabled={!editable}
+                     onChange={e => set('VehicleVessel', e.target.value)} />
+
+              <span className="field-label">L/Note No</span>
+              <input className="field-input" value={form.ManifestNumber ?? ''} disabled={!editable}
+                     onChange={e => set('ManifestNumber', e.target.value)} />
+
+              <span className="field-label">L/Note Date</span>
+              <input type="date" className="field-input" value={form.ClientSignDate ?? ''} disabled={!editable}
+                     onChange={e => set('ClientSignDate', e.target.value)} />
+
+              <span className="field-label">Received By</span>
+              <input className="field-input" value={form.EmdadRep ?? ''} disabled={!editable}
+                     onChange={e => set('EmdadRep', e.target.value)} />
+
+              <span className="field-label">Linked DT</span>
+              <div className="field-value font-mono">{form.LinkedDT || '—'}</div>
+
+              <span className="field-label">Note</span>
+              <input className="field-input" value={form.Notes ?? ''} disabled={!editable}
+                     onChange={e => set('Notes', e.target.value)} />
             </div>
           </div>
 
-          <div className="card overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 text-sm font-medium text-gray-700 flex items-center justify-between">
-              <span>Returned Tools — {lines.length} item(s)</span>
-              {canEdit && (
-                <button
-                  onClick={() => setPickerOpen(true)}
-                  disabled={adding}
-                  className="btn-primary text-xs py-1.5 disabled:opacity-40"
-                >
-                  <Plus size={13} /> Add Tool
+          {/* UPPER — the manifest being built */}
+          <div className="bg-white border border-gray-300 rounded flex flex-col max-h-[40vh]">
+            <div className="px-2 h-[22px] flex items-center justify-between bg-gray-100 border-b border-gray-300 shrink-0">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-600">
+                Received tools on this ticket
+              </span>
+              <span className="text-[10px] font-semibold text-green-700">{lines.length} received</span>
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto">
+              <table className="w-full text-[12px] border-collapse">
+                <thead className="sticky top-0 z-10">
+                  <tr>
+                    <th className="table-th w-10">#</th>
+                    <th className="table-th">Asset No</th>
+                    <th className="table-th">Description</th>
+                    <th className="table-th w-12 !text-right">Qty</th>
+                    <th className="table-th">Date In</th>
+                    <th className="table-th w-32">Usage</th>
+                    <th className="table-th">Routes To</th>
+                    {editable && <th className="table-th w-8"></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.length === 0 ? (
+                    <tr>
+                      <td colSpan={editable ? 8 : 7} className="table-td text-center py-8 text-gray-400">
+                        Nothing received yet. Tick tools below and move them up.
+                      </td>
+                    </tr>
+                  ) : (
+                    lines.map((l, idx) => {
+                      const used = normUsed(l.UsedStatus)
+                      return (
+                        <tr key={l.LineID} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="table-td text-gray-400">{idx + 1}</td>
+                          <td className="table-td font-mono font-medium">{l.AssetNo || l.SerialNumber || '—'}</td>
+                          <td className="table-td text-gray-600 max-w-[380px] truncate"
+                              title={l.ToolDescription || ''}>{l.ToolDescription || '—'}</td>
+                          <td className="table-td text-right">{l.Quantity}</td>
+                          <td className="table-td text-gray-500">{day(form.RTDate) || '—'}</td>
+                          <td className="table-td">
+                            <select
+                              className={`field-input !h-[22px] ${used ? '' : 'border-amber-400 bg-amber-50'}`}
+                              value={used}
+                              disabled={!editable || busy}
+                              onChange={e => setUsage(l, e.target.value)}
+                            >
+                              <option value="">— mark —</option>
+                              {USED_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </td>
+                          <td className="table-td text-gray-600">
+                            {used ? ROUTE_LABEL[used] : <span className="text-amber-700">set usage</span>}
+                          </td>
+                          {editable && (
+                            <td className="table-td">
+                              <button onClick={() => removeLine(l.LineID)}
+                                      className="text-gray-300 hover:text-red-500" title="Remove from ticket">
+                                <Trash2 size={12} />
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* LOWER — still out on the rig */}
+          <div className="bg-white border border-gray-300 rounded flex flex-col max-h-[40vh]">
+            <div className="px-2 py-1 flex items-center gap-2 flex-wrap bg-amber-50 border-b border-gray-300 shrink-0">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900">
+                Pending return — still on the rig
+              </span>
+              <span className="field-label">DT No</span>
+              <select className="field-input w-40 !h-[22px]" value={dtFilter}
+                      onChange={e => { setDtFilter(e.target.value); setChecked(new Set()) }}>
+                <option value="">All delivery tickets ({pending.length})</option>
+                {dtOptions.map(([dt, n]) => <option key={dt} value={dt}>{dt} ({n})</option>)}
+              </select>
+
+              <span className="field-label">Date In</span>
+              <input type="date" className="field-input w-32 !h-[22px]" value={dateIn}
+                     onChange={e => setDateIn(e.target.value)} disabled={!editable} />
+
+              {editable && (
+                <button className="btn-accent ml-auto" onClick={moveToRT} disabled={busy || checked.size === 0}>
+                  {busy ? <Spinner size="sm" /> : <>&#8595;</>} Move to RT ({checked.size})
                 </button>
               )}
             </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr>
-                  <th className="table-th">#</th>
-                  <th className="table-th">Serial / Asset</th>
-                  <th className="table-th">Description</th>
-                  <th className="table-th text-center">Qty</th>
-                  <th className="table-th">Condition</th>
-                  <th className="table-th">Routed To</th>
-                  <th className="table-th">Notes</th>
-                  {canEdit && <th className="table-th"></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {lines.length === 0 ? (
-                  <tr>
-                    <td colSpan={canEdit ? 8 : 7} className="table-td text-center py-8 text-gray-400">
-                      No tools returned on this ticket yet.
-                    </td>
-                  </tr>
-                ) : (
-                  lines.map((line, idx) => (
-                    <tr key={line.LineID} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="table-td text-gray-500">{idx + 1}</td>
-                      <td className="table-td font-medium text-gray-900">{line.AssetNo || '—'}</td>
-                      <td className="table-td text-gray-700">{line.ToolDescription}</td>
-                      <td className="table-td text-center">{line.Quantity}</td>
-                      <td className="table-td"><span className="text-green-600 text-xs">{line.Condition || '—'}</span></td>
-                      <td className="table-td text-gray-500 text-xs">{line.RoutedTo || '—'}</td>
-                      <td className="table-td text-gray-400 text-xs">{line.Notes || '—'}</td>
-                      {canEdit && (
-                        <td className="table-td">
-                          <button
-                            onClick={() => removeLine(line.LineID)}
-                            className="text-gray-300 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </td>
-                      )}
+
+            <div className="flex-1 min-h-0 overflow-auto">
+              {pendingShown.length === 0 ? (
+                <div className="py-8 text-center text-gray-400 text-xs italic">
+                  No equipment pending return for this job.
+                </div>
+              ) : (
+                <table className="w-full text-[12px] border-collapse">
+                  <thead className="sticky top-0 z-10">
+                    <tr>
+                      <th className="table-th w-10 !px-1 text-center">
+                        <input
+                          type="checkbox"
+                          disabled={!editable}
+                          checked={pendingShown.length > 0 && pendingShown.every(p => checked.has(p.Serial))}
+                          onChange={e => setChecked(prev => {
+                            const next = new Set(prev)
+                            pendingShown.forEach(p => e.target.checked ? next.add(p.Serial) : next.delete(p.Serial))
+                            return next
+                          })}
+                        />
+                      </th>
+                      <th className="table-th">DT No</th>
+                      <th className="table-th w-12 !text-right">Item</th>
+                      <th className="table-th">Asset No</th>
+                      <th className="table-th">Description</th>
+                      <th className="table-th">Size</th>
+                      <th className="table-th w-14 !text-right">DT Qty</th>
+                      <th className="table-th">Date Out</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {pendingShown.map((p, i) => {
+                      const on = checked.has(p.Serial)
+                      return (
+                        <tr key={`${p.TicketNo}-${p.Serial}-${i}`}
+                            onClick={() => editable && setChecked(prev => {
+                              const next = new Set(prev)
+                              if (next.has(p.Serial)) next.delete(p.Serial); else next.add(p.Serial)
+                              return next
+                            })}
+                            className={`border-b border-gray-100 ${editable ? 'cursor-pointer' : ''} ${on ? 'bg-brand-50' : 'hover:bg-gray-50'}`}>
+                          <td className="table-td !px-1 text-center">
+                            <input type="checkbox" checked={on} readOnly disabled={!editable} />
+                          </td>
+                          <td className="table-td font-mono text-gray-500">{p.TicketNo}</td>
+                          <td className="table-td text-right text-gray-400">{p.ItemNo}</td>
+                          <td className="table-td font-mono font-medium">{p.AssetNo}</td>
+                          <td className="table-td text-gray-600 max-w-[340px] truncate"
+                              title={p.Description || ''}>{p.Description || '—'}</td>
+                          <td className="table-td text-gray-500">{p.Size || '—'}</td>
+                          <td className="table-td text-right">{p.Qty}</td>
+                          <td className="table-td text-gray-500">{day(p.DateOut) || '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </>
-      )}
-
-      {pickerOpen && activeRT && (
-        <ToolPickerModal
-          jobId={jobId}
-          existingAssetNos={new Set(lines.map(l => l.AssetNo).filter((a): a is string => Boolean(a)))}
-          onInsert={handleInsertTools}
-          onClose={() => setPickerOpen(false)}
-        />
       )}
     </div>
   )
 }
-
-// ─── Utilization Tab ────────────────────────────────────────────────────────────
-
 function UtilizationTab({ jobId }: { jobId: string }) {
   const { hasRole } = useAuth()
   const { showToast } = useToast()
