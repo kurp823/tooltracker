@@ -515,6 +515,49 @@ const MIGRATIONS = [
         CREATE INDEX IX_ImportDTRT_dtpart ON dbo.tbl_ImportDTRT (dtNo, partNum);`,
   },
   {
+    /*
+     * A normalised, de-duplicated projection of a staged import batch.
+     *
+     * Every check the preview runs needs the same three things: the job key,
+     * the row de-duplicated, and the sheet's AssetNo resolved to the inventory
+     * SystemID that ticket lines actually store. Computing those inside each
+     * check meant five passes over 46,000 rows with expressions no index could
+     * serve, and the preview passed the 45-second function cap.
+     *
+     * Built once per batch, indexed, and every check then reads from here.
+     */
+    name: 'seed:import-dtrt-resolved',
+    sql: `
+      IF OBJECT_ID('dbo.tbl_ImportDTRTResolved', 'U') IS NULL
+      CREATE TABLE dbo.tbl_ImportDTRTResolved (
+        id        INT IDENTITY(1,1) PRIMARY KEY,
+        batchId   NVARCHAR(40)  NOT NULL,
+        jobKey    NVARCHAR(80)  NULL,
+        jobNum    NVARCHAR(60)  NULL,
+        dtNo      NVARCHAR(60)  NULL,
+        partNum   NVARCHAR(120) NULL,
+        rtNo      NVARCHAR(60)  NULL,
+        rig       NVARCHAR(120) NULL,
+        well      NVARCHAR(120) NULL,
+        remark    NVARCHAR(120) NULL,
+        systemId  NVARCHAR(120) NULL,
+        rtKind    TINYINT       NOT NULL   -- 0 none, 1 real, 2 dummy
+      );
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ImpRes_batch')
+        CREATE INDEX IX_ImpRes_batch ON dbo.tbl_ImportDTRTResolved (batchId)
+          INCLUDE (jobKey, dtNo, partNum, rtNo, systemId, rtKind);
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ImpRes_dtpart')
+        CREATE INDEX IX_ImpRes_dtpart ON dbo.tbl_ImportDTRTResolved (batchId, dtNo, partNum);
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ImpRes_rtpart')
+        CREATE INDEX IX_ImpRes_rtpart ON dbo.tbl_ImportDTRTResolved (batchId, rtNo, partNum);
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ImpRes_jobpart')
+        CREATE INDEX IX_ImpRes_jobpart ON dbo.tbl_ImportDTRTResolved (batchId, jobKey, systemId);
+
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Inventory_AssetNo')
+        CREATE INDEX IX_Inventory_AssetNo ON dbo.tbl_Inventory (AssetNo) INCLUDE (SystemID);`,
+  },
+  {
     name: 'seed:dedupe-ticket-lines',
     sql: `
       SET XACT_ABORT ON;

@@ -22,17 +22,21 @@ type Row = {
   remark: string; rig: string; well: string
 }
 
-type Preview = {
-  batchId: string
-  empty?: boolean
-  rowsStaged?: number
-  shape: Record<string, number>
-  stillOnRigByJobStatus: Array<Record<string, string | number>>
-  deliveryLines: Record<string, number>
-  returnLines: Record<string, number>
-  notKnownToTheApp: Array<{ Kind: string; Example: string | null; Count: number }>
-  linkedTables: Array<{ Item: string; Count: number }>
+/* The checks run one request each: together they exceeded the 45-second cap on
+ * a managed function and the platform answered with a bodiless 500. */
+const PARTS = ['shape', 'onrig', 'dt', 'rt', 'unknown', 'linkage'] as const
+type Part = typeof PARTS[number]
+
+const PART_LABEL: Record<Part, string> = {
+  shape:   'What the sheet contains',
+  onrig:   "Still on a rig, by the job's status in the app",
+  dt:      'Delivery lines — sheet against app',
+  rt:      'Return lines — sheet against app',
+  unknown: 'Named in the sheet but unknown to the app',
+  linkage: 'Linked tables the apply step would have to write',
 }
+
+type AnyRows = Record<string, unknown> | Array<Record<string, unknown>>
 
 /* The sheet's headers vary between exports, so match on a squashed form of the
  * header rather than its exact spelling. */
@@ -67,13 +71,14 @@ export function DataImportView() {
   const [batchId, setBatchId] = useState('')
   const [sent, setSent] = useState(0)
   const [busy, setBusy] = useState<'' | 'parsing' | 'uploading' | 'checking'>('')
-  const [preview, setPreview] = useState<Preview | null>(null)
+  const [stage, setStage] = useState('')
+  const [parts, setParts] = useState<Partial<Record<Part, AnyRows>>>({})
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
   function reset() {
     setRows([]); setFileName(''); setHeaderMap({}); setUnmapped([])
-    setBatchId(''); setSent(0); setPreview(null); setError('')
+    setBatchId(''); setSent(0); setParts({}); setStage(''); setError('')
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -131,7 +136,7 @@ export function DataImportView() {
   async function upload() {
     if (!rows.length) return
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-    setBatchId(id); setSent(0); setPreview(null); setError('')
+    setBatchId(id); setSent(0); setParts({}); setError('')
     setBusy('uploading')
     try {
       // Clear first so a re-run cannot double-count a half-finished upload.
@@ -140,16 +145,37 @@ export function DataImportView() {
         await api.post('/import-dtrt/rows', { batchId: id, rows: rows.slice(i, i + CHUNK) })
         setSent(Math.min(i + CHUNK, rows.length))
       }
+
       setBusy('checking')
-      setPreview(await api.get<Preview>(`/import-dtrt/preview?batchId=${encodeURIComponent(id)}`))
+      setStage('normalising the batch')
+      await api.post('/import-dtrt/prepare', { batchId: id })
+
+      // One request per check, rendered as each lands, so a slow one cannot
+      // take the whole report down with it.
+      for (const part of PARTS) {
+        setStage(PART_LABEL[part])
+        try {
+          const r = await api.get<{ data: AnyRows }>(
+            `/import-dtrt/preview?batchId=${encodeURIComponent(id)}&part=${part}`)
+          setParts((prev) => ({ ...prev, [part]: r.data }))
+        } catch (err) {
+          setParts((prev) => ({
+            ...prev,
+            [part]: [{ Item: 'Failed', Count: err instanceof Error ? err.message : String(err) }],
+          }))
+        }
+      }
+      setStage('')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setBusy('')
+      setBusy(''); setStage('')
     }
   }
 
-  const noRT = preview?.shape?.LinesWithNoRT ?? 0
+  const shape = parts.shape as Record<string, number> | undefined
+  const noRT = shape?.LinesWithNoRT ?? 0
+  const anyParts = Object.keys(parts).length > 0
 
   return (
     <div className="screen">
@@ -208,52 +234,66 @@ export function DataImportView() {
           </section>
         )}
 
-        {preview?.empty && (
-          <p className="text-[12px] text-amber-700">
-            Nothing was staged for this batch — re-run the upload.
-          </p>
+        {busy === 'checking' && stage && (
+          <p className="text-[12px] text-slate-500">Checking: {stage}…</p>
         )}
 
-        {preview && !preview.empty && (
+        {anyParts && (
           <>
-            <Block title="What the sheet contains">
-              <Grid obj={preview.shape} />
-              <p className="mt-1 text-[12px] text-slate-600">
-                {noRT.toLocaleString()} lines carry no return ticket. Those tools are still on a rig.
-              </p>
-            </Block>
-
-            <Block title="Still on a rig, by the job's status in the app">
-              <Table
-                cols={['JobStatus', 'Invoiced', 'LinesStillOut', 'Jobs', 'Assets']}
-                rows={preview.stillOnRigByJobStatus}
-              />
-            </Block>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <Block title="Delivery lines — sheet against app">
-                <Grid obj={preview.deliveryLines} />
+            {shape && (
+              <Block title={PART_LABEL.shape}>
+                <Grid obj={shape} />
+                <p className="mt-1 text-[12px] text-slate-600">
+                  {noRT.toLocaleString()} lines carry no return ticket — those tools are still on
+                  a rig. Counts below the first are on the de-duplicated set: the sheet repeats
+                  rows, and counting a repeat as real would overstate everything after it.
+                </p>
               </Block>
-              <Block title="Return lines — sheet against app">
-                <Grid obj={preview.returnLines} />
+            )}
+
+            {parts.onrig && (
+              <Block title={PART_LABEL.onrig}>
+                <Table cols={['JobStatus', 'Invoiced', 'LinesStillOut', 'Jobs', 'Assets']}
+                       rows={parts.onrig as Array<Record<string, unknown>>} />
               </Block>
-            </div>
+            )}
 
-            <Block title="Named in the sheet but unknown to the app">
-              <Table cols={['Kind', 'Count', 'Example']} rows={preview.notKnownToTheApp} />
-            </Block>
+            {(parts.dt || parts.rt) && (
+              <div className="grid gap-3 md:grid-cols-2">
+                {parts.dt && (
+                  <Block title={PART_LABEL.dt}>
+                    <Grid obj={parts.dt as Record<string, number>} />
+                  </Block>
+                )}
+                {parts.rt && (
+                  <Block title={PART_LABEL.rt}>
+                    <Grid obj={parts.rt as Record<string, number>} />
+                  </Block>
+                )}
+              </div>
+            )}
 
-            <Block title="Linked tables the apply step would have to write">
-              <Table cols={['Item', 'Count']} rows={preview.linkedTables} />
-              <p className="mt-1 text-[12px] text-slate-600">
-                Tool history and job history need nothing of their own — both are derived from the
-                ticket tables and the field logs, so they follow once those are right.
-              </p>
-            </Block>
+            {parts.unknown && (
+              <Block title={PART_LABEL.unknown}>
+                <Table cols={['Kind', 'Count', 'Example']}
+                       rows={parts.unknown as Array<Record<string, unknown>>} />
+              </Block>
+            )}
+
+            {parts.linkage && (
+              <Block title={PART_LABEL.linkage}>
+                <Table cols={['Item', 'Count']}
+                       rows={parts.linkage as Array<Record<string, unknown>>} />
+                <p className="mt-1 text-[12px] text-slate-600">
+                  Tool history and job history need nothing of their own — both are derived from
+                  the ticket tables and the field logs, so they follow once those are right.
+                </p>
+              </Block>
+            )}
           </>
         )}
 
-        {!rows.length && !preview && busy === '' && (
+        {!rows.length && !anyParts && busy === '' && (
           <p className="text-[12px] text-slate-500">
             Choose the corrected sheet. It should carry one row per dispatched tool, with the
             return ticket where the tool came back and blank where it is still out — column
