@@ -1507,6 +1507,48 @@ function UtilizationTab({ jobId }: { jobId: string }) {
 
 // ─── Job Header Tab (Details) ─────────────────────────────────────────────────
 
+/**
+ * Type-to-filter picker for a job field. A plain <select> is wrong here —
+ * there are 1,939 wells and 211 rigs — but a datalist keeps the existing value
+ * typeable while still offering the real list, so a job can't quietly be saved
+ * against a spelling that exists nowhere else.
+ *
+ * Declared at module scope and called as a function, not rendered as <Picker/>
+ * inside the tab: a component defined during render is a new type on every
+ * render, so React would unmount and remount the input and it would lose focus
+ * after each keystroke.
+ */
+function jobPicker({
+  field, list, required, value, onChange, disabled,
+}: {
+  field: keyof Job
+  list?: string[]
+  required?: boolean
+  value: string
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  disabled: boolean
+}) {
+  const id = `dl-${String(field)}`
+  return (
+    <React.Fragment key={String(field)}>
+      <span className="field-label">
+        {String(field).replace(/([A-Z])/g, ' $1').trim()}{required ? ' *' : ''}
+      </span>
+      <input
+        className="field-input"
+        list={id}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        autoComplete="off"
+      />
+      <datalist id={id}>
+        {(list || []).map(v => <option key={v} value={v} />)}
+      </datalist>
+    </React.Fragment>
+  )
+}
+
 function JobHeaderTab({
   form,
   set,
@@ -1522,105 +1564,80 @@ function JobHeaderTab({
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       set(field, e.target.value)
 
-  return (
-    <div className="space-y-4">
-      <div className="card p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Job Identity</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {!isNew && (
-            <div>
-              <label className="label">Job ID</label>
-              <input className="input bg-gray-50 font-mono text-xs" value={form.JobID || ''} readOnly />
-            </div>
-          )}
-          <div>
-            <label className="label">Client *</label>
-            <input className="input" value={form.Client || ''} onChange={f('Client')}
-              disabled={!canEdit} placeholder="Client name" />
-          </div>
-          <div>
-            <label className="label">Rig *</label>
-            <input className="input" value={form.Rig || ''} onChange={f('Rig')}
-              disabled={!canEdit} placeholder="Rig name" />
-          </div>
-          <div>
-            <label className="label">Well</label>
-            <input className="input" value={form.Well || ''} onChange={f('Well')}
-              disabled={!canEdit} placeholder="Well name" />
-          </div>
-          <div>
-            <label className="label">Contract</label>
-            <input className="input" value={form.Contract || ''} onChange={f('Contract')}
-              disabled={!canEdit} />
-          </div>
-          <div>
-            <label className="label">PO Number</label>
-            <input className="input" value={form.PONumber || ''} onChange={f('PONumber')}
-              disabled={!canEdit} />
-          </div>
-          <div>
-            <label className="label">Client Ref</label>
-            <input className="input" value={form.ClientRef || ''} onChange={f('ClientRef')}
-              disabled={!canEdit} />
-          </div>
-          <div>
-            <label className="label">ERP Ref</label>
-            <input className="input" value={form.ERPRef || ''} onChange={f('ERPRef')}
-              disabled={!canEdit} />
-          </div>
-        </div>
-      </div>
+  // The values actually in use across the 3,824 jobs. Client, rig, well,
+  // contract and service type were free-text boxes, which is how one rig ends
+  // up spelled three ways and the executive dashboard can't group by anything.
+  const { data: facets } = useFetch<{
+    Client: string[]; Rig: string[]; Well: string[]
+    Contract: string[]; ServiceType: string[]
+  }>('/jobs?facets=1')
 
-      <div className="card p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Service Details</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <label className="label">Status</label>
-            <select className="input" value={form.Status || 'Open'} onChange={f('Status')}
-              disabled={!canEdit}>
-              {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">Service Type</label>
-            <input className="input" value={form.ServiceType || ''} onChange={f('ServiceType')}
-              disabled={!canEdit} placeholder="e.g. FISHING / RENTAL" />
-          </div>
-          <div>
-            <label className="label">Invoicing Type</label>
-            <select className="input" value={form.InvoicingType || 'PerJob'} onChange={f('InvoicingType')}
-              disabled={!canEdit}>
-              {INVOICING_OPTS.map(o => <option key={o}>{o}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">Currency</label>
-            <select className="input" value={form.Currency || 'USD'} onChange={f('Currency')}
-              disabled={!canEdit}>
-              {CURRENCY_OPTS.map(c => <option key={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">Invoice Amount</label>
-            <input type="number" className="input" value={form.InvoiceAmount || ''} onChange={f('InvoiceAmount')}
-              disabled={!canEdit} placeholder="0.00" />
-          </div>
-          <div>
-            <label className="label">Mob Date</label>
-            <input type="date" className="input" value={toDateInput(form.MobDate)} onChange={f('MobDate')}
-              disabled={!canEdit} />
-          </div>
-          <div>
-            <label className="label">Demob Date</label>
-            <input type="date" className="input" value={toDateInput(form.DemobDate)} onChange={f('DemobDate')}
-              disabled={!canEdit} />
-          </div>
-          <div>
-            <label className="label">Fiscal Year</label>
-            <input className="input" value={form.FiscalYear || ''} onChange={f('FiscalYear')}
-              disabled={!canEdit} placeholder="2026" />
-          </div>
-        </div>
+  const picker = (field: keyof Job, list?: string[], required?: boolean) =>
+    jobPicker({ field, list, required, value: (form[field] as string) || '', onChange: f(field), disabled: !canEdit })
+
+  return (
+    <div className="space-y-1.5">
+      {/*
+        One dense block in place of three p-5 cards. Sixteen fields took about
+        450px of a screen that also has to show seven tabs of content; the old
+        job screen fits its header into roughly 80px.
+      */}
+      <div
+        className="field-row bg-white border border-gray-300 rounded px-2 py-1.5
+                   grid-cols-[auto_1fr] md:grid-cols-[auto_1fr_auto_1fr] xl:grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto_1fr]"
+      >
+        {!isNew && (
+          <>
+            <span className="field-label">Job No</span>
+            <div className="field-value font-mono">{form.JobID || ''}</div>
+          </>
+        )}
+
+        {picker('Client',      facets?.Client,      true)}
+        {picker('Rig',         facets?.Rig,         true)}
+        {picker('Well',        facets?.Well)}
+        {picker('Contract',    facets?.Contract)}
+        {picker('ServiceType', facets?.ServiceType)}
+
+        <span className="field-label">PO Number</span>
+        <input className="field-input" value={form.PONumber || ''} onChange={f('PONumber')} disabled={!canEdit} />
+
+        <span className="field-label">Client Ref</span>
+        <input className="field-input" value={form.ClientRef || ''} onChange={f('ClientRef')} disabled={!canEdit} />
+
+        <span className="field-label">ERP Ref</span>
+        <input className="field-input" value={form.ERPRef || ''} onChange={f('ERPRef')} disabled={!canEdit} />
+
+        <span className="field-label">Status</span>
+        <select className="field-input" value={form.Status || 'Open'} onChange={f('Status')} disabled={!canEdit}>
+          {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
+        </select>
+
+        <span className="field-label">Invoicing</span>
+        <select className="field-input" value={form.InvoicingType || 'PerJob'} onChange={f('InvoicingType')} disabled={!canEdit}>
+          {INVOICING_OPTS.map(o => <option key={o}>{o}</option>)}
+        </select>
+
+        <span className="field-label">Currency</span>
+        <select className="field-input" value={form.Currency || 'USD'} onChange={f('Currency')} disabled={!canEdit}>
+          {CURRENCY_OPTS.map(c => <option key={c}>{c}</option>)}
+        </select>
+
+        <span className="field-label">Job Value</span>
+        <input type="number" className="field-input text-right" value={form.InvoiceAmount || ''}
+               onChange={f('InvoiceAmount')} disabled={!canEdit} placeholder="0.00" />
+
+        <span className="field-label">Mob Date</span>
+        <input type="date" className="field-input" value={toDateInput(form.MobDate)}
+               onChange={f('MobDate')} disabled={!canEdit} />
+
+        <span className="field-label">Demob Date</span>
+        <input type="date" className="field-input" value={toDateInput(form.DemobDate)}
+               onChange={f('DemobDate')} disabled={!canEdit} />
+
+        <span className="field-label">Fiscal Year</span>
+        <input className="field-input" value={form.FiscalYear || ''} onChange={f('FiscalYear')}
+               disabled={!canEdit} placeholder="2026" />
       </div>
 
       <div className="card p-5">
