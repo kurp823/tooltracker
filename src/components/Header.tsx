@@ -13,6 +13,7 @@ const PAGES: Record<string, { crumb: string; title: string }> = {
   '/utilization':       { crumb: 'Operations Module',        title: 'Utilization' },
   '/gate-pass':         { crumb: 'Operations Module',        title: 'Security Gate Pass' },
   '/inventory':         { crumb: 'Assets & Inventory Management', title: 'Assets and Inventory Catalog' },
+  '/missing-tools':     { crumb: 'Inventory Module',         title: 'Tools Not in Inventory' },
   '/categories':        { crumb: 'Inventory Module',         title: 'Tool Categories & Sizes' },
   '/inspection':        { crumb: 'Maintenance & QC Module',  title: 'QC Inspection Bay' },
   '/maintenance':       { crumb: 'Maintenance & QC Module',  title: 'Maintenance Orders' },

@@ -29,6 +29,7 @@ export default {
           head: '#1a3055',  // table header row
         },
         accent: {
+          50:  '#fffaeb',   // selected-row tint on the reconciliation grids
           300: '#fbd38d',
           400: '#f6ad55',
           500: '#f0b429',
