@@ -125,22 +125,22 @@ module.exports = async function (context, req) {
         FROM      tbl_DeliveryTicketLines dtl
         JOIN      tbl_DeliveryTickets     dt ON dtl.dtNumber = dt.dtNumber
         OUTER APPLY (
-          -- Despite the comment in api/delivery-tickets, the 'serial' column
-          -- on ticket lines mostly holds the ASSET NUMBER, not the SystemID:
-          -- inventory keys look like SystemID 'EMD-5794' / AssetNo 'STB578-01',
-          -- while line serials read 'STB578-09', 'ADSE1144', 'CX0697'.
-          -- Joining on SystemID alone missed ~72% of lines, which is why Size
-          -- and Supplier came back blank. Match on any of the three keys,
-          -- preferring SystemID, and take one row so a line never duplicates.
-          SELECT TOP 1 i2.AssetNo, i2.ShortDesc, i2.[Size], i2.IsEmdad,
-                       i2.Supplier, i2.Ownership
-          FROM   tbl_Inventory i2
-          WHERE  i2.SystemID = dtl.serial
-             OR  i2.AssetNo  = dtl.serial
-             OR  NULLIF(i2.OEMSerial, '') = dtl.serial
-          ORDER BY CASE WHEN i2.SystemID = dtl.serial THEN 0
-                        WHEN i2.AssetNo  = dtl.serial THEN 1
-                        ELSE 2 END
+          -- Resolved by SystemID, else AssetNo, else OEMSerial. Written as
+          -- separate UNION ALL branches rather than an OR so each branch can
+          -- seek its own index; the OR form scanned tbl_Inventory per line.
+          SELECT TOP 1 u.AssetNo, u.ShortDesc, u.[Size], u.IsEmdad,
+                       u.Supplier, u.Ownership
+          FROM (
+            SELECT 0 AS pref, a.AssetNo, a.ShortDesc, a.[Size], a.IsEmdad, a.Supplier, a.Ownership
+              FROM tbl_Inventory a WHERE a.SystemID = dtl.serial
+            UNION ALL
+            SELECT 1, b.AssetNo, b.ShortDesc, b.[Size], b.IsEmdad, b.Supplier, b.Ownership
+              FROM tbl_Inventory b WHERE b.AssetNo = dtl.serial AND NULLIF(b.AssetNo, '') IS NOT NULL
+            UNION ALL
+            SELECT 2, c.AssetNo, c.ShortDesc, c.[Size], c.IsEmdad, c.Supplier, c.Ownership
+              FROM tbl_Inventory c WHERE c.OEMSerial = dtl.serial AND NULLIF(c.OEMSerial, '') IS NOT NULL
+          ) u
+          ORDER BY u.pref
         ) i
         OUTER APPLY (
           -- The receiving ticket that brought this same tool back on this job.
