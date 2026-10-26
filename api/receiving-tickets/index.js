@@ -14,6 +14,9 @@ const { query, jsonResponse, requireAuth } = require('../db')
 // create we store the tool's SystemID there, and on read we resolve the
 // live AssetNo via a join (same pattern as delivery-tickets lines).
 
+/** Undefined -> null (leave the column alone); '' -> '' (clear it). */
+const nz = (v) => (v === undefined ? null : v === '' ? '' : v)
+
 module.exports = async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
@@ -31,7 +34,12 @@ module.exports = async function (context, req) {
                 l.serial AS SerialNumber, COALESCE(i.AssetNo, l.serial) AS AssetNo,
                 l.toolDescription AS ToolDescription,
                 l.qty AS Quantity, l.condition AS Condition,
-                l.usedStatus AS UsedStatus, l.routedTo AS RoutedTo, l.remarks AS Notes
+                l.usedStatus AS UsedStatus, l.routedTo AS RoutedTo, l.remarks AS Notes,
+                i.[Size] AS SizeName,
+                i.ShortDesc AS CategoryName,
+                -- The sub-contractor's own name, never a generic label.
+                CASE WHEN i.IsEmdad = 1 THEN 'EMDAD'
+                     ELSE COALESCE(NULLIF(i.Ownership, ''), NULLIF(i.Supplier, '')) END AS Supplier
            FROM tbl_ReceivingTicketLines l
            OUTER APPLY (
              -- 'serial' on ticket lines mostly holds the ASSET NUMBER, not the
@@ -94,12 +102,15 @@ module.exports = async function (context, req) {
     const result = await query(
       `SELECT r.id AS RTID, r.rtNumber AS RTNumber, r.jobNumber AS JobID,
               r.receivingDate AS RTDate, r.status AS Status,
+              r.rig AS Rig, r.well AS Well, r.manifestNumber AS ManifestNumber,
+              r.linkedDtNumber AS LinkedDT,
               r.createdAt AS CreatedDate, r.createdBy AS CreatedBy,
-              c.clientName AS Client,
+              COALESCE(c.clientName, NULLIF(r.clientCode, '')) AS Client,
               (SELECT COUNT(*) FROM tbl_ReceivingTicketLines WHERE rtNumber = r.rtNumber) AS LineCount
          FROM tbl_ReceivingTickets r
          LEFT JOIN tbl_Clients c ON r.clientCode = c.clientCode
-        ORDER BY r.createdAt DESC`,
+        -- Newest first by receiving date; createdAt is NULL on imported history.
+        ORDER BY r.receivingDate DESC, r.rtNumber DESC`,
       []
     )
     return jsonResponse(context, 200, result.recordset)
@@ -111,10 +122,15 @@ module.exports = async function (context, req) {
       `SELECT r.id AS RTID, r.rtNumber AS RTNumber, r.jobNumber AS JobID,
               r.receivingDate AS RTDate, r.rig AS Rig, r.well AS Well,
               r.linkedDtNumber AS LinkedDT, r.manifestNumber AS ManifestNumber,
+              r.clientCode AS ClientCode, r.clientRef AS ClientRef,
+              r.vehicleVessel AS VehicleVessel,
+              r.emdadRep AS EmdadRep, r.emdadSignDate AS EmdadSignDate,
+              r.clientSignedBy AS ClientSignedBy, r.clientSignDate AS ClientSignDate,
+              r.attachmentRef AS AttachmentRef, r.lockStage AS LockStage,
               r.status AS Status, r.notes AS Notes,
               r.createdAt AS CreatedDate, r.createdBy AS CreatedBy,
               r.updatedAt AS UpdatedDate,
-              c.clientName AS Client
+              COALESCE(c.clientName, NULLIF(r.clientCode, '')) AS Client
          FROM tbl_ReceivingTickets r
          LEFT JOIN tbl_Clients c ON r.clientCode = c.clientCode
         WHERE r.id = @id`,
@@ -144,15 +160,24 @@ module.exports = async function (context, req) {
     const RTNumber = `RT-${String(seq).padStart(5, '0')}`
 
     const r = await query(
-      `INSERT INTO tbl_ReceivingTickets (rtNumber, jobNumber, receivingDate, status, notes, createdBy, createdAt)
+      // Customer / rig / well carried over from the job, as the old screen
+      // pre-filled them. Status starts blank: 'Draft' appears nowhere in the
+      // 3,451 real tickets (only 'Processed' and 'Closed' do).
+      `INSERT INTO tbl_ReceivingTickets
+         (rtNumber, jobNumber, linkedDtNumber, clientCode, receivingDate,
+          rig, well, status, notes, createdBy, createdAt)
        OUTPUT INSERTED.id
-       VALUES (@num, @job, @date, 'Draft', @notes, @by, GETDATE())`,
+       SELECT @num, @job, @linkdt, COALESCE(j.Client, ''), @date,
+              j.Rig, j.Well, '', @notes, @by, GETDATE()
+         FROM   (SELECT 1 AS one) seed
+         LEFT JOIN tbl_Jobs j ON j.JobID = @job`,
       [
-        { name: 'num',   value: RTNumber },
-        { name: 'job',   value: b.JobID  },
-        { name: 'date',  value: b.RTDate || new Date().toISOString().split('T')[0] },
-        { name: 'notes', value: b.Notes || null },
-        { name: 'by',    value: user.Username },
+        { name: 'num',    value: RTNumber },
+        { name: 'job',    value: b.JobID  },
+        { name: 'linkdt', value: b.LinkedDT || null },
+        { name: 'date',   value: b.RTDate || new Date().toISOString().split('T')[0] },
+        { name: 'notes',  value: b.Notes || null },
+        { name: 'by',     value: user.Username },
       ]
     )
     return jsonResponse(context, 201, { RTID: r.recordset[0].id, RTNumber })
@@ -164,14 +189,40 @@ module.exports = async function (context, req) {
       return jsonResponse(context, 403, { error: 'Forbidden' })
     const b = req.body
     await query(
+      // Every editable column, not just three. COALESCE(@x, col) leaves a
+      // field untouched when the caller omits it, so a partial save can't
+      // blank the rest of the ticket.
       `UPDATE tbl_ReceivingTickets
-          SET receivingDate = @date, status = @status, notes = @notes, updatedAt = GETDATE()
+          SET receivingDate  = COALESCE(@date, receivingDate),
+              linkedDtNumber = COALESCE(@linkdt, linkedDtNumber),
+              rig            = COALESCE(@rig, rig),
+              well           = COALESCE(@well, well),
+              manifestNumber = COALESCE(@manifest, manifestNumber),
+              clientRef      = COALESCE(@cref, clientRef),
+              vehicleVessel  = COALESCE(@veh, vehicleVessel),
+              emdadRep       = COALESCE(@rep, emdadRep),
+              emdadSignDate  = COALESCE(@repdate, emdadSignDate),
+              clientSignedBy = COALESCE(@csb, clientSignedBy),
+              clientSignDate = COALESCE(@csd, clientSignDate),
+              status         = COALESCE(@status, status),
+              notes          = COALESCE(@notes, notes),
+              updatedAt      = GETDATE()
         WHERE id = @id`,
       [
-        { name: 'id',     value: Number(id) },
-        { name: 'date',   value: b.RTDate   || null },
-        { name: 'status', value: b.Status   || null },
-        { name: 'notes',  value: b.Notes    || null },
+        { name: 'id',       value: Number(id) },
+        { name: 'date',     value: nz(b.RTDate) },
+        { name: 'linkdt',   value: nz(b.LinkedDT) },
+        { name: 'rig',      value: nz(b.Rig) },
+        { name: 'well',     value: nz(b.Well) },
+        { name: 'manifest', value: nz(b.ManifestNumber) },
+        { name: 'cref',     value: nz(b.ClientRef) },
+        { name: 'veh',      value: nz(b.VehicleVessel) },
+        { name: 'rep',      value: nz(b.EmdadRep) },
+        { name: 'repdate',  value: nz(b.EmdadSignDate) },
+        { name: 'csb',      value: nz(b.ClientSignedBy) },
+        { name: 'csd',      value: nz(b.ClientSignDate) },
+        { name: 'status',   value: b.Status === undefined ? null : String(b.Status) },
+        { name: 'notes',    value: b.Notes  === undefined ? null : String(b.Notes) },
       ]
     )
     return jsonResponse(context, 200, { ok: true })
