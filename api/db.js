@@ -36,9 +36,14 @@ async function getPool() {
  * @param {Array}  params     - [{ name, type, value }]
  * @returns {Promise<sql.IResult>}
  */
-async function query(queryText, params = []) {
+async function query(queryText, params = [], opts = {}) {
   const pool    = await getPool()
   const request = pool.request()
+  // mssql defaults to a 15s request timeout. That is right for app queries —
+  // a slow screen should fail fast — but a one-off data migration over 58,000
+  // rows legitimately takes longer, so the migrate endpoint raises it per call
+  // rather than globally.
+  if (opts.timeout) request.timeout = opts.timeout
   for (const { name, type, value } of params) {
     // mssql's .input() has two overloads: (name, value) and (name, type, value).
     // Passing an explicit `undefined` as the type argument crashes internally
