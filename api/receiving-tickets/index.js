@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth } = require('../db')
+const { query, jsonResponse, requireAuth, jobKey, jobKeyOf } = require('../db')
 
 // Real tbl_ReceivingTickets columns (confirmed via INFORMATION_SCHEMA):
 //   id, rtNumber, jobNumber, linkedDtNumber, clientCode, receivingDate,
@@ -217,7 +217,7 @@ module.exports = async function (context, req) {
     try {
       const result = await query(
         `DECLARE @job NVARCHAR(50) = (SELECT TOP 1 jobNumber FROM tbl_ReceivingTickets WHERE id = @id);
-         DECLARE @seq INT = TRY_CAST(RIGHT(@job, CHARINDEX('-', REVERSE(@job) + '-') - 1) AS INT);
+         DECLARE @seq NVARCHAR(100) = ${jobKey('@job')};
 
          SELECT dt.dtNumber        AS TicketNo,
                 dt.deliveryDate    AS DateOut,
@@ -235,14 +235,14 @@ module.exports = async function (context, req) {
               WHERE a.SystemID = dtl.serial OR a.AssetNo = dtl.serial
               ORDER BY CASE WHEN a.SystemID = dtl.serial THEN 0 ELSE 1 END
            ) i
-          WHERE TRY_CAST(RIGHT(dt.jobNumber, CHARINDEX('-', REVERSE(dt.jobNumber) + '-') - 1) AS INT) = @seq
+          WHERE ${jobKey('dt.jobNumber')} = @seq
             -- Already received on any RT for this job, matched on serial.
             AND NOT EXISTS (
               SELECT 1
                 FROM tbl_ReceivingTicketLines rl
                 JOIN tbl_ReceivingTickets     rh ON rh.rtNumber = rl.rtNumber
                WHERE rl.serial = dtl.serial
-                 AND TRY_CAST(RIGHT(rh.jobNumber, CHARINDEX('-', REVERSE(rh.jobNumber) + '-') - 1) AS INT) = @seq
+                 AND ${jobKey('rh.jobNumber')} = @seq
             )
           ORDER BY dt.dtNumber, dtl.itemNo`,
         [{ name: 'id', value: Number(id) }]
@@ -377,8 +377,8 @@ module.exports = async function (context, req) {
     const listParams = []
     let jobFilter = ''
     if (jobQ) {
-      jobFilter = `WHERE TRY_CAST(RIGHT(r.jobNumber, CHARINDEX('-', REVERSE(r.jobNumber) + '-') - 1) AS INT) = @jobseq`
-      listParams.push({ name: 'jobseq', value: Number(String(jobQ).replace(/.*-/, '')) || -1 })
+      jobFilter = `WHERE ${jobKey('r.jobNumber')} = @jobkey`
+      listParams.push({ name: 'jobkey', value: jobKeyOf(jobQ) })
     }
     const result = await query(
       `SELECT r.id AS RTID, r.rtNumber AS RTNumber, r.jobNumber AS JobID,

@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth } = require('../db')
+const { query, jsonResponse, requireAuth, jobKey } = require('../db')
 
 /**
  * GET /api/diagnostics — read-only integrity counts. Admin only.
@@ -378,11 +378,11 @@ const CHECKS = [
     name: 'reviewOnRigLive',
     sql: `WITH jobs AS (
             SELECT JobID, Status, Client, Rig, Well, ServiceType,
-                   TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS jobSeq
+                   ${jobKey('JobID')} AS jobKey
               FROM tbl_Jobs
           ),
           dtl AS (
-            SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+            SELECT ${jobKey('t.jobNumber')} AS jobKey,
                    t.jobNumber, t.dtNumber, t.deliveryDate, t.rig, t.well, t.clientCode,
                    l.serial, l.toolDescription, l.qty
               FROM tbl_DeliveryTicketLines l
@@ -391,7 +391,7 @@ const CHECKS = [
           ),
           rtl AS (
             SELECT DISTINCT
-                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   ${jobKey('t.jobNumber')} AS jobKey,
                    l.serial
               FROM tbl_ReceivingTicketLines l
               JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
@@ -399,12 +399,12 @@ const CHECKS = [
           ),
           outstanding AS (
             SELECT d.*,
-                   ROW_NUMBER() OVER (PARTITION BY d.jobSeq, d.serial
+                   ROW_NUMBER() OVER (PARTITION BY d.jobKey, d.serial
                                           ORDER BY d.deliveryDate DESC, d.dtNumber DESC) AS rn
               FROM dtl d
-             WHERE d.jobSeq IS NOT NULL
+             WHERE NULLIF(d.jobKey, '') IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM rtl
-                                WHERE rtl.jobSeq = d.jobSeq AND rtl.serial = d.serial)
+                                WHERE rtl.jobKey = d.jobKey AND rtl.serial = d.serial)
           ),
           LIVE_SET AS (SELECT 1 AS x)
           SELECT COALESCE(i.AssetNo, o.serial)   AS AssetNo,
@@ -415,7 +415,7 @@ const CHECKS = [
                  i.Status                        AS CurrentInvStatus,
                  COALESCE(i.Location, '')        AS CurrentLocation,
                  COALESCE(i.Supplier, '')        AS Supplier,
-                 o.jobNumber                     AS JobNo,
+                 j.JobID                         AS JobNo,
                  j.Status                        AS JobStatus,
                  COALESCE(j.Client, o.clientCode, '') AS Client,
                  COALESCE(o.rig, j.Rig, '')      AS Rig,
@@ -424,7 +424,7 @@ const CHECKS = [
                  CONVERT(VARCHAR(10), o.deliveryDate, 23) AS DTDate,
                  o.qty                           AS Qty
             FROM outstanding o
-            JOIN jobs j ON j.jobSeq = o.jobSeq
+            JOIN jobs j ON j.jobKey = o.jobKey
             JOIN tbl_Inventory i ON i.SystemID = o.serial OR i.AssetNo = o.serial
            WHERE o.rn = 1
              AND j.Status IN ('Ongoing', 'Draft Invoice Submitted', 'Open', 'Waiting on Signed Docs')
@@ -436,11 +436,11 @@ const CHECKS = [
     name: 'reviewNotInInventory',
     sql: `WITH jobs AS (
             SELECT JobID, Status, Client, Rig, Well, ServiceType,
-                   TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS jobSeq
+                   ${jobKey('JobID')} AS jobKey
               FROM tbl_Jobs
           ),
           dtl AS (
-            SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+            SELECT ${jobKey('t.jobNumber')} AS jobKey,
                    t.jobNumber, t.dtNumber, t.deliveryDate, t.rig, t.well, t.clientCode,
                    l.serial, l.toolDescription, l.qty
               FROM tbl_DeliveryTicketLines l
@@ -449,7 +449,7 @@ const CHECKS = [
           ),
           rtl AS (
             SELECT DISTINCT
-                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   ${jobKey('t.jobNumber')} AS jobKey,
                    l.serial
               FROM tbl_ReceivingTicketLines l
               JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
@@ -457,17 +457,17 @@ const CHECKS = [
           ),
           outstanding AS (
             SELECT d.*,
-                   ROW_NUMBER() OVER (PARTITION BY d.jobSeq, d.serial
+                   ROW_NUMBER() OVER (PARTITION BY d.jobKey, d.serial
                                           ORDER BY d.deliveryDate DESC, d.dtNumber DESC) AS rn
               FROM dtl d
-             WHERE d.jobSeq IS NOT NULL
+             WHERE NULLIF(d.jobKey, '') IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM rtl
-                                WHERE rtl.jobSeq = d.jobSeq AND rtl.serial = d.serial)
+                                WHERE rtl.jobKey = d.jobKey AND rtl.serial = d.serial)
           ),
           LIVE_SET AS (SELECT 1 AS x)
           SELECT o.serial                        AS AssetNo,
                  CAST(o.toolDescription AS NVARCHAR(400)) AS DescriptionOnTicket,
-                 o.jobNumber                     AS JobNo,
+                 j.JobID                         AS JobNo,
                  j.Status                        AS JobStatus,
                  COALESCE(j.Client, o.clientCode, '') AS Client,
                  COALESCE(o.rig, j.Rig, '')      AS Rig,
@@ -476,12 +476,12 @@ const CHECKS = [
                  CONVERT(VARCHAR(10), o.deliveryDate, 23) AS DTDate,
                  o.qty                           AS Qty
             FROM outstanding o
-            JOIN jobs j ON j.jobSeq = o.jobSeq
+            JOIN jobs j ON j.jobKey = o.jobKey
            WHERE o.rn = 1
              AND j.Status IN ('Ongoing', 'Draft Invoice Submitted', 'Open', 'Waiting on Signed Docs')
              AND NOT EXISTS (SELECT 1 FROM tbl_Inventory i
                               WHERE i.SystemID = o.serial OR i.AssetNo = o.serial)
-           ORDER BY o.jobNumber, o.serial`,
+           ORDER BY j.JobID, o.serial`,
   },
   {
     // (3) Outstanding on a job that is already CLOSED — one row per job, so
@@ -489,11 +489,11 @@ const CHECKS = [
     name: 'reviewClosedJobsSummary',
     sql: `WITH jobs AS (
             SELECT JobID, Status, Client, Rig, Well, ServiceType,
-                   TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS jobSeq
+                   ${jobKey('JobID')} AS jobKey
               FROM tbl_Jobs
           ),
           dtl AS (
-            SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+            SELECT ${jobKey('t.jobNumber')} AS jobKey,
                    t.jobNumber, t.dtNumber, t.deliveryDate, t.rig, t.well, t.clientCode,
                    l.serial, l.toolDescription, l.qty
               FROM tbl_DeliveryTicketLines l
@@ -502,7 +502,7 @@ const CHECKS = [
           ),
           rtl AS (
             SELECT DISTINCT
-                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   ${jobKey('t.jobNumber')} AS jobKey,
                    l.serial
               FROM tbl_ReceivingTicketLines l
               JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
@@ -510,24 +510,24 @@ const CHECKS = [
           ),
           outstanding AS (
             SELECT d.*,
-                   ROW_NUMBER() OVER (PARTITION BY d.jobSeq, d.serial
+                   ROW_NUMBER() OVER (PARTITION BY d.jobKey, d.serial
                                           ORDER BY d.deliveryDate DESC, d.dtNumber DESC) AS rn
               FROM dtl d
-             WHERE d.jobSeq IS NOT NULL
+             WHERE NULLIF(d.jobKey, '') IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM rtl
-                                WHERE rtl.jobSeq = d.jobSeq AND rtl.serial = d.serial)
+                                WHERE rtl.jobKey = d.jobKey AND rtl.serial = d.serial)
           ),
           LIVE_SET AS (SELECT 1 AS x),
           rtCount AS (
-            SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+            SELECT ${jobKey('t.jobNumber')} AS jobKey,
                    COUNT(DISTINCT t.rtNumber) AS rtTickets,
                    COUNT(l.id)                AS rtLines,
                    MAX(CASE WHEN t.rtNumber LIKE 'DUMMY%' THEN 1 ELSE 0 END) AS hasDummy
               FROM tbl_ReceivingTickets t
               LEFT JOIN tbl_ReceivingTicketLines l ON l.rtNumber = t.rtNumber
-             GROUP BY TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT)
+             GROUP BY ${jobKey('t.jobNumber')}
           )
-          SELECT o.jobNumber                     AS JobNo,
+          SELECT j.JobID                         AS JobNo,
                  j.Status                        AS JobStatus,
                  COALESCE(j.Client, '')          AS Client,
                  COALESCE(j.Rig, '')             AS Rig,
@@ -537,11 +537,11 @@ const CHECKS = [
                  COALESCE(c.rtLines, 0)          AS RTLinesOnJob,
                  CASE WHEN COALESCE(c.hasDummy, 0) = 1 THEN 'Yes' ELSE 'No' END AS ClosedWithDummyRT
             FROM outstanding o
-            JOIN jobs j ON j.jobSeq = o.jobSeq
-            LEFT JOIN rtCount c ON c.jobSeq = o.jobSeq
+            JOIN jobs j ON j.jobKey = o.jobKey
+            LEFT JOIN rtCount c ON c.jobKey = o.jobKey
            WHERE o.rn = 1
              AND j.Status NOT IN ('Ongoing', 'Draft Invoice Submitted', 'Open', 'Waiting on Signed Docs')
-           GROUP BY o.jobNumber, j.Status, j.Client, j.Rig, j.Well,
+           GROUP BY j.JobID, j.Status, j.Client, j.Rig, j.Well,
                     c.rtTickets, c.rtLines, c.hasDummy
            ORDER BY COUNT(*) DESC`,
   },
@@ -550,11 +550,11 @@ const CHECKS = [
     name: 'reviewClosedJobsDetail',
     sql: `WITH jobs AS (
             SELECT JobID, Status, Client, Rig, Well, ServiceType,
-                   TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS jobSeq
+                   ${jobKey('JobID')} AS jobKey
               FROM tbl_Jobs
           ),
           dtl AS (
-            SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+            SELECT ${jobKey('t.jobNumber')} AS jobKey,
                    t.jobNumber, t.dtNumber, t.deliveryDate, t.rig, t.well, t.clientCode,
                    l.serial, l.toolDescription, l.qty
               FROM tbl_DeliveryTicketLines l
@@ -563,7 +563,7 @@ const CHECKS = [
           ),
           rtl AS (
             SELECT DISTINCT
-                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   ${jobKey('t.jobNumber')} AS jobKey,
                    l.serial
               FROM tbl_ReceivingTicketLines l
               JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
@@ -571,12 +571,12 @@ const CHECKS = [
           ),
           outstanding AS (
             SELECT d.*,
-                   ROW_NUMBER() OVER (PARTITION BY d.jobSeq, d.serial
+                   ROW_NUMBER() OVER (PARTITION BY d.jobKey, d.serial
                                           ORDER BY d.deliveryDate DESC, d.dtNumber DESC) AS rn
               FROM dtl d
-             WHERE d.jobSeq IS NOT NULL
+             WHERE NULLIF(d.jobKey, '') IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM rtl
-                                WHERE rtl.jobSeq = d.jobSeq AND rtl.serial = d.serial)
+                                WHERE rtl.jobKey = d.jobKey AND rtl.serial = d.serial)
           ),
           LIVE_SET AS (SELECT 1 AS x)
           SELECT COALESCE(i.AssetNo, o.serial)   AS AssetNo,
@@ -585,7 +585,7 @@ const CHECKS = [
                  COALESCE(i.Description, CAST(o.toolDescription AS NVARCHAR(400))) AS Description,
                  CASE WHEN i.SystemID IS NULL THEN 'Not in inventory'
                       ELSE COALESCE(i.Status, '') END AS CurrentInvStatus,
-                 o.jobNumber                     AS JobNo,
+                 j.JobID                         AS JobNo,
                  j.Status                        AS JobStatus,
                  COALESCE(j.Client, o.clientCode, '') AS Client,
                  COALESCE(o.rig, j.Rig, '')      AS Rig,
@@ -593,15 +593,44 @@ const CHECKS = [
                  CONVERT(VARCHAR(10), o.deliveryDate, 23) AS DTDate,
                  o.qty                           AS Qty
             FROM outstanding o
-            JOIN jobs j ON j.jobSeq = o.jobSeq
+            JOIN jobs j ON j.jobKey = o.jobKey
             LEFT JOIN tbl_Inventory i ON i.SystemID = o.serial OR i.AssetNo = o.serial
            WHERE o.rn = 1
              AND j.Status NOT IN ('Ongoing', 'Draft Invoice Submitted', 'Open', 'Waiting on Signed Docs')
-           ORDER BY o.jobNumber, COALESCE(i.AssetNo, o.serial)`,
+           ORDER BY j.JobID, COALESCE(i.AssetNo, o.serial)`,
   },
   {
     // (5) Every job status string actually in use, with how many jobs carry
     //     it. 'JobCompleted' and 'Completed' are the same thing spelt twice.
+    name: 'reviewJobNumberFormats',
+    sql: `SELECT TRANSLATE(JobID, '0123456789', '##########') AS Shape,
+                 COUNT(*)   AS Jobs,
+                 MIN(JobID) AS ExampleJob,
+                 MAX(JobID) AS ExampleJob2
+            FROM tbl_Jobs
+           GROUP BY TRANSLATE(JobID, '0123456789', '##########')
+           ORDER BY COUNT(*) DESC`,
+  },
+  {
+    // (5b) How badly the old trailing-sequence key was broken: how many jobs
+    //      share a trailing sequence with at least one other job.
+    name: 'reviewSequenceCollisions',
+    sql: `WITH s AS (
+            SELECT JobID,
+                   TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS trailingSeq
+              FROM tbl_Jobs
+          ),
+          g AS (
+            SELECT trailingSeq, COUNT(*) AS jobsSharingIt
+              FROM s GROUP BY trailingSeq
+          )
+          SELECT (SELECT COUNT(*) FROM s)                               AS TotalJobs,
+                 (SELECT COUNT(*) FROM g)                               AS DistinctTrailingSequences,
+                 (SELECT COUNT(*) FROM g WHERE jobsSharingIt > 1)       AS SequencesSharedByManyJobs,
+                 (SELECT SUM(jobsSharingIt) FROM g WHERE jobsSharingIt > 1) AS JobsAffected,
+                 (SELECT MAX(jobsSharingIt) FROM g)                     AS WorstCase`,
+  },
+  {
     name: 'reviewJobStatusVocabulary',
     sql: `SELECT COALESCE(NULLIF(LTRIM(RTRIM(Status)), ''), '(blank)') AS JobStatus,
                  COUNT(*) AS Jobs,
@@ -619,18 +648,18 @@ const CHECKS = [
     name: 'reviewReceivedNoDispatch',
     sql: `WITH dtl AS (
             SELECT DISTINCT
-                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   ${jobKey('t.jobNumber')} AS jobKey,
                    l.serial
               FROM tbl_DeliveryTicketLines l
               JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
              WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
           ),
           rtl AS (
-            SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+            SELECT ${jobKey('t.jobNumber')} AS jobKey,
                    t.jobNumber, t.rtNumber, t.receivingDate, t.rig,
                    l.serial, l.toolDescription, l.usedStatus, l.routedTo,
                    ROW_NUMBER() OVER (PARTITION BY
-                        TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT),
+                        ${jobKey('t.jobNumber')},
                         l.serial ORDER BY t.receivingDate DESC, l.id DESC) AS rn
               FROM tbl_ReceivingTicketLines l
               JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
@@ -639,7 +668,7 @@ const CHECKS = [
           SELECT COALESCE(i.AssetNo, r.serial)   AS AssetNo,
                  COALESCE(i.ShortDesc, '')       AS Category,
                  COALESCE(i.Description, CAST(r.toolDescription AS NVARCHAR(400))) AS Description,
-                 r.jobNumber                     AS ReceivedOnJob,
+                 COALESCE(j.JobID, r.jobNumber)  AS ReceivedOnJob,
                  j.Status                        AS JobStatus,
                  r.rtNumber                      AS RTNo,
                  CONVERT(VARCHAR(10), r.receivingDate, 23) AS RTDate,
@@ -647,12 +676,12 @@ const CHECKS = [
                  COALESCE(r.usedStatus, '')      AS UsedStatus,
                  COALESCE(r.routedTo, '')        AS RoutedTo
             FROM rtl r
-            LEFT JOIN tbl_Jobs j ON TRY_CAST(RIGHT(j.JobID, CHARINDEX('-', REVERSE(j.JobID) + '-') - 1) AS INT) = r.jobSeq
+            LEFT JOIN tbl_Jobs j ON ${jobKey('j.JobID')} = r.jobKey
             LEFT JOIN tbl_Inventory i ON i.SystemID = r.serial OR i.AssetNo = r.serial
            WHERE r.rn = 1
-             AND r.jobSeq IS NOT NULL
-             AND NOT EXISTS (SELECT 1 FROM dtl WHERE dtl.jobSeq = r.jobSeq AND dtl.serial = r.serial)
-           ORDER BY r.jobNumber, COALESCE(i.AssetNo, r.serial)`,
+             AND NULLIF(r.jobKey, '') IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM dtl WHERE dtl.jobKey = r.jobKey AND dtl.serial = r.serial)
+           ORDER BY COALESCE(j.JobID, r.jobNumber), COALESCE(i.AssetNo, r.serial)`,
   },
   {
     /*
@@ -665,12 +694,12 @@ const CHECKS = [
      */
     name: 'stillOnRigLive',
     sql: `WITH live AS (
-            SELECT TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS jobSeq
+            SELECT ${jobKey('JobID')} AS jobKey
               FROM tbl_Jobs
              WHERE Status IN ('Ongoing', 'Draft Invoice Submitted', 'Open', 'Waiting on Signed Docs')
           ),
           dt AS (
-            SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+            SELECT ${jobKey('t.jobNumber')} AS jobKey,
                    l.serial, t.rig
               FROM tbl_DeliveryTicketLines l
               JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
@@ -678,7 +707,7 @@ const CHECKS = [
           ),
           rt AS (
             SELECT DISTINCT
-                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   ${jobKey('t.jobNumber')} AS jobKey,
                    l.serial
               FROM tbl_ReceivingTicketLines l
               JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
@@ -687,9 +716,9 @@ const CHECKS = [
           outstanding AS (
             SELECT DISTINCT dt.serial
               FROM dt
-             WHERE dt.jobSeq IN (SELECT jobSeq FROM live WHERE jobSeq IS NOT NULL)
+             WHERE dt.jobKey IN (SELECT jobKey FROM live WHERE NULLIF(jobKey, '') IS NOT NULL)
                AND NOT EXISTS (SELECT 1 FROM rt
-                                WHERE rt.jobSeq = dt.jobSeq AND rt.serial = dt.serial)
+                                WHERE rt.jobKey = dt.jobKey AND rt.serial = dt.serial)
           )
           SELECT COALESCE(i.Status, '(not in inventory)') AS invStatus,
                  COUNT(*) AS assets
@@ -716,7 +745,7 @@ const CHECKS = [
     name: 'stillOnRig',
     sql: `WITH dt AS (
             SELECT DISTINCT
-                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   ${jobKey('t.jobNumber')} AS jobKey,
                    l.serial
               FROM tbl_DeliveryTicketLines l
               JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
@@ -724,30 +753,30 @@ const CHECKS = [
           ),
           rt AS (
             SELECT DISTINCT
-                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   ${jobKey('t.jobNumber')} AS jobKey,
                    l.serial
               FROM tbl_ReceivingTicketLines l
               JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
              WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
           ),
           outstanding AS (
-            SELECT dt.jobSeq, dt.serial
+            SELECT dt.jobKey, dt.serial
               FROM dt
-             WHERE dt.jobSeq IS NOT NULL
+             WHERE NULLIF(dt.jobKey, '') IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM rt
-                                WHERE rt.jobSeq = dt.jobSeq AND rt.serial = dt.serial)
+                                WHERE rt.jobKey = dt.jobKey AND rt.serial = dt.serial)
           ),
           jobs AS (
-            SELECT TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS jobSeq,
+            SELECT ${jobKey('JobID')} AS jobKey,
                    MAX(Status) AS Status
               FROM tbl_Jobs
-             GROUP BY TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT)
+             GROUP BY ${jobKey('JobID')}
           )
           SELECT COALESCE(j.Status, '(no matching job)') AS jobStatus,
                  COUNT(*)                     AS toolsOutstanding,
-                 COUNT(DISTINCT o.jobSeq)     AS jobsAffected
+                 COUNT(DISTINCT o.jobKey)     AS jobsAffected
             FROM outstanding o
-            LEFT JOIN jobs j ON j.jobSeq = o.jobSeq
+            LEFT JOIN jobs j ON j.jobKey = o.jobKey
            GROUP BY COALESCE(j.Status, '(no matching job)')
            ORDER BY COUNT(*) DESC`,
   },
@@ -758,7 +787,7 @@ const CHECKS = [
     name: 'receivedWithoutDispatchOnSameJob',
     sql: `WITH dt AS (
             SELECT DISTINCT
-                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   ${jobKey('t.jobNumber')} AS jobKey,
                    l.serial
               FROM tbl_DeliveryTicketLines l
               JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
@@ -766,7 +795,7 @@ const CHECKS = [
           ),
           rt AS (
             SELECT DISTINCT
-                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   ${jobKey('t.jobNumber')} AS jobKey,
                    l.serial
               FROM tbl_ReceivingTicketLines l
               JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
@@ -774,9 +803,9 @@ const CHECKS = [
           )
           SELECT COUNT(*) AS receivedWithNoDispatchOnThatJob
             FROM rt
-           WHERE rt.jobSeq IS NOT NULL
+           WHERE NULLIF(rt.jobKey, '') IS NOT NULL
              AND NOT EXISTS (SELECT 1 FROM dt
-                              WHERE dt.jobSeq = rt.jobSeq AND dt.serial = rt.serial)`,
+                              WHERE dt.jobKey = rt.jobKey AND dt.serial = rt.serial)`,
   },
   {
     // Are the duplicates and the orphans the same rows, or separate problems?
