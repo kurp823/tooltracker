@@ -42,21 +42,56 @@
   }
   /* Measured from the previous app: navy header row, white 11px uppercase. */
   .table-th {
-    @apply px-3 py-2 text-left text-[11px] font-semibold text-white uppercase tracking-wide
+    @apply px-2 py-1.5 text-left text-[11px] font-semibold text-white uppercase tracking-wide
            bg-navy-head whitespace-nowrap;
   }
   .table-td {
-    @apply px-3 py-1.5 text-[12px] text-gray-700;
+    @apply px-2 py-1 text-[12px] text-gray-700;
   }
   .table-tr {
     @apply border-b border-gray-100 hover:bg-brand-50/50 transition-colors cursor-pointer;
   }
   /* Page title block, as used across the old app's screens */
   .page-crumb {
-    @apply text-[11px] uppercase tracking-wide text-gray-500;
+    @apply text-[10px] uppercase tracking-wide text-gray-400;
   }
   .page-title {
-    @apply text-xl font-bold text-navy-900;
+    @apply text-[15px] font-bold text-navy-900 leading-none;
+  }
+
+  /*
+   * Every screen fills the main area exactly and never makes the page scroll;
+   * its grid scrolls internally, both directions. Use in place of a
+   * hard-coded h-[calc(100vh-Npx)], which breaks whenever the chrome changes.
+   */
+  .screen {
+    @apply h-full min-h-0 flex flex-col overflow-hidden;
+  }
+  /* Toolbar strip above a grid — one short row, not a card. */
+  .screen-bar {
+    @apply flex items-center gap-1.5 flex-wrap shrink-0 mb-1.5;
+  }
+
+  /*
+   * Dense header form, as on the old Rental Ticket screen: label and field on
+   * one 24px row, several pairs per row, so 15 fields cost ~80px instead of
+   * half the screen.
+   */
+  .field-row {
+    @apply grid gap-x-3 gap-y-1 items-center;
+  }
+  .field-label {
+    @apply text-[11px] font-semibold text-gray-600 whitespace-nowrap;
+  }
+  .field-input {
+    @apply w-full h-[24px] px-1.5 text-[12px] border border-gray-300 rounded-sm bg-white
+           focus:outline-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500
+           disabled:bg-gray-100 disabled:text-gray-500;
+  }
+  /* Read-only presentation of a stored value, same height as .field-input. */
+  .field-value {
+    @apply h-[24px] px-1.5 text-[12px] text-gray-800 bg-gray-50 border border-gray-200
+           rounded-sm flex items-center truncate;
   }
   .btn-accent {
     @apply inline-flex items-center gap-1.5 px-2.5 py-1 bg-accent-500 text-navy-950 text-xs font-semibold
@@ -90,7 +125,7 @@
 
 /* Sidebar transition */
 .sidebar-link {
-  @apply flex items-center gap-2.5 px-3 py-[7px] rounded text-[13px] font-medium transition-colors;
+  @apply flex items-center gap-2 px-2 py-[3px] rounded text-[12px] font-medium transition-colors;
 }
 .sidebar-link.active {
   @apply bg-accent-500 text-navy-950 font-semibold;
@@ -99,7 +134,7 @@
   @apply text-slate-300 hover:bg-navy-800 hover:text-white;
 }
 .sidebar-group {
-  @apply flex items-center gap-2 w-full px-2.5 py-2 text-[11px] font-bold uppercase tracking-wider
+  @apply flex items-center gap-1.5 w-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider
          text-slate-400 hover:text-slate-200 transition-colors;
 }
 

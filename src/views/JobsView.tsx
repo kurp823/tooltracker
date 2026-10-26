@@ -48,7 +48,7 @@ export function JobsView() {
   if (isLoading) return <PageLoader />
 
   return (
-    <div className="flex flex-col h-[calc(100vh-104px)] gap-3">
+    <div className="screen gap-1.5">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Search */}
