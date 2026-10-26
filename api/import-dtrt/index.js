@@ -1,5 +1,6 @@
 'use strict'
 const { sql, query, jsonResponse, requireAuth, jobKey } = require('../db')
+const { ORDER, STAGES, WINDOWED, runStage } = require('./apply')
 
 /**
  * /api/import-dtrt — ingest and check a corrected DT/RT sheet. Admin only.
@@ -361,6 +362,50 @@ module.exports = async function (context, req) {
     } catch (err) {
       context.log.error(`import preview ${part} error:`, err)
       return jsonResponse(context, 500, { error: `Preview "${part}" failed — ${err.message}` })
+    }
+  }
+
+  // ----------------------------------------------------------------- apply ---
+  /*
+   * Write the staged sheet into the live tables, one stage per request.
+   *
+   * GET  /apply            the stage list, in order
+   * POST /apply  {batchId, stage, fromId}
+   *
+   * Every stage is guarded so repeating it changes nothing. That is not
+   * belt-and-braces: a request that passes the 45-second platform cap still
+   * runs to completion in the database, so the caller can see a failure for
+   * work that actually succeeded and will retry it.
+   */
+  if (sub === 'apply' && method === 'GET') {
+    return jsonResponse(context, 200, {
+      order: ORDER,
+      windowed: ORDER.filter((s) => WINDOWED.has(s)),
+      note: 'POST each stage in order. A windowed stage returns nextFromId; keep posting until it is null.',
+    })
+  }
+
+  if (sub === 'apply' && method === 'POST') {
+    const b = req.body || {}
+    const batchId = text(b.batchId)
+    const stage = text(b.stage)
+    const fromId = Number(b.fromId) > 0 ? Number(b.fromId) : 0
+    if (!batchId) return jsonResponse(context, 400, { error: 'batchId is required' })
+    if (!STAGES[stage]) {
+      return jsonResponse(context, 400, { error: `Unknown stage "${stage}"`, order: ORDER })
+    }
+    try {
+      const n = await query(
+        'SELECT COUNT(*) AS n FROM tbl_ImportDTRT WHERE batchId = @b',
+        [{ name: 'b', type: sql.NVarChar, value: batchId }])
+      if (!n.recordset[0].n) {
+        return jsonResponse(context, 400, { error: 'Nothing is staged for that batchId' })
+      }
+      return jsonResponse(context, 200,
+        await runStage(stage, batchId, fromId, user.Username))
+    } catch (err) {
+      context.log.error(`import apply ${stage} error:`, err)
+      return jsonResponse(context, 500, { error: `Stage "${stage}" failed — ${err.message}` })
     }
   }
 

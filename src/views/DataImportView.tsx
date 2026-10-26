@@ -25,6 +25,15 @@ type Row = {
 /* The checks run one request each: together they exceeded the 45-second cap on
  * a managed function and the platform answered with a bodiless 500. */
 const PARTS = ['shape', 'onrig', 'dt', 'rt', 'unknown', 'linkage'] as const
+
+/* The write stages, in the order they must run. Jobs and inventory come first
+ * because everything after needs a job to hang off and a SystemID to point at. */
+const APPLY_ORDER = [
+  'jobs', 'inventory', 'dt-headers', 'dt-lines', 'rt-headers', 'rt-lines',
+  'dummy-headers', 'dummy-lines', 'jobtools', 'fieldlogs',
+  'inv-status-onrig', 'inv-status-returned', 'job-status',
+] as const
+const APPLY_WINDOWED = new Set(['dt-lines', 'rt-lines', 'dummy-lines', 'jobtools', 'fieldlogs'])
 type Part = typeof PARTS[number]
 
 const PART_LABEL: Record<Part, string> = {
@@ -185,6 +194,45 @@ export function DataImportView() {
     }
   }
 
+  const [applying, setApplying] = useState('')
+  const [applied, setApplied] = useState<Array<{ stage: string; written: number; ms: number; error?: string }>>([])
+
+  /*
+   * Ravi runs this, not Claude: a write to the live tables needs an approval
+   * that only he can give, so the screen walks the stages itself.
+   */
+  async function applyToLive() {
+    if (!batchId) return
+    if (!window.confirm(
+      'This writes the sheet into the live tables: jobs, inventory, delivery and return tickets, '
+      + 'dummy return tickets, the job tool lists, utilization, and inventory and job status.\n\n'
+      + 'Every stage is safe to repeat. Continue?')) return
+    setApplied([]); setError('')
+    for (const stage of APPLY_ORDER) {
+      setApplying(stage)
+      try {
+        let fromId: number | null = 0
+        let written = 0
+        let ms = 0
+        do {
+          const r: { written: number; ms: number; nextFromId: number | null } =
+            await api.post('/import-dtrt/apply', { batchId, stage, fromId })
+          written += r.written; ms += r.ms
+          fromId = APPLY_WINDOWED.has(stage) ? r.nextFromId : null
+          if (fromId !== null) setApplying(`${stage} — ${written.toLocaleString()} rows so far`)
+        } while (fromId !== null)
+        setApplied((p) => [...p, { stage, written, ms }])
+      } catch (err) {
+        setApplied((p) => [...p, {
+          stage, written: 0, ms: 0,
+          error: err instanceof Error ? err.message : String(err),
+        }])
+        break   // a later stage depends on the one that failed
+      }
+    }
+    setApplying('')
+  }
+
   const shape = parts.shape as Record<string, number> | undefined
   const noRT = shape?.LinesWithNoRT ?? 0
   const anyParts = Object.keys(parts).length > 0
@@ -207,7 +255,14 @@ export function DataImportView() {
               ? `Uploading ${sent.toLocaleString()} / ${rows.length.toLocaleString()}`
               : busy === 'checking' ? 'Comparing…' : 'Upload and compare'}
           </button>
-          <button className="btn-ghost" onClick={reset} disabled={busy !== ''}>Clear</button>
+          <button
+            className="btn-primary" onClick={applyToLive}
+            disabled={!batchId || busy !== '' || applying !== ''}
+            title="Writes the staged sheet into the live tables"
+          >
+            {applying ? `Applying: ${applying}` : 'Apply to live data'}
+          </button>
+          <button className="btn-ghost" onClick={reset} disabled={busy !== '' || applying !== ''}>Clear</button>
         </div>
       </div>
 
@@ -303,6 +358,34 @@ export function DataImportView() {
               </Block>
             )}
           </>
+        )}
+
+        {!!applied.length && (
+          <Block title="Applied to the live tables">
+            <table className="w-full table-fixed text-[12px]">
+              <thead><tr>
+                <th className="table-th text-left">Stage</th>
+                <th className="table-th text-left">Rows written</th>
+                <th className="table-th text-left">Time</th>
+                <th className="table-th text-left">Result</th>
+              </tr></thead>
+              <tbody>
+                {applied.map((a) => (
+                  <tr key={a.stage}>
+                    <td className="table-td whitespace-nowrap">{a.stage}</td>
+                    <td className="table-td whitespace-nowrap">{a.written.toLocaleString()}</td>
+                    <td className="table-td whitespace-nowrap">{(a.ms / 1000).toFixed(1)}s</td>
+                    <td className={`table-td ${a.error ? 'text-rose-700' : 'text-slate-500'}`}>
+                      {a.error || 'done'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-1 text-[12px] text-slate-600">
+              Every stage is guarded, so running this again writes only what is still missing.
+            </p>
+          </Block>
         )}
 
         {!rows.length && !anyParts && busy === '' && (
