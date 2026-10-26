@@ -34,6 +34,7 @@ interface InvItem {
   AssetNo: string       // physical label — always use this
   Serial: string
   ShortDesc: string     // this IS the category name in tbl_Inventory
+  Description: string | null  // the long free-text description
   Size: string
   Supplier: string
   Ownership: string

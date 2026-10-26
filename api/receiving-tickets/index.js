@@ -17,6 +17,46 @@ const { query, jsonResponse, requireAuth } = require('../db')
 /** Undefined -> null (leave the column alone); '' -> '' (clear it). */
 const nz = (v) => (v === undefined ? null : v === '' ? '' : v)
 
+/**
+ * Where a returned tool is routed decides the status it carries in inventory.
+ * Anything needing a workshop step is NOT 'Good', so it shows on the tool
+ * picker as needing attention rather than as ready to mobilise.
+ */
+function routedStatus(routedTo) {
+  const r = String(routedTo || '').trim().toLowerCase()
+  if (!r || r.includes('available') || r.includes('inventory')) return 'Good'
+  if (r.includes('inspection')) return 'Inspection'
+  if (r.includes('workshop') || r.includes('repair') || r.includes('redress')) return 'Maintenance'
+  if (r.includes('scrap') || r.includes('dbr')) return 'DBR'
+  return 'Good'
+}
+
+/**
+ * Set a tool's status/location by whichever key the ticket line carries.
+ * Ticket lines hold the AssetNo about as often as the SystemID, so match on
+ * either. Best-effort: a ticket line must still save if this fails.
+ */
+async function setInventoryStatus(key, status, location) {
+  const k = String(key || '').trim()
+  if (!k) return
+  try {
+    await query(
+      `UPDATE tbl_Inventory
+          SET Status = @status,
+              Location = COALESCE(@loc, Location),
+              LastUpdated = GETDATE()
+        WHERE SystemID = @k OR AssetNo = @k`,
+      [
+        { name: 'k',      value: k },
+        { name: 'status', value: status },
+        { name: 'loc',    value: location || null },
+      ]
+    )
+  } catch (err) {
+    // Deliberately swallowed — never fail the ticket over the status mirror.
+  }
+}
+
 module.exports = async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
@@ -85,6 +125,14 @@ module.exports = async function (context, req) {
           { name: 'notes',  value: b.Notes            || null },
         ]
       )
+
+      // Bring the tool back into inventory with the status its routing implies.
+      // Nothing wrote tbl_Inventory.Status before, so a tool sent to the
+      // inspection bay still read 'Good' in the catalogue and a tool out on a
+      // rig did too — which is why the only statuses in 5,094 rows were 'Good'
+      // and 'DBR', and why the tool picker could not show where anything was.
+      await setInventoryStatus(b.SystemID || b.Serial, routedStatus(b.RoutedTo), 'Emdad Base')
+
       return jsonResponse(context, 201, { LineID: r.recordset[0].id })
     }
 
