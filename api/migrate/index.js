@@ -166,6 +166,46 @@ const MIGRATIONS = [
         CREATE INDEX IX_tbl_SubRentalInward_assetNo  ON dbo.tbl_SubRentalInward (assetNo);
       END`,
   },
+  {
+    name: 'seed:tbl_ToolSizes',
+    sql: `
+      -- One-time backfill. From here on the size master is the source and
+      -- inventory receives its size from it via PO/GRN and rental intake,
+      -- not the other way round. Only runs while the master is empty.
+      IF NOT EXISTS (SELECT 1 FROM dbo.tbl_ToolSizes)
+      BEGIN
+        IF COLUMNPROPERTY(OBJECT_ID('dbo.tbl_ToolSizes'), 'SizeID', 'IsIdentity') = 1
+          INSERT INTO dbo.tbl_ToolSizes (SizeLabel, InInventory, ActiveFlag, SortOrder)
+          SELECT s.lbl, 1, 1, ROW_NUMBER() OVER (ORDER BY s.lbl)
+          FROM (SELECT DISTINCT LTRIM(RTRIM(i.[Size])) AS lbl
+                  FROM dbo.tbl_Inventory i
+                 WHERE NULLIF(LTRIM(RTRIM(i.[Size])), '') IS NOT NULL) s;
+        ELSE
+          INSERT INTO dbo.tbl_ToolSizes (SizeID, SizeLabel, InInventory, ActiveFlag, SortOrder)
+          SELECT ROW_NUMBER() OVER (ORDER BY s.lbl), s.lbl, 1, 1,
+                 ROW_NUMBER() OVER (ORDER BY s.lbl)
+          FROM (SELECT DISTINCT LTRIM(RTRIM(i.[Size])) AS lbl
+                  FROM dbo.tbl_Inventory i
+                 WHERE NULLIF(LTRIM(RTRIM(i.[Size])), '') IS NOT NULL) s;
+      END`,
+  },
+  {
+    name: 'seed:tbl_Suppliers',
+    sql: `
+      -- Promote the suppliers already present on inventory (Ownership) into
+      -- the supplier master, skipping any that are already registered.
+      INSERT INTO dbo.tbl_Suppliers (supplierCode, supplierName, supplierType, active, createdBy, createdAt)
+      SELECT REPLACE(REPLACE(UPPER(s.nm), ' ', '-'), '.', ''), s.nm,
+             CASE WHEN UPPER(s.nm) = 'EMDAD' THEN 'Internal' ELSE 'Rental Vendor' END,
+             1, 'migrate', GETDATE()
+      FROM (SELECT DISTINCT LTRIM(RTRIM(i.Ownership)) AS nm
+              FROM dbo.tbl_Inventory i
+             WHERE NULLIF(LTRIM(RTRIM(i.Ownership)), '') IS NOT NULL) s
+      WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.tbl_Suppliers x
+         WHERE UPPER(LTRIM(RTRIM(x.supplierName))) = UPPER(s.nm)
+      )`,
+  },
 ]
 
 module.exports = async function (context, req) {
@@ -181,6 +221,14 @@ module.exports = async function (context, req) {
   const results = {}
   for (const m of MIGRATIONS) {
     try {
+      // Data seeds are idempotent by their own guards and create no object,
+      // so the table-existence check below does not apply to them.
+      if (m.name.startsWith('seed:')) {
+        await query(m.sql)
+        results[m.name] = 'applied'
+        continue
+      }
+
       const before = await query(
         `SELECT CASE WHEN OBJECT_ID('dbo.${m.name}', 'U') IS NULL THEN 0 ELSE 1 END AS present`
       )
