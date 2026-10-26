@@ -602,6 +602,132 @@ const CHECKS = [
   {
     // (5) Every job status string actually in use, with how many jobs carry
     //     it. 'JobCompleted' and 'Completed' are the same thing spelt twice.
+    /*
+     * Closing rules, taking tbl_Jobs as the authority rather than the tickets.
+     *
+     *   Completed + legal invoice number -> close with a DUMMY ticket
+     *   JobCompleted                      -> raise a real RT and close
+     *   Ongoing / Open / Draft            -> leave alone, still running
+     *
+     * This bucket count says how many jobs and how much outstanding kit sit
+     * in each rule, so the scale of each action is known before any of it runs.
+     */
+    name: 'jobCloseBuckets',
+    sql: `WITH jobs AS (
+            SELECT JobID, Status, Rig, Well,
+                   CASE WHEN NULLIF(LTRIM(RTRIM(LegalInvoiceNumber)), '') IS NOT NULL
+                        THEN 'Has legal invoice' ELSE 'No legal invoice' END AS invoiced,
+                   ${jobKey('JobID')} AS jobKey
+              FROM tbl_Jobs
+          ),
+          dtl AS (
+            SELECT ${jobKey('t.jobNumber')} AS jobKey, l.serial
+              FROM tbl_DeliveryTicketLines l
+              JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          rtl AS (
+            SELECT DISTINCT ${jobKey('t.jobNumber')} AS jobKey, l.serial
+              FROM tbl_ReceivingTicketLines l
+              JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          outstanding AS (
+            SELECT DISTINCT d.jobKey, d.serial
+              FROM dtl d
+             WHERE NOT EXISTS (SELECT 1 FROM rtl
+                                WHERE rtl.jobKey = d.jobKey AND rtl.serial = d.serial)
+          )
+          SELECT j.Status, j.invoiced,
+                 COUNT(DISTINCT j.JobID)                                AS Jobs,
+                 COUNT(DISTINCT CASE WHEN o.jobKey IS NOT NULL THEN j.JobID END) AS JobsWithToolsOut,
+                 COUNT(o.serial)                                        AS ToolsOutstanding
+            FROM jobs j
+            LEFT JOIN outstanding o ON o.jobKey = j.jobKey
+           GROUP BY j.Status, j.invoiced
+           ORDER BY COUNT(o.serial) DESC`,
+  },
+  {
+    /*
+     * Ravi's check before closing a completed job: the delivery ticket should
+     * carry the SAME rig and well as the job. One that does not is a ticket
+     * attached to the wrong job.
+     *
+     * Compared two ways, because the strings are not written consistently --
+     * 'AD-137(JORDAN)' vs 'AD 137', say. Exact tells you how messy the text is;
+     * Loose ignores case, spaces, dashes, brackets and dots and is the figure
+     * to act on. Only a LOOSE mismatch is evidence of a wrong attachment.
+     */
+    name: 'rigWellMismatch',
+    sql: `WITH jobs AS (
+            SELECT JobID, Status, Rig, Well, ${jobKey('JobID')} AS jobKey
+              FROM tbl_Jobs
+             WHERE Status = 'Completed'
+               AND NULLIF(LTRIM(RTRIM(LegalInvoiceNumber)), '') IS NOT NULL
+          ),
+          dt AS (
+            SELECT t.dtNumber, t.jobNumber, t.rig, t.well, ${jobKey('t.jobNumber')} AS jobKey,
+                   (SELECT COUNT(*) FROM tbl_DeliveryTicketLines l WHERE l.dtNumber = t.dtNumber) AS Lines
+              FROM tbl_DeliveryTickets t
+          ),
+          m AS (
+            SELECT d.dtNumber, d.Lines,
+                   CASE WHEN UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(j.Rig)), ''),' ',''),'-',''),'(',''),')',''),'.','')) = UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(d.rig)), ''),' ',''),'-',''),'(',''),')',''),'.','')) THEN 1 ELSE 0 END AS rigLoose,
+                   CASE WHEN UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(j.Well)), ''),' ',''),'-',''),'(',''),')',''),'.','')) = UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(d.well)), ''),' ',''),'-',''),'(',''),')',''),'.','')) THEN 1 ELSE 0 END AS wellLoose,
+                   CASE WHEN LTRIM(RTRIM(COALESCE(j.Rig, ''))) = LTRIM(RTRIM(COALESCE(d.rig, ''))) THEN 1 ELSE 0 END AS rigExact,
+                   CASE WHEN LTRIM(RTRIM(COALESCE(j.Well, ''))) = LTRIM(RTRIM(COALESCE(d.well, ''))) THEN 1 ELSE 0 END AS wellExact,
+                   CASE WHEN NULLIF(LTRIM(RTRIM(d.rig)), '') IS NULL
+                          OR NULLIF(LTRIM(RTRIM(d.well)), '') IS NULL THEN 1 ELSE 0 END AS dtBlank
+              FROM dt d
+              JOIN jobs j ON j.jobKey = d.jobKey
+          )
+          SELECT COUNT(*)                                             AS DTsOnCompletedInvoicedJobs,
+                 SUM(Lines)                                           AS LinesOnThoseDTs,
+                 SUM(CASE WHEN rigExact = 1 AND wellExact = 1 THEN 1 ELSE 0 END)  AS BothMatchExactly,
+                 SUM(CASE WHEN rigLoose = 1 AND wellLoose = 1 THEN 1 ELSE 0 END)  AS BothMatchLoosely,
+                 SUM(CASE WHEN rigLoose = 0 AND wellLoose = 1 THEN 1 ELSE 0 END)  AS RigDiffersOnly,
+                 SUM(CASE WHEN rigLoose = 1 AND wellLoose = 0 THEN 1 ELSE 0 END)  AS WellDiffersOnly,
+                 SUM(CASE WHEN rigLoose = 0 AND wellLoose = 0 THEN 1 ELSE 0 END)  AS BothDiffer,
+                 SUM(CASE WHEN dtBlank = 1 THEN 1 ELSE 0 END)                     AS DTRigOrWellBlank,
+                 SUM(CASE WHEN rigLoose = 0 OR wellLoose = 0 THEN Lines ELSE 0 END) AS LinesOnMismatchedDTs
+            FROM m`,
+  },
+  {
+    // The mismatched tickets themselves, job rig/well beside ticket rig/well,
+    // so the pattern can be read before anything is removed.
+    name: 'rigWellMismatchRows',
+    sql: `WITH jobs AS (
+            SELECT JobID, Status, Rig, Well, LegalInvoiceNumber, ${jobKey('JobID')} AS jobKey
+              FROM tbl_Jobs
+             WHERE Status = 'Completed'
+               AND NULLIF(LTRIM(RTRIM(LegalInvoiceNumber)), '') IS NOT NULL
+          ),
+          dt AS (
+            SELECT t.dtNumber, t.jobNumber, t.rig, t.well, t.deliveryDate,
+                   ${jobKey('t.jobNumber')} AS jobKey,
+                   (SELECT COUNT(*) FROM tbl_DeliveryTicketLines l WHERE l.dtNumber = t.dtNumber) AS Lines
+              FROM tbl_DeliveryTickets t
+          )
+          SELECT j.JobID                              AS JobNo,
+                 j.LegalInvoiceNumber                 AS LegalInvoiceNo,
+                 COALESCE(j.Rig, '')                  AS JobRig,
+                 COALESCE(j.Well, '')                 AS JobWell,
+                 d.dtNumber                           AS DTNo,
+                 COALESCE(d.rig, '')                  AS DTRig,
+                 COALESCE(d.well, '')                 AS DTWell,
+                 CONVERT(VARCHAR(10), d.deliveryDate, 23) AS DTDate,
+                 d.Lines                              AS DTLines,
+                 CASE WHEN UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(j.Rig)), ''),' ',''),'-',''),'(',''),')',''),'.','')) <> UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(d.rig)), ''),' ',''),'-',''),'(',''),')',''),'.',''))
+                       AND UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(j.Well)), ''),' ',''),'-',''),'(',''),')',''),'.','')) <> UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(d.well)), ''),' ',''),'-',''),'(',''),')',''),'.','')) THEN 'Rig and well differ'
+                      WHEN UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(j.Rig)), ''),' ',''),'-',''),'(',''),')',''),'.','')) <> UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(d.rig)), ''),' ',''),'-',''),'(',''),')',''),'.','')) THEN 'Rig differs'
+                      ELSE 'Well differs' END         AS Differs
+            FROM dt d
+            JOIN jobs j ON j.jobKey = d.jobKey
+           WHERE UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(j.Rig)), ''),' ',''),'-',''),'(',''),')',''),'.','')) <> UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(d.rig)), ''),' ',''),'-',''),'(',''),')',''),'.',''))
+              OR UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(j.Well)), ''),' ',''),'-',''),'(',''),')',''),'.','')) <> UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(d.well)), ''),' ',''),'-',''),'(',''),')',''),'.',''))
+           ORDER BY d.Lines DESC, j.JobID`,
+  },
+  {
     name: 'reviewJobNumberFormats',
     sql: `SELECT TRANSLATE(JobID, '0123456789', '##########') AS Shape,
                  COUNT(*)   AS Jobs,
