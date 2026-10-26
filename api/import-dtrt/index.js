@@ -154,54 +154,70 @@ module.exports = async function (context, req) {
 
   // --------------------------------------------------------------- prepare ---
   /*
-   * Normalise the batch once. Each check below then reads an indexed table
-   * rather than recomputing the job key and re-resolving every asset, which is
-   * what pushed the old single-shot preview past the 45-second cap.
+   * Normalise the batch, one statement per request.
+   *
+   * Done as a single call this also passed the 45-second cap, so each statement
+   * is its own step and reports how long it took - a slow one can then be found
+   * rather than guessed at. Steps are ordered and each is safe to repeat.
    */
   if (sub === 'prepare' && method === 'POST') {
-    const batchId = text((req.body || {}).batchId)
+    const b = req.body || {}
+    const batchId = text(b.batchId)
+    const step = text(b.step) || 'clear'
     if (!batchId) return jsonResponse(context, 400, { error: 'batchId is required' })
     const p = [{ name: 'b', type: sql.NVarChar, value: batchId }]
+
+    const STEPS = {
+      clear: 'DELETE FROM tbl_ImportDTRTResolved WHERE batchId = @b',
+
+      /* De-duplicate to one row per (ticket, asset, return ticket). The sheet
+       * repeats rows and counting a repeat as real overstates everything after. */
+      rows: `INSERT INTO tbl_ImportDTRTResolved
+               (batchId, jobKey, jobNum, dtNo, partNum, rtNo, rig, well, remark, rtKind)
+             SELECT @b, ${jobKey('MAX(jobNum)')}, MAX(jobNum), dtNo, partNum, rtNo,
+                    MAX(rig), MAX(well), MAX(remark),
+                    CASE WHEN NULLIF(LTRIM(RTRIM(rtNo)), '') IS NULL THEN 0
+                         WHEN rtNo LIKE '%DUMMY%' THEN 2 ELSE 1 END
+               FROM tbl_ImportDTRT
+              WHERE batchId = @b AND NULLIF(LTRIM(RTRIM(dtNo)), '') IS NOT NULL
+              GROUP BY dtNo, partNum, rtNo,
+                       CASE WHEN NULLIF(LTRIM(RTRIM(rtNo)), '') IS NULL THEN 0
+                            WHEN rtNo LIKE '%DUMMY%' THEN 2 ELSE 1 END`,
+
+      /* The sheet carries the human AssetNo; ticket lines store the SystemID.
+       * Resolved as a set-based join, AssetNo first because that is what the
+       * sheet means by a part number. */
+      'resolve-asset': `UPDATE r SET systemId = i.SystemID
+                          FROM tbl_ImportDTRTResolved r
+                          JOIN tbl_Inventory i ON i.AssetNo = r.partNum
+                         WHERE r.batchId = @b AND r.systemId IS NULL
+                           AND NULLIF(LTRIM(RTRIM(r.partNum)), '') IS NOT NULL`,
+
+      'resolve-system': `UPDATE r SET systemId = i.SystemID
+                           FROM tbl_ImportDTRTResolved r
+                           JOIN tbl_Inventory i ON i.SystemID = r.partNum
+                          WHERE r.batchId = @b AND r.systemId IS NULL`,
+
+      count: `SELECT COUNT(*) AS Rows,
+                     SUM(CASE WHEN systemId IS NULL THEN 1 ELSE 0 END) AS Unresolved
+                FROM tbl_ImportDTRTResolved WHERE batchId = @b`,
+    }
+
+    if (!STEPS[step]) {
+      return jsonResponse(context, 400, { error: `Unknown step "${step}"`, steps: Object.keys(STEPS) })
+    }
+
     try {
-      await query('DELETE FROM tbl_ImportDTRTResolved WHERE batchId = @b', p)
-
-      await query(
-        `INSERT INTO tbl_ImportDTRTResolved
-           (batchId, jobKey, jobNum, dtNo, partNum, rtNo, rig, well, remark, rtKind)
-         SELECT @b,
-                ${jobKey('MAX(jobNum)')},
-                MAX(jobNum), dtNo, partNum, rtNo,
-                MAX(rig), MAX(well), MAX(remark),
-                CASE WHEN NULLIF(LTRIM(RTRIM(rtNo)), '') IS NULL THEN 0
-                     WHEN rtNo LIKE '%DUMMY%' THEN 2 ELSE 1 END
-           FROM tbl_ImportDTRT
-          WHERE batchId = @b AND NULLIF(LTRIM(RTRIM(dtNo)), '') IS NOT NULL
-          GROUP BY dtNo, partNum, rtNo,
-                   CASE WHEN NULLIF(LTRIM(RTRIM(rtNo)), '') IS NULL THEN 0
-                        WHEN rtNo LIKE '%DUMMY%' THEN 2 ELSE 1 END`, p)
-
-      /* Resolve AssetNo -> SystemID as a set-based join, not a lookup per row.
-       * AssetNo first: it is what the sheet carries and what people read. */
-      await query(
-        `UPDATE r SET systemId = i.SystemID
-           FROM tbl_ImportDTRTResolved r
-           JOIN tbl_Inventory i ON i.AssetNo = r.partNum
-          WHERE r.batchId = @b AND r.systemId IS NULL
-            AND NULLIF(LTRIM(RTRIM(r.partNum)), '') IS NOT NULL`, p)
-      await query(
-        `UPDATE r SET systemId = i.SystemID
-           FROM tbl_ImportDTRTResolved r
-           JOIN tbl_Inventory i ON i.SystemID = r.partNum
-          WHERE r.batchId = @b AND r.systemId IS NULL`, p)
-
-      const n = await query(
-        `SELECT COUNT(*) AS Rows,
-                SUM(CASE WHEN systemId IS NULL THEN 1 ELSE 0 END) AS Unresolved
-           FROM tbl_ImportDTRTResolved WHERE batchId = @b`, p)
-      return jsonResponse(context, 200, { prepared: n.recordset[0] })
+      const t0 = Date.now()
+      const r = await query(STEPS[step], p)
+      return jsonResponse(context, 200, {
+        step, ms: Date.now() - t0,
+        rowsAffected: r.rowsAffected ? r.rowsAffected[0] : undefined,
+        data: r.recordset && r.recordset.length ? r.recordset[0] : undefined,
+      })
     } catch (err) {
-      context.log.error('import prepare error:', err)
-      return jsonResponse(context, 500, { error: `Failed to prepare the batch — ${err.message}` })
+      context.log.error(`import prepare ${step} error:`, err)
+      return jsonResponse(context, 500, { error: `Prepare "${step}" failed — ${err.message}` })
     }
   }
 

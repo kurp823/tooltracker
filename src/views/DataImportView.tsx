@@ -24,6 +24,7 @@ type Row = {
 
 /* The checks run one request each: together they exceeded the 45-second cap on
  * a managed function and the platform answered with a bodiless 500. */
+const PREPARE_STEPS = ['clear', 'rows', 'resolve-asset', 'resolve-system'] as const
 const PARTS = ['shape', 'onrig', 'dt', 'rt', 'unknown', 'linkage'] as const
 type Part = typeof PARTS[number]
 
@@ -147,8 +148,12 @@ export function DataImportView() {
       }
 
       setBusy('checking')
-      setStage('normalising the batch')
-      await api.post('/import-dtrt/prepare', { batchId: id })
+      // Prepare is stepped for the same reason the checks are: one statement
+      // per request keeps each well inside the function's time limit.
+      for (const step of PREPARE_STEPS) {
+        setStage(`normalising — ${step}`)
+        await api.post('/import-dtrt/prepare', { batchId: id, step })
+      }
 
       // One request per check, rendered as each lands, so a slow one cannot
       // take the whole report down with it.
