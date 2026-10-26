@@ -34,7 +34,7 @@ interface NavModule {
   items: NavItem[]
 }
 
-const ICON = 16
+const ICON = 14
 
 const MODULES: NavModule[] = [
   {
@@ -169,39 +169,24 @@ export function Sidebar() {
   const { user, logout } = useAuth()
 
   return (
-    <aside className="w-[228px] shrink-0 bg-navy-900 flex flex-col border-r border-navy-950">
-      {/* Brand */}
-      <div className="px-3 py-3 border-b border-navy-800 flex items-center gap-2.5">
-        <div className="w-9 h-9 rounded bg-white flex items-center justify-center shrink-0">
-          <Package size={20} className="text-brand-700" />
+    <aside className="w-[210px] shrink-0 bg-navy-900 flex flex-col border-r border-navy-950">
+      {/* Brand — one compact row; the strap lines cost 100px and said nothing. */}
+      <div className="px-2.5 h-[34px] border-b border-navy-800 flex items-center gap-2">
+        <div className="w-5 h-5 rounded bg-white flex items-center justify-center shrink-0">
+          <Package size={13} className="text-brand-700" />
         </div>
-        <div className="min-w-0">
-          <div className="text-white font-bold text-sm leading-tight">EMDAD LLC</div>
-          <div className="text-slate-400 text-[10px] leading-tight truncate">
-            Well Intervention &ndash; Upstream Services
-          </div>
-        </div>
-      </div>
-
-      {/* Platform label */}
-      <div className="px-3 py-2 border-b border-navy-800">
-        <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-accent-500" />
-          <span className="text-white text-[11px] font-bold uppercase tracking-wider">
-            Operations Platform
-          </span>
-        </div>
-        <div className="text-slate-400 text-[10px] pl-3.5">Tool Fleet &amp; Dispatch</div>
+        <div className="text-white font-bold text-[13px] leading-none truncate">EMDAD LLC</div>
+        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0" title="Operations Platform" />
       </div>
 
       {/* Modules */}
-      <nav className="flex-1 overflow-y-auto px-1.5 py-2 dark-scroll">
+      <nav className="flex-1 min-h-0 overflow-y-auto px-1 py-1 dark-scroll">
         {MODULES.map(m => <Module key={m.module} mod={m} />)}
       </nav>
 
       {/* User */}
-      <div className="px-3 py-2.5 border-t border-navy-800 flex items-center gap-2">
-        <div className="w-7 h-7 rounded-full bg-accent-500 text-navy-950 flex items-center justify-center text-xs font-bold shrink-0">
+      <div className="px-2.5 py-1.5 border-t border-navy-800 flex items-center gap-2 shrink-0">
+        <div className="w-6 h-6 rounded-full bg-accent-500 text-navy-950 flex items-center justify-center text-[11px] font-bold shrink-0">
           {(user?.FullName || user?.Username || '?').charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">

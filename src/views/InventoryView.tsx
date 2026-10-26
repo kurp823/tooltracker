@@ -36,7 +36,7 @@ export function InventoryView() {
   const subCount = items?.filter(i => !i.IsEmdad).length ?? 0
 
   return (
-    <div className="flex flex-col h-[calc(100vh-104px)] gap-3">
+    <div className="screen gap-1.5">
       {/* Summary chips */}
       <div className="flex gap-3 flex-wrap">
         <div className="card px-4 py-2 flex items-center gap-2">

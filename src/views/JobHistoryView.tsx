@@ -78,7 +78,7 @@ export function JobHistoryView() {
   const head = rows[0]
 
   return (
-    <div className="flex flex-col h-[calc(100vh-104px)]">
+    <div className="screen">
       {/* Controls */}
       <div className="flex items-center gap-2 flex-wrap mb-3 print:hidden">
         <div className="w-80">

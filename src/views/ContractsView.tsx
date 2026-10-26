@@ -101,7 +101,7 @@ export function ContractsView() {
   if (isLoading) return <PageLoader />
 
   return (
-    <div className="flex flex-col h-[calc(100vh-104px)] gap-3">
+    <div className="screen gap-1.5">
       {/* Portfolio metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
         <div className="card px-4 py-2.5">
