@@ -24,7 +24,8 @@ type Row = {
 
 /* The checks run one request each: together they exceeded the 45-second cap on
  * a managed function and the platform answered with a bodiless 500. */
-const PREPARE_STEPS = ['clear', 'rows', 'resolve-asset', 'resolve-system'] as const
+// 'rows' clears the batch itself, in the same transaction, so it is safe to repeat
+const PREPARE_STEPS = ['rows', 'resolve-asset', 'resolve-system'] as const
 const PARTS = ['shape', 'onrig', 'dt', 'rt', 'unknown', 'linkage'] as const
 type Part = typeof PARTS[number]
 
