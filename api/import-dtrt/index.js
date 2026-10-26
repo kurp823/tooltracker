@@ -170,9 +170,21 @@ module.exports = async function (context, req) {
     const STEPS = {
       clear: 'DELETE FROM tbl_ImportDTRTResolved WHERE batchId = @b',
 
-      /* De-duplicate to one row per (ticket, asset, return ticket). The sheet
-       * repeats rows and counting a repeat as real overstates everything after. */
-      rows: `INSERT INTO tbl_ImportDTRTResolved
+      /*
+       * De-duplicate to one row per (ticket, asset, return ticket). The sheet
+       * repeats rows and counting a repeat as real overstates everything after.
+       *
+       * Clears first, in the same transaction, so the step is idempotent. It
+       * has to be: a request that passes the 45-second platform cap still runs
+       * to completion in the database - db.js allows three minutes - so the
+       * caller sees a failure, retries, and without this the batch is inserted
+       * twice. That is exactly what happened: 85,354 rows for a 42,000-row
+       * sheet.
+       */
+      rows: `SET XACT_ABORT ON;
+             BEGIN TRANSACTION;
+             DELETE FROM tbl_ImportDTRTResolved WHERE batchId = @b;
+             INSERT INTO tbl_ImportDTRTResolved
                (batchId, jobKey, jobNum, dtNo, partNum, rtNo, rig, well, remark, rtKind)
              SELECT @b, ${jobKey('MAX(jobNum)')}, MAX(jobNum), dtNo, partNum, rtNo,
                     MAX(rig), MAX(well), MAX(remark),
@@ -182,7 +194,8 @@ module.exports = async function (context, req) {
               WHERE batchId = @b AND NULLIF(LTRIM(RTRIM(dtNo)), '') IS NOT NULL
               GROUP BY dtNo, partNum, rtNo,
                        CASE WHEN NULLIF(LTRIM(RTRIM(rtNo)), '') IS NULL THEN 0
-                            WHEN rtNo LIKE '%DUMMY%' THEN 2 ELSE 1 END`,
+                            WHEN rtNo LIKE '%DUMMY%' THEN 2 ELSE 1 END;
+             COMMIT;`,
 
       /* The sheet carries the human AssetNo; ticket lines store the SystemID.
        * Resolved as a set-based join, AssetNo first because that is what the
