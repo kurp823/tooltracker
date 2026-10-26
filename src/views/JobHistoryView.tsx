@@ -124,6 +124,7 @@ export function JobHistoryView() {
       {/* Table */}
       <div className="card flex-1 flex flex-col overflow-hidden">
         <MovementTable
+          tableId="job-history"
           rows={rows}
           loading={loading}
           visible={visible}
