@@ -419,6 +419,61 @@ const MIGRATIONS = [
        WHERE i.Status = 'Good';`,
   },
   {
+    /*
+     * Remove delivery tickets carrying the wrong rig or well.
+     *
+     * The job list is the authority. A job that is Completed and carries a
+     * legal invoice number has a settled rig and well; a delivery ticket on
+     * that job showing a different rig or well is wrong data. Checked against
+     * every job in the table first: no job anywhere has the rig/well these
+     * tickets claim, so there is nothing to re-attach them to.
+     *
+     * Compared loosely - ignoring case, spaces, dashes, brackets and dots -
+     * so AD-137(JORDAN) and AD 137 count as the same rig and only a genuine
+     * difference is removed. 2,656 of 2,669 such tickets match and are
+     * untouched.
+     *
+     * DUMMY tickets are deliberately excluded: those are a deliberate
+     * convention for closing old jobs, not data to clean up.
+     *
+     * Idempotent: once removed the rows no longer match.
+     */
+    name: 'seed:remove-wrong-rigwell-tickets',
+    sql: `
+      SET XACT_ABORT ON;
+      BEGIN TRANSACTION;
+
+      WITH jobs AS (
+        SELECT JobID, Rig, Well, Status, LegalInvoiceNumber,
+               ${jobKey('JobID')} AS jobKey
+          FROM tbl_Jobs
+         WHERE Status = 'Completed'
+           AND NULLIF(LTRIM(RTRIM(LegalInvoiceNumber)), '') IS NOT NULL
+      ),
+      dt AS (
+        SELECT t.dtNumber, t.rig, t.well, ${jobKey('t.jobNumber')} AS jobKey
+          FROM tbl_DeliveryTickets t
+         WHERE t.dtNumber NOT LIKE 'DT-DUMMY%'
+           AND t.dtNumber NOT LIKE 'DUMMY%'
+      )
+      SELECT d.dtNumber
+        INTO #wrongRigWell
+        FROM dt d
+        JOIN jobs j ON j.jobKey = d.jobKey
+       WHERE UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(j.Rig)), ''),' ',''),'-',''),'(',''),')',''),'.','')) <> UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(d.rig)), ''),' ',''),'-',''),'(',''),')',''),'.',''))
+          OR UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(j.Well)), ''),' ',''),'-',''),'(',''),')',''),'.','')) <> UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(d.well)), ''),' ',''),'-',''),'(',''),')',''),'.',''));
+
+      DELETE FROM tbl_DeliveryTicketLines
+       WHERE dtNumber IN (SELECT dtNumber FROM #wrongRigWell);
+
+      DELETE FROM tbl_DeliveryTickets
+       WHERE dtNumber IN (SELECT dtNumber FROM #wrongRigWell);
+
+      DROP TABLE #wrongRigWell;
+
+      COMMIT;`,
+  },
+  {
     name: 'seed:dedupe-ticket-lines',
     sql: `
       SET XACT_ABORT ON;
