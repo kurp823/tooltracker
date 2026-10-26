@@ -364,6 +364,51 @@ const CHECKS = [
   },
   {
     /*
+     * The live-job slice of stillOnRig, resolved against the catalogue.
+     *
+     * This is the set a backfill would touch, so it reports current inventory
+     * status: only rows reading 'Good' are safe to move to 'On Rig'. A tool
+     * already marked DBR, Inspection, Maintenance or Lost in Hole is in
+     * someone else's workflow and must be left alone.
+     */
+    name: 'stillOnRigLive',
+    sql: `WITH live AS (
+            SELECT TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS jobSeq
+              FROM tbl_Jobs
+             WHERE Status IN ('Ongoing', 'Draft Invoice Submitted', 'Open', 'Waiting on Signed Docs')
+          ),
+          dt AS (
+            SELECT TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   l.serial, t.rig
+              FROM tbl_DeliveryTicketLines l
+              JOIN tbl_DeliveryTickets t ON t.dtNumber = l.dtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          rt AS (
+            SELECT DISTINCT
+                   TRY_CAST(RIGHT(t.jobNumber, CHARINDEX('-', REVERSE(t.jobNumber) + '-') - 1) AS INT) AS jobSeq,
+                   l.serial
+              FROM tbl_ReceivingTicketLines l
+              JOIN tbl_ReceivingTickets t ON t.rtNumber = l.rtNumber
+             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
+          ),
+          outstanding AS (
+            SELECT DISTINCT dt.serial
+              FROM dt
+             WHERE dt.jobSeq IN (SELECT jobSeq FROM live WHERE jobSeq IS NOT NULL)
+               AND NOT EXISTS (SELECT 1 FROM rt
+                                WHERE rt.jobSeq = dt.jobSeq AND rt.serial = dt.serial)
+          )
+          SELECT COALESCE(i.Status, '(not in inventory)') AS invStatus,
+                 COUNT(*) AS assets
+            FROM outstanding o
+            LEFT JOIN tbl_Inventory i
+                   ON i.SystemID = o.serial OR i.AssetNo = o.serial
+           GROUP BY COALESCE(i.Status, '(not in inventory)')
+           ORDER BY COUNT(*) DESC`,
+  },
+  {
+    /*
      * What is actually still on a rig.
      *
      * The raw gap between the two line tables does NOT answer this: orphan
