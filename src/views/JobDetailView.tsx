@@ -199,6 +199,16 @@ function ToolPickerModal({
 
   const sizes = Array.from(new Set(items.map((i: InvItem) => i.Size).filter(Boolean))).sort()
 
+  /*
+   * Only render a slice. With the availability filter fixed this list is 5,072
+   * tools, and putting all of them in the modal's DOM made opening the picker
+   * slow enough to look broken. Nobody scrolls 5,072 rows — they search or
+   * filter by size — so cap the render and say so when it is capped.
+   */
+  const RENDER_CAP = 200
+  const shownItems = filtered.slice(0, RENDER_CAP)
+  const capped = filtered.length > RENDER_CAP
+
   function toggleRow(assetNo: string) {
     setSelected(prev => {
       const next = new Set(prev)
@@ -209,10 +219,10 @@ function ToolPickerModal({
   }
 
   function toggleAll() {
-    if (selected.size === filtered.length) {
+    if (selected.size === shownItems.length) {
       setSelected(new Set())
     } else {
-      setSelected(new Set(filtered.map(i => i.AssetNo)))
+      setSelected(new Set(shownItems.map(i => i.AssetNo)))
     }
   }
 
@@ -259,6 +269,7 @@ function ToolPickerModal({
           </div>
           <div className="text-xs text-gray-500 ml-auto">
             Matching Tools: <strong>{filtered.length}</strong>
+            {capped && <span className="text-amber-700 font-semibold ml-2">showing first {RENDER_CAP} — search or filter by size to narrow</span>}
           </div>
         </div>
 
@@ -285,7 +296,7 @@ function ToolPickerModal({
                 <tr>
                   <th className="table-th w-10">
                     <button onClick={toggleAll}>
-                      {selected.size === filtered.length && filtered.length > 0
+                      {selected.size === shownItems.length && shownItems.length > 0
                         ? <CheckSquare size={15} className="text-brand-600" />
                         : <Square size={15} className="text-gray-400" />
                       }
@@ -308,7 +319,7 @@ function ToolPickerModal({
                     </td>
                   </tr>
                 ) : (
-                  filtered.map(item => {
+                  shownItems.map(item => {
                     const isSelected = selected.has(item.AssetNo)
                     return (
                       <tr
