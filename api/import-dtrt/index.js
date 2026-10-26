@@ -116,6 +116,13 @@ module.exports = async function (context, req) {
     const p = [{ name: 'b', type: sql.NVarChar, value: batchId }]
 
     try {
+      // Nothing staged: the comparisons below would still scan the live tables
+      // to prove it, which is a slow way to say zero.
+      const staged = await query(
+        'SELECT COUNT(*) AS n FROM tbl_ImportDTRT WHERE batchId = @b', p)
+      if (!staged.recordset[0].n) {
+        return jsonResponse(context, 200, { batchId, empty: true, rowsStaged: 0 })
+      }
       /*
        * One pass over the staged batch, de-duplicated the same way the live
        * tables were: a sheet exported from Excel repeats rows, and counting
@@ -178,10 +185,15 @@ module.exports = async function (context, req) {
             WHERE batchId = @b AND NULLIF(LTRIM(RTRIM(dtNo)), '') IS NOT NULL
               AND NULLIF(LTRIM(RTRIM(partNum)), '') IS NOT NULL
          ),
+         tix AS (
+           SELECT DISTINCT dtNo FROM tbl_ImportDTRT
+            WHERE batchId = @b AND NULLIF(LTRIM(RTRIM(dtNo)), '') IS NOT NULL
+         ),
          live AS (
            SELECT DISTINCT l.dtNumber AS dtNo,
                   COALESCE(NULLIF(i.AssetNo, ''), l.serial) AS partNum
              FROM tbl_DeliveryTicketLines l
+             JOIN tix ON tix.dtNo = l.dtNumber
              LEFT JOIN tbl_Inventory i
                     ON i.SystemID = l.serial OR i.AssetNo = l.serial
             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
@@ -195,7 +207,7 @@ module.exports = async function (context, req) {
                      AND live.partNum = s.partNum))                    AS SheetOnly,
                 (SELECT COUNT(*) FROM live WHERE NOT EXISTS
                    (SELECT 1 FROM s WHERE s.dtNo = live.dtNo
-                     AND s.partNum = live.partNum))                    AS AppOnly`, p)
+                     AND s.partNum = live.partNum))                    AS AppOnlyOnSheetsTickets`, p)
 
       /* The return side, same comparison. This is where the two diverge. */
       const rt = await query(
@@ -206,10 +218,16 @@ module.exports = async function (context, req) {
               AND rtNo NOT LIKE '%DUMMY%'
               AND NULLIF(LTRIM(RTRIM(partNum)), '') IS NOT NULL
          ),
+         tix AS (
+           SELECT DISTINCT rtNo FROM tbl_ImportDTRT
+            WHERE batchId = @b AND NULLIF(LTRIM(RTRIM(rtNo)), '') IS NOT NULL
+              AND rtNo NOT LIKE '%DUMMY%'
+         ),
          live AS (
            SELECT DISTINCT l.rtNumber AS rtNo,
                   COALESCE(NULLIF(i.AssetNo, ''), l.serial) AS partNum
              FROM tbl_ReceivingTicketLines l
+             JOIN tix ON tix.rtNo = l.rtNumber
              LEFT JOIN tbl_Inventory i
                     ON i.SystemID = l.serial OR i.AssetNo = l.serial
             WHERE NULLIF(LTRIM(RTRIM(l.serial)), '') IS NOT NULL
@@ -223,7 +241,7 @@ module.exports = async function (context, req) {
                      AND live.partNum = s.partNum))                    AS SheetOnly,
                 (SELECT COUNT(*) FROM live WHERE NOT EXISTS
                    (SELECT 1 FROM s WHERE s.rtNo = live.rtNo
-                     AND s.partNum = live.partNum))                    AS AppOnly`, p)
+                     AND s.partNum = live.partNum))                    AS AppOnlyOnSheetsTickets`, p)
 
       /* Tickets and jobs named in the sheet that the app has never heard of. */
       const unknown = await query(

@@ -24,6 +24,8 @@ type Row = {
 
 type Preview = {
   batchId: string
+  empty?: boolean
+  rowsStaged?: number
   shape: Record<string, number>
   stillOnRigByJobStatus: Array<Record<string, string | number>>
   deliveryLines: Record<string, number>
@@ -206,7 +208,13 @@ export function DataImportView() {
           </section>
         )}
 
-        {preview && (
+        {preview?.empty && (
+          <p className="text-[12px] text-amber-700">
+            Nothing was staged for this batch — re-run the upload.
+          </p>
+        )}
+
+        {preview && !preview.empty && (
           <>
             <Block title="What the sheet contains">
               <Grid obj={preview.shape} />
