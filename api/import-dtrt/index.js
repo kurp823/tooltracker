@@ -54,32 +54,57 @@ module.exports = async function (context, req) {
     }
 
     try {
-      // A table-valued parameter would be neater, but it needs a user-defined
-      // type in the database; a multi-row VALUES list keeps this to one round
-      // trip without that dependency.
-      const params = [
-        { name: 'batchId', type: sql.NVarChar, value: batchId },
-        { name: 'by', type: sql.NVarChar, value: user.Username || '' },
-      ]
-      const tuples = rows.map((r, i) => {
-        const names = COLUMNS.map((c) => {
-          const pn = `${c}${i}`
-          const raw = r[c]
-          params.push({
-            name: pn,
-            type: c === 'rowNo' ? sql.Int : sql.NVarChar,
-            value: c === 'rowNo' ? (Number.isFinite(Number(raw)) ? Number(raw) : null)
-                                 : text(raw).slice(0, 400),
-          })
-          return `@${pn}`
-        })
-        return `(@batchId, ${names.join(', ')}, @by)`
-      })
-
+      /*
+       * The chunk travels as ONE json parameter and is expanded by OPENJSON.
+       *
+       * The obvious shape - a multi-row VALUES list with a parameter per cell -
+       * cannot work here: SQL Server caps a request at 2,100 parameters, and
+       * 2,000 rows of twelve columns asks for 24,000. Dropping the chunk size
+       * to fit would mean a request per 170 rows, so the whole sheet would take
+       * 270 round trips. OPENJSON keeps it at three parameters whatever the
+       * chunk size.
+       */
       await query(
         `INSERT INTO tbl_ImportDTRT
            (batchId, ${COLUMNS.join(', ')}, uploadedBy)
-         VALUES ${tuples.join(', ')}`, params)
+         SELECT @batchId, ${COLUMNS.map((c) => `j.${c}`).join(', ')}, @by
+           FROM OPENJSON(@rows)
+           WITH (
+             rowNo    INT            '$.rowNo',
+             jobNum   NVARCHAR(60)   '$.jobNum',
+             dtNo     NVARCHAR(60)   '$.dtNo',
+             dtDate   NVARCHAR(40)   '$.dtDate',
+             sNo      NVARCHAR(20)   '$.sNo',
+             partNum  NVARCHAR(120)  '$.partNum',
+             partDesc NVARCHAR(400)  '$.partDesc',
+             rtNo     NVARCHAR(60)   '$.rtNo',
+             rtDate   NVARCHAR(40)   '$.rtDate',
+             remark   NVARCHAR(120)  '$.remark',
+             rig      NVARCHAR(120)  '$.rig',
+             well     NVARCHAR(120)  '$.well'
+           ) j`,
+        [
+          { name: 'batchId', type: sql.NVarChar, value: batchId },
+          { name: 'by', type: sql.NVarChar, value: user.Username || '' },
+          {
+            name: 'rows',
+            type: sql.NVarChar(sql.MAX),
+            value: JSON.stringify(rows.map((r) => ({
+              rowNo: Number.isFinite(Number(r.rowNo)) ? Number(r.rowNo) : null,
+              jobNum: text(r.jobNum).slice(0, 60),
+              dtNo: text(r.dtNo).slice(0, 60),
+              dtDate: text(r.dtDate).slice(0, 40),
+              sNo: text(r.sNo).slice(0, 20),
+              partNum: text(r.partNum).slice(0, 120),
+              partDesc: text(r.partDesc).slice(0, 400),
+              rtNo: text(r.rtNo).slice(0, 60),
+              rtDate: text(r.rtDate).slice(0, 40),
+              remark: text(r.remark).slice(0, 120),
+              rig: text(r.rig).slice(0, 120),
+              well: text(r.well).slice(0, 120),
+            }))),
+          },
+        ])
 
       const n = await query(
         'SELECT COUNT(*) AS n FROM tbl_ImportDTRT WHERE batchId = @b',
@@ -90,7 +115,9 @@ module.exports = async function (context, req) {
       })
     } catch (err) {
       context.log.error('import rows error:', err)
-      return jsonResponse(context, 500, { error: 'Failed to stage rows', detail: String(err.message || err) })
+      return jsonResponse(context, 500, {
+        error: `Failed to stage rows — ${String(err.message || err)}`,
+      })
     }
   }
 
@@ -330,7 +357,9 @@ module.exports = async function (context, req) {
       })
     } catch (err) {
       context.log.error('import preview error:', err)
-      return jsonResponse(context, 500, { error: 'Failed to build the preview', detail: String(err.message || err) })
+      return jsonResponse(context, 500, {
+        error: `Failed to build the preview — ${String(err.message || err)}`,
+      })
     }
   }
 
