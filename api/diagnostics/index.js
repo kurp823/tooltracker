@@ -108,6 +108,106 @@ const CHECKS = [
            ORDER BY COUNT(DISTINCT rtNumber) DESC`,
   },
   {
+    /*
+     * The question that decides whether the duplicates can be deleted: within
+     * a duplicated (ticket, serial) group, is every row the same, or do the
+     * rows differ in a field that carries real information?
+     *
+     * 'identical'  — every row in the group agrees on description, qty and
+     *                remarks, so all but one are safely redundant.
+     * 'differing'  — at least one field varies, so the rows may be separate
+     *                real entries (two of the same tool at different
+     *                quantities, or with different remarks) and deleting them
+     *                would destroy manifest detail.
+     */
+    name: 'duplicateShapeDT',
+    sql: `WITH g AS (
+            SELECT dtNumber, serial,
+                   COUNT(*) AS n,
+                   COUNT(DISTINCT CAST(CONCAT(
+                     LEFT(COALESCE(CAST(toolDescription AS NVARCHAR(4000)), '~'), 200), '|',
+                     COALESCE(CAST(qty AS NVARCHAR(20)), '~'), '|',
+                     LEFT(COALESCE(CAST(remarks AS NVARCHAR(4000)), '~'), 200)
+                   ) AS NVARCHAR(500))) AS distinctShapes
+              FROM tbl_DeliveryTicketLines
+             WHERE NULLIF(LTRIM(RTRIM(serial)), '') IS NOT NULL
+             GROUP BY dtNumber, serial
+            HAVING COUNT(*) > 1
+          )
+          SELECT
+            COUNT(*)                                            AS duplicateGroups,
+            SUM(CASE WHEN distinctShapes = 1 THEN 1 ELSE 0 END) AS identicalGroups,
+            SUM(CASE WHEN distinctShapes > 1 THEN 1 ELSE 0 END) AS differingGroups,
+            SUM(CASE WHEN distinctShapes = 1 THEN n - 1 ELSE 0 END) AS safelyRedundantRows,
+            SUM(CASE WHEN distinctShapes > 1 THEN n - 1 ELSE 0 END) AS rowsNeedingReview
+          FROM g`,
+  },
+  {
+    name: 'duplicateShapeRT',
+    sql: `WITH g AS (
+            SELECT rtNumber, serial,
+                   COUNT(*) AS n,
+                   COUNT(DISTINCT CAST(CONCAT(
+                     LEFT(COALESCE(CAST(toolDescription AS NVARCHAR(4000)), '~'), 150), '|',
+                     COALESCE(CAST(qty AS NVARCHAR(20)), '~'), '|',
+                     COALESCE(usedStatus, '~'), '|',
+                     LEFT(COALESCE(CAST(condition AS NVARCHAR(4000)), '~'), 80), '|',
+                     COALESCE(routedTo, '~'), '|',
+                     LEFT(COALESCE(CAST(remarks AS NVARCHAR(4000)), '~'), 150)
+                   ) AS NVARCHAR(700))) AS distinctShapes
+              FROM tbl_ReceivingTicketLines
+             WHERE NULLIF(LTRIM(RTRIM(serial)), '') IS NOT NULL
+             GROUP BY rtNumber, serial
+            HAVING COUNT(*) > 1
+          )
+          SELECT
+            COUNT(*)                                            AS duplicateGroups,
+            SUM(CASE WHEN distinctShapes = 1 THEN 1 ELSE 0 END) AS identicalGroups,
+            SUM(CASE WHEN distinctShapes > 1 THEN 1 ELSE 0 END) AS differingGroups,
+            SUM(CASE WHEN distinctShapes = 1 THEN n - 1 ELSE 0 END) AS safelyRedundantRows,
+            SUM(CASE WHEN distinctShapes > 1 THEN n - 1 ELSE 0 END) AS rowsNeedingReview
+          FROM g`,
+  },
+  {
+    // Concrete examples of groups whose rows genuinely differ, so the
+    // difference can be judged rather than assumed.
+    name: 'differingDuplicateSamplesRT',
+    sql: `WITH g AS (
+            SELECT TOP 4 rtNumber, serial
+              FROM tbl_ReceivingTicketLines
+             WHERE NULLIF(LTRIM(RTRIM(serial)), '') IS NOT NULL
+             GROUP BY rtNumber, serial
+            HAVING COUNT(*) > 1
+               AND COUNT(DISTINCT CAST(CONCAT(
+                     COALESCE(CAST(qty AS NVARCHAR(20)), '~'), '|',
+                     COALESCE(usedStatus, '~'), '|',
+                     LEFT(COALESCE(CAST(remarks AS NVARCHAR(4000)), '~'), 150)
+                   ) AS NVARCHAR(300))) > 1
+             ORDER BY rtNumber DESC
+          )
+          SELECT l.rtNumber, l.itemNo, l.serial, l.qty, l.usedStatus,
+                 LEFT(COALESCE(CAST(l.condition AS NVARCHAR(MAX)), ''), 30) AS cond,
+                 LEFT(COALESCE(CAST(l.remarks AS NVARCHAR(MAX)), ''), 40)   AS remarks
+            FROM tbl_ReceivingTicketLines l
+            JOIN g ON g.rtNumber = l.rtNumber AND g.serial = l.serial
+           ORDER BY l.rtNumber, l.serial, l.itemNo`,
+  },
+  {
+    // Are the duplicates and the orphans the same rows, or separate problems?
+    name: 'duplicateVsOrphanOverlap',
+    sql: `SELECT
+            (SELECT COUNT(*) FROM tbl_ReceivingTicketLines l
+              WHERE NOT EXISTS (SELECT 1 FROM tbl_ReceivingTickets t WHERE t.rtNumber = l.rtNumber)
+                AND EXISTS (SELECT 1 FROM tbl_ReceivingTicketLines d
+                             WHERE d.rtNumber = l.rtNumber AND d.serial = l.serial AND d.id <> l.id)
+            ) AS rtLinesBothOrphanAndDuplicated,
+            (SELECT COUNT(*) FROM tbl_DeliveryTicketLines l
+              WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t WHERE t.dtNumber = l.dtNumber)
+                AND EXISTS (SELECT 1 FROM tbl_DeliveryTicketLines d
+                             WHERE d.dtNumber = l.dtNumber AND d.serial = l.serial AND d.id <> l.id)
+            ) AS dtLinesBothOrphanAndDuplicated`,
+  },
+  {
     // The headers currently carrying two merged line sets, from the renumber.
     name: 'ticketsWithDuplicateItemNos',
     sql: `SELECT TOP 20 dtNumber, COUNT(*) AS lines, COUNT(DISTINCT itemNo) AS distinctItemNos
