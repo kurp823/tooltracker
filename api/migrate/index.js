@@ -341,6 +341,21 @@ const MIGRATIONS = [
    * HAVING COUNT(*) > 1 guard matches nothing.
    */
   {
+    /*
+     * The grouping that both the diagnostics and the de-duplication do is
+     * (ticket, serial); without an index that is a full scan of 58,000 and
+     * 47,000 rows on every call.
+     */
+    name: 'seed:ticket-line-group-indexes',
+    sql: `
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_RTLines_rtNumber_serial')
+        CREATE INDEX IX_RTLines_rtNumber_serial
+          ON dbo.tbl_ReceivingTicketLines (rtNumber, serial) INCLUDE (id, qty, usedStatus);
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_DTLines_dtNumber_serial')
+        CREATE INDEX IX_DTLines_dtNumber_serial
+          ON dbo.tbl_DeliveryTicketLines (dtNumber, serial) INCLUDE (id, qty);`,
+  },
+  {
     name: 'seed:dedupe-ticket-lines',
     sql: `
       SET XACT_ABORT ON;
@@ -371,16 +386,15 @@ const MIGRATIONS = [
          WHERE shapesIgnoringRemarks = 1
            AND (remarkVariants = 1 OR rowsWithRealRemarks = 0)
       ),
-      keepers AS (
-        SELECT MIN(l.id) AS keepId
+      ranked AS (
+        SELECT l.id,
+               ROW_NUMBER() OVER (PARTITION BY l.rtNumber, l.serial ORDER BY l.id) AS rn
           FROM tbl_ReceivingTicketLines l
           JOIN safe s ON s.rtNumber = l.rtNumber AND s.serial = l.serial
-         GROUP BY l.rtNumber, l.serial
       )
-      DELETE l
-        FROM tbl_ReceivingTicketLines l
-        JOIN safe s ON s.rtNumber = l.rtNumber AND s.serial = l.serial
-       WHERE l.id NOT IN (SELECT keepId FROM keepers);
+      -- One pass. The previous NOT IN (SELECT ... FROM keepers) re-evaluated
+      -- the keeper set per row and timed out at 15s over 58,000 rows.
+      DELETE FROM ranked WHERE rn > 1;
 
       ------------------------------------------------ delivery ticket lines ---
       WITH gd AS (
@@ -395,16 +409,13 @@ const MIGRATIONS = [
                  LEFT(COALESCE(CAST(remarks AS NVARCHAR(4000)), '~'), 150)
                ) AS NVARCHAR(500))) = 1
       ),
-      keepersD AS (
-        SELECT MIN(l.id) AS keepId
+      rankedD AS (
+        SELECT l.id,
+               ROW_NUMBER() OVER (PARTITION BY l.dtNumber, l.serial ORDER BY l.id) AS rn
           FROM tbl_DeliveryTicketLines l
           JOIN gd ON gd.dtNumber = l.dtNumber AND gd.serial = l.serial
-         GROUP BY l.dtNumber, l.serial
       )
-      DELETE l
-        FROM tbl_DeliveryTicketLines l
-        JOIN gd ON gd.dtNumber = l.dtNumber AND gd.serial = l.serial
-       WHERE l.id NOT IN (SELECT keepId FROM keepersD);
+      DELETE FROM rankedD WHERE rn > 1;
 
       COMMIT TRANSACTION;`,
   },
@@ -426,7 +437,7 @@ module.exports = async function (context, req) {
       // Data seeds are idempotent by their own guards and create no object,
       // so the table-existence check below does not apply to them.
       if (m.name.startsWith('seed:')) {
-        await query(m.sql)
+        await query(m.sql, [], { timeout: 180000 })
         results[m.name] = 'applied'
         continue
       }
@@ -441,7 +452,7 @@ module.exports = async function (context, req) {
         continue
       }
 
-      await query(m.sql)
+      await query(m.sql, [], { timeout: 180000 })
 
       const after = await query(
         `SELECT CASE WHEN OBJECT_ID('dbo.${m.name}', 'U') IS NULL THEN 0 ELSE 1 END AS present`
