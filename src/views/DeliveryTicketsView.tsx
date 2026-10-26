@@ -24,6 +24,18 @@ interface DT {
   CreatedDate: string | null
   Client: string | null
   LineCount: number
+  // Real columns on tbl_DeliveryTickets that the first cut never surfaced.
+  Rig: string | null
+  Well: string | null
+  PONumber: string | null
+  ClientRef: string | null
+  CalloutRef: string | null
+  VehicleVessel: string | null
+  DriverName: string | null
+  EmdadRep: string | null
+  EmdadSignDate: string | null
+  ClientSignedBy: string | null
+  ClientSignDate: string | null
 }
 
 interface DTLine {
@@ -40,6 +52,10 @@ interface DTLine {
   AssetNo: string | null
   ToolDescription: string | null
   SizeName: string | null
+  CategoryName: string | null
+  Supplier: string | null
+  RgtNo: string | null
+  DateIn: string | null
 }
 
 interface InventoryItem {
@@ -53,7 +69,15 @@ interface InventoryItem {
   Condition: string | null
 }
 
-const STATUS_OPTIONS = ['Draft', 'Submitted', 'Approved', 'Rejected'] as const
+/**
+ * The real statuses, counted across all 3,700 tickets in tbl_DeliveryTickets:
+ * Closed 2,116, Signed 1,569, blank 15. 'Draft'/'Submitted'/'Approved'/
+ * 'Rejected' were invented by the first cut and appear on no ticket at all,
+ * so filtering by them matched nothing. A new ticket starts blank — that is
+ * genuinely what the data shows for a ticket not yet signed.
+ */
+const STATUS_OPTIONS = ['', 'Signed', 'Closed'] as const
+const STATUS_LABEL = (s: string) => (s ? s : 'Not set')
 
 // ─── Tool Picker Modal ────────────────────────────────────────────────────────
 
@@ -269,29 +293,76 @@ function DTDetailPanel({
   const { success, error: toastErr } = useToast()
   const [showToolPicker, setShowToolPicker] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({
-    DTDate: dt.DTDate?.split('T')[0] ?? '',
-    Status: dt.Status,
-    Notes: dt.Notes ?? '',
-  })
+  // The register row carries only a few columns; the ticket itself has 24, so
+  // fetch the full record before showing the header fields.
+  const { data: full } = useFetch<DT>(`/delivery-tickets/${dt.DTID}`)
+  const d = full ?? dt
+
+  const day = (v: string | null | undefined) => (v ? v.split('T')[0] : '')
+
+  const [form, setForm] = useState<Record<string, string>>({})
+  const [loaded, setLoaded] = useState(false)
+  React.useEffect(() => {
+    if (!full || loaded) return
+    setForm({
+      DTDate: day(full.DTDate),
+      Rig: full.Rig ?? '',
+      Well: full.Well ?? '',
+      PONumber: full.PONumber ?? '',
+      ClientRef: full.ClientRef ?? '',
+      CalloutRef: full.CalloutRef ?? '',
+      VehicleVessel: full.VehicleVessel ?? '',
+      DriverName: full.DriverName ?? '',
+      EmdadRep: full.EmdadRep ?? '',
+      EmdadSignDate: day(full.EmdadSignDate),
+      ClientSignedBy: full.ClientSignedBy ?? '',
+      ClientSignDate: day(full.ClientSignDate),
+      Status: full.Status ?? '',
+      Notes: full.Notes ?? '',
+    })
+    setLoaded(true)
+  }, [full, loaded])
 
   const { data: lines, refetch: refetchLines } =
     useFetch<DTLine[]>(`/delivery-tickets/${dt.DTID}/lines`)
 
   const canEdit = hasRole('Admin', 'Operations')
 
-  // Save header changes
+  // Unsaved-work guard: typed changes must not be lost by navigating away.
+  const [dirty, setDirty] = useState(false)
+  const set = (k: string, v: string) => {
+    setForm(f => ({ ...f, [k]: v }))
+    setDirty(true)
+  }
+
+  React.useEffect(() => {
+    if (!dirty) return
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
+  // Save header changes. The cursor stays busy until the write lands, so the
+  // user can see their typing has actually been committed.
   const handleSave = async () => {
     setSaving(true)
+    document.body.style.cursor = 'wait'
     try {
       await api.put(`/delivery-tickets/${dt.DTID}`, form)
-      success('Saved')
+      setDirty(false)
+      success('Ticket saved')
       onRefresh()
     } catch (err: any) {
       toastErr(err.message || 'Save failed')
     } finally {
+      document.body.style.cursor = ''
       setSaving(false)
     }
+  }
+
+  const handleClose = () => {
+    if (dirty && !window.confirm('This ticket has unsaved changes. Leave without saving?')) return
+    onClose()
   }
 
   // Add a tool line
@@ -329,142 +400,182 @@ function DTDetailPanel({
         onSelect={handleAddTool}
       />
 
-      <div className="w-[480px] shrink-0 bg-white border-l border-gray-200 flex flex-col h-full overflow-hidden shadow-lg">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50">
-          <div>
-            <p className="font-semibold text-gray-900">{dt.DTNumber}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Job: {dt.JobID} · {dt.Client || '—'}</p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X size={18} />
+      {/*
+        Full-width ticket, laid out like the old Rental Ticket screen: a dense
+        three-row header, then the tool grid taking everything that's left, then
+        a one-row footer. The 480px drawer it replaces could show 5 of the grid's
+        11 columns and edited 3 of the ticket's 24 fields.
+      */}
+      <div className="screen">
+        {/* Title row */}
+        <div className="flex items-center gap-2 px-2 h-[30px] bg-navy-head text-white shrink-0 rounded-t">
+          <button onClick={handleClose} className="hover:text-accent-400" title="Back to register">
+            <X size={15} />
           </button>
+          <span className="text-[13px] font-bold tracking-wide">DELIVERY TICKET</span>
+          <span className="ml-auto text-[11px] text-slate-300">Ticket No</span>
+          <span className="font-mono font-bold text-accent-400 text-[14px]">{d.DTNumber}</span>
         </div>
 
-        {/* Form */}
-        <div className="px-5 py-4 border-b border-gray-100 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">DT Date</label>
-              <input
-                type="date"
-                className="input w-full"
-                value={form.DTDate}
-                onChange={e => setForm(f => ({ ...f, DTDate: e.target.value }))}
-                disabled={!canEdit}
-              />
-            </div>
-            <div>
-              <label className="label">Status</label>
-              <select
-                className="input w-full"
-                value={form.Status}
-                onChange={e => setForm(f => ({ ...f, Status: e.target.value }))}
-                disabled={!canEdit}
-              >
-                {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
-              </select>
-            </div>
-          </div>
+        {/* Header fields — 4 pairs per row, 24px rows */}
+        <div
+          className="field-row bg-white border-x border-b border-gray-300 px-2 py-1.5 shrink-0
+                     grid-cols-[auto_1fr] md:grid-cols-[auto_1fr_auto_1fr] xl:grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto_1fr]"
+        >
+          <span className="field-label">Customer</span>
+          <div className="field-value" title={d.Client || ''}>{d.Client || '—'}</div>
 
-          <div>
-            <label className="label">Notes</label>
-            <textarea
-              className="input w-full"
-              rows={2}
-              value={form.Notes}
-              onChange={e => setForm(f => ({ ...f, Notes: e.target.value }))}
-              disabled={!canEdit}
-            />
-          </div>
+          <span className="field-label">Job Number</span>
+          <div className="field-value font-mono">{d.JobID}</div>
 
-          {canEdit && (
-            <div className="flex justify-end">
-              <button
-                className="btn-primary text-xs py-1.5 px-3"
-                onClick={handleSave}
-                disabled={saving}
-              >
-                {saving ? <Spinner size="sm" /> : <Save size={12} />}
-                Save Header
-              </button>
-            </div>
-          )}
+          <span className="field-label">Taskorder / PO</span>
+          <input className="field-input" value={form.PONumber ?? ''} disabled={!canEdit}
+                 onChange={e => set('PONumber', e.target.value)} />
+
+          <span className="field-label">Date Shipped</span>
+          <input type="date" className="field-input" value={form.DTDate ?? ''} disabled={!canEdit}
+                 onChange={e => set('DTDate', e.target.value)} />
+
+          <span className="field-label">Rig</span>
+          <input className="field-input" value={form.Rig ?? ''} disabled={!canEdit}
+                 onChange={e => set('Rig', e.target.value)} />
+
+          <span className="field-label">Well</span>
+          <input className="field-input" value={form.Well ?? ''} disabled={!canEdit}
+                 onChange={e => set('Well', e.target.value)} />
+
+          <span className="field-label">Client Ref</span>
+          <input className="field-input" value={form.ClientRef ?? ''} disabled={!canEdit}
+                 onChange={e => set('ClientRef', e.target.value)} />
+
+          <span className="field-label">Radio Msg No</span>
+          <input className="field-input" value={form.CalloutRef ?? ''} disabled={!canEdit}
+                 onChange={e => set('CalloutRef', e.target.value)} />
+
+          <span className="field-label">Prepared By</span>
+          <input className="field-input" value={form.EmdadRep ?? ''} disabled={!canEdit}
+                 onChange={e => set('EmdadRep', e.target.value)} />
+
+          <span className="field-label">Delivered To</span>
+          <input className="field-input" value={form.ClientSignedBy ?? ''} disabled={!canEdit}
+                 onChange={e => set('ClientSignedBy', e.target.value)} />
+
+          <span className="field-label">Client Sign Date</span>
+          <input type="date" className="field-input" value={form.ClientSignDate ?? ''} disabled={!canEdit}
+                 onChange={e => set('ClientSignDate', e.target.value)} />
+
+          <span className="field-label">Status</span>
+          <select className="field-input" value={form.Status ?? ''} disabled={!canEdit}
+                  onChange={e => set('Status', e.target.value)}>
+            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABEL(s)}</option>)}
+          </select>
         </div>
 
-        {/* Lines */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-            <p className="text-sm font-semibold text-gray-700">
-              Tool Lines ({lines?.length ?? 0})
-            </p>
+        {/* Tool grid — gets all remaining height, scrolls inside, both ways */}
+        <div className="flex-1 min-h-0 flex flex-col bg-white border-x border-gray-300">
+          <div className="flex items-center gap-2 px-2 h-[26px] bg-gray-100 border-b border-gray-300 shrink-0">
+            <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
+              Tools ({lines?.length ?? 0})
+            </span>
             {canEdit && (
-              <button
-                className="btn-primary text-xs py-1.5 px-3"
-                onClick={() => setShowToolPicker(true)}
-              >
-                <Plus size={12} /> Add Tool
+              <button className="btn-mini ml-auto !py-px" onClick={() => setShowToolPicker(true)}>
+                <Plus size={11} /> Add Tool
               </button>
             )}
           </div>
 
           {(!lines || lines.length === 0) ? (
-            <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-              <Package size={32} className="mb-2 opacity-30" />
-              <p className="text-sm">No tools added yet</p>
+            <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+              <Package size={28} className="mb-1.5 opacity-30" />
+              <p className="text-xs">No tools on this ticket yet</p>
               {canEdit && (
-                <button
-                  className="mt-3 text-brand-600 text-sm hover:text-brand-700"
-                  onClick={() => setShowToolPicker(true)}
-                >
-                  + Add first tool
+                <button className="mt-2 text-brand-600 text-xs hover:text-brand-700"
+                        onClick={() => setShowToolPicker(true)}>
+                  + Add the first tool
                 </button>
               )}
             </div>
           ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50">
-                  <th className="table-th text-xs">#</th>
-                  <th className="table-th text-xs">Serial / Asset</th>
-                  <th className="table-th text-xs">Description</th>
-                  <th className="table-th text-xs">Size</th>
-                  <th className="table-th text-xs">Qty</th>
-                  {canEdit && <th className="table-th w-8"></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map(line => (
-                  <tr key={line.LineID} className="table-tr">
-                    <td className="table-td text-xs text-gray-400">{line.LineNumber}</td>
-                    <td className="table-td text-xs font-mono">
-                      {line.AssetNo || '—'}
-                    </td>
-                    <td className="table-td text-xs text-gray-600 max-w-[140px] truncate">
-                      {line.ToolDescription || '—'}
-                    </td>
-                    <td className="table-td text-xs text-gray-500">{line.SizeName || '—'}</td>
-                    <td className="table-td text-xs">{line.Quantity}</td>
-                    {canEdit && (
-                      <td className="table-td">
-                        <button
-                          onClick={() => handleRemoveLine(line.LineID)}
-                          className="text-gray-300 hover:text-red-500 transition-colors"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </td>
-                    )}
+            <div className="flex-1 min-h-0 overflow-auto">
+              <table className="w-full text-[12px] border-collapse">
+                <thead className="sticky top-0 z-10">
+                  <tr>
+                    <th className="table-th w-10">#</th>
+                    <th className="table-th">Part / Asset No</th>
+                    <th className="table-th">Description</th>
+                    <th className="table-th">Size</th>
+                    <th className="table-th w-12 !text-right">Qty</th>
+                    <th className="table-th">Category</th>
+                    <th className="table-th">Supplier</th>
+                    <th className="table-th">RGT No</th>
+                    <th className="table-th">Date In</th>
+                    <th className="table-th">Remarks</th>
+                    {canEdit && <th className="table-th w-8"></th>}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {lines.map(line => (
+                    <tr key={line.LineID} className="border-b border-gray-100 hover:bg-brand-50/40">
+                      <td className="table-td text-gray-400">{line.LineNumber}</td>
+                      <td className="table-td font-mono">{line.AssetNo || '—'}</td>
+                      <td className="table-td text-gray-600 max-w-[380px] truncate"
+                          title={line.ToolDescription || ''}>
+                        {line.ToolDescription || '—'}
+                      </td>
+                      <td className="table-td text-gray-500">{line.SizeName || '—'}</td>
+                      <td className="table-td text-right">{line.Quantity}</td>
+                      <td className="table-td text-gray-500">{line.CategoryName || '—'}</td>
+                      <td className="table-td text-gray-500">{line.Supplier || '—'}</td>
+                      <td className="table-td font-mono text-gray-500">{line.RgtNo || '—'}</td>
+                      <td className="table-td text-gray-500">{formatDate(line.DateIn) || '—'}</td>
+                      <td className="table-td text-gray-500 max-w-[180px] truncate"
+                          title={line.Notes || ''}>{line.Notes || '—'}</td>
+                      {canEdit && (
+                        <td className="table-td">
+                          <button onClick={() => handleRemoveLine(line.LineID)}
+                                  className="text-gray-300 hover:text-red-500 transition-colors"
+                                  title="Remove line">
+                            <Trash2 size={12} />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 text-xs text-gray-400">
-          Created {formatDate(dt.CreatedDate)} by {dt.CreatedBy || '—'}
+        {/* Footer — transport, signature and note on one strip */}
+        <div
+          className="field-row bg-gray-50 border border-gray-300 rounded-b px-2 py-1.5 shrink-0
+                     grid-cols-[auto_1fr] lg:grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto_2fr]"
+        >
+          <span className="field-label">Vehicle / Vessel</span>
+          <input className="field-input" value={form.VehicleVessel ?? ''} disabled={!canEdit}
+                 onChange={e => set('VehicleVessel', e.target.value)} />
+
+          <span className="field-label">Driver Name</span>
+          <input className="field-input" value={form.DriverName ?? ''} disabled={!canEdit}
+                 onChange={e => set('DriverName', e.target.value)} />
+
+          <span className="field-label">Emdad Sign Date</span>
+          <input type="date" className="field-input" value={form.EmdadSignDate ?? ''} disabled={!canEdit}
+                 onChange={e => set('EmdadSignDate', e.target.value)} />
+
+          <span className="field-label">Note</span>
+          <div className="flex items-center gap-1.5">
+            <input className="field-input" value={form.Notes ?? ''} disabled={!canEdit}
+                   onChange={e => set('Notes', e.target.value)} />
+            {canEdit && (
+              <button className="btn-accent shrink-0" onClick={handleSave} disabled={saving || !dirty}
+                      title={dirty ? 'Save this ticket' : 'No unsaved changes'}>
+                {saving ? <Spinner size="sm" /> : <Save size={12} />}
+                {dirty ? 'Save' : 'Saved'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </>
@@ -511,48 +622,62 @@ export function DeliveryTicketsView() {
         }}
       />
 
-      <div className="flex gap-0 h-full">
-        {/* Left: list */}
-        <div className="flex-1 min-w-0 space-y-4 overflow-y-auto pr-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-48">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+      {/*
+        The ticket takes the whole screen rather than sharing it with the
+        register — its grid has 11 columns and the header 13 fields, which a
+        side panel cannot show without scrolling in both directions.
+      */}
+      {selected ? (
+        <DTDetailPanel
+          key={selected.DTID}
+          dt={selected}
+          onClose={() => setSelected(null)}
+          onRefresh={refetch}
+        />
+      ) : (
+        <div className="screen">
+          <div className="screen-bar">
+            <div className="relative w-64">
+              <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
-                className="input pl-9"
-                placeholder="Search DT number, Job ID, client…"
+                className="field-input !pl-7"
+                placeholder="Search DT number, job or client…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
             <select
-              className="input w-auto"
+              className="field-input w-auto"
               value={status}
               onChange={e => setStatus(e.target.value)}
             >
               {['All', ...STATUS_OPTIONS].map(s =>
-                <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>
+                <option key={s} value={s}>{s === 'All' ? 'All statuses' : STATUS_LABEL(s)}</option>
               )}
             </select>
-            <button onClick={refetch} className="btn-ghost"><RefreshCw size={15} /></button>
+            <button onClick={refetch} className="btn-mini" title="Refresh"><RefreshCw size={12} /></button>
+            <span className="text-[11px] text-gray-500">{filtered.length} of {tickets?.length ?? 0}</span>
             {hasRole('Admin', 'Operations') && (
-              <button className="btn-primary" onClick={() => setShowCreate(true)}>
-                <Plus size={15} /> New DT
+              <button className="btn-accent ml-auto" onClick={() => setShowCreate(true)}>
+                <Plus size={12} /> New DT
               </button>
             )}
           </div>
 
-          {error && <div className="card p-3 text-red-600 text-sm">{error}</div>}
-          <p className="text-xs text-gray-500">{filtered.length} delivery tickets</p>
+          {error && <div className="card p-2 text-red-600 text-xs mb-1.5 shrink-0">{error}</div>}
 
-          <div className="card overflow-hidden">
-            <table className="w-full">
-              <thead>
+          <div className="flex-1 min-h-0 overflow-auto bg-white border border-gray-300 rounded">
+            <table className="w-full border-collapse">
+              <thead className="sticky top-0 z-10">
                 <tr>
                   <th className="table-th">DT Number</th>
-                  <th className="table-th">Job ID</th>
+                  <th className="table-th">Job No</th>
                   <th className="table-th">Client</th>
-                  <th className="table-th">DT Date</th>
-                  <th className="table-th">Lines</th>
+                  <th className="table-th">Rig</th>
+                  <th className="table-th">Well</th>
+                  <th className="table-th">PO / Taskorder</th>
+                  <th className="table-th">Date Out</th>
+                  <th className="table-th !text-right">Lines</th>
                   <th className="table-th">Status</th>
                   <th className="table-th w-6"></th>
                 </tr>
@@ -560,32 +685,28 @@ export function DeliveryTicketsView() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="table-td text-center text-gray-400 py-12">
+                    <td colSpan={10} className="table-td text-center text-gray-400 py-10">
                       No delivery tickets found
                     </td>
                   </tr>
                 ) : (
                   filtered.map(t => (
-                    <tr
-                      key={t.DTID}
-                      className={`table-tr cursor-pointer ${
-                        selected?.DTID === t.DTID ? 'bg-brand-50 border-l-2 border-l-brand-500' : ''
-                      }`}
-                      onClick={() => setSelected(t)}
-                    >
-                      <td className="table-td font-medium text-brand-600">{t.DTNumber}</td>
-                      <td className="table-td">{t.JobID}</td>
-                      <td className="table-td text-gray-500">{t.Client || '—'}</td>
-                      <td className="table-td text-gray-500">{formatDate(t.DTDate)}</td>
-                      <td className="table-td text-gray-500">{t.LineCount ?? 0}</td>
+                    <tr key={t.DTID} className="table-tr" onClick={() => setSelected(t)}>
+                      <td className="table-td font-mono font-medium text-brand-600">{t.DTNumber}</td>
+                      <td className="table-td font-mono">{t.JobID}</td>
+                      <td className="table-td text-gray-500 max-w-[180px] truncate"
+                          title={t.Client || ''}>{t.Client || '—'}</td>
+                      <td className="table-td text-gray-500">{t.Rig || '—'}</td>
+                      <td className="table-td text-gray-500">{t.Well || '—'}</td>
+                      <td className="table-td text-gray-500">{t.PONumber || '—'}</td>
+                      <td className="table-td text-gray-500">{formatDate(t.DTDate) || '—'}</td>
+                      <td className="table-td text-right text-gray-500">{t.LineCount ?? 0}</td>
                       <td className="table-td">
-                        <span className={`badge ${statusBadgeClass(t.Status)}`}>{t.Status}</span>
+                        {t.Status
+                          ? <span className={`badge ${statusBadgeClass(t.Status)}`}>{t.Status}</span>
+                          : <span className="text-gray-400">—</span>}
                       </td>
-                      <td className="table-td">
-                        <ChevronRight size={13} className={
-                          selected?.DTID === t.DTID ? 'text-brand-400' : 'text-gray-300'
-                        } />
-                      </td>
+                      <td className="table-td"><ChevronRight size={12} className="text-gray-300" /></td>
                     </tr>
                   ))
                 )}
@@ -593,17 +714,7 @@ export function DeliveryTicketsView() {
             </table>
           </div>
         </div>
-
-        {/* Right: detail panel */}
-        {selected && (
-          <DTDetailPanel
-            key={selected.DTID}
-            dt={selected}
-            onClose={() => setSelected(null)}
-            onRefresh={refetch}
-          />
-        )}
-      </div>
+      )}
     </>
   )
 }

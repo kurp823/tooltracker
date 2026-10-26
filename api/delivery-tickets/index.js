@@ -21,6 +21,12 @@ const { query, jsonResponse, requireAuth } = require('../db')
 // SQL columns are aliased back to the PascalCase names the frontend already
 // expects, so no frontend changes are needed.
 
+/**
+ * Undefined -> null (leave the column alone); '' -> '' (clear it deliberately).
+ * Without this an omitted field and a cleared field look identical.
+ */
+const nz = (v) => (v === undefined ? null : v === '' ? '' : v)
+
 module.exports = async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
@@ -39,7 +45,13 @@ module.exports = async function (context, req) {
         `SELECT l.id AS LineID, l.dtNumber AS DTID, l.itemNo AS LineNumber,
                 l.serial AS SerialNumber, COALESCE(i.AssetNo, l.serial) AS AssetNo,
                 l.toolDescription AS ToolDescription,
-                l.qty AS Quantity, l.remarks AS Notes
+                l.qty AS Quantity, l.remarks AS Notes,
+                i.[Size] AS SizeName,
+                i.ShortDesc AS CategoryName,
+                -- The sub-contractor's own name, never a generic label.
+                CASE WHEN i.IsEmdad = 1 THEN 'EMDAD'
+                     ELSE COALESCE(NULLIF(i.Ownership, ''), NULLIF(i.Supplier, '')) END AS Supplier,
+                r.rtNumber AS RgtNo, r.receivingDate AS DateIn
            FROM tbl_DeliveryTicketLines l
            OUTER APPLY (
              -- 'serial' on ticket lines mostly holds the ASSET NUMBER, not the
@@ -56,6 +68,17 @@ module.exports = async function (context, req) {
                            WHEN i2.AssetNo  = l.serial THEN 1
                            ELSE 2 END
            ) i
+           OUTER APPLY (
+             -- The receiving ticket that brought this same tool back, so the
+             -- grid can show RGT No / Date In against each dispatched line
+             -- exactly as the printed ticket does.
+             SELECT TOP 1 rh.rtNumber, rh.receivingDate
+             FROM   tbl_ReceivingTicketLines rl
+             JOIN   tbl_ReceivingTickets     rh ON rl.rtNumber = rh.rtNumber
+             WHERE  rl.serial    = l.serial
+               AND  rh.jobNumber = (SELECT jobNumber FROM tbl_DeliveryTickets WHERE id = @id)
+             ORDER BY rh.receivingDate DESC
+           ) r
           WHERE l.dtNumber = (SELECT dtNumber FROM tbl_DeliveryTickets WHERE id = @id)
           ORDER BY l.itemNo`,
         [{ name: 'id', value: Number(id) }]
@@ -100,12 +123,15 @@ module.exports = async function (context, req) {
     const result = await query(
       `SELECT d.id AS DTID, d.dtNumber AS DTNumber, d.jobNumber AS JobID,
               d.deliveryDate AS DTDate, d.status AS Status,
+              d.rig AS Rig, d.well AS Well, d.poNumber AS PONumber,
               d.createdAt AS CreatedDate, d.createdBy AS CreatedBy,
-              c.clientName AS Client,
+              COALESCE(c.clientName, NULLIF(d.clientCode, '')) AS Client,
               (SELECT COUNT(*) FROM tbl_DeliveryTicketLines WHERE dtNumber = d.dtNumber) AS LineCount
          FROM tbl_DeliveryTickets d
          LEFT JOIN tbl_Clients c ON d.clientCode = c.clientCode
-        ORDER BY d.createdAt DESC`,
+        -- Newest first by delivery date; createdAt is NULL on the imported
+        -- history, which DESC sorts last and pushed the real tickets down.
+        ORDER BY d.deliveryDate DESC, d.dtNumber DESC`,
       []
     )
     return jsonResponse(context, 200, result.recordset)
@@ -115,13 +141,20 @@ module.exports = async function (context, req) {
   if (id && !sub && method === 'GET') {
     const result = await query(
       `SELECT d.id AS DTID, d.dtNumber AS DTNumber, d.jobNumber AS JobID,
+              d.clientCode AS ClientCode,
               d.deliveryDate AS DTDate, d.rig AS Rig, d.well AS Well,
               d.poNumber AS PONumber, d.clientRef AS ClientRef,
+              d.calloutRef AS CalloutRef,
               d.vehicleVessel AS VehicleVessel, d.driverName AS DriverName,
+              d.emdadRep AS EmdadRep, d.emdadSignDate AS EmdadSignDate,
+              d.clientSignedBy AS ClientSignedBy, d.clientSignDate AS ClientSignDate,
+              d.attachmentRef AS AttachmentRef, d.lockStage AS LockStage,
               d.status AS Status, d.notes AS Notes,
               d.createdAt AS CreatedDate, d.createdBy AS CreatedBy,
               d.updatedAt AS UpdatedDate,
-              c.clientName AS Client
+              -- tbl_Clients covers only 4 of the 31 client names in use, so fall
+              -- back to the stored code rather than showing an empty Customer.
+              COALESCE(c.clientName, NULLIF(d.clientCode, '')) AS Client
          FROM tbl_DeliveryTickets d
          LEFT JOIN tbl_Clients c ON d.clientCode = c.clientCode
         WHERE d.id = @id`,
@@ -152,9 +185,24 @@ module.exports = async function (context, req) {
     const DTNumber = `DT-${String(seq).padStart(5, '0')}`
 
     const r = await query(
-      `INSERT INTO tbl_DeliveryTickets (dtNumber, jobNumber, deliveryDate, status, notes, createdBy, createdAt)
+      // Customer / rig / well / taskorder are carried over from the job, the
+      // way the old ticket screen pre-fills them — they are properties of the
+      // job, not things to retype per ticket.
+      // Status starts blank: 'Draft' appears nowhere in the 3,700 real tickets
+      // (only 'Signed' and 'Closed' do), so inventing it put every new ticket
+      // into a state the rest of the system doesn't recognise.
+      `INSERT INTO tbl_DeliveryTickets
+         (dtNumber, jobNumber, clientCode, deliveryDate, rig, well, poNumber,
+          status, notes, createdBy, createdAt)
        OUTPUT INSERTED.id
-       VALUES (@num, @job, @date, 'Draft', @notes, @by, GETDATE())`,
+       SELECT @num, @job,
+              COALESCE(j.Client, ''), @date,
+              j.Rig, j.Well, j.PONumber,
+              '', @notes, @by, GETDATE()
+         -- LEFT JOIN, not a subquery in FROM: an unmatched job must still
+         -- create the ticket with blank carry-over, not silently insert nothing.
+         FROM   (SELECT 1 AS one) seed
+         LEFT JOIN tbl_Jobs j ON j.JobID = @job`,
       [
         { name: 'num',   value: DTNumber },
         { name: 'job',   value: b.JobID  },
@@ -172,14 +220,45 @@ module.exports = async function (context, req) {
       return jsonResponse(context, 403, { error: 'Forbidden' })
     const b = req.body
     await query(
+      // Every editable column on the ticket, not just the three the first cut
+      // wrote. Rig, well, PO/taskorder, client ref, vehicle/vessel, driver and
+      // the two signature blocks are all real columns and all appear on the
+      // printed ticket, so the screen has to be able to write them.
+      // COALESCE(@x, col) leaves a field untouched when the caller omits it,
+      // so a partial save can't blank the rest of the ticket.
       `UPDATE tbl_DeliveryTickets
-          SET deliveryDate = @date, status = @status, notes = @notes, updatedAt = GETDATE()
+          SET deliveryDate   = COALESCE(@date, deliveryDate),
+              rig            = COALESCE(@rig, rig),
+              well           = COALESCE(@well, well),
+              poNumber       = COALESCE(@po, poNumber),
+              clientRef      = COALESCE(@cref, clientRef),
+              calloutRef     = COALESCE(@callout, calloutRef),
+              vehicleVessel  = COALESCE(@veh, vehicleVessel),
+              driverName     = COALESCE(@driver, driverName),
+              emdadRep       = COALESCE(@rep, emdadRep),
+              emdadSignDate  = COALESCE(@repdate, emdadSignDate),
+              clientSignedBy = COALESCE(@csb, clientSignedBy),
+              clientSignDate = COALESCE(@csd, clientSignDate),
+              status         = COALESCE(@status, status),
+              notes          = COALESCE(@notes, notes),
+              updatedAt      = GETDATE()
         WHERE id = @id`,
       [
-        { name: 'id',     value: Number(id) },
-        { name: 'date',   value: b.DTDate   || null },
-        { name: 'status', value: b.Status   || null },
-        { name: 'notes',  value: b.Notes    || null },
+        { name: 'id',      value: Number(id) },
+        { name: 'date',    value: nz(b.DTDate) },
+        { name: 'rig',     value: nz(b.Rig) },
+        { name: 'well',    value: nz(b.Well) },
+        { name: 'po',      value: nz(b.PONumber) },
+        { name: 'cref',    value: nz(b.ClientRef) },
+        { name: 'callout', value: nz(b.CalloutRef) },
+        { name: 'veh',     value: nz(b.VehicleVessel) },
+        { name: 'driver',  value: nz(b.DriverName) },
+        { name: 'rep',     value: nz(b.EmdadRep) },
+        { name: 'repdate', value: nz(b.EmdadSignDate) },
+        { name: 'csb',     value: nz(b.ClientSignedBy) },
+        { name: 'csd',     value: nz(b.ClientSignDate) },
+        { name: 'status',  value: b.Status === undefined ? null : String(b.Status) },
+        { name: 'notes',   value: b.Notes === undefined ? null : String(b.Notes) },
       ]
     )
     return jsonResponse(context, 200, { ok: true })
