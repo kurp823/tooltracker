@@ -107,6 +107,7 @@ export function ToolHistoryView() {
       {/* Table */}
       <div className="card flex-1 flex flex-col overflow-hidden">
         <MovementTable
+          tableId="tool-history"
           rows={rows}
           loading={loading}
           visible={visible}

@@ -3,6 +3,7 @@ import { Spinner } from './Spinner'
 import { formatDate } from '../utils/format'
 import type { ToolMovement } from '../types'
 import type { ColumnDef } from './ColumnPicker'
+import { useResizableColumns, ResizerHandle } from './useResizableColumns'
 
 export const MOVEMENT_COLUMNS: ColumnDef[] = [
   { key: 'TicketNo',      label: 'Ticket No', locked: true },
@@ -24,6 +25,13 @@ export const MOVEMENT_COLUMNS: ColumnDef[] = [
   { key: 'StandbyAmount', label: 'SB Value' },
   { key: 'TotalAmount',   label: 'Total' },
 ]
+
+const DEFAULT_WIDTHS: Record<string, number> = {
+  TicketNo: 110, DateOut: 95, Item: 55, PartNo: 115, Description: 300, Size: 70,
+  JobID: 125, Rig: 80, Well: 90, RgtNo: 110, DateIn: 95, Comments: 95,
+  Supplier: 110, OpsDays: 70, StandbyDays: 70, OpsAmount: 100, StandbyAmount: 100,
+  TotalAmount: 105,
+}
 
 const NUMERIC = new Set(['OpsDays', 'StandbyDays', 'OpsAmount', 'StandbyAmount', 'TotalAmount'])
 
@@ -53,6 +61,8 @@ function cell(r: ToolMovement, key: string): React.ReactNode {
 }
 
 interface Props {
+  /** Distinct id so each screen remembers its own column widths. */
+  tableId: string
   rows: ToolMovement[]
   loading: boolean
   visible: Record<string, boolean>
@@ -61,8 +71,9 @@ interface Props {
   hasSelection: boolean
 }
 
-export function MovementTable({ rows, loading, visible, prompt, hasSelection }: Props) {
+export function MovementTable({ tableId, rows, loading, visible, prompt, hasSelection }: Props) {
   const cols = MOVEMENT_COLUMNS.filter(c => visible[c.key] !== false)
+  const { widthOf, startResize, resetColumn } = useResizableColumns(tableId, DEFAULT_WIDTHS)
 
   const totals = rows.reduce(
     (a, r) => ({
@@ -101,15 +112,20 @@ export function MovementTable({ rows, loading, visible, prompt, hasSelection }: 
     <div className="flex-1 overflow-auto">
       <table className="w-full text-xs border-collapse">
         <thead className="sticky top-0 z-10">
-          <tr className="bg-gray-100">
+          <tr className="bg-navy-head text-white">
             {cols.map(c => (
               <th
                 key={c.key}
-                className={`px-2 py-2 font-semibold text-gray-600 whitespace-nowrap border-b border-gray-200 ${
+                style={{ width: widthOf(c.key), minWidth: widthOf(c.key) }}
+                className={`relative px-2 py-2 font-semibold whitespace-nowrap ${
                   NUMERIC.has(c.key) ? 'text-right' : 'text-left'
                 }`}
               >
                 {c.label}
+                <ResizerHandle
+                  onMouseDown={e => startResize(c.key, e)}
+                  onDoubleClick={() => resetColumn(c.key)}
+                />
               </th>
             ))}
           </tr>
@@ -120,11 +136,13 @@ export function MovementTable({ rows, loading, visible, prompt, hasSelection }: 
               {cols.map(c => (
                 <td
                   key={c.key}
-                  className={`px-2 py-1.5 whitespace-nowrap ${NUMERIC.has(c.key) ? 'text-right' : 'text-left'} ${
-                    c.key === 'Description' ? 'max-w-sm truncate' : ''
-                  } ${c.key === 'PartNo' || c.key === 'TicketNo' || c.key === 'RgtNo' || c.key === 'JobID' ? 'font-mono' : ''} ${
-                    c.key === 'TotalAmount' ? 'font-semibold' : ''
-                  }`}
+                  style={{ width: widthOf(c.key), maxWidth: widthOf(c.key) }}
+                  className={[
+                    'px-2 py-1.5 overflow-hidden text-ellipsis whitespace-nowrap',
+                    NUMERIC.has(c.key) ? 'text-right' : 'text-left',
+                    ['PartNo', 'TicketNo', 'RgtNo', 'JobID'].includes(c.key) ? 'font-mono' : '',
+                    c.key === 'TotalAmount' ? 'font-semibold' : '',
+                  ].join(' ')}
                   title={c.key === 'Description' ? (r.Description || '') : undefined}
                 >
                   {cell(r, c.key)}
