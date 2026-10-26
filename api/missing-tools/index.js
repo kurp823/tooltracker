@@ -50,26 +50,40 @@ module.exports = async function (context, req) {
 
     try {
       const result = await query(
+        // Job numbers are stored in two shapes ('Job-026-01836' on the job,
+        // 'JOB-26-01836' on the ticket). Stripping non-digits does NOT make
+        // them comparable — that gives 02601836 vs 2601836, and the leading
+        // zero silently dropped every such job, CX0697's included. The
+        // trailing sequence never resets across years, so it is the key.
+        //
+        // Shape matters for speed too: filter the 3,700 tickets first, then
+        // seek their lines by dtNumber. Joining on a computed expression
+        // against all 47,106 lines took 14 seconds.
         `WITH live AS (
-           SELECT JobID FROM tbl_Jobs WHERE Status IN (${statusList})
+           SELECT DISTINCT
+                  TRY_CAST(RIGHT(JobID, CHARINDEX('-', REVERSE(JobID) + '-') - 1) AS INT) AS seq
+             FROM tbl_Jobs
+            WHERE Status IN (${statusList})
+         ),
+         liveTickets AS (
+           SELECT dt.dtNumber, dt.jobNumber, dt.rig, dt.deliveryDate
+             FROM tbl_DeliveryTickets dt
+             JOIN live l
+               ON l.seq = TRY_CAST(
+                    RIGHT(dt.jobNumber, CHARINDEX('-', REVERSE(dt.jobNumber) + '-') - 1) AS INT)
+            WHERE l.seq IS NOT NULL
          ),
          dispatched AS (
            SELECT dtl.serial                AS AssetNo,
                   MAX(dtl.toolDescription)  AS Description,
                   SUM(COALESCE(dtl.qty, 1)) AS Qty,
-                  MAX(dt.deliveryDate)      AS LastDateOut,
-                  COUNT(DISTINCT dt.dtNumber) AS Dispatches,
-                  MAX(dt.rig)               AS Rig,
-                  MAX(dt.jobNumber)         AS JobNumber,
-                  MAX(dt.dtNumber)          AS DTNumber
-             FROM tbl_DeliveryTicketLines dtl
-             JOIN tbl_DeliveryTickets     dt  ON dtl.dtNumber = dt.dtNumber
-             -- Job numbers are stored in two shapes across tables
-             -- ('Job-026-01834' and 'JOB-26-01834'), so compare on the digits
-             -- rather than the raw string, which would miss roughly half.
-             JOIN live j
-               ON REPLACE(REPLACE(UPPER(j.JobID), 'JOB', ''), '-', '')
-                = REPLACE(REPLACE(UPPER(dt.jobNumber), 'JOB', ''), '-', '')
+                  MAX(lt.deliveryDate)      AS LastDateOut,
+                  COUNT(DISTINCT lt.dtNumber) AS Dispatches,
+                  MAX(lt.rig)               AS Rig,
+                  MAX(lt.jobNumber)         AS JobNumber,
+                  MAX(lt.dtNumber)          AS DTNumber
+             FROM liveTickets lt
+             JOIN tbl_DeliveryTicketLines dtl ON dtl.dtNumber = lt.dtNumber
             WHERE NULLIF(LTRIM(RTRIM(dtl.serial)), '') IS NOT NULL
             GROUP BY dtl.serial
          )
@@ -97,11 +111,20 @@ module.exports = async function (context, req) {
                 WHERE c.OEMSerial = d.AssetNo AND NULLIF(c.OEMSerial, '') IS NOT NULL
              ) u
            ) inv
+           -- Returned on THIS job, not on any job ever. Matching across all
+           -- history marked a tool returned because it came back from a
+           -- different job years earlier, which collapsed "still on a rig"
+           -- from 137 down to 1.
            OUTER APPLY (
-             SELECT TOP 1 rl.rtNumber
+             SELECT TOP 1 rh.rtNumber
                FROM tbl_ReceivingTicketLines rl
+               JOIN tbl_ReceivingTickets     rh ON rl.rtNumber = rh.rtNumber
               WHERE rl.serial = d.AssetNo
-              ORDER BY rl.id DESC
+                AND TRY_CAST(RIGHT(rh.jobNumber,
+                      CHARINDEX('-', REVERSE(rh.jobNumber) + '-') - 1) AS INT)
+                  = TRY_CAST(RIGHT(d.JobNumber,
+                      CHARINDEX('-', REVERSE(d.JobNumber) + '-') - 1) AS INT)
+              ORDER BY rh.receivingDate DESC
            ) rt
           WHERE inv.found IS NULL
             ${onRigOnly ? 'AND rt.rtNumber IS NULL' : ''}
