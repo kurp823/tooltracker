@@ -29,6 +29,7 @@ import { SuppliersView }      from './views/SuppliersView'
 import { CategoriesSizesView } from './views/CategoriesSizesView'
 import { UsersView }          from './views/UsersView'
 import { SettingsView }       from './views/SettingsView'
+import { DataImportView }     from './views/DataImportView'
 
 // ─── Route guard ─────────────────────────────────────────────────────────────
 
@@ -112,6 +113,14 @@ export default function App() {
                 element={
                   <RequireRole roles={['Admin']}>
                     <UsersView />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="data-import"
+                element={
+                  <RequireRole roles={['Admin']}>
+                    <DataImportView />
                   </RequireRole>
                 }
               />

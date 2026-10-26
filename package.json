@@ -1,7 +1,7 @@
 {
   "name": "emdad-tooltracker",
   "version": "2.0.0",
-  "description": "Emdad Tool Tracker — Operational Web App",
+  "description": "Emdad Tool Tracker \u2014 Operational Web App",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -10,11 +10,12 @@
     "lint": "eslint src --ext ts,tsx"
   },
   "dependencies": {
+    "date-fns": "^3.6.0",
+    "lucide-react": "^0.441.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",
-    "date-fns": "^3.6.0",
-    "lucide-react": "^0.441.0"
+    "xlsx": "0.18.5"
   },
   "devDependencies": {
     "@types/react": "^18.3.5",
