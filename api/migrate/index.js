@@ -65,7 +65,7 @@ const MIGRATIONS = [
           id        int IDENTITY(1,1) NOT NULL
             CONSTRAINT PK_tbl_VendorOrderLines PRIMARY KEY,
           poNumber  nvarchar(50)  NOT NULL,
-          lineNo    int           NULL,
+          [lineNo]  int           NULL,
           assetNo   nvarchar(50)  NULL,
           description nvarchar(500) NULL,
           [size]    nvarchar(50)  NULL,
