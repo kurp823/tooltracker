@@ -233,6 +233,89 @@ const MIGRATIONS = [
                        AND object_id = OBJECT_ID('dbo.tbl_DailyFieldLogs'))
         CREATE INDEX IX_tbl_DFL_tool_dt ON dbo.tbl_DailyFieldLogs (ToolSerial, DTNumber);`,
   },
+
+  /*
+   * One-off data migration: pull the off-pattern tickets back into the single
+   * DT-NNNNN / RT-NNNNN series.
+   *
+   * Two numbering schemes were in use. The historic series is DT-NNNNN /
+   * RT-NNNNN, and a handful of tickets were created as DT-26-NNNN(N) /
+   * RT-26-NNNNN before the generator was fixed — inconsistent even among
+   * themselves (DT-26-3425 four digits, DT-26-03433 five).
+   *
+   * DELIBERATELY LEFT ALONE:
+   *   DT-DUMMY-* / RT-DUMMY-* (305 each)  — placeholders, confirmed to stay
+   *   RT-CLOSE-001..007                   — intentional closers for legacy jobs
+   * Neither matches the patterns below: 'DUMMY' and 'CLOSE' are not digits.
+   *
+   * A ticket number is the join key for its line table, for
+   * tbl_ReceivingTickets.linkedDtNumber and for tbl_DailyFieldLogs.DTNumber,
+   * so the header and every referencing row move together inside one
+   * transaction. Tickets with no lines at all are removed rather than given a
+   * number from the real series — nothing references them.
+   *
+   * Idempotent: once no 'XX-NN-' numbers remain, every statement is a no-op.
+   */
+  {
+    name: 'seed:renumber-stray-tickets',
+    sql: `
+      SET XACT_ABORT ON;
+      BEGIN TRANSACTION;
+
+      ----------------------------------------------------------------- DT ---
+      -- Empty strays first, so they don't consume numbers in the real series.
+      DELETE FROM tbl_DeliveryTickets
+       WHERE (dtNumber LIKE 'DT-[0-9][0-9]-%' OR dtNumber LIKE '%TEST%')
+         AND NOT EXISTS (SELECT 1 FROM tbl_DeliveryTicketLines l WHERE l.dtNumber = tbl_DeliveryTickets.dtNumber)
+         AND NOT EXISTS (SELECT 1 FROM tbl_ReceivingTickets r WHERE r.linkedDtNumber = tbl_DeliveryTickets.dtNumber)
+         AND NOT EXISTS (SELECT 1 FROM tbl_DailyFieldLogs d WHERE d.DTNumber = tbl_DeliveryTickets.dtNumber);
+
+      DECLARE @dtMax INT = COALESCE((
+        SELECT MAX(TRY_CAST(SUBSTRING(dtNumber, 4, 10) AS INT))
+          FROM tbl_DeliveryTickets
+         WHERE dtNumber LIKE 'DT-[0-9][0-9][0-9][0-9][0-9]'), 0);
+
+      -- Oldest first, so the new numbers run in the order the tickets happened.
+      DECLARE @dtMap TABLE (oldNo NVARCHAR(50) PRIMARY KEY, newNo NVARCHAR(50) NOT NULL);
+      INSERT INTO @dtMap (oldNo, newNo)
+      SELECT dtNumber,
+             'DT-' + RIGHT('00000' + CAST(@dtMax + ROW_NUMBER() OVER (ORDER BY deliveryDate, dtNumber) AS VARCHAR(10)), 5)
+        FROM tbl_DeliveryTickets
+       WHERE dtNumber LIKE 'DT-[0-9][0-9]-%';
+
+      UPDATE l SET l.dtNumber = m.newNo
+        FROM tbl_DeliveryTicketLines l JOIN @dtMap m ON m.oldNo = l.dtNumber;
+      UPDATE d SET d.DTNumber = m.newNo
+        FROM tbl_DailyFieldLogs d JOIN @dtMap m ON m.oldNo = d.DTNumber;
+      UPDATE r SET r.linkedDtNumber = m.newNo
+        FROM tbl_ReceivingTickets r JOIN @dtMap m ON m.oldNo = r.linkedDtNumber;
+      UPDATE t SET t.dtNumber = m.newNo
+        FROM tbl_DeliveryTickets t JOIN @dtMap m ON m.oldNo = t.dtNumber;
+
+      ----------------------------------------------------------------- RT ---
+      DELETE FROM tbl_ReceivingTickets
+       WHERE (rtNumber LIKE 'RT-[0-9][0-9]-%' OR rtNumber LIKE '%TEST%')
+         AND NOT EXISTS (SELECT 1 FROM tbl_ReceivingTicketLines l WHERE l.rtNumber = tbl_ReceivingTickets.rtNumber);
+
+      DECLARE @rtMax INT = COALESCE((
+        SELECT MAX(TRY_CAST(SUBSTRING(rtNumber, 4, 10) AS INT))
+          FROM tbl_ReceivingTickets
+         WHERE rtNumber LIKE 'RT-[0-9][0-9][0-9][0-9][0-9]'), 0);
+
+      DECLARE @rtMap TABLE (oldNo NVARCHAR(50) PRIMARY KEY, newNo NVARCHAR(50) NOT NULL);
+      INSERT INTO @rtMap (oldNo, newNo)
+      SELECT rtNumber,
+             'RT-' + RIGHT('00000' + CAST(@rtMax + ROW_NUMBER() OVER (ORDER BY receivingDate, rtNumber) AS VARCHAR(10)), 5)
+        FROM tbl_ReceivingTickets
+       WHERE rtNumber LIKE 'RT-[0-9][0-9]-%';
+
+      UPDATE l SET l.rtNumber = m.newNo
+        FROM tbl_ReceivingTicketLines l JOIN @rtMap m ON m.oldNo = l.rtNumber;
+      UPDATE t SET t.rtNumber = m.newNo
+        FROM tbl_ReceivingTickets t JOIN @rtMap m ON m.oldNo = t.rtNumber;
+
+      COMMIT TRANSACTION;`,
+  },
 ]
 
 module.exports = async function (context, req) {

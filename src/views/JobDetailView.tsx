@@ -21,6 +21,7 @@ import { useToast } from '../components/Toast'
 import { toDateInput, normalizeJobId } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
 import { ComboBox } from '../components/ComboBox'
+import { useRowWindow } from '../components/useRowWindow'
 import type { Job, JobStatus, InvoicingType, ToolMovement } from '../types'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1303,6 +1304,10 @@ function ReturnTicketTab({
 
   const unmarked = lines.filter(l => !normUsed(l.UsedStatus)).length
 
+  // A full manifest is 274 lines, each with its own usage dropdown; all of
+  // them in the DOM at once is what made this tab slow to open.
+  const { scrollRef, onScroll, visible: visibleLines, hasMore: moreLines } = useRowWindow(lines)
+
   async function createRT() {
     setBusy(true)
     document.body.style.cursor = 'wait'
@@ -1509,9 +1514,11 @@ function ReturnTicketTab({
               <span className="text-[10px] font-bold uppercase tracking-wider text-gray-600">
                 Received tools on this ticket
               </span>
-              <span className="text-[10px] font-semibold text-green-700">{lines.length} received</span>
+              <span className="text-[10px] font-semibold text-green-700">
+                {moreLines ? `${visibleLines.length} of ${lines.length} shown` : `${lines.length} received`}
+              </span>
             </div>
-            <div className="flex-1 min-h-0 overflow-auto">
+            <div ref={scrollRef} onScroll={onScroll} className="flex-1 min-h-0 overflow-auto">
               <table className="w-full text-[12px] border-collapse">
                 <thead className="sticky top-0 z-10">
                   <tr>
@@ -1533,7 +1540,7 @@ function ReturnTicketTab({
                       </td>
                     </tr>
                   ) : (
-                    lines.map((l, idx) => {
+                    visibleLines.map((l, idx) => {
                       const used = normUsed(l.UsedStatus)
                       return (
                         <tr key={l.LineID} className="border-b border-gray-100 hover:bg-gray-50">
