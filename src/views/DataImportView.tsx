@@ -24,8 +24,6 @@ type Row = {
 
 /* The checks run one request each: together they exceeded the 45-second cap on
  * a managed function and the platform answered with a bodiless 500. */
-// 'rows' clears the batch itself, in the same transaction, so it is safe to repeat
-const PREPARE_STEPS = ['rows', 'resolve-asset', 'resolve-system'] as const
 const PARTS = ['shape', 'onrig', 'dt', 'rt', 'unknown', 'linkage'] as const
 type Part = typeof PARTS[number]
 
@@ -149,11 +147,19 @@ export function DataImportView() {
       }
 
       setBusy('checking')
-      // Prepare is stepped for the same reason the checks are: one statement
-      // per request keeps each well inside the function's time limit.
-      for (const step of PREPARE_STEPS) {
-        setStage(`normalising — ${step}`)
-        await api.post('/import-dtrt/prepare', { batchId: id, step })
+      // Normalising walks the batch in windows: one pass could not finish inside
+      // the function's time limit, and an overrunning request still completes in
+      // the database, so a retry would duplicate the work.
+      setStage('normalising')
+      await api.post('/import-dtrt/prepare', { batchId: id, step: 'clear' })
+      let fromId: number | null = 0
+      let done = 0
+      while (fromId !== null) {
+        const r: { inserted: number; nextFromId: number | null } =
+          await api.post('/import-dtrt/prepare', { batchId: id, step: 'rows', fromId })
+        done += r.inserted
+        setStage(`normalising ${done.toLocaleString()} / ${rows.length.toLocaleString()}`)
+        fromId = r.nextFromId
       }
 
       // One request per check, rendered as each lands, so a slow one cannot

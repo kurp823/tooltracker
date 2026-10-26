@@ -167,49 +167,37 @@ module.exports = async function (context, req) {
     if (!batchId) return jsonResponse(context, 400, { error: 'batchId is required' })
     const p = [{ name: 'b', type: sql.NVarChar, value: batchId }]
 
+    /*
+     * Built a window at a time.
+     *
+     * One pass over the batch - delete, then a grouped insert - could not finish
+     * inside the 45-second platform cap, and a request that overruns it still
+     * completes in the database, so every retry duplicated the work. Windows of
+     * 10,000 staged rows keep each request short, and the caller walks them.
+     *
+     * The copy is one-to-one rather than de-duplicated: grouping across a window
+     * boundary would split a repeated row into two, and the checks de-duplicate
+     * at read time off an index for nothing.
+     */
+    const WINDOW = 10000
+    const fromId = Number(b.fromId) > 0 ? Number(b.fromId) : 0
+
     const STEPS = {
       clear: 'DELETE FROM tbl_ImportDTRTResolved WHERE batchId = @b',
 
-      /*
-       * De-duplicate to one row per (ticket, asset, return ticket). The sheet
-       * repeats rows and counting a repeat as real overstates everything after.
-       *
-       * Clears first, in the same transaction, so the step is idempotent. It
-       * has to be: a request that passes the 45-second platform cap still runs
-       * to completion in the database - db.js allows three minutes - so the
-       * caller sees a failure, retries, and without this the batch is inserted
-       * twice. That is exactly what happened: 85,354 rows for a 42,000-row
-       * sheet.
-       */
-      rows: `SET XACT_ABORT ON;
-             BEGIN TRANSACTION;
-             DELETE FROM tbl_ImportDTRTResolved WHERE batchId = @b;
-             INSERT INTO tbl_ImportDTRTResolved
-               (batchId, jobKey, jobNum, dtNo, partNum, rtNo, rig, well, remark, rtKind)
-             SELECT @b, ${jobKey('MAX(jobNum)')}, MAX(jobNum), dtNo, partNum, rtNo,
-                    MAX(rig), MAX(well), MAX(remark),
-                    CASE WHEN NULLIF(LTRIM(RTRIM(rtNo)), '') IS NULL THEN 0
-                         WHEN rtNo LIKE '%DUMMY%' THEN 2 ELSE 1 END
-               FROM tbl_ImportDTRT
-              WHERE batchId = @b AND NULLIF(LTRIM(RTRIM(dtNo)), '') IS NOT NULL
-              GROUP BY dtNo, partNum, rtNo,
-                       CASE WHEN NULLIF(LTRIM(RTRIM(rtNo)), '') IS NULL THEN 0
-                            WHEN rtNo LIKE '%DUMMY%' THEN 2 ELSE 1 END;
-             COMMIT;`,
-
-      /* The sheet carries the human AssetNo; ticket lines store the SystemID.
-       * Resolved as a set-based join, AssetNo first because that is what the
-       * sheet means by a part number. */
-      'resolve-asset': `UPDATE r SET systemId = i.SystemID
-                          FROM tbl_ImportDTRTResolved r
-                          JOIN tbl_Inventory i ON i.AssetNo = r.partNum
-                         WHERE r.batchId = @b AND r.systemId IS NULL
-                           AND NULLIF(LTRIM(RTRIM(r.partNum)), '') IS NOT NULL`,
-
-      'resolve-system': `UPDATE r SET systemId = i.SystemID
-                           FROM tbl_ImportDTRTResolved r
-                           JOIN tbl_Inventory i ON i.SystemID = r.partNum
-                          WHERE r.batchId = @b AND r.systemId IS NULL`,
+      rows: `INSERT INTO tbl_ImportDTRTResolved
+               (batchId, jobKey, jobNum, dtNo, partNum, rtNo, rig, well, remark, rtKind, systemId)
+             SELECT @b, ${jobKey('s.jobNum')}, s.jobNum, s.dtNo, s.partNum, s.rtNo,
+                    s.rig, s.well, s.remark,
+                    CASE WHEN NULLIF(LTRIM(RTRIM(s.rtNo)), '') IS NULL THEN 0
+                         WHEN s.rtNo LIKE '%DUMMY%' THEN 2 ELSE 1 END,
+                    i.SystemID
+               FROM tbl_ImportDTRT s
+               LEFT JOIN tbl_Inventory i
+                      ON i.AssetNo = s.partNum OR i.SystemID = s.partNum
+              WHERE s.batchId = @b
+                AND s.id > @fromId AND s.id <= @toId
+                AND NULLIF(LTRIM(RTRIM(s.dtNo)), '') IS NOT NULL`,
 
       count: `SELECT COUNT(*) AS Rows,
                      SUM(CASE WHEN systemId IS NULL THEN 1 ELSE 0 END) AS Unresolved
@@ -222,6 +210,22 @@ module.exports = async function (context, req) {
 
     try {
       const t0 = Date.now()
+      if (step === 'rows') {
+        const toId = fromId + WINDOW
+        p.push({ name: 'fromId', type: sql.Int, value: fromId })
+        p.push({ name: 'toId', type: sql.Int, value: toId })
+        const r = await query(STEPS.rows, p)
+        // Is there anything left beyond this window?
+        const more = await query(
+          'SELECT MAX(id) AS maxId FROM tbl_ImportDTRT WHERE batchId = @b',
+          [{ name: 'b', type: sql.NVarChar, value: batchId }])
+        const maxId = more.recordset[0].maxId || 0
+        return jsonResponse(context, 200, {
+          step, ms: Date.now() - t0,
+          inserted: r.rowsAffected ? r.rowsAffected[0] : 0,
+          fromId, toId, nextFromId: toId < maxId ? toId : null,
+        })
+      }
       const r = await query(STEPS[step], p)
       return jsonResponse(context, 200, {
         step, ms: Date.now() - t0,
@@ -248,7 +252,11 @@ module.exports = async function (context, req) {
     const p = [{ name: 'b', type: sql.NVarChar, value: batchId }]
 
     const PARTS = {
-      shape: `SELECT (SELECT COUNT(*) FROM tbl_ImportDTRT WHERE batchId = @b) AS RowsUploaded,
+      shape: `WITH d AS (
+                SELECT DISTINCT dtNo, partNum, rtNo, jobKey, rtKind
+                  FROM tbl_ImportDTRTResolved WHERE batchId = @b
+              )
+              SELECT (SELECT COUNT(*) FROM tbl_ImportDTRT WHERE batchId = @b) AS RowsUploaded,
                      COUNT(*)                        AS RowsDeduped,
                      COUNT(DISTINCT dtNo)            AS DeliveryTickets,
                      COUNT(DISTINCT jobKey)          AS Jobs,
@@ -256,7 +264,7 @@ module.exports = async function (context, req) {
                      SUM(CASE WHEN rtKind = 0 THEN 1 ELSE 0 END) AS LinesWithNoRT,
                      SUM(CASE WHEN rtKind = 2 THEN 1 ELSE 0 END) AS LinesOnDummyRT,
                      SUM(CASE WHEN rtKind = 1 THEN 1 ELSE 0 END) AS LinesWithRealRT
-                FROM tbl_ImportDTRTResolved WHERE batchId = @b`,
+                FROM d`,
 
       onrig: `WITH j AS (SELECT ${jobKey('JobID')} AS jobKey, Status, LegalInvoiceNumber FROM tbl_Jobs)
               SELECT COALESCE(j.Status, '(job not in the app)') AS JobStatus,
@@ -265,9 +273,10 @@ module.exports = async function (context, req) {
                      COUNT(*) AS LinesStillOut,
                      COUNT(DISTINCT r.jobKey) AS Jobs,
                      COUNT(DISTINCT r.partNum) AS Assets
-                FROM tbl_ImportDTRTResolved r
+                FROM (SELECT DISTINCT jobKey, dtNo, partNum FROM tbl_ImportDTRTResolved
+                       WHERE batchId = @b AND rtKind = 0) r
                 LEFT JOIN j ON j.jobKey = r.jobKey
-               WHERE r.batchId = @b AND r.rtKind = 0
+               WHERE 1 = 1
                GROUP BY COALESCE(j.Status, '(job not in the app)'),
                         CASE WHEN NULLIF(LTRIM(RTRIM(j.LegalInvoiceNumber)), '') IS NOT NULL
                              THEN 'invoiced' ELSE 'not invoiced' END
