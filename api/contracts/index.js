@@ -174,5 +174,41 @@ module.exports = async function (context, req) {
     }
   }
 
+  // ── DELETE /api/contracts/{id} ───────────────────────────────────────────
+  // Removing a contract created in error. Guarded: a contract that any job is
+  // booked against is never deleted, because that would leave those jobs
+  // pointing at nothing and silently break their billing lineage. Rates
+  // belonging to the contract go with it.
+  if (method === 'DELETE' && id && !sub) {
+    if (user.Role !== 'Admin')
+      return jsonResponse(context, 403, { error: 'Admin only' })
+
+    try {
+      const inUse = await query(
+        `SELECT COUNT(*) AS n FROM tbl_Jobs
+          WHERE Contract = @id
+             OR Contract = (SELECT TOP 1 ContractNumber FROM tbl_Contracts WHERE ContractID = @id)`,
+        [{ name: 'id', type: sql.VarChar, value: id }]
+      )
+      const n = Number(inUse.recordset[0]?.n || 0)
+      if (n > 0) {
+        return jsonResponse(context, 409, {
+          error: `Cannot delete: ${n} job${n === 1 ? ' is' : 's are'} booked against this contract`,
+          jobsAffected: n,
+        })
+      }
+
+      await query('DELETE FROM tbl_ContractRates WHERE ContractCode = @id OR ContractRef = @id',
+        [{ name: 'id', type: sql.VarChar, value: id }])
+      const r = await query('DELETE FROM tbl_Contracts WHERE ContractID = @id',
+        [{ name: 'id', type: sql.VarChar, value: id }])
+
+      return jsonResponse(context, 200, { ok: true, deleted: r.rowsAffected?.[0] ?? 0 })
+    } catch (err) {
+      context.log.error('Contract delete error:', err)
+      return jsonResponse(context, 500, { error: 'Failed to delete contract', detail: err.message })
+    }
+  }
+
   jsonResponse(context, 405, { error: 'Method not allowed' })
 }

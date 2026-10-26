@@ -31,7 +31,9 @@ interface Contract {
   IsActive: number
 }
 
-type Filter = 'All' | 'Active' | 'Closed' | 'Archived'
+// No Archived state: EMDAD does not archive contracts, and the only rows
+// carrying it were seven placeholders with every field blank.
+type Filter = 'All' | 'Active' | 'Closed'
 
 const money = (v: number | null | undefined, cur?: string | null) =>
   v == null || v === 0
@@ -54,10 +56,9 @@ export function ContractsView() {
   )
 
   const counts = useMemo(() => ({
-    All:      rows.length,
-    Active:   rows.filter(c => c.Status === 'Active').length,
-    Closed:   rows.filter(c => c.Status === 'Closed').length,
-    Archived: rows.filter(c => c.Status === 'Archived').length,
+    All:    rows.length,
+    Active: rows.filter(c => c.Status === 'Active').length,
+    Closed: rows.filter(c => c.Status === 'Closed').length,
   }), [rows])
 
   const metrics = useMemo(() => {
@@ -126,7 +127,7 @@ export function ContractsView() {
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap shrink-0">
         <div className="flex rounded border border-gray-300 overflow-hidden">
-          {(['All','Active','Closed','Archived'] as Filter[]).map(f => (
+          {(['All','Active','Closed'] as Filter[]).map(f => (
             <button
               key={f}
               onClick={() => setFilter(f)}
