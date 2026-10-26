@@ -18,6 +18,30 @@ const { query, jsonResponse, requireAuth } = require('../db')
 const nz = (v) => (v === undefined ? null : v === '' ? '' : v)
 
 /**
+ * The old app's rule, taken from JobDossierView.tsx verbatim: the condition a
+ * tool comes back in decides where it goes, so the receiving clerk sets one
+ * value and the routing follows. There is no separate routing decision.
+ *
+ *   USED     -> condition 'Inspection',    routedTo 'Inspection Bay'
+ *   NOT USED -> condition 'Available',     routedTo 'Available Inventory'
+ *   LIH      -> condition 'Lost in Hole',  routedTo 'Lost in Hole'
+ */
+const USED_STATES = ['USED', 'NOT USED', 'LIH']
+
+function routeFor(usedStatus) {
+  const u = String(usedStatus || '').trim().toUpperCase()
+  if (u === 'LIH') {
+    // Lost in hole: the tool is gone. It does not come back to base and must
+    // leave the available catalogue entirely, or it stays pickable forever.
+    return { condition: 'Lost in Hole', routedTo: 'Lost in Hole', invStatus: 'Lost in Hole', location: null }
+  }
+  if (u === 'USED') {
+    return { condition: 'Inspection', routedTo: 'Inspection Bay', invStatus: 'Inspection', location: 'Emdad Base' }
+  }
+  return { condition: 'Available', routedTo: 'Available Inventory', invStatus: 'Good', location: 'Emdad Base' }
+}
+
+/**
  * Where a returned tool is routed decides the status it carries in inventory.
  * Anything needing a workshop step is NOT 'Good', so it shows on the tool
  * picker as needing attention rather than as ready to mobilise.
@@ -136,12 +160,214 @@ module.exports = async function (context, req) {
       return jsonResponse(context, 201, { LineID: r.recordset[0].id })
     }
 
+    // PUT /receiving-tickets/{id}/lines/{lineId} — set USED / NOT USED / LIH.
+    // Condition, routing and the tool's inventory status all follow from it.
+    if (method === 'PUT' && subId) {
+      if (!['Admin','Operations'].includes(user.Role))
+        return jsonResponse(context, 403, { error: 'Forbidden' })
+
+      const b = req.body || {}
+      const used = String(b.UsedStatus || '').trim().toUpperCase()
+      if (!USED_STATES.includes(used))
+        return jsonResponse(context, 400, { error: `UsedStatus must be one of ${USED_STATES.join(', ')}` })
+
+      const route = routeFor(used)
+      const r = await query(
+        `UPDATE tbl_ReceivingTicketLines
+            SET usedStatus = @used,
+                condition  = @cond,
+                routedTo   = @routed,
+                routedAt   = GETDATE(),
+                routedBy   = @by,
+                remarks    = COALESCE(@notes, remarks)
+          OUTPUT INSERTED.serial
+          WHERE id = @lid`,
+        [
+          { name: 'lid',    value: Number(subId) },
+          { name: 'used',   value: used === 'LIH' ? 'LIH' : (used === 'USED' ? 'Used' : 'Not Used') },
+          { name: 'cond',   value: route.condition },
+          { name: 'routed', value: route.routedTo },
+          { name: 'by',     value: user.Username },
+          { name: 'notes',  value: b.Notes === undefined ? null : String(b.Notes) },
+        ]
+      )
+      const serial = r.recordset[0] && r.recordset[0].serial
+      if (serial) await setInventoryStatus(serial, route.invStatus, route.location)
+
+      return jsonResponse(context, 200, { ok: true, ...route })
+    }
+
     if (method === 'DELETE' && subId) {
       if (!['Admin','Operations'].includes(user.Role))
         return jsonResponse(context, 403, { error: 'Forbidden' })
       await query('DELETE FROM tbl_ReceivingTicketLines WHERE id = @lid',
         [{ name: 'lid', value: Number(subId) }])
       return jsonResponse(context, 200, { ok: true })
+    }
+  }
+
+  /*
+   * GET /receiving-tickets/{id}/pending
+   *   Equipment dispatched on this ticket's job and not yet on ANY receiving
+   *   ticket — the backload pool the clerk ticks from. Mirrors the old app's
+   *   `unreturnedDTs` / `rgtDTToolsToReturn`: lines of the job's delivery
+   *   tickets minus anything already received.
+   */
+  if (id && sub === 'pending' && method === 'GET') {
+    try {
+      const result = await query(
+        `DECLARE @job NVARCHAR(50) = (SELECT TOP 1 jobNumber FROM tbl_ReceivingTickets WHERE id = @id);
+         DECLARE @seq INT = TRY_CAST(RIGHT(@job, CHARINDEX('-', REVERSE(@job) + '-') - 1) AS INT);
+
+         SELECT dt.dtNumber        AS TicketNo,
+                dt.deliveryDate    AS DateOut,
+                dtl.itemNo         AS ItemNo,
+                dtl.serial         AS Serial,
+                COALESCE(NULLIF(i.AssetNo, ''), dtl.serial) AS AssetNo,
+                COALESCE(NULLIF(dtl.toolDescription, ''), i.ShortDesc) AS Description,
+                i.[Size]           AS [Size],
+                dtl.qty            AS Qty
+           FROM tbl_DeliveryTickets     dt
+           JOIN tbl_DeliveryTicketLines dtl ON dtl.dtNumber = dt.dtNumber
+           OUTER APPLY (
+             SELECT TOP 1 a.AssetNo, a.ShortDesc, a.[Size]
+               FROM tbl_Inventory a
+              WHERE a.SystemID = dtl.serial OR a.AssetNo = dtl.serial
+              ORDER BY CASE WHEN a.SystemID = dtl.serial THEN 0 ELSE 1 END
+           ) i
+          WHERE TRY_CAST(RIGHT(dt.jobNumber, CHARINDEX('-', REVERSE(dt.jobNumber) + '-') - 1) AS INT) = @seq
+            -- Already received on any RT for this job, matched on serial.
+            AND NOT EXISTS (
+              SELECT 1
+                FROM tbl_ReceivingTicketLines rl
+                JOIN tbl_ReceivingTickets     rh ON rh.rtNumber = rl.rtNumber
+               WHERE rl.serial = dtl.serial
+                 AND TRY_CAST(RIGHT(rh.jobNumber, CHARINDEX('-', REVERSE(rh.jobNumber) + '-') - 1) AS INT) = @seq
+            )
+          ORDER BY dt.dtNumber, dtl.itemNo`,
+        [{ name: 'id', value: Number(id) }]
+      )
+      return jsonResponse(context, 200, result.recordset)
+    } catch (err) {
+      context.log.error('Pending returns error:', err)
+      return jsonResponse(context, 500, { error: 'Failed to load pending returns', detail: err.message })
+    }
+  }
+
+  /*
+   * POST /receiving-tickets/{id}/receive
+   *   Move the ticked tools onto this ticket in one call. The old flow receives
+   *   whole manifests — 274 lines on RT-03170 — and one request per line would
+   *   be 274 round trips.
+   *   Body: { serials: [..], dateIn?, dtNumber? }
+   *   Lines land as 'Not Used' (back to inventory); the clerk then marks the
+   *   ones that were used, which routes those to inspection.
+   */
+  if (id && sub === 'receive' && method === 'POST') {
+    if (!['Admin','Operations'].includes(user.Role))
+      return jsonResponse(context, 403, { error: 'Forbidden' })
+
+    const b = req.body || {}
+    const serials = Array.isArray(b.serials) ? b.serials.filter(Boolean) : []
+    if (!serials.length) return jsonResponse(context, 400, { error: 'No tools selected' })
+    if (serials.length > 500) return jsonResponse(context, 400, { error: 'Too many tools in one call (max 500)' })
+
+    try {
+      const route = routeFor('NOT USED')
+      // One statement, one pass: pull description/qty from the dispatch line so
+      // the RT mirrors what actually went out.
+      const list = serials.map((s, idx) => ({ name: `s${idx}`, value: String(s) }))
+      const names = list.map(p => `@${p.name}`).join(', ')
+
+      const r = await query(
+        `DECLARE @rt NVARCHAR(50) = (SELECT TOP 1 rtNumber FROM tbl_ReceivingTickets WHERE id = @id);
+         DECLARE @next INT = COALESCE((SELECT MAX(itemNo) FROM tbl_ReceivingTicketLines WHERE rtNumber = @rt), 0);
+
+         INSERT INTO tbl_ReceivingTicketLines
+           (rtNumber, itemNo, serial, toolDescription, qty, condition, usedStatus, routedTo, routedAt, routedBy)
+         OUTPUT INSERTED.id
+         SELECT @rt,
+                @next + ROW_NUMBER() OVER (ORDER BY src.serial),
+                src.serial, src.descr, src.qty,
+                @cond, @used, @routed, GETDATE(), @by
+           FROM (
+             SELECT DISTINCT dtl.serial,
+                    MAX(dtl.toolDescription) AS descr,
+                    MAX(COALESCE(dtl.qty, 1)) AS qty
+               FROM tbl_DeliveryTicketLines dtl
+              WHERE dtl.serial IN (${names})
+              GROUP BY dtl.serial
+           ) src
+          WHERE NOT EXISTS (
+            SELECT 1 FROM tbl_ReceivingTicketLines x
+             WHERE x.rtNumber = @rt AND x.serial = src.serial
+          )`,
+        [
+          { name: 'id',     value: Number(id) },
+          { name: 'cond',   value: route.condition },
+          { name: 'used',   value: 'Not Used' },
+          { name: 'routed', value: route.routedTo },
+          { name: 'by',     value: user.Username },
+          ...list,
+        ]
+      )
+
+      // Put each one back in the catalogue as available; marking it USED later
+      // moves it to inspection.
+      for (const s of serials) await setInventoryStatus(s, route.invStatus, route.location)
+
+      if (b.dateIn) {
+        await query('UPDATE tbl_ReceivingTickets SET receivingDate = @d, updatedAt = GETDATE() WHERE id = @id',
+          [{ name: 'id', value: Number(id) }, { name: 'd', value: b.dateIn }])
+      }
+      if (b.dtNumber) {
+        await query(
+          `UPDATE tbl_ReceivingTickets
+              SET linkedDtNumber = COALESCE(NULLIF(linkedDtNumber, ''), @dt), updatedAt = GETDATE()
+            WHERE id = @id`,
+          [{ name: 'id', value: Number(id) }, { name: 'dt', value: b.dtNumber }]
+        )
+      }
+
+      return jsonResponse(context, 201, { received: r.recordset.length })
+    } catch (err) {
+      context.log.error('Receive error:', err)
+      return jsonResponse(context, 500, { error: 'Failed to receive tools', detail: err.message })
+    }
+  }
+
+  /*
+   * POST /receiving-tickets/{id}/lock — confirm the manifest.
+   * tbl_ReceivingTickets already carries lockStage/lockedAt/lockedBy and
+   * nothing used them, so a ticket could be edited forever after signing.
+   */
+  if (id && sub === 'lock' && method === 'POST') {
+    if (!['Admin','Operations'].includes(user.Role))
+      return jsonResponse(context, 403, { error: 'Forbidden' })
+    try {
+      const unmarked = await query(
+        `SELECT COUNT(*) AS n
+           FROM tbl_ReceivingTicketLines
+          WHERE rtNumber = (SELECT TOP 1 rtNumber FROM tbl_ReceivingTickets WHERE id = @id)
+            AND NULLIF(LTRIM(RTRIM(usedStatus)), '') IS NULL`,
+        [{ name: 'id', value: Number(id) }]
+      )
+      if (Number(unmarked.recordset[0]?.n || 0) > 0) {
+        return jsonResponse(context, 409, {
+          error: `${unmarked.recordset[0].n} line(s) have no usage marked yet`,
+        })
+      }
+      await query(
+        `UPDATE tbl_ReceivingTickets
+            SET lockStage = 'Processed', status = 'Processed',
+                lockedAt = GETDATE(), lockedBy = @by, updatedAt = GETDATE()
+          WHERE id = @id`,
+        [{ name: 'id', value: Number(id) }, { name: 'by', value: user.Username }]
+      )
+      return jsonResponse(context, 200, { ok: true, lockStage: 'Processed' })
+    } catch (err) {
+      context.log.error('RT lock error:', err)
+      return jsonResponse(context, 500, { error: 'Failed to lock ticket', detail: err.message })
     }
   }
 
