@@ -97,10 +97,12 @@ const STAGES = {
   /* ------------------------------------------------------ 3. DT headers --- */
   'dt-headers': `
     INSERT INTO tbl_DeliveryTickets
-      (dtNumber, jobNumber, deliveryDate, rig, well, createdBy, createdAt)
-    SELECT s.dtNo, MIN(s.jobNum), TRY_CONVERT(date, MIN(s.dtDate)),
-           MAX(s.rig), MAX(s.well), @by, GETDATE()
+      (dtNumber, jobNumber, clientCode, deliveryDate, rig, well, status, createdBy, createdAt)
+    SELECT s.dtNo, MIN(s.jobNum), COALESCE(MAX(j.Client), ''),
+           TRY_CONVERT(date, MIN(s.dtDate)),
+           MAX(s.rig), MAX(s.well), '', @by, GETDATE()
       FROM tbl_ImportDTRT s
+      LEFT JOIN tbl_Jobs j ON ${jobKey('j.JobID')} = ${jobKey('s.jobNum')}
      WHERE s.batchId = @b
        AND NULLIF(LTRIM(RTRIM(s.dtNo)), '') IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t WHERE t.dtNumber = s.dtNo)
@@ -109,21 +111,27 @@ const STAGES = {
   /* -------------------------------------------------------- 4. DT lines --- */
   'dt-lines': `
     INSERT INTO tbl_DeliveryTicketLines (dtNumber, itemNo, serial, toolDescription, qty)
-    SELECT s.dtNo, TRY_CAST(s.sNo AS INT), inv.SystemID, s.partDesc, 1
-      FROM tbl_ImportDTRT s
-      ${RESOLVE}
-     WHERE s.batchId = @b AND s.id > @fromId AND s.id <= @toId
-       AND inv.SystemID IS NOT NULL
-       AND NOT EXISTS (SELECT 1 FROM tbl_DeliveryTicketLines l
-                        WHERE l.dtNumber = s.dtNo AND l.serial = inv.SystemID)`,
+    SELECT x.dtNo, MIN(x.itemNo), x.SystemID, MAX(x.partDesc), 1
+      FROM (
+        SELECT s.dtNo, TRY_CAST(s.sNo AS INT) AS itemNo, inv.SystemID, s.partDesc
+          FROM tbl_ImportDTRT s
+          ${RESOLVE}
+         WHERE s.batchId = @b AND s.id > @fromId AND s.id <= @toId
+           AND inv.SystemID IS NOT NULL
+      ) x
+     WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTicketLines l
+                        WHERE l.dtNumber = x.dtNo AND l.serial = x.SystemID)
+     GROUP BY x.dtNo, x.SystemID`,
 
   /* ------------------------------------------------------ 5. RT headers --- */
   'rt-headers': `
     INSERT INTO tbl_ReceivingTickets
-      (rtNumber, jobNumber, receivingDate, rig, well, createdBy, createdAt)
-    SELECT s.rtNo, MIN(s.jobNum), TRY_CONVERT(date, MIN(s.rtDate)),
-           MAX(s.rig), MAX(s.well), @by, GETDATE()
+      (rtNumber, jobNumber, clientCode, receivingDate, rig, well, status, createdBy, createdAt)
+    SELECT s.rtNo, MIN(s.jobNum), COALESCE(MAX(j.Client), ''),
+           TRY_CONVERT(date, MIN(s.rtDate)),
+           MAX(s.rig), MAX(s.well), '', @by, GETDATE()
       FROM tbl_ImportDTRT s
+      LEFT JOIN tbl_Jobs j ON ${jobKey('j.JobID')} = ${jobKey('s.jobNum')}
      WHERE s.batchId = @b
        AND NULLIF(LTRIM(RTRIM(s.rtNo)), '') IS NOT NULL
        AND s.rtNo NOT LIKE '%DUMMY%'
@@ -134,16 +142,21 @@ const STAGES = {
   'rt-lines': `
     INSERT INTO tbl_ReceivingTicketLines
       (rtNumber, itemNo, serial, toolDescription, qty, usedStatus, condition, routedTo, routedAt, routedBy)
-    SELECT s.rtNo, TRY_CAST(s.sNo AS INT), inv.SystemID, s.partDesc, 1,
-           ${USED}, ${CONDITION}, ${ROUTED}, GETDATE(), @by
-      FROM tbl_ImportDTRT s
-      ${RESOLVE}
-     WHERE s.batchId = @b AND s.id > @fromId AND s.id <= @toId
-       AND NULLIF(LTRIM(RTRIM(s.rtNo)), '') IS NOT NULL
-       AND s.rtNo NOT LIKE '%DUMMY%'
-       AND inv.SystemID IS NOT NULL
-       AND NOT EXISTS (SELECT 1 FROM tbl_ReceivingTicketLines l
-                        WHERE l.rtNumber = s.rtNo AND l.serial = inv.SystemID)`,
+    SELECT x.rtNo, MIN(x.itemNo), x.SystemID, MAX(x.partDesc), 1,
+           MAX(x.used), MAX(x.cond), MAX(x.routed), GETDATE(), @by
+      FROM (
+        SELECT s.rtNo, TRY_CAST(s.sNo AS INT) AS itemNo, inv.SystemID, s.partDesc,
+               ${USED} AS used, ${CONDITION} AS cond, ${ROUTED} AS routed
+          FROM tbl_ImportDTRT s
+          ${RESOLVE}
+         WHERE s.batchId = @b AND s.id > @fromId AND s.id <= @toId
+           AND NULLIF(LTRIM(RTRIM(s.rtNo)), '') IS NOT NULL
+           AND s.rtNo NOT LIKE '%DUMMY%'
+           AND inv.SystemID IS NOT NULL
+      ) x
+     WHERE NOT EXISTS (SELECT 1 FROM tbl_ReceivingTicketLines l
+                        WHERE l.rtNumber = x.rtNo AND l.serial = x.SystemID)
+     GROUP BY x.rtNo, x.SystemID`,
 
   /* --------------------------------------------------- 7. dummy headers --- */
   /*
@@ -153,56 +166,66 @@ const STAGES = {
    * the same way whether the job carries 1 line or 266.
    */
   'dummy-headers': `
-    WITH j AS (
-      SELECT ${jobKey('JobID')} AS jobKey, Status, LegalInvoiceNumber FROM tbl_Jobs
+    WITH jb AS (
+      SELECT ${jobKey('JobID')} AS jobKey, Client, Status, LegalInvoiceNumber FROM tbl_Jobs
     ),
     need AS (
-      SELECT DISTINCT s.jobNum
+      SELECT ${DUMMY_NO('s.jobNum')} AS rtNo,
+             MIN(s.jobNum)   AS jobNum,
+             MAX(jb.Client)  AS client,
+             MAX(s.rig)      AS rig,
+             MAX(s.well)     AS well,
+             MAX(s.dtDate)   AS lastOut
         FROM tbl_ImportDTRT s
-        LEFT JOIN j ON j.jobKey = ${jobKey('s.jobNum')}
+        LEFT JOIN jb ON jb.jobKey = ${jobKey('s.jobNum')}
        WHERE s.batchId = @b
          AND NULLIF(LTRIM(RTRIM(s.jobNum)), '') IS NOT NULL
          AND ( s.rtNo LIKE '%DUMMY%'
             OR ( NULLIF(LTRIM(RTRIM(s.rtNo)), '') IS NULL
-                 AND j.Status = 'Completed'
-                 AND NULLIF(LTRIM(RTRIM(j.LegalInvoiceNumber)), '') IS NOT NULL ) )
+                 AND jb.Status = 'Completed'
+                 AND NULLIF(LTRIM(RTRIM(jb.LegalInvoiceNumber)), '') IS NOT NULL ) )
+       GROUP BY ${DUMMY_NO('s.jobNum')}
     )
     INSERT INTO tbl_ReceivingTickets
-      (rtNumber, jobNumber, receivingDate, rig, well, notes, createdBy, createdAt)
-    SELECT ${DUMMY_NO('n.jobNum')}, n.jobNum,
-           (SELECT TRY_CONVERT(date, MAX(x.dtDate)) FROM tbl_ImportDTRT x
-             WHERE x.batchId = @b AND x.jobNum = n.jobNum),
-           (SELECT MAX(x.rig)  FROM tbl_ImportDTRT x WHERE x.batchId = @b AND x.jobNum = n.jobNum),
-           (SELECT MAX(x.well) FROM tbl_ImportDTRT x WHERE x.batchId = @b AND x.jobNum = n.jobNum),
-           'Dummy return ticket — job closed from the corrected DT/RT sheet',
+      (rtNumber, jobNumber, clientCode, receivingDate, rig, well, status, notes, createdBy, createdAt)
+    SELECT n.rtNo, n.jobNum, COALESCE(n.client, ''), TRY_CONVERT(date, n.lastOut),
+           n.rig, n.well, '',
+           N'Dummy return ticket - job closed from the corrected DT/RT sheet',
            @by, GETDATE()
       FROM need n
-     WHERE NOT EXISTS (SELECT 1 FROM tbl_ReceivingTickets t
-                        WHERE t.rtNumber = ${DUMMY_NO('n.jobNum')})`,
+     WHERE n.rtNo IS NOT NULL
+       AND n.rtNo NOT LIKE '%NULL%'
+       AND NOT EXISTS (SELECT 1 FROM tbl_ReceivingTickets t WHERE t.rtNumber = n.rtNo)`,
 
   /* ----------------------------------------------------- 8. dummy lines --- */
   'dummy-lines': `
-    WITH j AS (
+    WITH jb AS (
       SELECT ${jobKey('JobID')} AS jobKey, Status, LegalInvoiceNumber FROM tbl_Jobs
     )
     INSERT INTO tbl_ReceivingTicketLines
       (rtNumber, itemNo, serial, toolDescription, qty, usedStatus, condition, routedTo, routedAt, routedBy)
-    SELECT ${DUMMY_NO('s.jobNum')}, TRY_CAST(s.sNo AS INT), inv.SystemID, s.partDesc, 1,
-           ${USED}, ${CONDITION}, ${ROUTED}, GETDATE(), @by
-      FROM tbl_ImportDTRT s
-      LEFT JOIN j ON j.jobKey = ${jobKey('s.jobNum')}
-      ${RESOLVE}
-     WHERE s.batchId = @b AND s.id > @fromId AND s.id <= @toId
-       AND inv.SystemID IS NOT NULL
-       AND NULLIF(LTRIM(RTRIM(s.jobNum)), '') IS NOT NULL
-       AND ( s.rtNo LIKE '%DUMMY%'
-          OR ( NULLIF(LTRIM(RTRIM(s.rtNo)), '') IS NULL
-               AND j.Status = 'Completed'
-               AND NULLIF(LTRIM(RTRIM(j.LegalInvoiceNumber)), '') IS NOT NULL ) )
-       AND EXISTS (SELECT 1 FROM tbl_ReceivingTickets t
-                    WHERE t.rtNumber = ${DUMMY_NO('s.jobNum')})
+    SELECT x.rtNo, MIN(x.itemNo), x.SystemID, MAX(x.partDesc), 1,
+           MAX(x.used), MAX(x.cond), MAX(x.routed), GETDATE(), @by
+      FROM (
+        SELECT ${DUMMY_NO('s.jobNum')} AS rtNo, TRY_CAST(s.sNo AS INT) AS itemNo,
+               inv.SystemID, s.partDesc,
+               ${USED} AS used, ${CONDITION} AS cond, ${ROUTED} AS routed
+          FROM tbl_ImportDTRT s
+          LEFT JOIN jb ON jb.jobKey = ${jobKey('s.jobNum')}
+          ${RESOLVE}
+         WHERE s.batchId = @b AND s.id > @fromId AND s.id <= @toId
+           AND inv.SystemID IS NOT NULL
+           AND NULLIF(LTRIM(RTRIM(s.jobNum)), '') IS NOT NULL
+           AND ( s.rtNo LIKE '%DUMMY%'
+              OR ( NULLIF(LTRIM(RTRIM(s.rtNo)), '') IS NULL
+                   AND jb.Status = 'Completed'
+                   AND NULLIF(LTRIM(RTRIM(jb.LegalInvoiceNumber)), '') IS NOT NULL ) )
+      ) x
+     WHERE x.rtNo IS NOT NULL
+       AND EXISTS (SELECT 1 FROM tbl_ReceivingTickets t WHERE t.rtNumber = x.rtNo)
        AND NOT EXISTS (SELECT 1 FROM tbl_ReceivingTicketLines l
-                        WHERE l.rtNumber = ${DUMMY_NO('s.jobNum')} AND l.serial = inv.SystemID)`,
+                        WHERE l.rtNumber = x.rtNo AND l.serial = x.SystemID)
+     GROUP BY x.rtNo, x.SystemID`,
 
   /* ------------------------------------------------------- 9. job tools --- */
   // The tool list shown on the job file. Separate from the ticket lines, and
@@ -227,16 +250,22 @@ const STAGES = {
   // these every imported day is invisible to the totals.
   fieldlogs: `
     INSERT INTO tbl_DailyFieldLogs (JobID, DTNumber, ToolSerial, LogDate, StatusType, CreatedDate)
-    SELECT MIN(s.jobNum), s.dtNo, inv.SystemID,
-           TRY_CONVERT(date, MIN(s.dtDate)), '1', GETDATE()
-      FROM tbl_ImportDTRT s
-      ${RESOLVE}
-     WHERE s.batchId = @b AND s.id > @fromId AND s.id <= @toId
-       AND inv.SystemID IS NOT NULL
-       AND NULLIF(LTRIM(RTRIM(s.dtNo)), '') IS NOT NULL
-       AND NOT EXISTS (SELECT 1 FROM tbl_DailyFieldLogs d
-                        WHERE d.DTNumber = s.dtNo AND d.ToolSerial = inv.SystemID)
-     GROUP BY s.dtNo, inv.SystemID`,
+    SELECT MIN(x.jobNum), MIN(x.dtNo), x.SystemID, x.LogDate, '1', GETDATE()
+      FROM (
+        SELECT s.jobNum, s.dtNo, inv.SystemID, TRY_CONVERT(date, s.dtDate) AS LogDate
+          FROM tbl_ImportDTRT s
+          ${RESOLVE}
+         WHERE s.batchId = @b AND s.id > @fromId AND s.id <= @toId
+           AND inv.SystemID IS NOT NULL
+           AND NULLIF(LTRIM(RTRIM(s.dtNo)), '') IS NOT NULL
+           AND NULLIF(LTRIM(RTRIM(s.jobNum)), '') IS NOT NULL
+           AND TRY_CONVERT(date, s.dtDate) IS NOT NULL
+      ) x
+     WHERE NOT EXISTS (SELECT 1 FROM tbl_DailyFieldLogs d
+                        WHERE ${jobKey('d.JobID')} = ${jobKey('x.jobNum')}
+                          AND d.ToolSerial = x.SystemID
+                          AND d.LogDate    = x.LogDate)
+     GROUP BY ${jobKey('x.jobNum')}, x.SystemID, x.LogDate`,
 
   /* ------------------------------------------------ 11. inventory status --- */
   /*
@@ -264,17 +293,39 @@ const STAGES = {
       JOIN outstanding o ON o.SystemID = i.SystemID
      WHERE i.Status = 'Good'`,
 
-  /* Anything the sheet shows as returned goes back where the receiving rule
-   * puts it, so a tool wrongly left 'On Rig' is released. */
+  /*
+   * Anything the sheet shows as returned goes back where the receiving rule
+   * puts it, so a tool wrongly left 'On Rig' is released.
+   *
+   * A tool almost always has both kinds of row: it went out and came back on
+   * a dozen earlier jobs, and it is out again now. Matching on "has a return
+   * ticket somewhere in the sheet" therefore matches nearly every tool stage
+   * 11 has just put on a rig - which is what happened: stage 10 moved 532 and
+   * stage 11 released the same 532, leaving inventory exactly where it
+   * started. A tool still out on a live job must be excluded outright, so
+   * 'outstanding' here is the same set stage 10 marks.
+   */
   'inv-status-returned': `
-    WITH returned AS (
-      SELECT DISTINCT inv.SystemID,
+    WITH j AS (SELECT ${jobKey('JobID')} AS jobKey, Status FROM tbl_Jobs),
+    outstanding AS (
+      SELECT DISTINCT inv.SystemID
+        FROM tbl_ImportDTRT s
+        JOIN j ON j.jobKey = ${jobKey('s.jobNum')}
+        ${RESOLVE}
+       WHERE s.batchId = @b
+         AND NULLIF(LTRIM(RTRIM(s.rtNo)), '') IS NULL
+         AND inv.SystemID IS NOT NULL
+         AND j.Status IN ${LIVE}
+    ),
+    returned AS (
+      SELECT inv.SystemID,
              MAX(CASE WHEN UPPER(LTRIM(RTRIM(COALESCE(s.remark, '')))) = 'USED' THEN 1 ELSE 0 END) AS wasUsed
         FROM tbl_ImportDTRT s
         ${RESOLVE}
        WHERE s.batchId = @b
          AND NULLIF(LTRIM(RTRIM(s.rtNo)), '') IS NOT NULL
          AND inv.SystemID IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM outstanding o WHERE o.SystemID = inv.SystemID)
        GROUP BY inv.SystemID
     )
     UPDATE i
