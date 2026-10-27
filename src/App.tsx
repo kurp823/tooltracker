@@ -31,6 +31,13 @@ import { UsersView }          from './views/UsersView'
 import { SettingsView }       from './views/SettingsView'
 import { DataImportView }     from './views/DataImportView'
 
+// Dashboards
+import { InventoryDashboardView }   from './views/InventoryDashboardView'
+import { MaintenanceDashboardView } from './views/MaintenanceDashboardView'
+import { BillingDashboardView }     from './views/BillingDashboardView'
+import { ContractsDashboardView }   from './views/ContractsDashboardView'
+import { DbInspectorView }          from './views/DbInspectorView'
+
 // ─── Route guard ─────────────────────────────────────────────────────────────
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -83,6 +90,7 @@ export default function App() {
               </Route>
 
               {/* Inventory */}
+              <Route path="inventory-dashboard" element={<InventoryDashboardView />} />
               <Route path="inventory" element={<InventoryView />} />
               <Route path="missing-tools" element={<MissingToolsView />} />
               <Route path="tool-history" element={<ToolHistoryView />} />
@@ -95,13 +103,16 @@ export default function App() {
               <Route path="gate-pass"         element={<GatePassView />} />
 
               {/* Technical */}
+              <Route path="maintenance-dashboard" element={<MaintenanceDashboardView />} />
               <Route path="inspection"  element={<InspectionView />} />
               <Route path="maintenance" element={<MaintenanceView />} />
 
               {/* Finance */}
+              <Route path="billing-dashboard" element={<BillingDashboardView />} />
               <Route path="invoices" element={<InvoicesView />} />
 
               {/* Master Data */}
+              <Route path="contracts-dashboard" element={<ContractsDashboardView />} />
               <Route path="clients"   element={<ClientsView />} />
               <Route path="contracts" element={<ContractsView />} />
               <Route path="suppliers" element={<SuppliersView />} />
@@ -121,6 +132,14 @@ export default function App() {
                 element={
                   <RequireRole roles={['Admin']}>
                     <DataImportView />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="db-inspector"
+                element={
+                  <RequireRole roles={['Admin']}>
+                    <DbInspectorView />
                   </RequireRole>
                 }
               />

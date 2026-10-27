@@ -57,7 +57,7 @@ const MODULES: NavModule[] = [
     icon: <Boxes size={ICON} />,
     roles: ['Admin', 'Operations'],
     items: [
-      { label: 'Inventory Dashboard',       to: '/inventory-dashboard', icon: <Gauge size={ICON} />, pending: true },
+      { label: 'Inventory Dashboard',       to: '/inventory-dashboard', icon: <Gauge size={ICON} /> },
       { label: 'Assets and Inventory',      to: '/inventory',           icon: <Package size={ICON} /> },
       { label: 'Not in Inventory',          to: '/missing-tools',       icon: <PackageSearch size={ICON} /> },
       { label: 'Tool Categories & Sizes',   to: '/categories',          icon: <Tag size={ICON} /> },
@@ -71,7 +71,7 @@ const MODULES: NavModule[] = [
     icon: <HardHat size={ICON} />,
     roles: ['Admin', 'Operations', 'QAQC', 'ThirdParty'],
     items: [
-      { label: 'Maintenance & QC Dashboard', to: '/maintenance-dashboard', icon: <Gauge size={ICON} />, pending: true },
+      { label: 'Maintenance & QC Dashboard', to: '/maintenance-dashboard', icon: <Gauge size={ICON} /> },
       { label: 'QC Inspection Bay',          to: '/inspection',            icon: <ClipboardCheck size={ICON} /> },
       { label: 'Maintenance Orders',         to: '/maintenance',           icon: <Wrench size={ICON} /> },
     ],
@@ -81,7 +81,7 @@ const MODULES: NavModule[] = [
     icon: <Receipt size={ICON} />,
     roles: ['Admin', 'Billing', 'Finance', 'CostController', 'Executive'],
     items: [
-      { label: 'Billing Dashboard',              to: '/billing-dashboard', icon: <Gauge size={ICON} />, pending: true },
+      { label: 'Billing Dashboard',              to: '/billing-dashboard', icon: <Gauge size={ICON} /> },
       { label: 'Invoicing',                      to: '/invoices',          icon: <FileText size={ICON} /> },
       { label: 'Tool Revenue & Utilization',     to: '/tool-revenue',      icon: <Coins size={ICON} />, pending: true },
       { label: 'Sub-Contractor Rentals',         to: '/sub-rentals',       icon: <Building2 size={ICON} />, pending: true },
@@ -93,7 +93,7 @@ const MODULES: NavModule[] = [
     icon: <BookOpen size={ICON} />,
     roles: ['Admin', 'Billing', 'Finance'],
     items: [
-      { label: 'Contracts Dashboard',     to: '/contracts-dashboard', icon: <Gauge size={ICON} />, pending: true },
+      { label: 'Contracts Dashboard',     to: '/contracts-dashboard', icon: <Gauge size={ICON} /> },
       { label: 'Master Contract Register', to: '/contracts',          icon: <FileText size={ICON} /> },
       { label: 'Clients',                  to: '/clients',            icon: <Building2 size={ICON} /> },
       { label: 'Suppliers',                to: '/suppliers',          icon: <Building2 size={ICON} /> },
@@ -105,7 +105,7 @@ const MODULES: NavModule[] = [
     roles: ['Admin'],
     adminBadge: true,
     items: [
-      { label: 'System Database Inspector', to: '/db-inspector', icon: <Database size={ICON} />, pending: true },
+      { label: 'System Database Inspector', to: '/db-inspector', icon: <Database size={ICON} /> },
       { label: 'Users',                     to: '/users',        icon: <Users size={ICON} /> },
       { label: 'Data Import',               to: '/data-import',  icon: <Upload size={ICON} /> },
       { label: 'Global Configurations',     to: '/settings',     icon: <Settings size={ICON} /> },
