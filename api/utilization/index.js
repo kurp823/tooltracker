@@ -99,7 +99,15 @@ async function priceDay (load, ctx, statusType) {
   if (!ctx)            return { rate: null, source: null, reason: 'job-not-found' }
   if (!ctx.contract)   return { rate: null, source: null, reason: 'job-has-no-contract' }
   const rates = await load(ctx.contract)
-  if (!rates.length)   return { rate: null, source: null, reason: 'contract-has-no-rates' }
+  if (!rates.length) {
+    // The contract may exist only under scoped codes - '4700024608' is
+    // filed as '-UDR' and '-UZ', and those hold different prices. Say so
+    // rather than picking one.
+    const scopes = await R.listScopes(ctx.contract)
+    return scopes.length
+      ? { rate: null, source: null, reason: 'contract-scope-required', scopes }
+      : { rate: null, source: null, reason: 'contract-has-no-rates' }
+  }
 
   const hit = R.pickRate(rates, ctx)
   if (!hit.rate)       return { rate: null, source: null, reason: hit.matchedOn }

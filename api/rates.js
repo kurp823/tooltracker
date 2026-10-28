@@ -64,37 +64,68 @@ function baseCode (code) {
 
 // ── loading ────────────────────────────────────────────────────────────────
 /**
- * Every active rate row belonging to a contract, matched on the base code
- * so a job and its rate sheet find each other through a scope suffix.
+ * Every active rate row for EXACTLY this contract code.
+ *
+ * The match is deliberately exact. An earlier version matched on the base
+ * code so that a job saying '4700024608' would find '4700024608-UDR' and
+ * '-UZ'. That is wrong here: those two scopes carry genuinely different
+ * prices - UZ is roughly double UDR for drilling jars, confirmed against
+ * the client price table - so a base-code match would have returned both
+ * and priced the tool at whichever row came back first. A job that does
+ * not name its scope cannot be priced, and must say so.
  */
 async function loadContractRates (contractCode) {
   if (isBlankish(contractCode)) return []
-  const base = baseCode(contractCode)
 
   const r = await query(
     `SELECT RateID, ContractCode, Category, EMDADShortDesc, Size, HoleSection,
-            OpsRate, StandbyRate, RunCharges, Redress, MonthlyCharges, Currency
+            OpsRate, StandbyRate, RunCharges, Redress, MonthlyCharges,
+            Currency, Notes
        FROM tbl_ContractRates
       WHERE ActiveFlag = 1
-        AND (  UPPER(LTRIM(RTRIM(ContractCode)))        = @base
-            OR UPPER(LTRIM(RTRIM(ContractCode))) LIKE   @base + '-%'
-            OR @base LIKE UPPER(LTRIM(RTRIM(ContractCode))) + '-%' )`,
-    [{ name: 'base', value: base }]
+        AND UPPER(LTRIM(RTRIM(ContractCode))) = @code`,
+    [{ name: 'code', value: norm(contractCode) }]
   )
   return r.recordset
 }
 
+/**
+ * The scoped codes that extend this one - '4700024608' -> ['...-UDR',
+ * '...-UZ']. Used only to explain why a job could not be priced, and to
+ * offer the choice. Never used to pick one.
+ */
+async function listScopes (contractCode) {
+  if (isBlankish(contractCode)) return []
+  const base = baseCode(contractCode)
+
+  const r = await query(
+    `SELECT DISTINCT ContractCode
+       FROM tbl_ContractRates
+      WHERE ActiveFlag = 1
+        AND UPPER(LTRIM(RTRIM(ContractCode))) LIKE @base + '-%'`,
+    [{ name: 'base', value: base }]
+  )
+  return r.recordset.map(x => x.ContractCode).sort()
+}
+
 // ── shape of a contract ────────────────────────────────────────────────────
 /**
- * Collapse rows that are the same price under a different contract scope.
- * A contract filed as both '-UDR' and '-UZ' returns every row twice, which
- * would otherwise wreck the row counts the shape test below relies on.
- * Keyed on what actually identifies a rate: category, size, hole section.
+ * Collapse rows that are genuinely the same rate recorded twice - on
+ * 4700024608, SWIVEL MASTER 3-1/2" appears twice at 1704.56 in each scope.
+ * Without this the resolver would call that ambiguous and refuse to price
+ * a tool whose price is not actually in doubt.
+ *
+ * The key INCLUDES ContractCode. It must: two rows with the same category,
+ * size and hole section but different scope codes are two different prices
+ * (UZ is roughly double UDR), and collapsing them would silently pick
+ * whichever came back first. Keeping them apart makes the resolver report
+ * the ambiguity instead, which is the only safe answer.
  */
 function dedupe (rates) {
   const seen = new Map()
   for (const r of rates) {
-    const k = `${norm(r.Category)}|${norm(r.Size)}|${norm(r.HoleSection)}`
+    const k = `${norm(r.ContractCode)}|${norm(r.Category)}|` +
+              `${norm(r.Size)}|${norm(r.HoleSection)}`
     if (!seen.has(k)) seen.set(k, r)
   }
   return [...seen.values()]
@@ -118,23 +149,33 @@ function dedupe (rates) {
 function holePricedCategories (rates) {
   const rows = dedupe(rates)
 
-  const byCat = new Map()
+  // Grouped by contract AND category. A contract's pricing style is a fact
+  // about that contract, so two scopes must be judged separately - pooled,
+  // six sizes seen twice stop looking like six distinct sizes and a
+  // size-priced category reads as hole-priced.
+  const byKey = new Map()
   for (const r of rows) {
-    const k = norm(r.Category)
-    if (!byCat.has(k)) byCat.set(k, [])
-    byCat.get(k).push(r)
+    const k = `${norm(r.ContractCode)}|${norm(r.Category)}`
+    if (!byKey.has(k)) byKey.set(k, [])
+    byKey.get(k).push(r)
   }
 
   const out = new Map()
-  for (const [k, list] of byCat) {
+  for (const [k, list] of byKey) {
+    const cat   = k.slice(k.indexOf('|') + 1)
     const sizes = new Set(list.map(r => norm(r.Size)))
     const holes = new Set(list.filter(r => !isBlankish(r.HoleSection))
                               .map(r => String(r.HoleSection).trim()))
 
     // Size identifies every row on its own -> priced by size.
     const sizeDistinguishes = sizes.size === list.length && !sizes.has('')
+    if (sizeDistinguishes || holes.size < 2) continue
 
-    if (!sizeDistinguishes && holes.size > 1) out.set(k, [...holes])
+    // union across scopes, so the category is hole-priced if any scope
+    // prices it that way
+    const merged = out.get(cat) || []
+    for (const h of holes) if (!merged.some(x => norm(x) === norm(h))) merged.push(h)
+    out.set(cat, merged)
   }
   return out
 }
@@ -287,7 +328,7 @@ function listRateOptions (rates, category) {
 
 module.exports = {
   norm, isBlankish, baseCode, dedupe,
-  loadContractRates,
+  loadContractRates, listScopes,
   holePricedCategories, listHoleSections, compareHoleSections,
   pickRate, dayRate, listRateOptions,
 }
