@@ -32,7 +32,10 @@ const pick = (r: Record<string, unknown>, ...names: string[]) => {
 }
 
 export function MaintenanceDashboardView() {
-  const { data: insp,  isLoading: l1, error: e1 } = useFetch<Insp[]>('/inspection')
+  // '/inspections', plural - the route is registered as inspections/{id?} and
+  // every other caller uses that. The singular form here returned a bare 404,
+  // which is what the dashboard was showing instead of its tiles.
+  const { data: insp,  isLoading: l1, error: e1 } = useFetch<Insp[]>('/inspections')
   const { data: maint, isLoading: l2 }            = useFetch<Maint[]>('/maintenance')
   const { data: inv,   isLoading: l3 }            = useFetch<InvItem[]>('/inventory')
 
