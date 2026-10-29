@@ -144,7 +144,7 @@ const WORKSPACE_TABS = [
 type Tab = typeof WORKSPACE_TABS[number]['id']
 
 const STATUS_OPTIONS: JobStatus[]     = ['Open','Ongoing','Draft Invoice Submitted','Completed','JobCompleted']
-const INVOICING_OPTS: InvoicingType[] = ['PerJob','PerDay','Lump Sum']
+const INVOICING_OPTS: InvoicingType[] = ['PerJob','PerDay','Lump Sum','Monthly']
 const CURRENCY_OPTS                   = ['USD','AED','SAR','OMR']
 // Real tbl_DeliveryTickets statuses: Closed 2,116, Signed 1,569, blank 15.
 // 'Draft/Submitted/Approved/Rejected' appear on none of the 3,700 tickets.

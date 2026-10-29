@@ -32,7 +32,10 @@ export interface AuthUser extends User {
 // Completed (3675), Ongoing (55), JobCompleted (47),
 // Draft Invoice Submitted (42), Open (5)
 export type JobStatus = 'Open' | 'Ongoing' | 'Completed' | 'JobCompleted' | 'Draft Invoice Submitted'
-export type InvoicingType = 'PerJob' | 'PerDay' | 'Lump Sum'
+// 'Monthly' is what switches on the rollover button and period-based
+// invoicing — ADNOC Drilling 4700024096 and the Turnwell packages, where a
+// new job is raised each month and tools with no return ticket carry over.
+export type InvoicingType = 'PerJob' | 'PerDay' | 'Lump Sum' | 'Monthly'
 
 export interface Job {
   JobID: string
