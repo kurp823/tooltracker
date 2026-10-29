@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../utils/api'
+import { useAuth } from './AuthContext'
 
 /*
  * Dropdown values, served from tbl_Lists.
@@ -37,11 +38,21 @@ const Ctx = createContext<ListsState>({
 })
 
 export function ListsProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
   const [lists, setLists]         = useState<ListMap>({})
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError]         = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    // Nothing is fetched until there is a session.
+    //
+    // This provider wraps every route, the login page included. api.ts
+    // treats any 401 as an expired session: it clears the token and sets
+    // window.location, so an unauthenticated fetch from here reloaded the
+    // page, which mounted this provider again, which fetched again — an
+    // infinite refresh on the login screen that made signing in impossible.
+    if (!user) { setLists({}); setIsLoading(false); setError(null); return }
+
     setIsLoading(true)
     setError(null)
     try {
@@ -57,7 +68,7 @@ export function ListsProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [user])
 
   useEffect(() => { load() }, [load])
 
