@@ -677,10 +677,25 @@ const MIGRATIONS = [
          thing to put back. Date is the earliest field log for the ticket.
          Status, PO number, client ref, vehicle, driver, EMDAD rep and the
          signature fields were lost with the original row. */
+      /* clientCode and deliveryDate are NOT NULL on this table, so both have
+         to come from somewhere real. clientCode is taken from another
+         delivery ticket on the same job - it identifies the contract, and
+         the siblings carry it. deliveryDate is the earliest field log for
+         the ticket, falling back to the job's mob date. There is no invented
+         last resort: if neither source has a value the insert fails and the
+         transaction rolls back, which is the right outcome - a placeholder
+         sitting in the register looking like a real figure is worse than a
+         ticket that could not be rebuilt. */
       INSERT INTO tbl_DeliveryTickets
-            (dtNumber, jobNumber, deliveryDate, rig, well, status, notes, createdBy, createdAt)
+            (dtNumber, jobNumber, clientCode, deliveryDate, rig, well, status, notes, createdBy, createdAt)
       SELECT r.dtNumber, j.JobID,
-             (SELECT MIN(d2.LogDate) FROM tbl_DailyFieldLogs d2 WHERE d2.DTNumber = r.dtNumber),
+             (SELECT TOP 1 t2.clientCode
+                FROM tbl_DeliveryTickets t2
+               WHERE ${jobKey('t2.jobNumber')} = ${jobKey('j.JobID')}
+                 AND NULLIF(LTRIM(RTRIM(t2.clientCode)), '') IS NOT NULL),
+             COALESCE(
+               (SELECT MIN(d2.LogDate) FROM tbl_DailyFieldLogs d2 WHERE d2.DTNumber = r.dtNumber),
+               TRY_CONVERT(date, j.MobDate)),
              j.Rig, j.Well,
              NULL,
              'Restored 29-Oct-2026. Deleted by an automated rig/well cleanup. Rig, well and job are the job record''s own values; the date is the earliest field log. Status, PO number, client ref, vehicle, driver, EMDAD rep and the signature fields were lost with the original row and are not recoverable.',
@@ -688,7 +703,7 @@ const MIGRATIONS = [
              GETDATE()
         FROM #rebuild r
         CROSS APPLY (
-          SELECT TOP 1 j2.JobID, j2.Rig, j2.Well
+          SELECT TOP 1 j2.JobID, j2.Rig, j2.Well, j2.MobDate
             FROM tbl_DailyFieldLogs d
             JOIN tbl_Jobs j2 ON ${jobKey('j2.JobID')} = ${jobKey('d.JobID')}
            WHERE d.DTNumber = r.dtNumber
