@@ -667,8 +667,8 @@ const MIGRATIONS = [
              TRY_CONVERT(date, h.dtDate),
              h.rig,
              h.well,
-             'Signed',
-             'Restored 29-Oct-2026 from the operator DT/RT sheet after an automated cleanup removed it.',
+             NULL,
+             'Restored 29-Oct-2026 from the operator DT/RT sheet after an automated cleanup removed it. Status, PO number, client ref, vehicle, driver, EMDAD rep and the signature fields were lost with the original row and are not recoverable.',
              'restore:dt-1029',
              GETDATE()
         FROM #gone g
