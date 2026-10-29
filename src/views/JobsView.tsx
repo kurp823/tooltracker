@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { useRowWindow }  from '../components/useRowWindow'
+import { usePagedRows, Pager } from '../components/usePagedRows'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Search, Filter, RefreshCw } from 'lucide-react'
 import { useFetch } from '../hooks/useFetch'
@@ -60,9 +60,10 @@ export function JobsView() {
     })
   }, [jobs, statusFilter, yearFilter, search])
 
-  // Render the register in slices; all 3,700+ rows in the DOM at once was
-  // most of the delay before first paint on these screens.
-  const { scrollRef, onScroll, visible, hasMore, shown, total } = useRowWindow(filtered)
+  // One screenful per page, measured from the rendered row height. Putting
+  // all 3,700+ rows in the DOM was most of the delay before first paint.
+  const { scrollRef, visible, page, pageCount, setPage, from, to, total } =
+    usePagedRows(filtered)
 
   if (isLoading) return <PageLoader />
 
@@ -104,7 +105,7 @@ export function JobsView() {
         </button>
 
         <span className="text-[11px] text-gray-500">
-          {hasMore ? `${shown} of ${total} shown` : `${total} job${total === 1 ? '' : 's'}`}
+          {`${total.toLocaleString()} job${total === 1 ? '' : 's'}`}
         </span>
 
         {hasRole('Admin', 'Operations') && (
@@ -117,12 +118,12 @@ export function JobsView() {
       {error && <div className="card p-2 text-red-600 text-xs shrink-0">{error}</div>}
 
       {/* Table — nowrap everywhere; a wrapped Job ID made every row 3 lines tall */}
-      <div ref={scrollRef} onScroll={onScroll}
-           className="flex-1 min-h-0 overflow-auto bg-white border border-gray-300 rounded">
+      <div ref={scrollRef}
+           className="flex-1 min-h-0 overflow-auto bg-white border border-gray-300 rounded-t">
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-10">
             <tr>
-              <th className="table-th">Job No</th>
+              <th className="table-th pin-l">Job No</th>
               <th className="table-th">Client</th>
               <th className="table-th">Sub-Division</th>
               <th className="table-th">Rig</th>
@@ -133,7 +134,7 @@ export function JobsView() {
               <th className="table-th">End</th>
               <th className="table-th !text-right">Job Value</th>
               <th className="table-th">Invoice No</th>
-              <th className="table-th">Status</th>
+              <th className="table-th pin-r">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -150,7 +151,7 @@ export function JobsView() {
                   className="table-tr whitespace-nowrap"
                   onClick={() => navigate(`/jobs/${job.JobID}`)}
                 >
-                  <td className="table-td font-mono font-medium text-brand-600">{job.JobID}</td>
+                  <td className="table-td pin-l font-mono font-medium text-brand-600">{job.JobID}</td>
                   {/* Client names run long - 'Churchill Drilling Tools Oil Well
                       Drilling' was cut to 'Churchill Drilling Tools Oil Well Dr…'
                       and the distinguishing part is at the end. */}
@@ -169,7 +170,7 @@ export function JobsView() {
                       : null}</V>
                   </td>
                   <td className="table-td text-gray-500 font-mono"><V>{job.LegalInvoiceNumber}</V></td>
-                  <td className="table-td">
+                  <td className="table-td pin-r">
                     <span className={`badge ${statusBadgeClass(job.Status)}`}>
                       {job.Status}
                     </span>
@@ -180,6 +181,9 @@ export function JobsView() {
           </tbody>
         </table>
       </div>
+
+      <Pager page={page} pageCount={pageCount} setPage={setPage}
+             from={from} to={to} total={total} noun="job" />
     </div>
   )
 }

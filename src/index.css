@@ -37,8 +37,16 @@
   .card {
     @apply bg-white rounded-lg border border-gray-300 shadow-sm;
   }
+  /* A status marker: a small coloured dot and the word, as the old app's
+     registers had it. The dot inherits currentColor, so the .status-* class
+     sets both. No pill, no fill. */
   .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap;
+  }
+  .badge::before {
+    content: '';
+    @apply w-1.5 h-1.5 rounded-full shrink-0;
+    background-color: currentColor;
   }
   /* Grid header, matching the old app's registers: a light grey band with
      dark uppercase text. The navy #1a3055 belongs to the page header block,
@@ -56,8 +64,11 @@
      carry twelve columns on plain white and stay legible because the only
      tint on the grid is the row under the cursor; a second tint on every
      other row competes with it. */
+  /* A solid background, not a transparent row: the pinned columns below
+     inherit it, and a semi-transparent pin would let the scrolling columns
+     show through underneath it. */
   .table-tr {
-    @apply border-b border-gray-100 hover:bg-brand-50/40 transition-colors cursor-pointer;
+    @apply bg-white border-b border-gray-100 hover:bg-brand-50 transition-colors cursor-pointer;
   }
   /* An empty cell. Roughly 40% of cells in the job register hold a dash, and
      in the same grey as real data they compete with it - the eye cannot tell
@@ -77,6 +88,27 @@
   .table-ref {
     @apply font-mono;
   }
+  /*
+   * Pinned columns.
+   *
+   * Twelve columns do not fit on a laptop screen, so the register scrolls
+   * sideways. Unpinned, that means the Status column sits half off the right
+   * edge until you scroll - and once you have scrolled, the Job No the row
+   * belongs to has gone off the left. You can see what a job is, or which
+   * job it is, but not both. The old app pinned its Job # for the same
+   * reason.
+   *
+   * The cells take background-color: inherit so they pick up the row's own
+   * white or hover tint; anything semi-transparent here would let the
+   * columns sliding underneath show through.
+   */
+  .pin-l, .pin-r { position: sticky; }
+  .pin-l { left: 0; }
+  .pin-r { right: 0; }
+  .table-th.pin-l, .table-th.pin-r { z-index: 30; }
+  .table-td.pin-l, .table-td.pin-r { z-index: 20; background-color: inherit; }
+  .pin-l { box-shadow: 2px 0 4px -2px rgb(0 0 0 / 0.08); }
+  .pin-r { box-shadow: -2px 0 4px -2px rgb(0 0 0 / 0.08); }
   /* Page title block, as used across the old app's screens */
   .page-crumb {
     @apply text-[10px] uppercase tracking-wide text-gray-400;
@@ -164,11 +196,15 @@
          text-slate-400 hover:text-slate-200 transition-colors;
 }
 
-/* Status badge colors */
-.status-open      { @apply bg-blue-100 text-blue-700; }
-.status-active    { @apply bg-green-100 text-green-700; }
-.status-closed    { @apply bg-gray-100 text-gray-600; }
-.status-pending   { @apply bg-yellow-100 text-yellow-700; }
-.status-draft     { @apply bg-orange-100 text-orange-700; }
-.status-completed { @apply bg-emerald-100 text-emerald-700; }
-.status-cancelled { @apply bg-red-100 text-red-700; }
+/* Status colours. Text only: the dot in .badge takes currentColor, so each
+   status keeps its colour without a filled pill behind it. The old app's
+   registers showed status as a coloured dot and plain text - a column of
+   twelve filled pills is the heaviest thing on a register screen, and it
+   pulls the eye away from the data it is supposed to be labelling. */
+.status-open      { @apply text-blue-700; }
+.status-active    { @apply text-green-700; }
+.status-closed    { @apply text-gray-600; }
+.status-pending   { @apply text-yellow-700; }
+.status-draft     { @apply text-orange-700; }
+.status-completed { @apply text-emerald-700; }
+.status-cancelled { @apply text-red-700; }
