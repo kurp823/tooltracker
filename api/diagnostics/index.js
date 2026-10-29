@@ -35,6 +35,33 @@ const loose = (col) =>
  */
 const CHECKS = [
   {
+    /*
+     * The delivery tickets an automated cleanup deleted on 29 Oct 2026, and
+     * what is available to rebuild each one from. Read-only: this lists the
+     * candidates that restore:dt-1029 would put back, so the set can be
+     * looked at before anything is written.
+     */
+    name: 'deletedDTCandidates',
+    sql: `SELECT b.dtNumber,
+                 COUNT(*)                         AS linesInBackup,
+                 MAX(h.jobNum)                    AS jobNumber,
+                 MAX(h.rig)                       AS rig,
+                 MAX(h.well)                      AS well,
+                 MAX(h.dtDate)                    AS dtDate,
+                 MAX(CASE WHEN h.dtNo IS NULL THEN 0 ELSE 1 END) AS inOperatorSheet
+            FROM bk_DeliveryTicketLines_1027 b
+            OUTER APPLY (
+              SELECT TOP 1 i.dtNo, i.jobNum, i.rig, i.well, i.dtDate
+                FROM tbl_ImportDTRT i
+               WHERE LTRIM(RTRIM(i.dtNo)) = b.dtNumber
+               ORDER BY CASE WHEN TRY_CONVERT(date, i.dtDate) IS NULL THEN 1 ELSE 0 END, i.id
+            ) h
+           WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t
+                              WHERE t.dtNumber = b.dtNumber)
+           GROUP BY b.dtNumber
+           ORDER BY b.dtNumber`,
+  },
+  {
     name: 'lineTotals',
     sql: `SELECT
             (SELECT COUNT(*) FROM tbl_DeliveryTicketLines)  AS dtLines,

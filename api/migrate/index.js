@@ -474,61 +474,6 @@ const MIGRATIONS = [
   },
   {
     /*
-     * Remove delivery tickets carrying the wrong rig or well.
-     *
-     * The job list is the authority. A job that is Completed and carries a
-     * legal invoice number has a settled rig and well; a delivery ticket on
-     * that job showing a different rig or well is wrong data. Checked against
-     * every job in the table first: no job anywhere has the rig/well these
-     * tickets claim, so there is nothing to re-attach them to.
-     *
-     * Compared loosely - ignoring case, spaces, dashes, brackets and dots -
-     * so AD-137(JORDAN) and AD 137 count as the same rig and only a genuine
-     * difference is removed. 2,656 of 2,669 such tickets match and are
-     * untouched.
-     *
-     * DUMMY tickets are deliberately excluded: those are a deliberate
-     * convention for closing old jobs, not data to clean up.
-     *
-     * Idempotent: once removed the rows no longer match.
-     */
-    name: 'seed:remove-wrong-rigwell-tickets',
-    sql: `
-      SET XACT_ABORT ON;
-      BEGIN TRANSACTION;
-
-      WITH jobs AS (
-        SELECT JobID, Rig, Well, Status, LegalInvoiceNumber,
-               ${jobKey('JobID')} AS jobKey
-          FROM tbl_Jobs
-         WHERE Status = 'Completed'
-           AND NULLIF(LTRIM(RTRIM(LegalInvoiceNumber)), '') IS NOT NULL
-      ),
-      dt AS (
-        SELECT t.dtNumber, t.rig, t.well, ${jobKey('t.jobNumber')} AS jobKey
-          FROM tbl_DeliveryTickets t
-         WHERE t.dtNumber NOT LIKE 'DT-DUMMY%'
-           AND t.dtNumber NOT LIKE 'DUMMY%'
-      )
-      SELECT d.dtNumber
-        INTO #wrongRigWell
-        FROM dt d
-        JOIN jobs j ON j.jobKey = d.jobKey
-       WHERE UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(j.Rig)), ''),' ',''),'-',''),'(',''),')',''),'.','')) <> UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(d.rig)), ''),' ',''),'-',''),'(',''),')',''),'.',''))
-          OR UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(j.Well)), ''),' ',''),'-',''),'(',''),')',''),'.','')) <> UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(LTRIM(RTRIM(d.well)), ''),' ',''),'-',''),'(',''),')',''),'.',''));
-
-      DELETE FROM tbl_DeliveryTicketLines
-       WHERE dtNumber IN (SELECT dtNumber FROM #wrongRigWell);
-
-      DELETE FROM tbl_DeliveryTickets
-       WHERE dtNumber IN (SELECT dtNumber FROM #wrongRigWell);
-
-      DROP TABLE #wrongRigWell;
-
-      COMMIT;`,
-  },
-  {
-    /*
      * Staging table for a corrected DT/RT sheet.
      *
      * The sheet is the operator's own reconciliation: one row per dispatched
@@ -683,6 +628,70 @@ const MIGRATIONS = [
 
       COMMIT TRANSACTION;`,
   },
+  {
+    /*
+     * One-time repair for the ten delivery tickets the rig/well seed deleted
+     * on 29 Oct 2026, and their 152 lines.
+     *
+     * The tickets themselves were never backed up - that seed took the header
+     * rows out with no copy - so they are rebuilt from two sources that do
+     * still hold them:
+     *
+     *   bk_DeliveryTicketLines_1027   the lines, verbatim
+     *   tbl_ImportDTRT                the operator's own DT/RT sheet, which
+     *                                 carries ticket number, date, job, rig
+     *                                 and well for each one
+     *
+     * Only ticket numbers that have lines in the backup, are absent from the
+     * live table, and appear in the operator's sheet are touched. Idempotent:
+     * a second run finds nothing missing and inserts nothing. Lines are keyed
+     * on the ticket, so they come back only for tickets this step restored.
+     */
+    name: 'restore:dt-1029',
+    sql: `
+      SET XACT_ABORT ON;
+      BEGIN TRANSACTION;
+
+      SELECT DISTINCT b.dtNumber
+        INTO #gone
+        FROM bk_DeliveryTicketLines_1027 b
+       WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t
+                          WHERE t.dtNumber = b.dtNumber)
+         AND EXISTS (SELECT 1 FROM tbl_ImportDTRT i
+                      WHERE LTRIM(RTRIM(i.dtNo)) = b.dtNumber);
+
+      INSERT INTO tbl_DeliveryTickets
+            (dtNumber, jobNumber, deliveryDate, rig, well, status, notes, createdBy, createdAt)
+      SELECT g.dtNumber,
+             h.jobNum,
+             TRY_CONVERT(date, h.dtDate),
+             h.rig,
+             h.well,
+             NULL,
+             'Restored 29-Oct-2026 from the operator DT/RT sheet after an automated cleanup removed it. Status, PO number, client ref, vehicle, driver, EMDAD rep and the signature fields were lost with the original row and are not recoverable.',
+             'restore:dt-1029',
+             GETDATE()
+        FROM #gone g
+        CROSS APPLY (
+          SELECT TOP 1 i.jobNum, i.dtDate, i.rig, i.well
+            FROM tbl_ImportDTRT i
+           WHERE LTRIM(RTRIM(i.dtNo)) = g.dtNumber
+           ORDER BY CASE WHEN TRY_CONVERT(date, i.dtDate) IS NULL THEN 1 ELSE 0 END, i.id
+        ) h;
+
+      INSERT INTO tbl_DeliveryTicketLines
+            (dtNumber, itemNo, serial, toolDescription, qty, remarks)
+      SELECT b.dtNumber, b.itemNo, b.serial, b.toolDescription, b.qty, b.remarks
+        FROM bk_DeliveryTicketLines_1027 b
+        JOIN #gone g ON g.dtNumber = b.dtNumber
+       WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTicketLines l
+                          WHERE l.dtNumber = b.dtNumber
+                            AND l.itemNo   = b.itemNo
+                            AND ISNULL(l.serial,'') = ISNULL(b.serial,''));
+
+      DROP TABLE #gone;
+      COMMIT;`,
+  },
 ]
 
 module.exports = async function (context, req) {
@@ -695,12 +704,35 @@ module.exports = async function (context, req) {
     return jsonResponse(context, 405, { error: 'Method not allowed' })
   }
 
+  /*
+   * Data seeds no longer run just because someone asked for a table.
+   *
+   * A call to this endpoint to create one missing table also re-ran every
+   * seed in this file, and one of them deleted delivery tickets whose rig or
+   * well disagreed with the job - on completed, legally invoiced jobs. Ten
+   * tickets and 152 lines went with it. That seed has been removed, and
+   * anything that writes rows now has to be asked for by name:
+   *
+   *   POST /api/migrate                      -> creates missing tables only
+   *   POST /api/migrate?only=seed:<name>     -> runs exactly that one step
+   *   POST /api/migrate?only=restore:dt-1029 -> the restore below
+   *
+   * Creating a table is additive and guarded by OBJECT_ID, so that stays the
+   * default. Touching rows is not, so it is opt-in.
+   */
+  const only = String((req.query || {}).only || '').trim()
+
   const results = {}
   for (const m of MIGRATIONS) {
+    const isData = m.name.startsWith('seed:') || m.name.startsWith('restore:')
+    if (only) {
+      if (m.name !== only) continue
+    } else if (isData) {
+      results[m.name] = 'skipped — writes rows; ask for it by name with ?only='
+      continue
+    }
     try {
-      // Data seeds are idempotent by their own guards and create no object,
-      // so the table-existence check below does not apply to them.
-      if (m.name.startsWith('seed:')) {
+      if (isData) {
         await query(m.sql)
         results[m.name] = 'applied'
         continue
