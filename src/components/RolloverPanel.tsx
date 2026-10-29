@@ -48,7 +48,10 @@ export function RolloverPanel({
 
   useEffect(() => { setPreview(null) }, [from])
 
-  if (invoicingType !== 'Monthly') return null
+  // Case-insensitive: production holds 'MONTHLY' while the dropdown offers
+  // 'Monthly', and an exact match would hide this panel from every job that
+  // needs it.
+  if (String(invoicingType || '').trim().toUpperCase() !== 'MONTHLY') return null
 
   async function check() {
     if (!from.trim()) return
