@@ -112,7 +112,7 @@ export function MovementTable({ tableId, rows, loading, visible, prompt, hasSele
     <div className="flex-1 overflow-auto">
       <table className="w-full text-xs border-collapse">
         <thead className="sticky top-0 z-10">
-          <tr className="bg-navy-head text-white">
+          <tr className="bg-gray-100 text-gray-600 uppercase tracking-wider border-b border-gray-200">
             {cols.map(c => (
               <th
                 key={c.key}

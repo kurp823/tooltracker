@@ -159,10 +159,10 @@ export function JobsView() {
                   <td className="table-td text-gray-500"><V>{job.ServiceType}</V></td>
                   <td className="table-td"><V>{job.Rig}</V></td>
                   <td className="table-td text-gray-500"><V>{job.Well}</V></td>
-                  <td className="table-td text-gray-500"><V>{job.Contract}</V></td>
-                  <td className="table-td text-gray-500"><V>{job.PONumber}</V></td>
-                  <td className="table-td text-gray-500"><V>{formatDate(job.MobDate)}</V></td>
-                  <td className="table-td text-gray-500"><V>{formatDate(job.DemobDate)}</V></td>
+                  <td className="table-td table-ref text-gray-500"><V>{job.Contract}</V></td>
+                  <td className="table-td table-ref text-gray-500"><V>{job.PONumber}</V></td>
+                  <td className="table-td table-ref text-gray-500"><V>{formatDate(job.MobDate)}</V></td>
+                  <td className="table-td table-ref text-gray-500"><V>{formatDate(job.DemobDate)}</V></td>
                   <td className="table-td table-num text-gray-800">
                     <V>{job.InvoiceAmount
                       ? Number(job.InvoiceAmount).toLocaleString(undefined, { maximumFractionDigits: 0 })
