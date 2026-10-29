@@ -9,6 +9,7 @@ import { api }              from '../utils/api'
 import { formatDate, statusBadgeClass } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
 import { ListOptions } from '../components/ListOptions'
+import { MaintenanceConsumables } from '../components/MaintenanceConsumables'
 
 interface MJob {
   MaintenanceJobID: number
@@ -255,6 +256,8 @@ function MJobDetailPanel({ job, onClose, onRefresh }: {
           <textarea className="input w-full" rows={4} value={form.Notes}
             onChange={e => f('Notes', e.target.value)} disabled={!canEdit} />
         </div>
+        <MaintenanceConsumables mjNumber={job.MaintenanceJobNumber} />
+
         {canEdit && (
           <div className="flex justify-end">
             <button className="btn-primary" onClick={handleSave} disabled={saving}>

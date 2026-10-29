@@ -35,6 +35,10 @@ import { DataImportView }     from './views/DataImportView'
 // Dashboards
 import { InventoryDashboardView }   from './views/InventoryDashboardView'
 import { ToolRevenueView }         from './views/ToolRevenueView'
+import { PurchaseOrdersView }      from './views/PurchaseOrdersView'
+import { ConsumablesView }         from './views/ConsumablesView'
+import { RentalInwardView }        from './views/RentalInwardView'
+import { MonthlyExpensesView }     from './views/MonthlyExpensesView'
 import { MaintenanceDashboardView } from './views/MaintenanceDashboardView'
 import { BillingDashboardView }     from './views/BillingDashboardView'
 import { ContractsDashboardView }   from './views/ContractsDashboardView'
@@ -96,6 +100,11 @@ export default function App() {
               {/* Inventory */}
               <Route path="inventory-dashboard" element={<InventoryDashboardView />} />
               <Route path="tool-revenue"        element={<ToolRevenueView />} />
+              <Route path="po-grn"              element={<PurchaseOrdersView />} />
+              <Route path="consumables"         element={<ConsumablesView />} />
+              <Route path="sub-rental-inward"   element={<RentalInwardView />} />
+              <Route path="sub-rentals"         element={<RentalInwardView />} />
+              <Route path="monthly-expenses"    element={<MonthlyExpensesView />} />
               <Route path="inventory" element={<InventoryView />} />
               <Route path="missing-tools" element={<MissingToolsView />} />
               <Route path="tool-history" element={<ToolHistoryView />} />
