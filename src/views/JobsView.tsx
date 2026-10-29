@@ -122,7 +122,7 @@ export function JobsView() {
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-10">
             <tr>
-              <th className="table-th">Job No</th>
+              <th className="table-th pin-l">Job No</th>
               <th className="table-th">Client</th>
               <th className="table-th">Sub-Division</th>
               <th className="table-th">Rig</th>
@@ -133,7 +133,7 @@ export function JobsView() {
               <th className="table-th">End</th>
               <th className="table-th !text-right">Job Value</th>
               <th className="table-th">Invoice No</th>
-              <th className="table-th">Status</th>
+              <th className="table-th pin-r">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -150,7 +150,7 @@ export function JobsView() {
                   className="table-tr whitespace-nowrap"
                   onClick={() => navigate(`/jobs/${job.JobID}`)}
                 >
-                  <td className="table-td font-mono font-medium text-brand-600">{job.JobID}</td>
+                  <td className="table-td pin-l font-mono font-medium text-brand-600">{job.JobID}</td>
                   {/* Client names run long - 'Churchill Drilling Tools Oil Well
                       Drilling' was cut to 'Churchill Drilling Tools Oil Well Dr…'
                       and the distinguishing part is at the end. */}
@@ -169,7 +169,7 @@ export function JobsView() {
                       : null}</V>
                   </td>
                   <td className="table-td text-gray-500 font-mono"><V>{job.LegalInvoiceNumber}</V></td>
-                  <td className="table-td">
+                  <td className="table-td pin-r">
                     <span className={`badge ${statusBadgeClass(job.Status)}`}>
                       {job.Status}
                     </span>

@@ -64,8 +64,11 @@
      carry twelve columns on plain white and stay legible because the only
      tint on the grid is the row under the cursor; a second tint on every
      other row competes with it. */
+  /* A solid background, not a transparent row: the pinned columns below
+     inherit it, and a semi-transparent pin would let the scrolling columns
+     show through underneath it. */
   .table-tr {
-    @apply border-b border-gray-100 hover:bg-brand-50/40 transition-colors cursor-pointer;
+    @apply bg-white border-b border-gray-100 hover:bg-brand-50 transition-colors cursor-pointer;
   }
   /* An empty cell. Roughly 40% of cells in the job register hold a dash, and
      in the same grey as real data they compete with it - the eye cannot tell
@@ -85,6 +88,27 @@
   .table-ref {
     @apply font-mono;
   }
+  /*
+   * Pinned columns.
+   *
+   * Twelve columns do not fit on a laptop screen, so the register scrolls
+   * sideways. Unpinned, that means the Status column sits half off the right
+   * edge until you scroll - and once you have scrolled, the Job No the row
+   * belongs to has gone off the left. You can see what a job is, or which
+   * job it is, but not both. The old app pinned its Job # for the same
+   * reason.
+   *
+   * The cells take background-color: inherit so they pick up the row's own
+   * white or hover tint; anything semi-transparent here would let the
+   * columns sliding underneath show through.
+   */
+  .pin-l, .pin-r { position: sticky; }
+  .pin-l { left: 0; }
+  .pin-r { right: 0; }
+  .table-th.pin-l, .table-th.pin-r { z-index: 30; }
+  .table-td.pin-l, .table-td.pin-r { z-index: 20; background-color: inherit; }
+  .pin-l { box-shadow: 2px 0 4px -2px rgb(0 0 0 / 0.08); }
+  .pin-r { box-shadow: -2px 0 4px -2px rgb(0 0 0 / 0.08); }
   /* Page title block, as used across the old app's screens */
   .page-crumb {
     @apply text-[10px] uppercase tracking-wide text-gray-400;
