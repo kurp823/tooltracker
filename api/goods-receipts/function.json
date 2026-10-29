@@ -5,7 +5,7 @@
       "type": "httpTrigger",
       "direction": "in",
       "name": "req",
-      "route": "goods-receipts/{id?}/{sub?}/{subId?}",
+      "route": "goods-receipts/{id?}/{sub?}",
       "methods": ["get","post","put","delete"]
     },
     { "type": "http", "direction": "out", "name": "res" }
