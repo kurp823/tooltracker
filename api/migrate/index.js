@@ -14,6 +14,47 @@ const { query, jsonResponse, requireAuth, jobKey } = require('../db')
  */
 const MIGRATIONS = [
   {
+    // The PO register shipped against four tables. Three of them exist in the
+    // live database - tbl_PurchaseOrders, tbl_GoodsReceipts and
+    // tbl_GoodsReceiptLines, all with the shapes the API expects - but the
+    // line table does not, so every call on the screen failed. The column
+    // types below are taken from what api/purchase-orders/index.js binds
+    // (qty Decimal(18,3), unitRate and lineAmount Decimal(18,2), description
+    // sliced to 500) and from the sibling tables, so poNumber matches
+    // tbl_PurchaseOrders.poNumber and destination matches
+    // tbl_GoodsReceiptLines.destination.
+    //
+    // tbl_GoodsReceiptLines.poLineId is a reference to this table's id, so
+    // GRN receiving was broken by the same gap.
+    name: 'tbl_PurchaseOrderLines',
+    sql: `
+      IF OBJECT_ID('dbo.tbl_PurchaseOrderLines', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.tbl_PurchaseOrderLines (
+          id          int IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_tbl_PurchaseOrderLines PRIMARY KEY,
+          poNumber    nvarchar(64)   NOT NULL,
+          lineNo      int            NOT NULL,
+          partNumber  nvarchar(100)  NULL,
+          [description] nvarchar(500) NULL,
+          [size]      nvarchar(50)   NULL,
+          qty         decimal(18, 3) NOT NULL
+            CONSTRAINT DF_tbl_PurchaseOrderLines_qty DEFAULT (0),
+          uom         nvarchar(20)   NULL,
+          unitRate    decimal(18, 2) NULL,
+          lineAmount  decimal(18, 2) NULL,
+          currency    nvarchar(10)   NULL,
+          jobId       nvarchar(50)   NULL,
+          destination nvarchar(20)   NULL,
+          notes       nvarchar(max)  NULL
+        );
+        CREATE INDEX IX_tbl_PurchaseOrderLines_poNumber
+          ON dbo.tbl_PurchaseOrderLines (poNumber);
+        CREATE INDEX IX_tbl_PurchaseOrderLines_jobId
+          ON dbo.tbl_PurchaseOrderLines (jobId);
+      END`,
+  },
+  {
     name: 'tbl_JobTools',
     sql: `
       IF OBJECT_ID('dbo.tbl_JobTools', 'U') IS NULL
