@@ -29,30 +29,43 @@ const MIGRATIONS = [
     name: 'tbl_PurchaseOrderLines',
     sql: `
       IF OBJECT_ID('dbo.tbl_PurchaseOrderLines', 'U') IS NULL
-      BEGIN
-        CREATE TABLE dbo.tbl_PurchaseOrderLines (
-          id          int IDENTITY(1,1) NOT NULL
-            CONSTRAINT PK_tbl_PurchaseOrderLines PRIMARY KEY,
-          poNumber    nvarchar(64)   NOT NULL,
-          lineNo      int            NOT NULL,
-          partNumber  nvarchar(100)  NULL,
-          [description] nvarchar(500) NULL,
-          [size]      nvarchar(50)   NULL,
-          qty         decimal(18, 3) NOT NULL
-            CONSTRAINT DF_tbl_PurchaseOrderLines_qty DEFAULT (0),
-          uom         nvarchar(20)   NULL,
-          unitRate    decimal(18, 2) NULL,
-          lineAmount  decimal(18, 2) NULL,
-          currency    nvarchar(10)   NULL,
-          jobId       nvarchar(50)   NULL,
-          destination nvarchar(20)   NULL,
-          notes       nvarchar(max)  NULL
-        );
+      CREATE TABLE dbo.tbl_PurchaseOrderLines (
+        [id]          int IDENTITY(1,1) NOT NULL
+          CONSTRAINT PK_tbl_PurchaseOrderLines PRIMARY KEY,
+        [poNumber]    nvarchar(64)   NOT NULL,
+        [lineNo]      int            NULL,
+        [partNumber]  nvarchar(100)  NULL,
+        [description] nvarchar(500)  NULL,
+        [size]        nvarchar(50)   NULL,
+        [qty]         decimal(18,3)  NULL,
+        [uom]         nvarchar(20)   NULL,
+        [unitRate]    decimal(18,2)  NULL,
+        [lineAmount]  decimal(18,2)  NULL,
+        [currency]    nvarchar(10)   NULL,
+        [jobId]       nvarchar(50)   NULL,
+        [destination] nvarchar(20)   NULL,
+        [notes]       nvarchar(1000) NULL
+      )`,
+  },
+  {
+    // Indexes as their own step: a CREATE INDEX beside the CREATE TABLE in
+    // one batch is what the previous attempt tried, and it failed to parse.
+    name: 'seed:po-lines-indexes',
+    sql: `
+      IF OBJECT_ID('dbo.tbl_PurchaseOrderLines', 'U') IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM sys.indexes
+                          WHERE name = 'IX_tbl_PurchaseOrderLines_poNumber')
         CREATE INDEX IX_tbl_PurchaseOrderLines_poNumber
-          ON dbo.tbl_PurchaseOrderLines (poNumber);
+          ON dbo.tbl_PurchaseOrderLines ([poNumber])`,
+  },
+  {
+    name: 'seed:po-lines-job-index',
+    sql: `
+      IF OBJECT_ID('dbo.tbl_PurchaseOrderLines', 'U') IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM sys.indexes
+                          WHERE name = 'IX_tbl_PurchaseOrderLines_jobId')
         CREATE INDEX IX_tbl_PurchaseOrderLines_jobId
-          ON dbo.tbl_PurchaseOrderLines (jobId);
-      END`,
+          ON dbo.tbl_PurchaseOrderLines ([jobId])`,
   },
   {
     name: 'tbl_JobTools',
