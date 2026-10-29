@@ -652,25 +652,20 @@ const MIGRATIONS = [
       SET XACT_ABORT ON;
       BEGIN TRANSACTION;
 
+      /* Stage one: which ticket numbers have backup lines but no live header.
+         Kept separate so the sheet lookup below runs over a handful of rows
+         rather than all 77,526 backup lines, which timed out. */
       SELECT DISTINCT b.dtNumber
         INTO #gone
         FROM bk_DeliveryTicketLines_1027 b
        WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t
-                          WHERE t.dtNumber = b.dtNumber)
-         AND EXISTS (SELECT 1 FROM tbl_ImportDTRT i
-                      WHERE LTRIM(RTRIM(i.dtNo)) = b.dtNumber);
+                          WHERE t.dtNumber = b.dtNumber);
 
-      INSERT INTO tbl_DeliveryTickets
-            (dtNumber, jobNumber, deliveryDate, rig, well, status, notes, createdBy, createdAt)
-      SELECT g.dtNumber,
-             h.jobNum,
-             TRY_CONVERT(date, h.dtDate),
-             h.rig,
-             h.well,
-             NULL,
-             'Restored 29-Oct-2026 from the operator DT/RT sheet after an automated cleanup removed it. Status, PO number, client ref, vehicle, driver, EMDAD rep and the signature fields were lost with the original row and are not recoverable.',
-             'restore:dt-1029',
-             GETDATE()
+      /* Stage two: of those, the ones the operator's own sheet still
+         describes. A ticket the sheet does not know is not rebuilt - there
+         would be nothing truthful to put in its job, date, rig or well. */
+      SELECT g.dtNumber, h.jobNum, h.dtDate, h.rig, h.well
+        INTO #rebuild
         FROM #gone g
         CROSS APPLY (
           SELECT TOP 1 i.jobNum, i.dtDate, i.rig, i.well
@@ -679,16 +674,26 @@ const MIGRATIONS = [
            ORDER BY CASE WHEN TRY_CONVERT(date, i.dtDate) IS NULL THEN 1 ELSE 0 END, i.id
         ) h;
 
+      INSERT INTO tbl_DeliveryTickets
+            (dtNumber, jobNumber, deliveryDate, rig, well, status, notes, createdBy, createdAt)
+      SELECT r.dtNumber, r.jobNum, TRY_CONVERT(date, r.dtDate), r.rig, r.well,
+             NULL,
+             'Restored 29-Oct-2026 from the operator DT/RT sheet after an automated cleanup removed it. Status, PO number, client ref, vehicle, driver, EMDAD rep and the signature fields were lost with the original row and are not recoverable.',
+             'restore:dt-1029',
+             GETDATE()
+        FROM #rebuild r;
+
       INSERT INTO tbl_DeliveryTicketLines
             (dtNumber, itemNo, serial, toolDescription, qty, remarks)
       SELECT b.dtNumber, b.itemNo, b.serial, b.toolDescription, b.qty, b.remarks
         FROM bk_DeliveryTicketLines_1027 b
-        JOIN #gone g ON g.dtNumber = b.dtNumber
+        JOIN #rebuild r ON r.dtNumber = b.dtNumber
        WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTicketLines l
                           WHERE l.dtNumber = b.dtNumber
                             AND l.itemNo   = b.itemNo
                             AND ISNULL(l.serial,'') = ISNULL(b.serial,''));
 
+      DROP TABLE #rebuild;
       DROP TABLE #gone;
       COMMIT;`,
   },

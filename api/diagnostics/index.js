@@ -36,30 +36,41 @@ const loose = (col) =>
 const CHECKS = [
   {
     /*
-     * The delivery tickets an automated cleanup deleted on 29 Oct 2026, and
-     * what is available to rebuild each one from. Read-only: this lists the
-     * candidates that restore:dt-1029 would put back, so the set can be
-     * looked at before anything is written.
+     * The delivery tickets that are present in the 27-Oct line backup but no
+     * longer in the live table, and what is available to rebuild each from.
+     * Read-only.
+     *
+     * Two stages on purpose. Matching the operator sheet with
+     * LTRIM(RTRIM(dtNo)) over all 77,526 backup rows could not use the index
+     * on tbl_ImportDTRT and timed out. The missing ticket numbers are found
+     * first - a handful - and only those are looked up in the sheet.
      */
     name: 'deletedDTCandidates',
-    sql: `SELECT b.dtNumber,
-                 COUNT(*)                         AS linesInBackup,
-                 MAX(h.jobNum)                    AS jobNumber,
-                 MAX(h.rig)                       AS rig,
-                 MAX(h.well)                      AS well,
-                 MAX(h.dtDate)                    AS dtDate,
-                 MAX(CASE WHEN h.dtNo IS NULL THEN 0 ELSE 1 END) AS inOperatorSheet
-            FROM bk_DeliveryTicketLines_1027 b
-            OUTER APPLY (
-              SELECT TOP 1 i.dtNo, i.jobNum, i.rig, i.well, i.dtDate
-                FROM tbl_ImportDTRT i
-               WHERE LTRIM(RTRIM(i.dtNo)) = b.dtNumber
-               ORDER BY CASE WHEN TRY_CONVERT(date, i.dtDate) IS NULL THEN 1 ELSE 0 END, i.id
-            ) h
-           WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t
-                              WHERE t.dtNumber = b.dtNumber)
-           GROUP BY b.dtNumber
-           ORDER BY b.dtNumber`,
+    sql: `
+      SELECT b.dtNumber, COUNT(*) AS linesInBackup
+        INTO #gone
+        FROM bk_DeliveryTicketLines_1027 b
+       WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t
+                          WHERE t.dtNumber = b.dtNumber)
+       GROUP BY b.dtNumber;
+
+      SELECT g.dtNumber,
+             g.linesInBackup,
+             h.jobNum  AS jobNumber,
+             h.rig,
+             h.well,
+             h.dtDate,
+             CASE WHEN h.dtNo IS NULL THEN 0 ELSE 1 END AS inOperatorSheet
+        FROM #gone g
+        OUTER APPLY (
+          SELECT TOP 1 i.dtNo, i.jobNum, i.rig, i.well, i.dtDate
+            FROM tbl_ImportDTRT i
+           WHERE LTRIM(RTRIM(i.dtNo)) = g.dtNumber
+           ORDER BY CASE WHEN TRY_CONVERT(date, i.dtDate) IS NULL THEN 1 ELSE 0 END, i.id
+        ) h
+       ORDER BY g.dtNumber;
+
+      DROP TABLE #gone;`,
   },
   {
     name: 'lineTotals',
