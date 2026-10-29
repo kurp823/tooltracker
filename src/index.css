@@ -40,16 +40,33 @@
   .badge {
     @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
   }
-  /* Measured from the previous app: navy header row, white 11px uppercase. */
+  /* Navy header row, white uppercase, as the previous app had it. Padding is
+     wider than the original px-2: at that width the columns ran into each
+     other and a twelve-column row read as one block of text. */
   .table-th {
-    @apply px-2 py-1.5 text-left text-[11px] font-semibold text-white uppercase tracking-wide
+    @apply px-3 py-2 text-left text-[11px] font-semibold text-white uppercase tracking-wide
            bg-navy-head whitespace-nowrap;
   }
   .table-td {
-    @apply px-2 py-1 text-[12px] text-gray-700;
+    @apply px-3 py-[5px] text-[12.5px] text-gray-700;
   }
+  /* Zebra striping rather than a hairline alone. Twelve columns is further
+     than the eye tracks along a 1px border, and a row read one line off is a
+     job attributed to the wrong rig. */
   .table-tr {
-    @apply border-b border-gray-100 hover:bg-brand-50/50 transition-colors cursor-pointer;
+    @apply border-b border-gray-100 even:bg-gray-50/70
+           hover:bg-brand-50 transition-colors cursor-pointer;
+  }
+  /* An empty cell. Roughly 40% of cells in the job register hold a dash, and
+     in the same grey as real data they compete with it - the eye cannot tell
+     what is filled in at a glance. Faded, they recede. */
+  .table-empty {
+    @apply text-gray-300 select-none;
+  }
+  /* Figures: tabular numerals so digits line up down the column, which is
+     what makes a value column scannable rather than ragged. */
+  .table-num {
+    @apply text-right tabular-nums;
   }
   /* Page title block, as used across the old app's screens */
   .page-crumb {

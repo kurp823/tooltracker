@@ -10,6 +10,22 @@ import type { Job, JobStatus } from '../types'
 import { ListOptions } from '../components/ListOptions'
 
 
+
+/**
+ * A cell value, or a faded dash when there isn't one.
+ *
+ * The job register is mostly gaps - PO number, end date and invoice number
+ * are blank on the majority of rows - and rendering those dashes in the same
+ * grey as real data meant the eye had to read every cell to find the filled
+ * ones.
+ */
+function V({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  const empty = children == null || children === '' || children === false
+  return empty
+    ? <span className="table-empty">—</span>
+    : <span className={className}>{children}</span>
+}
+
 export function JobsView() {
   const { hasRole } = useAuth()
   const navigate = useNavigate()
@@ -135,21 +151,24 @@ export function JobsView() {
                   onClick={() => navigate(`/jobs/${job.JobID}`)}
                 >
                   <td className="table-td font-mono font-medium text-brand-600">{job.JobID}</td>
-                  <td className="table-td font-medium max-w-[190px] truncate"
-                      title={job.Client || ''}>{job.Client || '—'}</td>
-                  <td className="table-td text-gray-500">{job.ServiceType || '—'}</td>
-                  <td className="table-td">{job.Rig || '—'}</td>
-                  <td className="table-td text-gray-500">{job.Well || '—'}</td>
-                  <td className="table-td text-gray-500">{job.Contract || '—'}</td>
-                  <td className="table-td text-gray-500">{job.PONumber || '—'}</td>
-                  <td className="table-td text-gray-500">{formatDate(job.MobDate) || '—'}</td>
-                  <td className="table-td text-gray-500">{formatDate(job.DemobDate) || '—'}</td>
-                  <td className="table-td text-right text-gray-600">
-                    {job.InvoiceAmount
+                  {/* Client names run long - 'Churchill Drilling Tools Oil Well
+                      Drilling' was cut to 'Churchill Drilling Tools Oil Well Dr…'
+                      and the distinguishing part is at the end. */}
+                  <td className="table-td font-medium max-w-[260px] truncate"
+                      title={job.Client || ''}><V>{job.Client}</V></td>
+                  <td className="table-td text-gray-500"><V>{job.ServiceType}</V></td>
+                  <td className="table-td"><V>{job.Rig}</V></td>
+                  <td className="table-td text-gray-500"><V>{job.Well}</V></td>
+                  <td className="table-td text-gray-500"><V>{job.Contract}</V></td>
+                  <td className="table-td text-gray-500"><V>{job.PONumber}</V></td>
+                  <td className="table-td text-gray-500"><V>{formatDate(job.MobDate)}</V></td>
+                  <td className="table-td text-gray-500"><V>{formatDate(job.DemobDate)}</V></td>
+                  <td className="table-td table-num text-gray-800">
+                    <V>{job.InvoiceAmount
                       ? Number(job.InvoiceAmount).toLocaleString(undefined, { maximumFractionDigits: 0 })
-                      : '—'}
+                      : null}</V>
                   </td>
-                  <td className="table-td text-gray-500 font-mono">{job.LegalInvoiceNumber || '—'}</td>
+                  <td className="table-td text-gray-500 font-mono"><V>{job.LegalInvoiceNumber}</V></td>
                   <td className="table-td">
                     <span className={`badge ${statusBadgeClass(job.Status)}`}>
                       {job.Status}
