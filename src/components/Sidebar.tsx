@@ -62,8 +62,8 @@ const MODULES: NavModule[] = [
       { label: 'Not in Inventory',          to: '/missing-tools',       icon: <PackageSearch size={ICON} /> },
       { label: 'Tool Categories & Sizes',   to: '/categories',          icon: <Tag size={ICON} /> },
       { label: 'PO & Goods Inward (GRN)',   to: '/po-grn',              icon: <ShoppingCart size={ICON} /> },
-      { label: 'Third-Party Rental Inward', to: '/sub-rental-inward',   icon: <PackagePlus size={ICON} />, pending: true },
-      { label: 'Consumables & Store (SIV)', to: '/consumables',         icon: <Boxes size={ICON} />, pending: true },
+      { label: 'Third-Party Rental Inward', to: '/sub-rental-inward',   icon: <PackagePlus size={ICON} /> },
+      { label: 'Consumables & Store (SIV)', to: '/consumables',         icon: <Boxes size={ICON} /> },
     ],
   },
   {
@@ -84,8 +84,8 @@ const MODULES: NavModule[] = [
       { label: 'Billing Dashboard',              to: '/billing-dashboard', icon: <Gauge size={ICON} /> },
       { label: 'Invoicing',                      to: '/invoices',          icon: <FileText size={ICON} /> },
       { label: 'Tool Revenue & Utilization',     to: '/tool-revenue',      icon: <Coins size={ICON} /> },
-      { label: 'Sub-Contractor Rentals',         to: '/sub-rentals',       icon: <Building2 size={ICON} />, pending: true },
-      { label: 'Monthly Expense Grid & P&L',     to: '/monthly-expenses',  icon: <FileSpreadsheet size={ICON} />, pending: true },
+      { label: 'Sub-Contractor Rentals',         to: '/sub-rentals',       icon: <Building2 size={ICON} /> },
+      { label: 'Monthly Expense Grid & P&L',     to: '/monthly-expenses',  icon: <FileSpreadsheet size={ICON} /> },
     ],
   },
   {
