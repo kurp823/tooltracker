@@ -1,5 +1,6 @@
 'use strict'
 const { query, jsonResponse, requireAuth, jobKey, jobKeyOf } = require('../db')
+const { loadContractRates, listHoleSections } = require('../rates')
 
 // Real tbl_DeliveryTickets columns (confirmed via INFORMATION_SCHEMA):
 //   id, dtNumber, jobNumber, clientCode, deliveryDate, rig, well, poNumber,
@@ -190,6 +191,37 @@ module.exports = async function (context, req) {
     }
   }
 
+  // ── /delivery-tickets/{id}/hole-sections ────────────────────────────────
+  // Returns the sorted list of hole sections the contract behind this ticket
+  // prices on. An empty array means the contract prices by size alone, and the
+  // UI hides the field entirely — only ADNOC-style contracts with hole-priced
+  // categories expose this picker.
+  // Chain: ticket id → jobNumber → job.Contract → rate rows → hole sections.
+  if (id && sub === 'hole-sections' && method === 'GET') {
+    try {
+      const tkRow = await query(
+        'SELECT TOP 1 jobNumber FROM tbl_DeliveryTickets WHERE id = @id',
+        [{ name: 'id', value: Number(id) }]
+      )
+      const jobNumber = tkRow.recordset[0]?.jobNumber
+      if (!jobNumber) return jsonResponse(context, 200, { holeSections: [] })
+
+      const jobRow = await query(
+        'SELECT TOP 1 Contract FROM tbl_Jobs WHERE JobID = @jn',
+        [{ name: 'jn', value: jobNumber }]
+      )
+      const contractCode = jobRow.recordset[0]?.Contract
+      if (!contractCode) return jsonResponse(context, 200, { holeSections: [] })
+
+      const rates        = await loadContractRates(contractCode)
+      const holeSections = listHoleSections(rates)
+      return jsonResponse(context, 200, { holeSections, contractCode })
+    } catch (err) {
+      context.log.error('hole-sections error:', err)
+      return jsonResponse(context, 500, { error: 'Failed to load hole sections' })
+    }
+  }
+
   // ── /delivery-tickets (list) ─────────────────────────────────────────────
   if (!id && method === 'GET') {
     const jobQ = String((req.query || {}).job || '').trim()
@@ -235,6 +267,7 @@ module.exports = async function (context, req) {
               d.status AS Status, d.notes AS Notes,
               d.createdAt AS CreatedDate, d.createdBy AS CreatedBy,
               d.updatedAt AS UpdatedDate,
+              d.holeSection AS HoleSection,
               -- tbl_Clients covers only 4 of the 31 client names in use, so fall
               -- back to the stored code rather than showing an empty Customer.
               COALESCE(c.clientName, NULLIF(d.clientCode, '')) AS Client
@@ -316,6 +349,7 @@ module.exports = async function (context, req) {
               poNumber       = COALESCE(@po, poNumber),
               clientRef      = COALESCE(@cref, clientRef),
               calloutRef     = COALESCE(@callout, calloutRef),
+              holeSection    = COALESCE(@hs, holeSection),
               vehicleVessel  = COALESCE(@veh, vehicleVessel),
               driverName     = COALESCE(@driver, driverName),
               emdadRep       = COALESCE(@rep, emdadRep),
@@ -334,6 +368,7 @@ module.exports = async function (context, req) {
         { name: 'po',      value: nz(b.PONumber) },
         { name: 'cref',    value: nz(b.ClientRef) },
         { name: 'callout', value: nz(b.CalloutRef) },
+        { name: 'hs',      value: nz(b.HoleSection) },
         { name: 'veh',     value: nz(b.VehicleVessel) },
         { name: 'driver',  value: nz(b.DriverName) },
         { name: 'rep',     value: nz(b.EmdadRep) },
