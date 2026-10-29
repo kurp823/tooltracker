@@ -12,7 +12,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Save, Plus, Trash2, Search,
   CheckSquare, Square, FileText, Package, Users, Wrench,
-  ClipboardList, Truck, RotateCcw, BarChart3, X, AlertTriangle
+  ClipboardList, Truck, RotateCcw, BarChart3, X, AlertTriangle,
+  Lock, Unlock
 } from 'lucide-react'
 import { api } from '../utils/api'
 import { useFetch } from '../hooks/useFetch'
@@ -23,6 +24,7 @@ import { PageLoader, Spinner } from '../components/Spinner'
 import { ComboBox } from '../components/ComboBox'
 import { useRowWindow } from '../components/useRowWindow'
 import type { Job, JobStatus, InvoicingType, ToolMovement } from '../types'
+import { ListOptions } from '../components/ListOptions'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -143,13 +145,9 @@ const WORKSPACE_TABS = [
 
 type Tab = typeof WORKSPACE_TABS[number]['id']
 
-const STATUS_OPTIONS: JobStatus[]     = ['Open','Ongoing','Draft Invoice Submitted','Completed','JobCompleted']
-const INVOICING_OPTS: InvoicingType[] = ['PerJob','PerDay','Lump Sum']
-const CURRENCY_OPTS                   = ['USD','AED','SAR','OMR']
 // Real tbl_DeliveryTickets statuses: Closed 2,116, Signed 1,569, blank 15.
 // 'Draft/Submitted/Approved/Rejected' appear on none of the 3,700 tickets.
 // Receiving tickets no longer carry a free status — it follows the lock.
-const DT_STATUS_OPTS                  = ['', 'Signed', 'Closed']
 
 // ─── Tool Picker Modal ────────────────────────────────────────────────────────
 
@@ -738,7 +736,9 @@ function DTHeaderTab({
 }) {
   const { hasRole } = useAuth()
   const { showToast } = useToast()
-  const canEdit = hasRole('Admin', 'Operations')
+  // A finished job is read-only. The API enforces this too - the disabled
+  // fields here are the courtesy, the 423 from the server is the control.
+  const canEdit = hasRole('Admin', 'Operations') && !job?.IsLocked
 
   const [dts,        setDts]      = useState<DTRecord[]>([])
   const [activeDT,   setActiveDT] = useState<DTRecord | null>(null)
@@ -990,7 +990,7 @@ function DTHeaderTab({
                   value={form.Status}
                   onChange={e => setForm(p => ({ ...p, Status: e.target.value }))}
                   disabled={!canEdit}>
-                  {DT_STATUS_OPTS.map(s => <option key={s} value={s}>{s || 'Not set'}</option>)}
+                  <ListOptions name="DeliveryTicketStatus" current={form.Status} blank blankLabel="Not set" />
                 </select>
               </div>
             </div>
@@ -1225,7 +1225,9 @@ function ReturnTicketTab({
 }) {
   const { hasRole } = useAuth()
   const { showToast } = useToast()
-  const canEdit = hasRole('Admin', 'Operations')
+  // A finished job is read-only. The API enforces this too - the disabled
+  // fields here are the courtesy, the 423 from the server is the control.
+  const canEdit = hasRole('Admin', 'Operations') && !job?.IsLocked
 
   const [rts,      setRts]      = useState<RTRecord[]>([])
   const [activeRT, setActiveRT] = useState<RTRecord | null>(null)
@@ -1670,10 +1672,12 @@ function ReturnTicketTab({
     </div>
   )
 }
-function UtilizationTab({ jobId }: { jobId: string }) {
+function UtilizationTab({ jobId, job }: { jobId: string; job: Partial<Job> }) {
   const { hasRole } = useAuth()
   const { showToast } = useToast()
-  const canEdit = hasRole('Admin', 'Operations')
+  // A finished job is read-only. The API enforces this too - the disabled
+  // fields here are the courtesy, the 423 from the server is the control.
+  const canEdit = hasRole('Admin', 'Operations') && !job?.IsLocked
 
   const today = new Date()
   const [year,  setYear]  = useState(today.getFullYear())
@@ -2013,17 +2017,17 @@ function JobHeaderTab({
 
         <span className="field-label">Status</span>
         <select className="field-input" value={form.Status || 'Open'} onChange={f('Status')} disabled={!canEdit}>
-          {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
+          <ListOptions name="JobStatus" current={form.Status} />
         </select>
 
         <span className="field-label">Invoicing</span>
         <select className="field-input" value={form.InvoicingType || 'PerJob'} onChange={f('InvoicingType')} disabled={!canEdit}>
-          {INVOICING_OPTS.map(o => <option key={o}>{o}</option>)}
+          <ListOptions name="InvoicingType" current={form.InvoicingType} />
         </select>
 
         <span className="field-label">Currency</span>
         <select className="field-input" value={form.Currency || 'USD'} onChange={f('Currency')} disabled={!canEdit}>
-          {CURRENCY_OPTS.map(c => <option key={c}>{c}</option>)}
+          <ListOptions name="Currency" current={form.Currency} />
         </select>
 
         <span className="field-label">Job Value</span>
@@ -2316,13 +2320,39 @@ export function JobDetailView() {
   // When DT is generated, store its ID so DT tab auto-focuses it
   const [generatedDTID, setGeneratedDTID] = useState<number | null>(null)
 
-  const { data: job, isLoading } = useFetch<Job>(isNew ? null : `/jobs/${id}`)
+  const { data: job, isLoading, refetch } = useFetch<Job>(isNew ? null : `/jobs/${id}`)
+
+  async function unlockJob() {
+    // A reason is required by the API and stored against the job, so a
+    // change to a finished job can always be explained later.
+    const reason = window.prompt('Why does this completed job need correcting?')
+    if (!reason || !reason.trim()) return
+    try {
+      await api(`/jobs/${id}/unlock`, { method: 'POST', body: JSON.stringify({ Reason: reason.trim() }) })
+      showToast('Job unlocked', 'success')
+      refetch()
+    } catch (e: any) {
+      showToast(e.message || 'Could not unlock the job', 'error')
+    }
+  }
+
+  async function relockJob() {
+    try {
+      await api(`/jobs/${id}/lock`, { method: 'POST', body: '{}' })
+      showToast('Job locked', 'success')
+      refetch()
+    } catch (e: any) {
+      showToast(e.message || 'Could not lock the job', 'error')
+    }
+  }
 
   useEffect(() => {
     if (job) setForm(job)
   }, [job])
 
-  const canEdit = hasRole('Admin', 'Operations')
+  // A finished job is read-only. The API enforces this too - the disabled
+  // fields here are the courtesy, the 423 from the server is the control.
+  const canEdit = hasRole('Admin', 'Operations') && !job?.IsLocked
 
   function set(field: keyof Job, value: unknown) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -2396,6 +2426,34 @@ export function JobDetailView() {
         </div>
       )}
 
+      {/* A finished job is read-only. Shown rather than silently disabling
+          every field, so nobody wonders why nothing can be typed. */}
+      {job?.IsLocked && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-amber-50 border-y border-amber-200 text-sm">
+          <Lock size={15} className="text-amber-700 shrink-0" />
+          <span className="text-amber-900">
+            This job is <strong>Completed</strong> and locked. Nothing on it can be changed.
+          </span>
+          {hasRole('Admin') && (
+            <button className="btn-ghost text-xs ml-auto text-amber-900 underline"
+                    onClick={unlockJob}>Unlock to correct it</button>
+          )}
+        </div>
+      )}
+      {job && !job.IsLocked && job.UnlockedBy && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 border-y border-blue-200 text-sm">
+          <Unlock size={15} className="text-blue-700 shrink-0" />
+          <span className="text-blue-900">
+            Unlocked by <strong>{job.UnlockedBy}</strong>
+            {job.UnlockReason ? <> — {job.UnlockReason}</> : null}
+          </span>
+          {hasRole('Admin') && (
+            <button className="btn-ghost text-xs ml-auto text-blue-900 underline"
+                    onClick={relockJob}>Lock again</button>
+          )}
+        </div>
+      )}
+
       {/* Tab bar */}
       <div className="flex overflow-x-auto border-b border-gray-200 bg-white -mx-0">
         {WORKSPACE_TABS.map(t => (
@@ -2457,7 +2515,7 @@ export function JobDetailView() {
           <ReturnTicketTab jobId={id!} job={form} />
         )}
         {tab === 'util' && !isNew && (
-          <UtilizationTab jobId={id!} />
+          <UtilizationTab jobId={id!} job={job || {}} />
         )}
       </div>
 

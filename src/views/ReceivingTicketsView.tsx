@@ -11,6 +11,7 @@ import { useToast }         from '../components/Toast'
 import { api }              from '../utils/api'
 import { formatDate, statusBadgeClass } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
+import { ListOptions } from '../components/ListOptions'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -70,7 +71,6 @@ interface InventoryItem {
  * Processed 1,384, blank 6. 'Draft'/'Received'/'Verified'/'Locked' were
  * invented and match no ticket, so filtering by them returned nothing.
  */
-const STATUS_OPTIONS = ['', 'Processed', 'Closed'] as const
 const STATUS_LABEL = (s: string) => (s ? s : 'Not set')
 
 /**
@@ -80,9 +80,6 @@ const STATUS_LABEL = (s: string) => (s ? s : 'Not set')
  * line is unioned into its dropdown — otherwise opening an old ticket would
  * silently rewrite a value the user never touched.
  */
-const CONDITION_OPTIONS = ['Good', 'Damaged', 'Inspection Required', 'Scrap'] as const
-const USED_STATUS_OPTIONS = ['Used', 'Not Used'] as const
-const ROUTE_OPTIONS = ['Available Inventory', 'Inspection Bay', 'Workshop', 'Customer Return'] as const
 
 /** Options plus the value actually stored on this row, so nothing is lost. */
 function withCurrent(options: readonly string[], current: string | null | undefined): string[] {
@@ -468,8 +465,7 @@ function RTDetailPanel({
           <span className="field-label">Status</span>
           <select className="field-input" value={form.Status ?? ''} disabled={!canEdit}
                   onChange={e => set('Status', e.target.value)}>
-            {withCurrent(STATUS_OPTIONS, r.Status).map(s =>
-              <option key={s} value={s}>{STATUS_LABEL(s)}</option>)}
+            <ListOptions name="ReceivingTicketStatus" current={form.Status} blank blankLabel="Not set" />
           </select>
         </div>
 
@@ -641,9 +637,7 @@ export function ReceivingTicketsView() {
             </div>
             <select className="field-input w-auto" value={status}
               onChange={e => setStatus(e.target.value)}>
-              {['All', ...STATUS_OPTIONS].map(s =>
-                <option key={s} value={s}>{s === 'All' ? 'All statuses' : STATUS_LABEL(s)}</option>
-              )}
+              <ListOptions name="ReceivingTicketStatus" includeAll allLabel="All statuses" />
             </select>
             <button onClick={refetch} className="btn-mini" title="Refresh"><RefreshCw size={12} /></button>
             <span className="text-[11px] text-gray-500">

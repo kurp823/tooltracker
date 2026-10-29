@@ -11,6 +11,7 @@ import { useToast }         from '../components/Toast'
 import { api }              from '../utils/api'
 import { formatDate, statusBadgeClass } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
+import { ListOptions } from '../components/ListOptions'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -78,7 +79,6 @@ interface InventoryItem {
  * so filtering by them matched nothing. A new ticket starts blank — that is
  * genuinely what the data shows for a ticket not yet signed.
  */
-const STATUS_OPTIONS = ['', 'Signed', 'Closed'] as const
 const STATUS_LABEL = (s: string) => (s ? s : 'Not set')
 
 // ─── Tool Picker Modal ────────────────────────────────────────────────────────
@@ -477,7 +477,7 @@ function DTDetailPanel({
           <span className="field-label">Status</span>
           <select className="field-input" value={form.Status ?? ''} disabled={!canEdit}
                   onChange={e => set('Status', e.target.value)}>
-            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABEL(s)}</option>)}
+            <ListOptions name="DeliveryTicketStatus" current={form.Status} blank blankLabel="Not set" />
           </select>
 
           {/* Hole section: only rendered when the contract has hole-priced
@@ -680,9 +680,7 @@ export function DeliveryTicketsView() {
               value={status}
               onChange={e => setStatus(e.target.value)}
             >
-              {['All', ...STATUS_OPTIONS].map(s =>
-                <option key={s} value={s}>{s === 'All' ? 'All statuses' : STATUS_LABEL(s)}</option>
-              )}
+              <ListOptions name="DeliveryTicketStatus" includeAll allLabel="All statuses" />
             </select>
             <button onClick={refetch} className="btn-mini" title="Refresh"><RefreshCw size={12} /></button>
             <span className="text-[11px] text-gray-500">

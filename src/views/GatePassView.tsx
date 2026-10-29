@@ -10,6 +10,7 @@ import { useToast }         from '../components/Toast'
 import { api }              from '../utils/api'
 import { formatDate, statusBadgeClass } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
+import { ListOptions } from '../components/ListOptions'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -45,7 +46,6 @@ interface InventoryItem {
   CategoryName: string | null
 }
 
-const STATUS_OPTIONS = ['Open', 'Approved', 'Closed'] as const
 
 // ─── Tool Picker ──────────────────────────────────────────────────────────────
 
@@ -310,7 +310,7 @@ function GPDetailPanel({
               <select className="input w-full" value={form.Status}
                 onChange={e => setForm(f => ({ ...f, Status: e.target.value }))}
                 disabled={!canEdit}>
-                {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
+                <ListOptions name="GatePassStatus" />
               </select>
             </div>
           </div>
@@ -453,9 +453,7 @@ export function GatePassView() {
             </select>
             <select className="input w-auto" value={status}
               onChange={e => setStatus(e.target.value)}>
-              {['All', ...STATUS_OPTIONS].map(s =>
-                <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>
-              )}
+              <ListOptions name="GatePassStatus" includeAll allLabel="All Statuses" />
             </select>
             <button onClick={refetch} className="btn-ghost"><RefreshCw size={15} /></button>
             {hasRole('Admin', 'Operations') && (

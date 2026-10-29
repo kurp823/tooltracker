@@ -8,6 +8,7 @@ import { useToast }         from '../components/Toast'
 import { api }              from '../utils/api'
 import { formatDate, statusBadgeClass } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
+import { ListOptions } from '../components/ListOptions'
 
 interface MJob {
   MaintenanceJobID: number
@@ -27,9 +28,6 @@ interface MJob {
   CreatedBy: string | null
 }
 
-const MAINTENANCE_TYPES = ['Corrective', 'Preventive', 'Overhaul', 'Calibration', 'Repair'] as const
-const PRIORITY_OPTIONS  = ['Critical', 'High', 'Medium', 'Low'] as const
-const STATUS_OPTIONS    = ['Open', 'In Progress', 'On Hold', 'Completed', 'Cancelled'] as const
 
 const PRIORITY_COLOR: Record<string, string> = {
   Critical: 'bg-red-100 text-red-700',
@@ -109,14 +107,14 @@ function CreateMJobModal({ open, onClose, onCreated }: {
                 <label className="label">Type</label>
                 <select className="input w-full" value={form.MaintenanceType}
                   onChange={e => f('MaintenanceType', e.target.value)}>
-                  {MAINTENANCE_TYPES.map(t => <option key={t}>{t}</option>)}
+                  <ListOptions name="MaintenanceType" />
                 </select>
               </div>
               <div>
                 <label className="label">Priority</label>
                 <select className="input w-full" value={form.Priority}
                   onChange={e => f('Priority', e.target.value)}>
-                  {PRIORITY_OPTIONS.map(p => <option key={p}>{p}</option>)}
+                  <ListOptions name="MaintenancePriority" />
                 </select>
               </div>
             </div>
@@ -224,14 +222,14 @@ function MJobDetailPanel({ job, onClose, onRefresh }: {
             <label className="label">Priority</label>
             <select className="input w-full" value={form.Priority}
               onChange={e => f('Priority', e.target.value)} disabled={!canEdit}>
-              {PRIORITY_OPTIONS.map(p => <option key={p}>{p}</option>)}
+              <ListOptions name="MaintenancePriority" />
             </select>
           </div>
           <div>
             <label className="label">Status</label>
             <select className="input w-full" value={form.Status}
               onChange={e => f('Status', e.target.value)} disabled={!canEdit}>
-              {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
+              <ListOptions name="MaintenanceStatus" />
             </select>
           </div>
         </div>
@@ -322,12 +320,10 @@ export function MaintenanceView() {
                 value={search} onChange={e => setSearch(e.target.value)} />
             </div>
             <select className="input w-auto" value={priority} onChange={e => setPriority(e.target.value)}>
-              {['All', ...PRIORITY_OPTIONS].map(p =>
-                <option key={p} value={p}>{p === 'All' ? 'All Priorities' : p}</option>)}
+              <ListOptions name="MaintenancePriority" includeAll allLabel="All Priorities" />
             </select>
             <select className="input w-auto" value={status} onChange={e => setStatus(e.target.value)}>
-              {['All', ...STATUS_OPTIONS].map(s =>
-                <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>)}
+              <ListOptions name="MaintenanceStatus" includeAll allLabel="All Statuses" />
             </select>
             <button onClick={refetch} className="btn-ghost"><RefreshCw size={15} /></button>
             {hasRole('Admin', 'Operations', 'QAQC') && (
