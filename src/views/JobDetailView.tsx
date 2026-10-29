@@ -25,6 +25,7 @@ import { ComboBox } from '../components/ComboBox'
 import { useRowWindow } from '../components/useRowWindow'
 import type { Job, JobStatus, InvoicingType, ToolMovement } from '../types'
 import { ListOptions } from '../components/ListOptions'
+import { RolloverPanel } from '../components/RolloverPanel'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -2494,6 +2495,19 @@ export function JobDetailView() {
         )}
         {tab === 'manpower' && !isNew && (
           <ManpowerTab jobId={id!} canEdit={canEdit} />
+        )}
+        {tab === 'checklist' && !isNew && (
+          <div className="space-y-4">
+            {/* Only renders when the job is Monthly — rollover is what that
+                setting means, and on a per-job job it would quietly carry
+                tools into work billed as one complete job. */}
+            <RolloverPanel
+              jobId={id!}
+              invoicingType={form.InvoicingType}
+              rolledFrom={job?.RolledFromJobID}
+              onDone={refetch}
+            />
+          </div>
         )}
         {tab === 'checklist' && !isNew && (
           <ChecklistTab

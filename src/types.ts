@@ -55,6 +55,8 @@ export interface Job {
   UnlockedBy?: string | null
   UnlockedAt?: string | null
   UnlockReason?: string | null
+  /** Set when a monthly job carried its tools over from the previous month. */
+  RolledFromJobID?: string | null
   Currency: string
   MobDate: string | null
   DemobDate: string | null
