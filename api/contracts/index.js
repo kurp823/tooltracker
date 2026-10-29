@@ -40,8 +40,12 @@ module.exports = async function (context, req) {
         // PBGValue, PBGIssueDate, PBGExpiryDate, ContractValue, PONumber and
         // InvoicedToDate — so the register had no PBG details even though
         // 13 contracts carry them.
-        // MonthlyCharges added: column exists on tbl_Contracts but was
-        // missing from this SELECT, so it never reached the frontend.
+        // No MonthlyCharges here. It is a column on tbl_ContractRates - a
+        // per-rate-line monthly charge, which rates.js reads - not on
+        // tbl_Contracts, whose real columns are listed at the top of this
+        // file. Selecting it here made the whole statement fail on an
+        // invalid column name, which is why both the Master Contract
+        // Register and the Contracts Dashboard showed nothing at all.
         `SELECT c.ContractID,
                 c.ContractRef      AS ContractNumber,
                 c.Client           AS ClientName,
@@ -52,7 +56,6 @@ module.exports = async function (context, req) {
                 c.Status,
                 c.Notes            AS Description,
                 c.ContractValue,
-                c.MonthlyCharges,
                 c.InvoicedToDate,
                 c.PBGNumber,
                 c.PBGValue,
