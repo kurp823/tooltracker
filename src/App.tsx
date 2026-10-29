@@ -1,6 +1,7 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { ListsProvider } from './contexts/ListsContext'
 import { ToastProvider } from './components/Toast'
 import { Layout } from './components/Layout'
 import { PageLoader } from './components/Spinner'
@@ -59,6 +60,8 @@ export default function App() {
     <BrowserRouter>
       <ToastProvider>
         <AuthProvider>
+          {/* Inside AuthProvider: /api/lists needs the session token. */}
+          <ListsProvider>
           <Routes>
             {/* Public */}
             <Route path="/login"           element={<LoginView />} />
@@ -130,6 +133,7 @@ export default function App() {
             {/* Catch-all */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </ListsProvider>
         </AuthProvider>
       </ToastProvider>
     </BrowserRouter>

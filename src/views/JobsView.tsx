@@ -7,10 +7,8 @@ import { formatDate, statusBadgeClass } from '../utils/format'
 import { PageLoader } from '../components/Spinner'
 import { useAuth } from '../contexts/AuthContext'
 import type { Job, JobStatus } from '../types'
+import { ListOptions } from '../components/ListOptions'
 
-const STATUS_OPTIONS: (JobStatus | 'All')[] = [
-  'All', 'Open', 'Ongoing', 'Draft Invoice Submitted', 'Completed', 'JobCompleted'
-]
 
 export function JobsView() {
   const { hasRole } = useAuth()
@@ -72,9 +70,7 @@ export function JobsView() {
           value={statusFilter}
           onChange={e => setStatus(e.target.value as any)}
         >
-          {STATUS_OPTIONS.map(s => (
-            <option key={s} value={s}>{s === 'All' ? 'All statuses' : s}</option>
-          ))}
+          <ListOptions name="JobStatus" includeAll allLabel="All statuses" />
         </select>
 
         <select

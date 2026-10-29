@@ -9,6 +9,7 @@ import { useToast }         from '../components/Toast'
 import { api }              from '../utils/api'
 import { formatDate, statusBadgeClass } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
+import { ListOptions } from '../components/ListOptions'
 
 interface Inspection {
   InspectionID: number
@@ -28,9 +29,6 @@ interface Inspection {
   CreatedBy: string | null
 }
 
-const INSPECTION_TYPES = ['Visual', 'Dimensional', 'Pressure Test', 'NDT', 'Full Inspection'] as const
-const RESULT_OPTIONS   = ['Pass', 'Fail', 'Conditional', 'Pending'] as const
-const STATUS_OPTIONS   = ['Open', 'In Progress', 'Completed', 'Closed'] as const
 
 // ─── Create Modal ─────────────────────────────────────────────────────────────
 
@@ -123,7 +121,7 @@ function CreateInspectionModal({ open, onClose, onCreated }: {
                 <label className="label">Type</label>
                 <select className="input w-full" value={form.InspectionType}
                   onChange={e => f('InspectionType', e.target.value)}>
-                  {INSPECTION_TYPES.map(t => <option key={t}>{t}</option>)}
+                  <ListOptions name="InspectionType" />
                 </select>
               </div>
               <div>
@@ -142,7 +140,7 @@ function CreateInspectionModal({ open, onClose, onCreated }: {
                 <label className="label">Result</label>
                 <select className="input w-full" value={form.Result}
                   onChange={e => f('Result', e.target.value)}>
-                  {RESULT_OPTIONS.map(r => <option key={r}>{r}</option>)}
+                  <ListOptions name="InspectionResult" />
                 </select>
               </div>
             </div>
@@ -259,14 +257,14 @@ function InspectionDetailPanel({ ins, onClose, onRefresh }: {
             <label className="label">Result</label>
             <select className="input w-full" value={form.Result}
               onChange={e => f('Result', e.target.value)} disabled={!canEdit}>
-              {RESULT_OPTIONS.map(r => <option key={r}>{r}</option>)}
+              <ListOptions name="InspectionResult" />
             </select>
           </div>
           <div>
             <label className="label">Status</label>
             <select className="input w-full" value={form.Status}
               onChange={e => f('Status', e.target.value)} disabled={!canEdit}>
-              {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
+              <ListOptions name="InspectionStatus" />
             </select>
           </div>
         </div>
@@ -340,12 +338,10 @@ export function InspectionView() {
                 value={search} onChange={e => setSearch(e.target.value)} />
             </div>
             <select className="input w-auto" value={result} onChange={e => setResult(e.target.value)}>
-              {['All', ...RESULT_OPTIONS].map(r =>
-                <option key={r} value={r}>{r === 'All' ? 'All Results' : r}</option>)}
+              <ListOptions name="InspectionResult" includeAll allLabel="All Results" />
             </select>
             <select className="input w-auto" value={status} onChange={e => setStatus(e.target.value)}>
-              {['All', ...STATUS_OPTIONS].map(s =>
-                <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>)}
+              <ListOptions name="InspectionStatus" includeAll allLabel="All Statuses" />
             </select>
             <button onClick={refetch} className="btn-ghost"><RefreshCw size={15} /></button>
             {hasRole('Admin', 'Operations', 'QAQC', 'ThirdParty') && (

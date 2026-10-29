@@ -50,6 +50,11 @@ export interface Job {
   HoleSection: string | null
   ServiceType: string | null
   InvoicingType: InvoicingType
+  /** True when the job is Completed and has not been unlocked by an Admin. */
+  IsLocked?: boolean
+  UnlockedBy?: string | null
+  UnlockedAt?: string | null
+  UnlockReason?: string | null
   Currency: string
   MobDate: string | null
   DemobDate: string | null

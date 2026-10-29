@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { User, Key, Shield, Info } from 'lucide-react'
+import { User, Key, Shield, Info, List } from 'lucide-react'
+import { ListsAdmin } from '../components/ListsAdmin'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../utils/api'
 import { useToast } from '../components/Toast'
@@ -109,6 +110,17 @@ export function SettingsView() {
           </button>
         </form>
       </div>
+
+      {/* Dropdown values — Admin only. This is what keeps option lists out
+          of the code, so a new value needs a row rather than a deploy. */}
+      {user?.Role === 'Admin' && (
+        <div className="card p-6 space-y-4">
+          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <List size={18} /> Dropdown Values
+          </h3>
+          <ListsAdmin />
+        </div>
+      )}
 
       {/* App info */}
       <div className="text-xs text-gray-400 text-center pb-6">
