@@ -652,48 +652,83 @@ const MIGRATIONS = [
       SET XACT_ABORT ON;
       BEGIN TRANSACTION;
 
-      /* Stage one: which ticket numbers have backup lines but no live header.
-         Kept separate so the sheet lookup below runs over a handful of rows
-         rather than all 77,526 backup lines, which timed out. */
-      SELECT DISTINCT b.dtNumber
+      /* The ten tickets the rig/well seed deleted - identified by that
+         seed's own filter, not by "missing from live". 454 ticket numbers
+         have backup lines and no live header; 444 of them went in earlier,
+         deliberate October clean-ups and must stay gone. The seed only ever
+         touched tickets whose job is Completed and carries a legal invoice,
+         and the job survives in tbl_DailyFieldLogs. */
+      SELECT b.dtNumber
         INTO #gone
         FROM bk_DeliveryTicketLines_1027 b
        WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t
-                          WHERE t.dtNumber = b.dtNumber);
+                          WHERE t.dtNumber = b.dtNumber)
+       GROUP BY b.dtNumber;
 
-      /* Stage two: of those, the ones the operator's own sheet still
-         describes. A ticket the sheet does not know is not rebuilt - there
-         would be nothing truthful to put in its job, date, rig or well. */
-      SELECT g.dtNumber, h.jobNum, h.dtDate, h.rig, h.well
+      CREATE CLUSTERED INDEX IX_gone ON #gone (dtNumber);
+
+      SELECT d.DTNumber, MIN(d.JobID) AS JobID
+        INTO #dj
+        FROM tbl_DailyFieldLogs d
+       WHERE EXISTS (SELECT 1 FROM #gone g WHERE g.dtNumber = d.DTNumber)
+       GROUP BY d.DTNumber;
+
+      SELECT g.dtNumber, j.JobID, j.Rig, j.Well
         INTO #rebuild
         FROM #gone g
-        CROSS APPLY (
-          SELECT TOP 1 i.jobNum, i.dtDate, i.rig, i.well
-            FROM tbl_ImportDTRT i
-           WHERE LTRIM(RTRIM(i.dtNo)) = g.dtNumber
-           ORDER BY CASE WHEN TRY_CONVERT(date, i.dtDate) IS NULL THEN 1 ELSE 0 END, i.id
-        ) h;
+        JOIN #dj      dj ON dj.DTNumber = g.dtNumber
+        JOIN tbl_Jobs j
+              ON ${jobKey('j.JobID')} = ${jobKey('dj.JobID')}
+             AND j.Status = 'Completed'
+             AND NULLIF(LTRIM(RTRIM(j.LegalInvoiceNumber)), '') IS NOT NULL;
 
+      /* Header: job, rig and well come from the job itself. The deleted row
+         was removed precisely because its rig/well disagreed with the job,
+         and nothing recorded what it said, so the job's own values are the
+         only honest thing to put here. The date comes from the earliest
+         field log for the ticket. Status, PO number, client ref, vehicle,
+         driver, EMDAD rep and the signature fields went with the original
+         row and are not recoverable. */
       INSERT INTO tbl_DeliveryTickets
             (dtNumber, jobNumber, deliveryDate, rig, well, status, notes, createdBy, createdAt)
-      SELECT r.dtNumber, r.jobNum, TRY_CONVERT(date, r.dtDate), r.rig, r.well,
+      SELECT r.dtNumber, r.JobID,
+             (SELECT MIN(d.LogDate) FROM tbl_DailyFieldLogs d WHERE d.DTNumber = r.dtNumber),
+             r.Rig, r.Well,
              NULL,
-             'Restored 29-Oct-2026 from the operator DT/RT sheet after an automated cleanup removed it. Status, PO number, client ref, vehicle, driver, EMDAD rep and the signature fields were lost with the original row and are not recoverable.',
+             'Restored 29-Oct-2026. This ticket was deleted by an automated rig/well cleanup. Rig, well and job are the job record''s own values; the date is the earliest field log. Status, PO number, client ref, vehicle, driver, EMDAD rep and the signature fields were lost with the original row and are not recoverable.',
              'restore:dt-1029',
              GETDATE()
-        FROM #rebuild r;
+        FROM #rebuild r
+       WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t
+                          WHERE t.dtNumber = r.dtNumber);
+
+      /* Lines: the 27-Oct backup predates the de-duplication, so it holds
+         440 rows for these ten tickets where only 152 were live when they
+         were deleted. Restoring it wholesale would put ~288 duplicates back.
+         The dedupe kept one row per (ticket, serial) and left rows with no
+         serial alone, so the same rule is applied here. */
+      WITH ranked AS (
+        SELECT b.dtNumber, b.itemNo, b.serial, b.toolDescription, b.qty, b.remarks,
+               ROW_NUMBER() OVER (PARTITION BY b.dtNumber, b.serial
+                                      ORDER BY b.itemNo, b.id) AS rn
+          FROM bk_DeliveryTicketLines_1027 b
+          JOIN #rebuild r ON r.dtNumber = b.dtNumber
+         WHERE NULLIF(LTRIM(RTRIM(b.serial)), '') IS NOT NULL
+      )
+      INSERT INTO tbl_DeliveryTicketLines
+            (dtNumber, itemNo, serial, toolDescription, qty, remarks)
+      SELECT dtNumber, itemNo, serial, toolDescription, qty, remarks
+        FROM ranked WHERE rn = 1;
 
       INSERT INTO tbl_DeliveryTicketLines
             (dtNumber, itemNo, serial, toolDescription, qty, remarks)
       SELECT b.dtNumber, b.itemNo, b.serial, b.toolDescription, b.qty, b.remarks
         FROM bk_DeliveryTicketLines_1027 b
         JOIN #rebuild r ON r.dtNumber = b.dtNumber
-       WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTicketLines l
-                          WHERE l.dtNumber = b.dtNumber
-                            AND l.itemNo   = b.itemNo
-                            AND ISNULL(l.serial,'') = ISNULL(b.serial,''));
+       WHERE NULLIF(LTRIM(RTRIM(b.serial)), '') IS NULL;
 
       DROP TABLE #rebuild;
+      DROP TABLE #dj;
       DROP TABLE #gone;
       COMMIT;`,
   },
