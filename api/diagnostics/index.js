@@ -36,43 +36,54 @@ const loose = (col) =>
 const CHECKS = [
   {
     /*
-     * 454 ticket numbers have lines in the 27-Oct backup but no live header.
-     * Only ten of those were removed on 29 Oct by the rig/well seed; the rest
-     * went in earlier, deliberate October clean-ups, and must not come back.
+     * The delivery tickets the 29-Oct rig/well seed deleted, listed.
      *
-     * The discriminator is that seed's own filter: it only ever touched
-     * tickets whose job is Completed and carries a legal invoice. The job for
-     * a vanished ticket is recoverable from tbl_DailyFieldLogs, which still
-     * holds DTNumber and JobID for every tool-day and was not modified.
+     * 454 ticket numbers have backup lines and no live header, but only ten
+     * are from that seed - the rest went in earlier October clean-ups and
+     * must stay gone. The seed only ever touched tickets whose job is
+     * Completed and carries a legal invoice, so that is the filter. The job
+     * survives in tbl_DailyFieldLogs (DTNumber + JobID), which was untouched.
      *
-     * Read-only. This reports the split so the restore can be aimed at the
-     * right subset instead of all 454.
+     * Everything is narrowed to a temp table before the expensive joins run:
+     * SWA kills a request at 45 seconds, and matching jobKey() across all
+     * 3,871 jobs and 47,056 field-log rows did not come back. Here the field
+     * logs are filtered to the 454 first, so the join sees almost nothing.
+     *
+     * Read-only.
      */
     name: 'deletedDTCandidates',
     sql: `
-      WITH gone AS (
-        SELECT b.dtNumber, COUNT(*) AS n
-          FROM bk_DeliveryTicketLines_1027 b
-         WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t
-                            WHERE t.dtNumber = b.dtNumber)
-         GROUP BY b.dtNumber
-      ),
-      dtjob AS (
-        SELECT DTNumber, MIN(JobID) AS JobID
-          FROM tbl_DailyFieldLogs
-         GROUP BY DTNumber
-      )
-      SELECT COUNT(*)                                            AS missingTickets,
-             SUM(g.n)                                            AS missingLines,
-             SUM(CASE WHEN d.DTNumber IS NULL THEN 1 ELSE 0 END) AS noFieldLog,
-             SUM(CASE WHEN j.JobID IS NOT NULL THEN 1 ELSE 0 END) AS onCompletedInvoicedJob,
-             SUM(CASE WHEN j.JobID IS NOT NULL THEN g.n ELSE 0 END) AS linesOnThose
-        FROM gone g
-        LEFT JOIN dtjob d ON d.DTNumber = g.dtNumber
-        LEFT JOIN tbl_Jobs j
-               ON ${jobKey('j.JobID')} = ${jobKey('d.JobID')}
-              AND j.Status = 'Completed'
-              AND NULLIF(LTRIM(RTRIM(j.LegalInvoiceNumber)), '') IS NOT NULL`,
+      SELECT b.dtNumber, COUNT(*) AS linesInBackup
+        INTO #gone
+        FROM bk_DeliveryTicketLines_1027 b
+       WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t
+                          WHERE t.dtNumber = b.dtNumber)
+       GROUP BY b.dtNumber;
+
+      CREATE CLUSTERED INDEX IX_gone ON #gone (dtNumber);
+
+      SELECT d.DTNumber, MIN(d.JobID) AS JobID
+        INTO #dj
+        FROM tbl_DailyFieldLogs d
+       WHERE EXISTS (SELECT 1 FROM #gone g WHERE g.dtNumber = d.DTNumber)
+       GROUP BY d.DTNumber;
+
+      SELECT g.dtNumber,
+             g.linesInBackup,
+             j.JobID,
+             j.Rig,
+             j.Well,
+             j.LegalInvoiceNumber
+        FROM #gone g
+        JOIN #dj      dj ON dj.DTNumber = g.dtNumber
+        JOIN tbl_Jobs j
+              ON ${jobKey('j.JobID')} = ${jobKey('dj.JobID')}
+             AND j.Status = 'Completed'
+             AND NULLIF(LTRIM(RTRIM(j.LegalInvoiceNumber)), '') IS NOT NULL
+       ORDER BY g.dtNumber;
+
+      DROP TABLE #dj;
+      DROP TABLE #gone;`,
   },
   {
     name: 'lineTotals',
