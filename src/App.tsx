@@ -34,6 +34,7 @@ import { DataImportView }     from './views/DataImportView'
 
 // Dashboards
 import { InventoryDashboardView }   from './views/InventoryDashboardView'
+import { ToolRevenueView }         from './views/ToolRevenueView'
 import { MaintenanceDashboardView } from './views/MaintenanceDashboardView'
 import { BillingDashboardView }     from './views/BillingDashboardView'
 import { ContractsDashboardView }   from './views/ContractsDashboardView'
@@ -94,6 +95,7 @@ export default function App() {
 
               {/* Inventory */}
               <Route path="inventory-dashboard" element={<InventoryDashboardView />} />
+              <Route path="tool-revenue"        element={<ToolRevenueView />} />
               <Route path="inventory" element={<InventoryView />} />
               <Route path="missing-tools" element={<MissingToolsView />} />
               <Route path="tool-history" element={<ToolHistoryView />} />
