@@ -40,6 +40,8 @@ module.exports = async function (context, req) {
         // PBGValue, PBGIssueDate, PBGExpiryDate, ContractValue, PONumber and
         // InvoicedToDate — so the register had no PBG details even though
         // 13 contracts carry them.
+        // MonthlyCharges added: column exists on tbl_Contracts but was
+        // missing from this SELECT, so it never reached the frontend.
         `SELECT c.ContractID,
                 c.ContractRef      AS ContractNumber,
                 c.Client           AS ClientName,
@@ -50,6 +52,7 @@ module.exports = async function (context, req) {
                 c.Status,
                 c.Notes            AS Description,
                 c.ContractValue,
+                c.MonthlyCharges,
                 c.InvoicedToDate,
                 c.PBGNumber,
                 c.PBGValue,
@@ -73,12 +76,29 @@ module.exports = async function (context, req) {
   if (method === 'GET' && id && sub === 'rates') {
     try {
       const result = await query(
-        `SELECT r.RateID, r.ContractCode AS ContractID, r.EMDADShortDesc AS Description,
-                r.Category AS ItemCode, r.OpsRate AS UnitPrice, r.Currency,
-                r.Size AS UOM, r.ActiveFlag AS IsActive
+        // Previously returned 7 old PascalCase aliases that didn't match the
+        // ContractRateItem frontend type and dropped HoleSection, StandbyRate,
+        // RunCharges and Redress entirely. Now returns all rate fields using
+        // the camelCase keys the frontend ContractRateItem type expects.
+        // monthlyCharges lives on tbl_Contracts (not on tbl_ContractRates) so
+        // it is NULL here; the contracts GET endpoint returns it on the
+        // parent contract object.
+        `SELECT r.RateID          AS no,
+                r.ContractRef     AS contractRef,
+                r.Category        AS category,
+                r.EMDADShortDesc  AS shortDesc,
+                r.Size            AS size,
+                r.HoleSection     AS holeSection,
+                r.OpsRate         AS opsRate,
+                r.StandbyRate     AS standbyRate,
+                r.RunCharges      AS runCharges,
+                NULL              AS monthlyCharges,
+                r.Redress         AS redress,
+                r.Currency        AS currency,
+                r.ActiveFlag      AS isActive
          FROM   tbl_ContractRates r
          WHERE  r.ContractCode = @id
-         ORDER  BY r.Category`,
+         ORDER  BY r.Category, r.HoleSection, r.Size`,
         [{ name: 'id', value: id }]
       )
       return jsonResponse(context, 200, result.recordset)
@@ -155,16 +175,45 @@ module.exports = async function (context, req) {
       return jsonResponse(context, 403, { error: 'Insufficient permissions' })
     const b = req.body || {}
     try {
+      // Look up ContractRef from tbl_Contracts so we can store the human-
+      // readable ref (e.g. "ADNOC-4700024608-SCH2") alongside the ContractCode
+      // (the PK "CT-ADNOC-4700024608-SCH2"). Fall back to b.contractRef if
+      // the body already carries it, or to the raw id as a last resort.
+      let contractRef = b.contractRef || id
+      if (!b.contractRef) {
+        try {
+          const refRow = await query(
+            `SELECT TOP 1 ContractRef FROM tbl_Contracts WHERE ContractID = @id`,
+            [{ name: 'id', type: sql.VarChar, value: id }]
+          )
+          if (refRow.recordset[0]?.ContractRef) contractRef = refRow.recordset[0].ContractRef
+        } catch (_) { /* non-fatal — fall back to id */ }
+      }
+
+      // Previously wrote only 7 of 15 columns using old PascalCase body field
+      // aliases (Description, ItemCode, UnitPrice, UOM). Frontend now sends
+      // camelCase matching ContractRateItem. All rate columns now written.
       await query(
-        `INSERT INTO tbl_ContractRates (ContractCode, ContractRef, Category, EMDADShortDesc, Size, OpsRate, Currency, Notes, ActiveFlag)
-         VALUES (@cid, @cid, @code, @desc, @uom, @price, @currency, NULL, 1)`,
+        `INSERT INTO tbl_ContractRates
+           (ContractCode, ContractRef, Category, EMDADShortDesc, Size,
+            HoleSection, OpsRate, StandbyRate, RunCharges, Redress,
+            Currency, Notes, ActiveFlag)
+         VALUES
+           (@cid, @ref, @category, @shortDesc, @size,
+            @holeSection, @opsRate, @standbyRate, @runCharges, @redress,
+            @currency, NULL, 1)`,
         [
-          { name: 'cid',      type: sql.VarChar,  value: id },
-          { name: 'desc',     type: sql.VarChar,  value: b.Description || null },
-          { name: 'code',     type: sql.VarChar,  value: b.ItemCode    || null },
-          { name: 'price',    type: sql.Decimal,  value: b.UnitPrice   || 0 },
-          { name: 'currency', type: sql.VarChar,  value: b.Currency    || 'USD' },
-          { name: 'uom',      type: sql.VarChar,  value: b.UOM         || null },
+          { name: 'cid',         type: sql.VarChar,  value: id },
+          { name: 'ref',         type: sql.VarChar,  value: contractRef },
+          { name: 'category',    type: sql.VarChar,  value: b.category    || null },
+          { name: 'shortDesc',   type: sql.VarChar,  value: b.shortDesc   || null },
+          { name: 'size',        type: sql.VarChar,  value: b.size        || null },
+          { name: 'holeSection', type: sql.VarChar,  value: b.holeSection || null },
+          { name: 'opsRate',     type: sql.Decimal,  value: b.opsRate     ?? 0 },
+          { name: 'standbyRate', type: sql.Decimal,  value: b.standbyRate ?? null },
+          { name: 'runCharges',  type: sql.Decimal,  value: b.runCharges  ?? null },
+          { name: 'redress',     type: sql.Decimal,  value: b.redress     ?? null },
+          { name: 'currency',    type: sql.VarChar,  value: b.currency    || 'USD' },
         ]
       )
       return jsonResponse(context, 201, { success: true })
