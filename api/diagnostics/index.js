@@ -70,6 +70,18 @@ const CHECKS = [
 
       SELECT g.dtNumber,
              g.linesInBackup,
+             (SELECT COUNT(*) FROM (
+                SELECT 1 AS one
+                  FROM bk_DeliveryTicketLines_1027 b
+                 WHERE b.dtNumber = g.dtNumber
+                   AND NULLIF(LTRIM(RTRIM(b.serial)), '') IS NOT NULL
+                 GROUP BY b.serial
+                UNION ALL
+                SELECT 1
+                  FROM bk_DeliveryTicketLines_1027 b
+                 WHERE b.dtNumber = g.dtNumber
+                   AND NULLIF(LTRIM(RTRIM(b.serial)), '') IS NULL
+              ) z) AS linesAfterDedupe,
              j.JobID,
              j.Rig,
              j.Well,
