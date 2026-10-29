@@ -16,9 +16,27 @@ module.exports = async function (context, req) {
   // ── GET list ─────────────────────────────────────────────────────────────
   if (!id && method === 'GET') {
     const result = await query(
+      /*
+       * ToolCount is NULL because there is nothing to count it from.
+       *
+       * tbl_Inventory has no category column at all (its columns are SystemID,
+       * AssetNo, Size, ShortDesc, Description, Qty, Location, Status,
+       * Ownership, IsEmdad, OEMSerial, Supplier and the audit fields), so no
+       * tool is linked to a category.
+       *
+       * This read `(SELECT COUNT(*) FROM tbl_Inventory WHERE CategoryID =
+       * c.CategoryID)`. Because tbl_Inventory has no CategoryID, SQL Server
+       * bound that unqualified name to the OUTER query instead of raising an
+       * error, so the predicate was c.CategoryID = c.CategoryID - always true.
+       * Every category therefore reported the entire inventory: 8,775 tools
+       * each, on all 131 rows, with no error anywhere to give it away.
+       *
+       * NULL renders as a dash. A real count needs a category column on
+       * tbl_Inventory first; until then, no number here can be honest.
+       */
       `SELECT CategoryID, CategoryName, ToolFamily, InInventory, IsRentalTool,
               RequiresInspection, ActiveFlag, SortOrder, Notes,
-              (SELECT COUNT(*) FROM tbl_Inventory WHERE CategoryID = c.CategoryID) AS ToolCount
+              CAST(NULL AS INT) AS ToolCount
          FROM tbl_ToolCategories c
         ORDER BY SortOrder, CategoryName`,
       []

@@ -15,8 +15,21 @@ module.exports = async function (context, req) {
   // ── GET list ─────────────────────────────────────────────────────────────
   if (!id && method === 'GET') {
     const result = await query(
+      /*
+       * Counted on the size LABEL, not a SizeID.
+       *
+       * This read `WHERE SizeID = s.SizeID`, but tbl_Inventory has no SizeID -
+       * it stores Size as plain text. SQL Server bound the unqualified SizeID
+       * to the outer query rather than erroring, making the predicate
+       * s.SizeID = s.SizeID, always true, so every size reported the whole
+       * inventory: 8,775 tools on every row.
+       *
+       * Unlike categories this one can be counted for real, because the text
+       * in tbl_Inventory.Size is the same label tbl_ToolSizes holds.
+       */
       `SELECT SizeID, SizeLabel, SizeDecimal, InInventory, ActiveFlag, SortOrder,
-              (SELECT COUNT(*) FROM tbl_Inventory WHERE SizeID = s.SizeID) AS ToolCount
+              (SELECT COUNT(*) FROM tbl_Inventory i
+                WHERE i.Size = s.SizeLabel) AS ToolCount
          FROM tbl_ToolSizes s
         ORDER BY SortOrder, SizeDecimal`,
       []

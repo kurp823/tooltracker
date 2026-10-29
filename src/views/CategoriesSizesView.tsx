@@ -17,7 +17,8 @@ interface Category {
   ActiveFlag: boolean
   SortOrder: number | null
   Notes: string | null
-  ToolCount: number
+  /* Null while nothing links a tool to a category - see api/categories. */
+  ToolCount: number | null
 }
 
 interface Size {
@@ -27,7 +28,7 @@ interface Size {
   InInventory: boolean
   ActiveFlag: boolean
   SortOrder: number | null
-  ToolCount: number
+  ToolCount: number | null
 }
 
 const blankCategory = (): Partial<Category> => ({
@@ -156,7 +157,7 @@ function CategoriesTab({ canEdit }: { canEdit: boolean }) {
                     <td className="table-td text-gray-500">{c.ToolFamily || '—'}</td>
                     <td className="table-td text-center">{c.IsRentalTool ? 'Yes' : 'No'}</td>
                     <td className="table-td text-center">{c.RequiresInspection ? 'Yes' : 'No'}</td>
-                    <td className="table-td text-center text-gray-600">{c.ToolCount}</td>
+                    <td className="table-td text-center text-gray-600">{c.ToolCount ?? '—'}</td>
                     <td className="table-td text-center">
                       <span className={`badge ${c.ActiveFlag ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                         {c.ActiveFlag ? 'Yes' : 'No'}
@@ -293,7 +294,7 @@ function SizesTab({ canEdit }: { canEdit: boolean }) {
                   <tr key={s.SizeID} className="table-tr">
                     <td className="table-td font-medium text-gray-900">{s.SizeLabel}</td>
                     <td className="table-td text-gray-500">{s.SizeDecimal ?? '—'}</td>
-                    <td className="table-td text-center text-gray-600">{s.ToolCount}</td>
+                    <td className="table-td text-center text-gray-600">{s.ToolCount ?? '—'}</td>
                     <td className="table-td text-center">
                       <span className={`badge ${s.ActiveFlag ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                         {s.ActiveFlag ? 'Yes' : 'No'}
