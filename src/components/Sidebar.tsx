@@ -83,7 +83,7 @@ const MODULES: NavModule[] = [
     items: [
       { label: 'Billing Dashboard',              to: '/billing-dashboard', icon: <Gauge size={ICON} /> },
       { label: 'Invoicing',                      to: '/invoices',          icon: <FileText size={ICON} /> },
-      { label: 'Tool Revenue & Utilization',     to: '/tool-revenue',      icon: <Coins size={ICON} />, pending: true },
+      { label: 'Tool Revenue & Utilization',     to: '/tool-revenue',      icon: <Coins size={ICON} /> },
       { label: 'Sub-Contractor Rentals',         to: '/sub-rentals',       icon: <Building2 size={ICON} />, pending: true },
       { label: 'Monthly Expense Grid & P&L',     to: '/monthly-expenses',  icon: <FileSpreadsheet size={ICON} />, pending: true },
     ],
