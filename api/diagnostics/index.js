@@ -36,41 +36,27 @@ const loose = (col) =>
 const CHECKS = [
   {
     /*
-     * The delivery tickets that are present in the 27-Oct line backup but no
-     * longer in the live table, and what is available to rebuild each from.
-     * Read-only.
+     * How many delivery tickets have lines in the 27-Oct backup but no live
+     * header, and how many lines that accounts for.
      *
-     * Two stages on purpose. Matching the operator sheet with
-     * LTRIM(RTRIM(dtNo)) over all 77,526 backup rows could not use the index
-     * on tbl_ImportDTRT and timed out. The missing ticket numbers are found
-     * first - a handful - and only those are looked up in the sheet.
+     * Deliberately cheap - no join to the operator sheet, no join to jobs.
+     * The earlier version matched the sheet for every missing ticket and timed
+     * out, which is itself evidence that this set is far larger than the ten
+     * tickets the rig/well cleanup removed: the backup predates several other
+     * October clean-ups. This number decides whether "missing from live" is a
+     * safe way to pick what to restore, or whether it would drag back tickets
+     * that were removed on purpose.
      */
     name: 'deletedDTCandidates',
     sql: `
-      SELECT b.dtNumber, COUNT(*) AS linesInBackup
-        INTO #gone
-        FROM bk_DeliveryTicketLines_1027 b
-       WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t
-                          WHERE t.dtNumber = b.dtNumber)
-       GROUP BY b.dtNumber;
-
-      SELECT g.dtNumber,
-             g.linesInBackup,
-             h.jobNum  AS jobNumber,
-             h.rig,
-             h.well,
-             h.dtDate,
-             CASE WHEN h.dtNo IS NULL THEN 0 ELSE 1 END AS inOperatorSheet
-        FROM #gone g
-        OUTER APPLY (
-          SELECT TOP 1 i.dtNo, i.jobNum, i.rig, i.well, i.dtDate
-            FROM tbl_ImportDTRT i
-           WHERE LTRIM(RTRIM(i.dtNo)) = g.dtNumber
-           ORDER BY CASE WHEN TRY_CONVERT(date, i.dtDate) IS NULL THEN 1 ELSE 0 END, i.id
-        ) h
-       ORDER BY g.dtNumber;
-
-      DROP TABLE #gone;`,
+      WITH gone AS (
+        SELECT b.dtNumber, COUNT(*) AS n
+          FROM bk_DeliveryTicketLines_1027 b
+         WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t
+                            WHERE t.dtNumber = b.dtNumber)
+         GROUP BY b.dtNumber
+      )
+      SELECT COUNT(*) AS missingTickets, SUM(n) AS missingLines FROM gone`,
   },
   {
     name: 'lineTotals',
