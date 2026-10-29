@@ -5,24 +5,35 @@ import { useAuth } from '../contexts/AuthContext'
 import { formatDate, formatCurrency, statusBadgeClass } from '../utils/format'
 import { PageLoader } from '../components/Spinner'
 
+/**
+ * The year an invoice belongs to.
+ *
+ * FiscalYear is null on every one of the 3,666 invoices in the database, so
+ * reading it alone yielded the string "null" for all of them. This screen
+ * used to default its year filter to the current year and compare against
+ * that, which matched nothing and left the register permanently empty.
+ * InvoiceDate is populated, so it is the fallback.
+ */
+function invoiceYear(inv: any): string {
+  const fy = String(inv?.FiscalYear ?? '').trim()
+  if (/^\d{4}/.test(fy)) return fy.slice(0, 4)
+  const d = String(inv?.InvoiceDate ?? '')
+  return /^\d{4}/.test(d) ? d.slice(0, 4) : ''
+}
+
 export function InvoicesView() {
   const { hasRole } = useAuth()
   const [search, setSearch]   = useState('')
   const [status, setStatus]   = useState('All')
-  const [year,   setYear]     = useState(String(new Date().getFullYear()))
+  const [year,   setYear]     = useState('All')
 
   const { data: invoices, isLoading, error, refetch } = useRealtimeFetch<any[]>('/invoices')
-
-  const yearOptions = useMemo(() => {
-    const current = new Date().getFullYear()
-    return [String(current), String(current - 1), String(current - 2), 'All']
-  }, [])
 
   const filtered = useMemo(() => {
     if (!invoices) return []
     return invoices.filter(inv => {
       if (status !== 'All' && inv.Status !== status) return false
-      if (year   !== 'All' && String(inv.FiscalYear || '').slice(0, 4) !== year) return false
+      if (year   !== 'All' && invoiceYear(inv) !== year) return false
       if (search) {
         const q = search.toLowerCase()
         return (
@@ -37,6 +48,33 @@ export function InvoicesView() {
 
   const totalAmount = filtered.reduce((sum, inv) => sum + (inv.TotalAmount || 0), 0)
 
+  // Both dropdowns are built from the invoices themselves rather than from a
+  // fixed list. The old status list offered Draft / Submitted / Under Review /
+  // Approved / Paid / Rejected / Cancelled, and the database holds none of
+  // those words - the real values are Final Invoiced, Draft Invoiced,
+  // JobCompleted, Completed and Ongoing - so every choice filtered to nothing.
+  const yearOptions = useMemo(() => {
+    const ys = new Set((invoices || []).map(invoiceYear).filter(Boolean))
+    return ['All', ...Array.from(ys).sort().reverse()]
+  }, [invoices])
+
+  const statusOptions = useMemo(() => {
+    const ss = new Set((invoices || []).map(i => String(i.Status || '').trim()).filter(Boolean))
+    return ['All', ...Array.from(ss).sort()]
+  }, [invoices])
+
+  // The two tiles after the totals used to count 'Pending' and 'Paid', which
+  // never occur, so both always read zero. These follow whatever statuses the
+  // filtered set actually contains.
+  const topStatuses = useMemo(() => {
+    const counts = new Map<string, number>()
+    filtered.forEach(i => {
+      const s = String(i.Status || '').trim()
+      if (s) counts.set(s, (counts.get(s) || 0) + 1)
+    })
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 2)
+  }, [filtered])
+
   if (isLoading) return <PageLoader />
 
   return (
@@ -46,8 +84,7 @@ export function InvoicesView() {
         {[
           { label: 'Total Shown',  value: filtered.length, isNum: false },
           { label: 'Total Amount', value: formatCurrency(totalAmount), isNum: false },
-          { label: 'Pending',      value: filtered.filter(i => i.Status === 'Pending').length, isNum: false },
-          { label: 'Paid',         value: filtered.filter(i => i.Status === 'Paid').length, isNum: false },
+          ...topStatuses.map(([label, n]) => ({ label, value: n, isNum: false })),
         ].map(card => (
           <div key={card.label} className="card p-4">
             <p className="text-xs text-gray-500 uppercase tracking-wide">{card.label}</p>
@@ -64,7 +101,7 @@ export function InvoicesView() {
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <select className="input w-auto" value={status} onChange={e => setStatus(e.target.value)}>
-          {['All','Draft','Submitted','Under Review','Approved','Paid','Rejected','Cancelled'].map(s =>
+          {statusOptions.map(s =>
             <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>
           )}
         </select>
