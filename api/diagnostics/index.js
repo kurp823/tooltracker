@@ -36,16 +36,17 @@ const loose = (col) =>
 const CHECKS = [
   {
     /*
-     * How many delivery tickets have lines in the 27-Oct backup but no live
-     * header, and how many lines that accounts for.
+     * 454 ticket numbers have lines in the 27-Oct backup but no live header.
+     * Only ten of those were removed on 29 Oct by the rig/well seed; the rest
+     * went in earlier, deliberate October clean-ups, and must not come back.
      *
-     * Deliberately cheap - no join to the operator sheet, no join to jobs.
-     * The earlier version matched the sheet for every missing ticket and timed
-     * out, which is itself evidence that this set is far larger than the ten
-     * tickets the rig/well cleanup removed: the backup predates several other
-     * October clean-ups. This number decides whether "missing from live" is a
-     * safe way to pick what to restore, or whether it would drag back tickets
-     * that were removed on purpose.
+     * The discriminator is that seed's own filter: it only ever touched
+     * tickets whose job is Completed and carries a legal invoice. The job for
+     * a vanished ticket is recoverable from tbl_DailyFieldLogs, which still
+     * holds DTNumber and JobID for every tool-day and was not modified.
+     *
+     * Read-only. This reports the split so the restore can be aimed at the
+     * right subset instead of all 454.
      */
     name: 'deletedDTCandidates',
     sql: `
@@ -55,8 +56,23 @@ const CHECKS = [
          WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t
                             WHERE t.dtNumber = b.dtNumber)
          GROUP BY b.dtNumber
+      ),
+      dtjob AS (
+        SELECT DTNumber, MIN(JobID) AS JobID
+          FROM tbl_DailyFieldLogs
+         GROUP BY DTNumber
       )
-      SELECT COUNT(*) AS missingTickets, SUM(n) AS missingLines FROM gone`,
+      SELECT COUNT(*)                                            AS missingTickets,
+             SUM(g.n)                                            AS missingLines,
+             SUM(CASE WHEN d.DTNumber IS NULL THEN 1 ELSE 0 END) AS noFieldLog,
+             SUM(CASE WHEN j.JobID IS NOT NULL THEN 1 ELSE 0 END) AS onCompletedInvoicedJob,
+             SUM(CASE WHEN j.JobID IS NOT NULL THEN g.n ELSE 0 END) AS linesOnThose
+        FROM gone g
+        LEFT JOIN dtjob d ON d.DTNumber = g.dtNumber
+        LEFT JOIN tbl_Jobs j
+               ON ${jobKey('j.JobID')} = ${jobKey('d.JobID')}
+              AND j.Status = 'Completed'
+              AND NULLIF(LTRIM(RTRIM(j.LegalInvoiceNumber)), '') IS NOT NULL`,
   },
   {
     name: 'lineTotals',
