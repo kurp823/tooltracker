@@ -13,7 +13,7 @@
  * POST   /api/jobs/{id}/personnel  — add person
  * DELETE /api/jobs/{id}/personnel/{pid} — remove person
  */
-const { sql, query, jsonResponse, requireAuth } = require('../db')
+const { sql, query, jsonResponse, requireAuth, jobKey } = require('../db')
 
 /**
  * A finished job is read-only.
@@ -82,6 +82,46 @@ async function nextJobID(fiscalYear) {
   const parts = last.split('-')
   const seq   = parseInt(parts[2] || '0', 10) + 1
   return `Job-${yr}-${String(seq).padStart(5, '0')}`
+}
+
+
+/**
+ * Tools still on the rig for a job: on a delivery ticket, with no return
+ * ticket for the same job carrying the same serial.
+ *
+ * Job numbers are written six different ways across the ticket data, so
+ * both sides are normalised with the same rule db.js uses everywhere else.
+ * A plain string compare misses roughly a third of them.
+ */
+async function toolsStillOut (sourceJobId) {
+  const K = jobKey
+  const r = await query(
+    `SELECT dtl.serial                            AS SystemID,
+            MAX(dt.dtNumber)                      AS SourceDTNumber,
+            MAX(dt.deliveryDate)                  AS SentOn,
+            MAX(COALESCE(NULLIF(i.AssetNo, ''), dtl.serial))   AS AssetNo,
+            MAX(COALESCE(NULLIF(i.ShortDesc, ''), dtl.toolDescription)) AS ShortDesc,
+            MAX(i.Size)                           AS Size,
+            MAX(CAST(COALESCE(i.IsEmdad, 1) AS int)) AS IsEmdad,
+            MAX(i.Status)                         AS ToolStatus,
+            MAX(i.Location)                       AS ToolLocation
+       FROM tbl_DeliveryTicketLines dtl
+       JOIN tbl_DeliveryTickets dt ON dt.dtNumber = dtl.dtNumber
+       LEFT JOIN tbl_Inventory i   ON i.SystemID  = dtl.serial
+      WHERE ${K('dt.jobNumber')} = ${K('@job')}
+        AND dtl.serial IS NOT NULL
+        AND LTRIM(RTRIM(dtl.serial)) <> ''
+        AND NOT EXISTS (
+              SELECT 1
+                FROM tbl_ReceivingTicketLines rtl
+                JOIN tbl_ReceivingTickets rt ON rt.rtNumber = rtl.rtNumber
+               WHERE rtl.serial = dtl.serial
+                 AND ${K('rt.jobNumber')} = ${K('dt.jobNumber')})
+      GROUP BY dtl.serial
+      ORDER BY MAX(dt.deliveryDate)`,
+    [{ name: 'job', type: sql.NVarChar, value: sourceJobId }]
+  )
+  return r.recordset
 }
 
 module.exports = async function (context, req) {
@@ -377,6 +417,122 @@ module.exports = async function (context, req) {
       ok: true,
       locked: s.status === LOCKED_STATUS,
       status: s.status,
+    })
+  }
+
+  // ── GET /api/jobs/{id}/rollover?from=Job-XXX ──────────────────────────────
+  // A preview. Nothing is written, so the person can see exactly what would
+  // carry over before committing to it.
+  if (method === 'GET' && jobId && sub === 'rollover') {
+    const from = (req.query || {}).from
+    if (!from) return jsonResponse(context, 400, { error: 'Which job should it roll from?' })
+
+    const [target, source] = await Promise.all([
+      query(`SELECT JobID, InvoicingType, Status, Contract, Rig, RolledFromJobID
+               FROM tbl_Jobs WHERE JobID = @id`,
+        [{ name: 'id', type: sql.NVarChar, value: jobId }]),
+      query(`SELECT JobID, InvoicingType, Status, Contract, Rig
+               FROM tbl_Jobs WHERE JobID = @id`,
+        [{ name: 'id', type: sql.NVarChar, value: from }]),
+    ])
+    if (!target.recordset.length) return jsonResponse(context, 404, { error: 'Job not found' })
+    if (!source.recordset.length) return jsonResponse(context, 404, { error: `${from} not found` })
+
+    const tools = await toolsStillOut(from)
+
+    // Anything already on the target is reported rather than carried twice.
+    const existing = await query(
+      `SELECT SystemID FROM tbl_JobTools WHERE JobID = @id`,
+      [{ name: 'id', type: sql.NVarChar, value: jobId }]
+    )
+    const have = new Set(existing.recordset.map(x => String(x.SystemID || '').toUpperCase()))
+
+    return jsonResponse(context, 200, {
+      target: target.recordset[0],
+      source: source.recordset[0],
+      willCarry: tools.filter(t => !have.has(String(t.SystemID || '').toUpperCase())),
+      alreadyOnJob: tools.filter(t =>  have.has(String(t.SystemID || '').toUpperCase())),
+    })
+  }
+
+  // ── POST /api/jobs/{id}/rollover ──────────────────────────────────────────
+  if (method === 'POST' && jobId && sub === 'rollover') {
+    if (!['Admin', 'Operations'].includes(user.Role))
+      return jsonResponse(context, 403, { error: 'Insufficient permissions' })
+    if (await blockIfLocked(context, jobId)) return
+
+    const from = String((req.body || {}).fromJobId || '').trim()
+    if (!from) return jsonResponse(context, 400, { error: 'Which job should it roll from?' })
+    if (from === jobId) return jsonResponse(context, 400, { error: 'A job cannot roll into itself' })
+
+    const t = await query(
+      `SELECT JobID, InvoicingType FROM tbl_Jobs WHERE JobID = @id`,
+      [{ name: 'id', type: sql.NVarChar, value: jobId }]
+    )
+    if (!t.recordset.length) return jsonResponse(context, 404, { error: 'Job not found' })
+
+    // Rollover is what 'Monthly' means. Allowing it on a per-job job would
+    // quietly carry tools into work that is billed as one complete job.
+    if (String(t.recordset[0].InvoicingType || '') !== 'Monthly')
+      return jsonResponse(context, 409, {
+        error: 'Rollover is only for jobs set to Monthly invoicing.',
+        invoicingType: t.recordset[0].InvoicingType,
+      })
+
+    const tools = await toolsStillOut(from)
+    if (!tools.length)
+      return jsonResponse(context, 200, {
+        ok: true, carried: 0, skipped: [],
+        message: `Nothing is still out on ${from} — every tool has a return ticket.`,
+      })
+
+    const existing = await query(
+      `SELECT SystemID FROM tbl_JobTools WHERE JobID = @id`,
+      [{ name: 'id', type: sql.NVarChar, value: jobId }]
+    )
+    const have = new Set(existing.recordset.map(x => String(x.SystemID || '').toUpperCase()))
+
+    const carried = [], skipped = []
+    for (const tool of tools) {
+      const key = String(tool.SystemID || '').toUpperCase()
+      if (have.has(key)) { skipped.push({ systemId: tool.SystemID, reason: 'Already on this job' }); continue }
+
+      await query(
+        `INSERT INTO tbl_JobTools
+           (JobID, SystemID, Serial, AssetNo, ShortDesc, Size, IsEmdad,
+            SourceDTNumber, RolledFromJobID, AddedDate, AddedBy, Notes)
+         VALUES (@job, @sid, @sid, @asset, @desc, @size, @emdad,
+                 @dt, @from, GETDATE(), @by, @notes)`,
+        [
+          { name: 'job',   type: sql.NVarChar, value: jobId },
+          { name: 'sid',   type: sql.NVarChar, value: tool.SystemID },
+          { name: 'asset', type: sql.NVarChar, value: tool.AssetNo || null },
+          { name: 'desc',  type: sql.NVarChar, value: tool.ShortDesc || null },
+          { name: 'size',  type: sql.NVarChar, value: tool.Size || null },
+          { name: 'emdad', type: sql.Bit,      value: tool.IsEmdad ? 1 : 0 },
+          // The original DT travels with the tool: utilization is keyed on
+          // (JobID, DTNumber, ToolSerial) and days with no ticket behind
+          // them are invisible to the revenue rollup.
+          { name: 'dt',    type: sql.NVarChar, value: tool.SourceDTNumber || null },
+          { name: 'from',  type: sql.NVarChar, value: from },
+          { name: 'by',    type: sql.NVarChar, value: user.Username || null },
+          { name: 'notes', type: sql.NVarChar,
+            value: `Rolled over from ${from}, out since ${tool.SentOn ? String(tool.SentOn).slice(0, 10) : 'unknown'} on ${tool.SourceDTNumber || 'no DT'}` },
+        ]
+      )
+      carried.push({ systemId: tool.SystemID, assetNo: tool.AssetNo,
+                     shortDesc: tool.ShortDesc, sourceDT: tool.SourceDTNumber })
+      have.add(key)
+    }
+
+    await query(
+      `UPDATE tbl_Jobs SET RolledFromJobID = @from, UpdatedAt = GETDATE() WHERE JobID = @id`,
+      [{ name: 'id', type: sql.NVarChar, value: jobId },
+       { name: 'from', type: sql.NVarChar, value: from }]
+    )
+
+    return jsonResponse(context, 200, {
+      ok: true, carried: carried.length, carriedTools: carried, skipped, from,
     })
   }
 
