@@ -61,7 +61,7 @@ const MODULES: NavModule[] = [
       { label: 'Assets and Inventory',      to: '/inventory',           icon: <Package size={ICON} /> },
       { label: 'Not in Inventory',          to: '/missing-tools',       icon: <PackageSearch size={ICON} /> },
       { label: 'Tool Categories & Sizes',   to: '/categories',          icon: <Tag size={ICON} /> },
-      { label: 'PO & Goods Inward (GRN)',   to: '/po-grn',              icon: <ShoppingCart size={ICON} />, pending: true },
+      { label: 'PO & Goods Inward (GRN)',   to: '/po-grn',              icon: <ShoppingCart size={ICON} /> },
       { label: 'Third-Party Rental Inward', to: '/sub-rental-inward',   icon: <PackagePlus size={ICON} />, pending: true },
       { label: 'Consumables & Store (SIV)', to: '/consumables',         icon: <Boxes size={ICON} />, pending: true },
     ],
