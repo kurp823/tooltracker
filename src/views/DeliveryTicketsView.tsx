@@ -37,6 +37,7 @@ interface DT {
   EmdadSignDate: string | null
   ClientSignedBy: string | null
   ClientSignDate: string | null
+  HoleSection: string | null
 }
 
 interface DTLine {
@@ -320,12 +321,20 @@ function DTDetailPanel({
       ClientSignDate: day(full.ClientSignDate),
       Status: full.Status ?? '',
       Notes: full.Notes ?? '',
+      HoleSection: full.HoleSection ?? '',
     })
     setLoaded(true)
   }, [full, loaded])
 
   const { data: lines, refetch: refetchLines } =
     useFetch<DTLine[]>(`/delivery-tickets/${dt.DTID}/lines`)
+
+  // Hole sections are contract-specific: present on ADNOC-style contracts that
+  // price 18 categories by hole range rather than tool size. Empty array means
+  // this job's contract prices by size alone, so the field is hidden entirely.
+  const { data: holeSectionsData } =
+    useFetch<{ holeSections: string[] }>(`/delivery-tickets/${dt.DTID}/hole-sections`)
+  const holeSections = holeSectionsData?.holeSections ?? []
 
   const canEdit = hasRole('Admin', 'Operations')
 
@@ -470,6 +479,21 @@ function DTDetailPanel({
                   onChange={e => set('Status', e.target.value)}>
             {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABEL(s)}</option>)}
           </select>
+
+          {/* Hole section: only rendered when the contract has hole-priced
+              categories (ADNOC 4700024096 and similar). For size-priced and
+              lump-sum contracts holeSections is empty and the field is hidden
+              so it does not confuse dispatchers who never need it. */}
+          {holeSections.length > 0 && (
+            <>
+              <span className="field-label">Hole Section</span>
+              <select className="field-input" value={form.HoleSection ?? ''} disabled={!canEdit}
+                      onChange={e => set('HoleSection', e.target.value)}>
+                <option value="">— select —</option>
+                {holeSections.map(h => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </>
+          )}
         </div>
 
         {/* Tool grid — gets all remaining height, scrolls inside, both ways */}
