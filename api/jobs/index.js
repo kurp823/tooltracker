@@ -15,6 +15,61 @@
  */
 const { sql, query, jsonResponse, requireAuth } = require('../db')
 
+/**
+ * A finished job is read-only.
+ *
+ * 'Completed' is the end of the line - 3,675 jobs carry it, most already
+ * legally invoiced - so its figures must not move under an invoice that
+ * has gone to the client. Every other status stays editable, because work
+ * in progress is exactly what people need to correct.
+ *
+ * An Admin can unlock one job at a time through POST /api/jobs/{id}/unlock,
+ * and the unlock is recorded against the job. The lock lives here rather
+ * than only in the screen: a disabled input is a courtesy, not a control.
+ */
+const LOCKED_STATUS = 'Completed'
+
+async function lockStateOf (jobId) {
+  const r = await query(
+    `SELECT Status, UnlockedBy, UnlockedAt, UnlockReason
+       FROM tbl_Jobs WHERE JobID = @id`,
+    [{ name: 'id', type: sql.NVarChar, value: jobId }]
+  )
+  const j = r.recordset[0]
+  if (!j) return { exists: false }
+  return {
+    exists:   true,
+    status:   j.Status,
+    unlocked: j.UnlockedAt != null,
+    locked:   j.Status === LOCKED_STATUS && j.UnlockedAt == null,
+    unlockedBy: j.UnlockedBy || null,
+    unlockedAt: j.UnlockedAt || null,
+    reason:     j.UnlockReason || null,
+  }
+}
+
+/**
+ * Guards a write. Returns true when the caller may proceed; otherwise it
+ * has already answered the request and the caller must return.
+ */
+async function blockIfLocked (context, jobId) {
+  const s = await lockStateOf(jobId)
+  if (!s.exists) {
+    jsonResponse(context, 404, { error: 'Job not found' })
+    return true
+  }
+  if (s.locked) {
+    jsonResponse(context, 423, {
+      error:  `This job is ${LOCKED_STATUS} and cannot be changed.`,
+      locked: true,
+      status: s.status,
+      hint:   'An Admin can unlock it if it genuinely needs correcting.',
+    })
+    return true
+  }
+  return false
+}
+
 // ── Job number generator: EMDAD format Job-YYY-NNNNN ─────────────────────────
 async function nextJobID(fiscalYear) {
   const yr = fiscalYear || new Date().getFullYear().toString().slice(-3)
@@ -99,7 +154,12 @@ module.exports = async function (context, req) {
                -- Job value and legal invoice no: both on the old register and
                -- needed by the executive dashboard, alongside ServiceType.
                InvoiceAmount, NetInvoiceAmount, LegalInvoiceNumber,
-               CreatedDate, CreatedBy, UpdatedAt
+               CreatedDate, CreatedBy, UpdatedAt,
+               -- Lock state travels with the row so the register can show a
+               -- finished job as read-only without a call per job.
+               UnlockedBy, UnlockedAt, UnlockReason,
+               CAST(CASE WHEN Status = 'Completed' AND UnlockedAt IS NULL
+                         THEN 1 ELSE 0 END AS bit) AS IsLocked
         FROM   tbl_Jobs
         ${where}
         -- Newest job first. CreatedDate is NULL on the newer rows, and a DESC
@@ -122,7 +182,12 @@ module.exports = async function (context, req) {
   if (method === 'GET' && jobId && !sub) {
     try {
       const result = await query(
-        `SELECT * FROM tbl_Jobs WHERE JobID = @id`,
+        `SELECT *,
+                -- Computed rather than stored, so it can never drift out of
+                -- step with the status it depends on.
+                CAST(CASE WHEN Status = 'Completed' AND UnlockedAt IS NULL
+                          THEN 1 ELSE 0 END AS bit) AS IsLocked
+           FROM tbl_Jobs WHERE JobID = @id`,
         [{ name: 'id', type: sql.NVarChar, value: jobId }]
       )
       if (!result.recordset.length)
@@ -192,6 +257,7 @@ module.exports = async function (context, req) {
     if (!['Admin', 'Operations'].includes(user.Role)) {
       return jsonResponse(context, 403, { error: 'Insufficient permissions' })
     }
+    if (await blockIfLocked(context, jobId)) return
     const b = req.body || {}
     try {
       await query(
@@ -260,6 +326,68 @@ module.exports = async function (context, req) {
   }
 
   // ── GET /api/jobs/{id}/tools ───────────────────────────────────────────────
+  // ── POST /api/jobs/{id}/unlock ────────────────────────────────────────────
+  // Admin only, and it is recorded. Operations cannot unlock a finished job
+  // however urgent it feels - that separation is the point of the lock.
+  if (method === 'POST' && jobId && sub === 'unlock') {
+    if (user.Role !== 'Admin')
+      return jsonResponse(context, 403, { error: 'Only an Admin can unlock a completed job' })
+
+    const s = await lockStateOf(jobId)
+    if (!s.exists) return jsonResponse(context, 404, { error: 'Job not found' })
+    if (!s.locked && !s.unlocked)
+      return jsonResponse(context, 200, { ok: true, alreadyEditable: true, status: s.status })
+
+    const reason = String((req.body || {}).Reason || '').trim()
+    if (!reason)
+      return jsonResponse(context, 400, {
+        error: 'A reason is required — it is stored against the job so the change can be explained later.',
+      })
+
+    await query(
+      `UPDATE tbl_Jobs
+          SET UnlockedBy = @who, UnlockedAt = GETDATE(), UnlockReason = @reason
+        WHERE JobID = @id`,
+      [
+        { name: 'id',     type: sql.NVarChar, value: jobId },
+        { name: 'who',    type: sql.NVarChar, value: user.Username || String(user.UserID || '') },
+        { name: 'reason', type: sql.NVarChar, value: reason.slice(0, 300) },
+      ]
+    )
+    return jsonResponse(context, 200, { ok: true, unlocked: true })
+  }
+
+  // ── POST /api/jobs/{id}/lock ──────────────────────────────────────────────
+  // Puts a previously unlocked job back under the lock. The reason and who
+  // unlocked it are cleared, because they describe an unlock that is over.
+  if (method === 'POST' && jobId && sub === 'lock') {
+    if (user.Role !== 'Admin')
+      return jsonResponse(context, 403, { error: 'Only an Admin can re-lock a job' })
+
+    const s = await lockStateOf(jobId)
+    if (!s.exists) return jsonResponse(context, 404, { error: 'Job not found' })
+
+    await query(
+      `UPDATE tbl_Jobs
+          SET UnlockedBy = NULL, UnlockedAt = NULL, UnlockReason = NULL
+        WHERE JobID = @id`,
+      [{ name: 'id', type: sql.NVarChar, value: jobId }]
+    )
+    return jsonResponse(context, 200, {
+      ok: true,
+      locked: s.status === LOCKED_STATUS,
+      status: s.status,
+    })
+  }
+
+  // ── GET /api/jobs/{id}/lock ───────────────────────────────────────────────
+  // So the screen knows whether to show the job read-only, and why.
+  if (method === 'GET' && jobId && sub === 'lock') {
+    const s = await lockStateOf(jobId)
+    if (!s.exists) return jsonResponse(context, 404, { error: 'Job not found' })
+    return jsonResponse(context, 200, s)
+  }
+
   if (method === 'GET' && sub === 'tools') {
     try {
       const result = await query(
@@ -292,6 +420,7 @@ module.exports = async function (context, req) {
     if (!['Admin', 'Operations'].includes(user.Role)) {
       return jsonResponse(context, 403, { error: 'Insufficient permissions' })
     }
+    if (await blockIfLocked(context, jobId)) return
     const b = req.body || {}
     try {
       await query(
@@ -321,6 +450,7 @@ module.exports = async function (context, req) {
     if (!['Admin', 'Operations'].includes(user.Role)) {
       return jsonResponse(context, 403, { error: 'Insufficient permissions' })
     }
+    if (await blockIfLocked(context, jobId)) return
     try {
       await query(
         `DELETE FROM tbl_JobTools WHERE JobToolID = @tid AND JobID = @jid`,
@@ -355,6 +485,7 @@ module.exports = async function (context, req) {
     if (!['Admin', 'Operations'].includes(user.Role)) {
       return jsonResponse(context, 403, { error: 'Insufficient permissions' })
     }
+    if (await blockIfLocked(context, jobId)) return
     const b = req.body || {}
     try {
       await query(
@@ -384,6 +515,7 @@ module.exports = async function (context, req) {
     if (!['Admin', 'Operations'].includes(user.Role)) {
       return jsonResponse(context, 403, { error: 'Insufficient permissions' })
     }
+    if (await blockIfLocked(context, jobId)) return
     try {
       await query(
         `DELETE FROM tbl_JobPersonnel WHERE id = @pid AND JobID = @jid`,
