@@ -473,7 +473,12 @@ module.exports = async function (context, req) {
 
     // Rollover is what 'Monthly' means. Allowing it on a per-job job would
     // quietly carry tools into work that is billed as one complete job.
-    if (String(t.recordset[0].InvoicingType || '') !== 'Monthly')
+    //
+    // Compared case-insensitively: the 41 monthly jobs in production are
+    // stored as 'MONTHLY' while the dropdown offers 'Monthly', and an exact
+    // match would have hidden rollover from every job that needs it with
+    // nothing on screen to say why.
+    if (String(t.recordset[0].InvoicingType || '').trim().toUpperCase() !== 'MONTHLY')
       return jsonResponse(context, 409, {
         error: 'Rollover is only for jobs set to Monthly invoicing.',
         invoicingType: t.recordset[0].InvoicingType,
