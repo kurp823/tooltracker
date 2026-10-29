@@ -1865,7 +1865,7 @@ function UtilizationTab({ jobId, job }: { jobId: string; job: Partial<Job> }) {
         <table className="text-[11px] border-collapse" style={{ minWidth: `${340 + daysInMonth * 24}px` }}>
           <thead className="sticky top-0 z-20">
             <tr>
-              <th className="table-th sticky left-0 z-30 bg-navy-head w-[150px]">Tool</th>
+              <th className="table-th sticky left-0 z-30 bg-gray-100 w-[150px]">Tool</th>
               <th className="table-th">DT No</th>
               <th className="table-th">Out</th>
               <th className="table-th">In</th>
