@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { useRowWindow }  from '../components/useRowWindow'
+import { usePagedRows, Pager } from '../components/usePagedRows'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Search, Filter, RefreshCw } from 'lucide-react'
 import { useFetch } from '../hooks/useFetch'
@@ -60,9 +60,10 @@ export function JobsView() {
     })
   }, [jobs, statusFilter, yearFilter, search])
 
-  // Render the register in slices; all 3,700+ rows in the DOM at once was
-  // most of the delay before first paint on these screens.
-  const { scrollRef, onScroll, visible, hasMore, shown, total } = useRowWindow(filtered)
+  // One screenful per page, measured from the rendered row height. Putting
+  // all 3,700+ rows in the DOM was most of the delay before first paint.
+  const { scrollRef, visible, page, pageCount, setPage, from, to, total } =
+    usePagedRows(filtered)
 
   if (isLoading) return <PageLoader />
 
@@ -104,7 +105,7 @@ export function JobsView() {
         </button>
 
         <span className="text-[11px] text-gray-500">
-          {hasMore ? `${shown} of ${total} shown` : `${total} job${total === 1 ? '' : 's'}`}
+          {`${total.toLocaleString()} job${total === 1 ? '' : 's'}`}
         </span>
 
         {hasRole('Admin', 'Operations') && (
@@ -117,8 +118,8 @@ export function JobsView() {
       {error && <div className="card p-2 text-red-600 text-xs shrink-0">{error}</div>}
 
       {/* Table — nowrap everywhere; a wrapped Job ID made every row 3 lines tall */}
-      <div ref={scrollRef} onScroll={onScroll}
-           className="flex-1 min-h-0 overflow-auto bg-white border border-gray-300 rounded">
+      <div ref={scrollRef}
+           className="flex-1 min-h-0 overflow-auto bg-white border border-gray-300 rounded-t">
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-10">
             <tr>
@@ -180,6 +181,9 @@ export function JobsView() {
           </tbody>
         </table>
       </div>
+
+      <Pager page={page} pageCount={pageCount} setPage={setPage}
+             from={from} to={to} total={total} noun="job" />
     </div>
   )
 }
