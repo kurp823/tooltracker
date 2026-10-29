@@ -652,61 +652,56 @@ const MIGRATIONS = [
       SET XACT_ABORT ON;
       BEGIN TRANSACTION;
 
-      /* The ten tickets the rig/well seed deleted - identified by that
-         seed's own filter, not by "missing from live". 454 ticket numbers
-         have backup lines and no live header; 444 of them went in earlier,
-         deliberate October clean-ups and must stay gone. The seed only ever
-         touched tickets whose job is Completed and carries a legal invoice,
-         and the job survives in tbl_DailyFieldLogs. */
-      SELECT b.dtNumber
-        INTO #gone
-        FROM bk_DeliveryTicketLines_1027 b
-       WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t
-                          WHERE t.dtNumber = b.dtNumber)
-       GROUP BY b.dtNumber;
-
-      CREATE CLUSTERED INDEX IX_gone ON #gone (dtNumber);
-
-      SELECT d.DTNumber, MIN(d.JobID) AS JobID
-        INTO #dj
-        FROM tbl_DailyFieldLogs d
-       WHERE EXISTS (SELECT 1 FROM #gone g WHERE g.dtNumber = d.DTNumber)
-       GROUP BY d.DTNumber;
-
-      SELECT g.dtNumber, j.JobID, j.Rig, j.Well
+      /*
+       * The ten tickets, named.
+       *
+       * These are not worked out by a query. 454 ticket numbers have backup
+       * lines and no live header, and 444 of them went in earlier,
+       * deliberate October clean-ups - a rule that picks the wrong set would
+       * drag those back. This list is the ten the 29-Oct rig/well seed
+       * removed, each verified to sit on a completed, legally invoiced job,
+       * and together they account for the drop from 3,863 tickets to 3,853.
+       *
+       * Written out so the scope can be read and checked by eye. Nothing
+       * outside these ten can be touched by anything below.
+       */
+      SELECT dtNumber
         INTO #rebuild
-        FROM #gone g
-        JOIN #dj      dj ON dj.DTNumber = g.dtNumber
-        JOIN tbl_Jobs j
-              ON ${jobKey('j.JobID')} = ${jobKey('dj.JobID')}
-             AND j.Status = 'Completed'
-             AND NULLIF(LTRIM(RTRIM(j.LegalInvoiceNumber)), '') IS NOT NULL;
+        FROM (VALUES ('DT-00041'), ('DT-00044'), ('DT-00048'), ('DT-00199'),
+                     ('DT-01129'), ('DT-01937'), ('DT-03244'), ('DT-CB-001'),
+                     ('DT-ENG-001'), ('DT-ITS-001')) AS v(dtNumber);
 
-      /* Header: job, rig and well come from the job itself. The deleted row
-         was removed precisely because its rig/well disagreed with the job,
-         and nothing recorded what it said, so the job's own values are the
-         only honest thing to put here. The date comes from the earliest
-         field log for the ticket. Status, PO number, client ref, vehicle,
-         driver, EMDAD rep and the signature fields went with the original
-         row and are not recoverable. */
+      /* Header: job, rig and well from the job record. The deleted row went
+         precisely because its rig/well disagreed with the job and nothing
+         recorded what it said, so the job's own values are the only honest
+         thing to put back. Date is the earliest field log for the ticket.
+         Status, PO number, client ref, vehicle, driver, EMDAD rep and the
+         signature fields were lost with the original row. */
       INSERT INTO tbl_DeliveryTickets
             (dtNumber, jobNumber, deliveryDate, rig, well, status, notes, createdBy, createdAt)
-      SELECT r.dtNumber, r.JobID,
-             (SELECT MIN(d.LogDate) FROM tbl_DailyFieldLogs d WHERE d.DTNumber = r.dtNumber),
-             r.Rig, r.Well,
+      SELECT r.dtNumber, j.JobID,
+             (SELECT MIN(d2.LogDate) FROM tbl_DailyFieldLogs d2 WHERE d2.DTNumber = r.dtNumber),
+             j.Rig, j.Well,
              NULL,
-             'Restored 29-Oct-2026. This ticket was deleted by an automated rig/well cleanup. Rig, well and job are the job record''s own values; the date is the earliest field log. Status, PO number, client ref, vehicle, driver, EMDAD rep and the signature fields were lost with the original row and are not recoverable.',
+             'Restored 29-Oct-2026. Deleted by an automated rig/well cleanup. Rig, well and job are the job record''s own values; the date is the earliest field log. Status, PO number, client ref, vehicle, driver, EMDAD rep and the signature fields were lost with the original row and are not recoverable.',
              'restore:dt-1029',
              GETDATE()
         FROM #rebuild r
+        CROSS APPLY (
+          SELECT TOP 1 j2.JobID, j2.Rig, j2.Well
+            FROM tbl_DailyFieldLogs d
+            JOIN tbl_Jobs j2 ON ${jobKey('j2.JobID')} = ${jobKey('d.JobID')}
+           WHERE d.DTNumber = r.dtNumber
+        ) j
        WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t
                           WHERE t.dtNumber = r.dtNumber);
 
-      /* Lines: the 27-Oct backup predates the de-duplication, so it holds
-         440 rows for these ten tickets where only 152 were live when they
-         were deleted. Restoring it wholesale would put ~288 duplicates back.
-         The dedupe kept one row per (ticket, serial) and left rows with no
-         serial alone, so the same rule is applied here. */
+      /* Lines: the 27-Oct backup holds 440 rows for these ten, but only 152
+         were live when they were deleted - the backup predates the
+         de-duplication. Putting it back wholesale would re-create roughly
+         288 duplicates and undo that cleanup. The dedupe kept one row per
+         (ticket, serial) and left rows without a serial alone, so the same
+         rule applies here. */
       WITH ranked AS (
         SELECT b.dtNumber, b.itemNo, b.serial, b.toolDescription, b.qty, b.remarks,
                ROW_NUMBER() OVER (PARTITION BY b.dtNumber, b.serial
@@ -728,8 +723,6 @@ const MIGRATIONS = [
        WHERE NULLIF(LTRIM(RTRIM(b.serial)), '') IS NULL;
 
       DROP TABLE #rebuild;
-      DROP TABLE #dj;
-      DROP TABLE #gone;
       COMMIT;`,
   },
 ]
