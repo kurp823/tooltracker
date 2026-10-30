@@ -18,6 +18,7 @@ const PAGES: Record<string, { crumb: string; title: string }> = {
   '/inspection':        { crumb: 'Maintenance & QC Module',  title: 'QC Inspection Bay' },
   '/maintenance':       { crumb: 'Maintenance & QC Module',  title: 'Maintenance Orders' },
   '/invoices':          { crumb: 'Billing & Cost Control',   title: 'Invoicing' },
+  '/pending-rental-costs': { crumb: 'Billing & Cost Control', title: 'Pending Rental Costs' },
   '/contracts':         { crumb: 'Contracts Module',         title: 'Master Contract Register' },
   '/clients':           { crumb: 'Contracts Module',         title: 'Clients' },
   '/suppliers':         { crumb: 'Contracts Module',         title: 'Suppliers' },

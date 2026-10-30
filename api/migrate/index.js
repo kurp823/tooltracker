@@ -746,6 +746,43 @@ const MIGRATIONS = [
       DROP TABLE #rebuild;
       COMMIT;`,
   },
+  {
+    /*
+     * Columns the third-party inward screen needs.
+     *
+     * shortDesc already holds the category and keeps doing so - it is the
+     * same value as tbl_Inventory.ShortDesc, which is where the category
+     * actually lives in this database (126 of the 130 distinct ShortDesc
+     * values match a row in tbl_Categories). Category plus size is what
+     * tbl_ContractRates is keyed on, so that pair is what decides whether a
+     * hired-in tool can be billed to the client at all.
+     *
+     * Added here: the free-text description, the quantity on the line, the
+     * inspection flag and whether the line goes to Asset or Inventory - the
+     * columns the operator's own Access receipt form carries and this table
+     * did not.
+     *
+     * Writes rows only in the sense of adding empty columns; existing rows
+     * keep their values and the new columns are NULL. Each ALTER is guarded,
+     * so running it twice does nothing.
+     */
+    name: 'seed:rental-inward-columns',
+    sql: `
+      IF COL_LENGTH('dbo.tbl_RentalInward', 'description') IS NULL
+        ALTER TABLE dbo.tbl_RentalInward ADD [description] nvarchar(400) NULL;
+
+      IF COL_LENGTH('dbo.tbl_RentalInward', 'qty') IS NULL
+        ALTER TABLE dbo.tbl_RentalInward ADD [qty] int NULL;
+
+      IF COL_LENGTH('dbo.tbl_RentalInward', 'requiresInspection') IS NULL
+        ALTER TABLE dbo.tbl_RentalInward ADD [requiresInspection] bit NULL;
+
+      IF COL_LENGTH('dbo.tbl_RentalInward', 'destination') IS NULL
+        ALTER TABLE dbo.tbl_RentalInward ADD [destination] nvarchar(20) NULL;
+
+      IF COL_LENGTH('dbo.tbl_RentalInward', 'receiptRef') IS NULL
+        ALTER TABLE dbo.tbl_RentalInward ADD [receiptRef] nvarchar(40) NULL;`,
+  },
 ]
 
 module.exports = async function (context, req) {
