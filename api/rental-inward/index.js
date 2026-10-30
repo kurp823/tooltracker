@@ -30,6 +30,10 @@ const { sql, query, jsonResponse, requireAuth } = require('../db')
  */
 
 const EDITORS = ['Admin', 'Operations']
+// Who may put a cost against a hire. Stores receive the tool and do not know
+// what it costs - the day rate comes from the sub-contract, which Billing and
+// Finance hold. Operations is deliberately absent.
+const PRICERS = ['Admin', 'Billing', 'Finance', 'CostController']
 const VIEWERS = ['Admin', 'Operations', 'Finance', 'Billing', 'CostController']
 
 // Days on hire, inclusive of the day it arrived.
@@ -101,6 +105,191 @@ module.exports = async function (context, req) {
         ]
       )
       return jsonResponse(context, 200, r.recordset)
+    }
+
+    // ── GET rate-options — the Category/Size pairs the contracts price ────
+    //
+    // The category and size dropdowns on the inward screen are fed from here
+    // rather than from the full inventory vocabulary. A hired-in tool earns
+    // nothing unless its category and size match a row in tbl_ContractRates,
+    // so offering a category no contract prices sets the tool up to go to a
+    // rig and be unbillable.
+    if (method === 'GET' && id === 'rate-options') {
+      const r = await query(
+        `SELECT Category AS category, Size AS size,
+                MIN(ContractCode) AS contractCode,
+                COUNT(DISTINCT ContractCode) AS contracts
+           FROM tbl_ContractRates
+          WHERE ActiveFlag = 1
+            AND NULLIF(LTRIM(RTRIM(Category)), '') IS NOT NULL
+          GROUP BY Category, Size
+          ORDER BY Category, Size`, [])
+      return jsonResponse(context, 200, r.recordset)
+    }
+
+    // ── GET pending-pricing — received, no day rate yet ────────────────────
+    //
+    // The queue Billing works from. A tool with no rate is tracked and can go
+    // out on a ticket, but contributes nothing to cost until someone prices
+    // it, so this list is the difference between a cost figure and a guess.
+    if (method === 'GET' && id === 'pending-pricing') {
+      const r = await query(
+        `SELECT r.*, ${DAYS_ON_HIRE} AS daysOnHire
+           FROM tbl_RentalInward r
+          WHERE r.dayRate IS NULL
+            AND r.dateOut IS NULL
+          ORDER BY r.dateIn ASC, r.id ASC`, [])
+      return jsonResponse(context, 200, r.recordset)
+    }
+
+    // ── POST batch — one receipt, many tools ──────────────────────────────
+    //
+    // A sub-contractor delivers against one delivery note, and the operator's
+    // own Access receipt form works the same way: the header is typed once
+    // and the tools are listed beneath it. Each line still becomes its own
+    // hire row, because each tool has its own serial, its own asset number
+    // and eventually its own day rate - but the header is not re-keyed ten
+    // times, and the whole receipt succeeds or fails together.
+    //
+    // No day rate is accepted here at all. Stores record what arrived; the
+    // cost is added later from the pending queue by someone who holds the
+    // sub-contract.
+    if (method === 'POST' && id === 'batch') {
+      if (!EDITORS.includes(user.Role))
+        return jsonResponse(context, 403, { error: 'Insufficient permissions' })
+
+      const b     = req.body || {}
+      const lines = Array.isArray(b.lines) ? b.lines : []
+      const supplier = String(b.supplierName || '').trim()
+
+      if (!supplier)     return jsonResponse(context, 400, { error: 'Supplier is required' })
+      if (!b.dateIn)     return jsonResponse(context, 400, { error: 'Date in is required' })
+      if (!lines.length) return jsonResponse(context, 400, { error: 'Add at least one tool line' })
+
+      // Checked up front so a clash does not leave half a receipt written.
+      const assetNos = lines
+        .map(l => String(l.assetNo || '').trim())
+        .filter(Boolean)
+      const dupInBatch = assetNos.find((a, i) => assetNos.indexOf(a) !== i)
+      if (dupInBatch)
+        return jsonResponse(context, 400, { error: `${dupInBatch} appears on more than one line` })
+
+      for (const a of assetNos) {
+        const clash = await query(
+          `SELECT TOP 1 SystemID FROM tbl_Inventory WHERE SystemID = @a OR AssetNo = @a`,
+          [{ name: 'a', type: sql.VarChar, value: a }])
+        if (clash.recordset.length)
+          return jsonResponse(context, 409, {
+            error: `${a} is already in inventory. Use a different asset number.`,
+          })
+      }
+
+      const receiptRef = String(b.receiptRef || '').trim()
+        || `RI-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now() % 100000}`
+
+      const created = []
+      for (const l of lines) {
+        const category = String(l.category || '').trim()
+        if (!category)
+          return jsonResponse(context, 400, { error: 'Every line needs a category' })
+
+        const assetNo = String(l.assetNo || '').trim()
+        const r = await query(
+          `INSERT INTO tbl_RentalInward
+             (rentalRef, receiptRef, supplierName, poNumber, assetNo, shortDesc,
+              [description], size, oemSerial, jobId, qty, requiresInspection,
+              destination, dateIn, expectedOut, status, notes, createdBy)
+           OUTPUT INSERTED.id
+           VALUES (@ref, @rcpt, @sup, @po, @asset, @cat, @desc, @size, @serial,
+                   @job, @qty, @insp, @dest, @in, @exp, 'On Hire', @notes, @by)`,
+          [
+            { name: 'ref',    type: sql.NVarChar, value: b.rentalRef || null },
+            { name: 'rcpt',   type: sql.NVarChar, value: receiptRef },
+            { name: 'sup',    type: sql.NVarChar, value: supplier },
+            { name: 'po',     type: sql.NVarChar, value: b.poNumber || null },
+            { name: 'asset',  type: sql.NVarChar, value: assetNo || null },
+            { name: 'cat',    type: sql.NVarChar, value: category },
+            { name: 'desc',   type: sql.NVarChar, value: l.description || null },
+            { name: 'size',   type: sql.NVarChar, value: l.size || null },
+            { name: 'serial', type: sql.NVarChar, value: l.oemSerial || null },
+            { name: 'job',    type: sql.NVarChar, value: b.jobId || null },
+            { name: 'qty',    type: sql.Int,      value: l.qty == null || l.qty === '' ? 1 : Number(l.qty) },
+            { name: 'insp',   type: sql.Bit,      value: l.requiresInspection ? 1 : 0 },
+            { name: 'dest',   type: sql.NVarChar, value: l.destination || null },
+            { name: 'in',     type: sql.Date,     value: new Date(b.dateIn) },
+            { name: 'exp',    type: sql.Date,     value: b.expectedOut ? new Date(b.expectedOut) : null },
+            { name: 'notes',  type: sql.NVarChar, value: b.notes || null },
+            { name: 'by',     type: sql.NVarChar, value: user.Username || user.FullName || 'system' },
+          ])
+
+        const newId = r.recordset[0].id
+
+        // Into stock as the supplier's, so it can go out on a ticket at once.
+        // Ownership and IsEmdad are how sub-contractor tools are already
+        // marked in tbl_Inventory.
+        if (assetNo && l.destination !== 'Consumable') {
+          await query(
+            `INSERT INTO tbl_Inventory
+               (SystemID, AssetNo, Size, ShortDesc, [Description], Qty, [Status],
+                Ownership, IsEmdad, OEMSerial, Supplier, AddedDate, AddedBy, ItemType)
+             VALUES (@a, @a, @size, @cat, @desc, @qty, 'Available',
+                     @sup, 0, @serial, @sup, GETDATE(), @by, @dest)`,
+            [
+              { name: 'a',      type: sql.VarChar,  value: assetNo },
+              { name: 'size',   type: sql.NVarChar, value: l.size || null },
+              { name: 'cat',    type: sql.NVarChar, value: category },
+              { name: 'desc',   type: sql.NVarChar, value: l.description || null },
+              { name: 'qty',    type: sql.Int,      value: l.qty == null || l.qty === '' ? 1 : Number(l.qty) },
+              { name: 'sup',    type: sql.NVarChar, value: supplier },
+              { name: 'serial', type: sql.NVarChar, value: l.oemSerial || null },
+              { name: 'by',     type: sql.NVarChar, value: user.Username || user.FullName || 'system' },
+              { name: 'dest',   type: sql.NVarChar, value: l.destination || null },
+            ])
+
+          await query(`UPDATE tbl_RentalInward SET systemId = @a WHERE id = @id`,
+            [{ name: 'a',  type: sql.NVarChar, value: assetNo },
+             { name: 'id', type: sql.Int,      value: newId }])
+        }
+
+        created.push(newId)
+      }
+
+      return jsonResponse(context, 201, {
+        receiptRef,
+        created: created.length,
+        ids: created,
+        awaitingPricing: created.length,
+      })
+    }
+
+    // ── PUT pricing — Billing adds the cost ───────────────────────────────
+    if (method === 'PUT' && id && sub === 'pricing') {
+      if (!PRICERS.includes(user.Role))
+        return jsonResponse(context, 403, {
+          error: 'Only Admin, Billing, Finance or Cost Control can set a day rate',
+        })
+
+      const b = req.body || {}
+      if (b.dayRate == null || b.dayRate === '' || isNaN(Number(b.dayRate)))
+        return jsonResponse(context, 400, { error: 'A day rate is required' })
+
+      await query(
+        `UPDATE tbl_RentalInward
+            SET dayRate     = @rate,
+                currency    = COALESCE(@cur, currency),
+                expectedOut = COALESCE(@exp, expectedOut),
+                notes       = COALESCE(@notes, notes),
+                updatedAt   = GETDATE()
+          WHERE id = @id`,
+        [
+          { name: 'rate',  type: sql.Decimal(18, 2), value: Number(b.dayRate) },
+          { name: 'cur',   type: sql.NVarChar, value: b.currency || null },
+          { name: 'exp',   type: sql.Date,     value: b.expectedOut ? new Date(b.expectedOut) : null },
+          { name: 'notes', type: sql.NVarChar, value: b.notes || null },
+          { name: 'id',    type: sql.Int,      value: Number(id) },
+        ])
+
+      return jsonResponse(context, 200, { ok: true })
     }
 
     // ── GET one ────────────────────────────────────────────────────────────

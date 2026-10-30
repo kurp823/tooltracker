@@ -1,29 +1,44 @@
-import { useState } from 'react'
-import { Plus, Search, RefreshCw, PackagePlus, Undo2, Building2, AlertTriangle } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Plus, Search, RefreshCw, Undo2, Trash2, PackagePlus, AlertTriangle } from 'lucide-react'
 import { useFetch } from '../hooks/useFetch'
+import { api } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
-import { ListOptions } from '../components/ListOptions'
 import { PageLoader } from '../components/Spinner'
-import { Stat, Panel, Bar } from '../components/Stat'
-import { api } from '../utils/api'
+import { Stat } from '../components/Stat'
+import { ListOptions } from '../components/ListOptions'
+import { ComboBox } from '../components/ComboBox'
+import { usePagedRows, Pager } from '../components/usePagedRows'
 
 /*
- * Third-Party Rental Inward, with the Sub-Contractor Rentals report as its
- * second tab — the report is a view over the same data, so it lives beside
- * it rather than fetching the same rows from a separate screen.
+ * Third-party rental inward.
  *
- * This is the record that was missing behind the orphan serials: a
- * sub-contractor's tool arrived, went out on a ticket, and had no inward
- * record anywhere.
+ * A sub-contractor delivers against one delivery note and the tools are
+ * listed beneath it, which is how the operator's own Access receipt form
+ * works. So this is a header typed once and a grid of tool lines, not one
+ * form per tool: ten tools used to mean ten repetitions of supplier, date
+ * and reference.
+ *
+ * Stores enter no pricing at all. The storeman receiving a tool does not
+ * hold the sub-contract and does not know the day rate, so asking for it
+ * here either stops the receipt or invites a guess. The rate is added
+ * afterwards from Pending Rental Costs by Billing or Finance, and the
+ * "No day rate set" tile is the count of what is waiting.
+ *
+ * Category and size are the pair tbl_ContractRates is keyed on, so a line
+ * whose category and size match no contract rate is flagged as it is typed:
+ * that tool can go to a rig and come back unbillable, and the moment to
+ * notice is now, not at invoicing.
  */
 
 type Tab = 'hires' | 'report'
 
 interface Hire {
-  id: number; rentalRef: string | null; supplierName: string
-  poNumber: string | null; assetNo: string | null; shortDesc: string | null
+  id: number; rentalRef: string | null; receiptRef: string | null
+  supplierName: string; poNumber: string | null; assetNo: string | null
+  shortDesc: string | null; description: string | null
   size: string | null; oemSerial: string | null; jobId: string | null
+  qty: number | null; requiresInspection: boolean | null; destination: string | null
   dateIn: string; expectedOut: string | null; dateOut: string | null
   dayRate: number | null; currency: string | null; status: string
   systemId: string | null; notes: string | null
@@ -34,9 +49,28 @@ interface Summary {
   byJob: { jobId: string; tools: number; days: number; cost: number }[]
   totals: { tools: number; onHire: number; lostInHole: number; noRate: number; cost: number }
 }
+interface RateOption { category: string; size: string | null; contractCode: string; contracts: number }
+
+interface Line {
+  key: number
+  category: string
+  size: string
+  assetNo: string
+  oemSerial: string
+  description: string
+  qty: string
+  requiresInspection: boolean
+  destination: string
+}
 
 const money = (n: number | null | undefined) =>
   n == null ? '—' : Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+let lineSeq = 1
+const blankLine = (): Line => ({
+  key: lineSeq++, category: '', size: '', assetNo: '', oemSerial: '',
+  description: '', qty: '1', requiresInspection: false, destination: 'Inventory',
+})
 
 export function RentalInwardView() {
   const { hasRole } = useAuth()
@@ -46,31 +80,99 @@ export function RentalInwardView() {
   const [tab, setTab] = useState<Tab>('hires')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
+
   const { data: hires, isLoading, error, refetch } = useFetch<Hire[]>(
     `/rental-inward?${search ? `search=${encodeURIComponent(search)}&` : ''}${status ? `status=${encodeURIComponent(status)}` : ''}`)
   const { data: summary, refetch: refetchSummary } = useFetch<Summary>('/rental-inward/summary')
 
+  // Dropdown sources. All four come from the database - suppliers, the tool
+  // category list, the size list and the Category/Size pairs the contracts
+  // actually price. Nothing here is a literal list in the code.
+  const { data: suppliers }   = useFetch<{ SupplierName: string }[]>('/suppliers')
+  const { data: categories }  = useFetch<{ CategoryName: string }[]>('/categories')
+  const { data: sizes }       = useFetch<{ SizeLabel: string }[]>('/sizes')
+  const { data: rateOptions } = useFetch<RateOption[]>('/rental-inward/rate-options')
+
+  const supplierOpts = useMemo(
+    () => (suppliers || []).map(s => ({ value: s.SupplierName, label: s.SupplierName })), [suppliers])
+  const categoryOpts = useMemo(
+    () => (categories || []).map(c => ({ value: c.CategoryName, label: c.CategoryName })), [categories])
+  const sizeOpts = useMemo(
+    () => (sizes || []).map(s => ({ value: s.SizeLabel, label: s.SizeLabel })), [sizes])
+
+  // Category|Size pairs that some contract prices, for the billable check.
+  const priced = useMemo(() => {
+    const s = new Set<string>()
+    ;(rateOptions || []).forEach(r =>
+      s.add(`${(r.category || '').trim().toUpperCase()}|${(r.size || '').trim().toUpperCase()}`))
+    return s
+  }, [rateOptions])
+
+  const pricedCategories = useMemo(() => {
+    const s = new Set<string>()
+    ;(rateOptions || []).forEach(r => s.add((r.category || '').trim().toUpperCase()))
+    return s
+  }, [rateOptions])
+
+  function billable(l: Line): 'ok' | 'no-size' | 'no-category' | 'blank' {
+    const c = l.category.trim().toUpperCase()
+    if (!c) return 'blank'
+    if (!pricedCategories.has(c)) return 'no-category'
+    if (priced.has(`${c}|${l.size.trim().toUpperCase()}`)) return 'ok'
+    return 'no-size'
+  }
+
   const [busy, setBusy] = useState(false)
   const [adding, setAdding] = useState(false)
-  const [form, setForm] = useState({
-    supplierName: '', rentalRef: '', assetNo: '', shortDesc: '', size: '',
-    oemSerial: '', jobId: '', dateIn: new Date().toISOString().slice(0, 10),
-    expectedOut: '', dayRate: '', currency: 'USD', addToInventory: true,
+  const [head, setHead] = useState({
+    supplierName: '', rentalRef: '', poNumber: '', jobId: '',
+    dateIn: new Date().toISOString().slice(0, 10), expectedOut: '', notes: '',
   })
+  const [lines, setLines] = useState<Line[]>([blankLine()])
 
-  async function take() {
-    if (!form.supplierName.trim()) { showToast('Supplier is required', 'error'); return }
+  const setLine = (key: number, patch: Partial<Line>) =>
+    setLines(ls => ls.map(l => (l.key === key ? { ...l, ...patch } : l)))
+
+  function startReceipt() {
+    setHead({
+      supplierName: '', rentalRef: '', poNumber: '', jobId: '',
+      dateIn: new Date().toISOString().slice(0, 10), expectedOut: '', notes: '',
+    })
+    setLines([blankLine()])
+    setAdding(true)
+  }
+
+  async function saveReceipt() {
+    if (!head.supplierName.trim()) { showToast('Supplier is required', 'error'); return }
+    const filled = lines.filter(l => l.category.trim() || l.assetNo.trim() || l.oemSerial.trim())
+    if (!filled.length) { showToast('Add at least one tool line', 'error'); return }
+    const missing = filled.find(l => !l.category.trim())
+    if (missing) { showToast('Every line needs a category', 'error'); return }
+
     setBusy(true)
     try {
-      const r = await api('/rental-inward', { method: 'POST', body: JSON.stringify(form) }) as any
-      showToast(r.addedToInventory
-        ? `On hire, and added to inventory as ${form.assetNo}`
-        : 'Recorded as on hire', 'success')
+      const r = await api('/rental-inward/batch', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...head,
+          lines: filled.map(l => ({
+            category: l.category.trim(), size: l.size.trim(),
+            assetNo: l.assetNo.trim(), oemSerial: l.oemSerial.trim(),
+            description: l.description.trim(),
+            qty: l.qty === '' ? 1 : Number(l.qty),
+            requiresInspection: l.requiresInspection,
+            destination: l.destination,
+          })),
+        }),
+      }) as any
+      showToast(
+        `${r.created} tool(s) received on ${r.receiptRef} — now waiting for a day rate`,
+        'success')
       setAdding(false)
-      setForm(f => ({ ...f, rentalRef: '', assetNo: '', shortDesc: '', size: '', oemSerial: '', jobId: '' }))
       refetch(); refetchSummary()
-    } catch (e: any) { showToast(e.message || 'Could not record the hire', 'error') }
-    finally { setBusy(false) }
+    } catch (e: any) {
+      showToast(e.message || 'Could not save the receipt', 'error')
+    } finally { setBusy(false) }
   }
 
   async function sendBack(h: Hire, st: string) {
@@ -86,251 +188,352 @@ export function RentalInwardView() {
     finally { setBusy(false) }
   }
 
+  const rows = hires || []
+  const { scrollRef, visible, page, pageCount, setPage, from, to, total } = usePagedRows(rows)
+
   if (isLoading) return <PageLoader />
   if (error) return <div className="card p-6 text-center text-sm text-red-600">{error}</div>
 
-  const rows = hires || []
   const t = summary?.totals
   const maxCost = Math.max(1, ...(summary?.bySupplier || []).map(s => Number(s.cost)))
 
-  return (
-    <div className="space-y-5">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Third-Party Rentals</h2>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Tools hired in from sub-contractors — what we hold, and what it is costing
-          </p>
-        </div>
-        <div className="flex gap-2 items-center">
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input className="input pl-9 w-52" placeholder="supplier, asset or serial…"
-                   value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
-          <select className="input w-auto" value={status} onChange={e => setStatus(e.target.value)}>
-            <option value="">All statuses</option>
-            <ListOptions name="RentalInStatus" />
-          </select>
-          <button className="btn-ghost" onClick={() => { refetch(); refetchSummary() }}>
-            <RefreshCw size={15} />
-          </button>
-          {canEdit && (
-            <button className="btn-primary" onClick={() => setAdding(v => !v)}>
-              <Plus size={15} /> Take on hire
+  // ── Receipt entry ─────────────────────────────────────────────────────────
+  if (adding && canEdit) {
+    return (
+      <div className="screen gap-1.5">
+        <div className="screen-bar">
+          <span className="text-[13px] font-semibold text-navy-900">New third-party receipt</span>
+          <span className="text-[11px] text-gray-500">
+            Stores record what arrived — Billing adds the day rate afterwards
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <button className="btn-ghost" onClick={() => setAdding(false)}>Cancel</button>
+            <button className="btn-primary" disabled={busy} onClick={saveReceipt}>
+              Save receipt
             </button>
-          )}
+          </div>
         </div>
-      </div>
 
-      {t && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Stat label="On hire now" value={Number(t.onHire || 0).toLocaleString()}
-                icon={<PackagePlus size={22} className="text-blue-600" />} iconBg="bg-blue-100" />
-          <Stat label="Cost to date" value={money(t.cost)}
-                sub="day rate × days held" />
-          <Stat label="Lost in hole" value={Number(t.lostInHole || 0).toLocaleString()}
-                tone={Number(t.lostInHole) ? 'warn' : 'default'}
-                sub={Number(t.lostInHole) ? 'will be invoiced at replacement cost' : undefined} />
-          <Stat label="No day rate set" value={Number(t.noRate || 0).toLocaleString()}
-                tone={Number(t.noRate) ? 'warn' : 'default'}
-                sub={Number(t.noRate) ? 'these cost nothing in the figures above' : undefined}
-                icon={<AlertTriangle size={22} className="text-amber-600" />} iconBg="bg-amber-100" />
-        </div>
-      )}
-
-      {adding && canEdit && (
-        <div className="card p-4 space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div>
+        {/* Header — typed once for the whole delivery note */}
+        <div className="card p-2 shrink-0">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+            <div className="md:col-span-2">
               <label className="label">Supplier</label>
-              <input className="input mt-1" placeholder="Goss, Coretrax…" value={form.supplierName}
-                     onChange={e => setForm(f => ({ ...f, supplierName: e.target.value }))} />
+              <ComboBox value={head.supplierName} options={supplierOpts}
+                        placeholder="who it came from"
+                        onChange={v => setHead(h => ({ ...h, supplierName: v }))} />
             </div>
             <div>
-              <label className="label">Their reference</label>
-              <input className="input mt-1" value={form.rentalRef}
-                     onChange={e => setForm(f => ({ ...f, rentalRef: e.target.value }))} />
+              <label className="label">Their DN / ref</label>
+              <input className="field-input" value={head.rentalRef}
+                     onChange={e => setHead(h => ({ ...h, rentalRef: e.target.value }))} />
             </div>
             <div>
-              <label className="label">Our asset no</label>
-              <input className="input mt-1" placeholder="what we will call it" value={form.assetNo}
-                     onChange={e => setForm(f => ({ ...f, assetNo: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Their serial</label>
-              <input className="input mt-1" value={form.oemSerial}
-                     onChange={e => setForm(f => ({ ...f, oemSerial: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Category</label>
-              <input className="input mt-1" placeholder="as in inventory" value={form.shortDesc}
-                     onChange={e => setForm(f => ({ ...f, shortDesc: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Size</label>
-              <input className="input mt-1" value={form.size}
-                     onChange={e => setForm(f => ({ ...f, size: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">For job</label>
-              <input className="input mt-1" placeholder="optional" value={form.jobId}
-                     onChange={e => setForm(f => ({ ...f, jobId: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Day rate we pay</label>
-              <input type="number" className="input mt-1" value={form.dayRate}
-                     onChange={e => setForm(f => ({ ...f, dayRate: e.target.value }))} />
+              <label className="label">PO number</label>
+              <input className="field-input" value={head.poNumber}
+                     onChange={e => setHead(h => ({ ...h, poNumber: e.target.value }))} />
             </div>
             <div>
               <label className="label">Date in</label>
-              <input type="date" className="input mt-1" value={form.dateIn}
-                     onChange={e => setForm(f => ({ ...f, dateIn: e.target.value }))} />
+              <input type="date" className="field-input" value={head.dateIn}
+                     onChange={e => setHead(h => ({ ...h, dateIn: e.target.value }))} />
             </div>
             <div>
               <label className="label">Expected back</label>
-              <input type="date" className="input mt-1" value={form.expectedOut}
-                     onChange={e => setForm(f => ({ ...f, expectedOut: e.target.value }))} />
+              <input type="date" className="field-input" value={head.expectedOut}
+                     onChange={e => setHead(h => ({ ...h, expectedOut: e.target.value }))} />
             </div>
           </div>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={form.addToInventory}
-                   onChange={e => setForm(f => ({ ...f, addToInventory: e.target.checked }))} />
-            Add to inventory so it can go out on a ticket
-            <span className="text-xs text-gray-500">— marked as the supplier's, not ours</span>
-          </label>
-          <div className="flex gap-2">
-            <button className="btn-primary" disabled={busy} onClick={take}>Take on hire</button>
-            <button className="btn-ghost" onClick={() => setAdding(false)}>Cancel</button>
-          </div>
-        </div>
-      )}
-
-      <div className="card">
-        <div className="flex border-b border-gray-200">
-          {(['hires', 'report'] as Tab[]).map(x => (
-            <button key={x} onClick={() => setTab(x)}
-              className={`px-4 py-2.5 text-xs font-medium border-b-2 -mb-px ${
-                tab === x ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-              {x === 'hires' ? 'Hires' : 'Sub-contractor rentals report'}
-            </button>
-          ))}
         </div>
 
-        {tab === 'hires' && (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
+        {/* Lines */}
+        <div className="flex-1 min-h-0 overflow-auto bg-white border border-gray-300 rounded-t">
+          <table className="w-full border-collapse">
+            <thead className="sticky top-0 z-10">
               <tr>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Supplier</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Tool</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Job</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">In</th>
-                <th className="text-right px-4 py-2 font-medium text-gray-600">Days</th>
-                <th className="text-right px-4 py-2 font-medium text-gray-600">Cost</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Status</th>
-                <th className="w-36"></th>
+                <th className="table-th w-8">#</th>
+                <th className="table-th min-w-[170px]">Category</th>
+                <th className="table-th min-w-[110px]">Size</th>
+                <th className="table-th min-w-[120px]">Our asset no</th>
+                <th className="table-th min-w-[120px]">Their serial</th>
+                <th className="table-th min-w-[200px]">Description</th>
+                <th className="table-th w-16 !text-right">Qty</th>
+                <th className="table-th w-16 text-center">Insp</th>
+                <th className="table-th min-w-[110px]">Goes to</th>
+                <th className="table-th w-8"></th>
               </tr>
             </thead>
             <tbody>
-              {rows.map(h => (
-                <tr key={h.id} className="border-t border-gray-100">
-                  <td className="px-4 py-2 text-gray-900">{h.supplierName}</td>
-                  <td className="px-4 py-2 text-gray-700">
-                    {h.assetNo || h.oemSerial || '—'}
-                    {h.shortDesc && <span className="text-gray-400 text-xs ml-1">{h.shortDesc}</span>}
-                  </td>
-                  <td className="px-4 py-2 text-gray-600 text-xs">{h.jobId || '—'}</td>
-                  <td className="px-4 py-2 text-gray-600">{String(h.dateIn).slice(0, 10)}</td>
-                  <td className="px-4 py-2 text-right text-gray-700">{h.daysOnHire}</td>
-                  <td className="px-4 py-2 text-right text-gray-900">
-                    {h.dayRate == null
-                      ? <span className="text-amber-600 text-xs">no rate</span>
-                      : money(h.costToDate)}
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                      h.status === 'On Hire' ? 'bg-blue-100 text-blue-800'
-                      : h.status === 'Lost in Hole' ? 'bg-red-100 text-red-800'
-                      : 'bg-gray-100 text-gray-600'}`}>{h.status}</span>
-                  </td>
-                  <td className="px-4 py-2">
-                    {canEdit && !h.dateOut && (
-                      <div className="flex gap-1">
-                        <button className="btn-ghost text-xs" disabled={busy}
-                                onClick={() => sendBack(h, 'Returned')}>
-                          <Undo2 size={13} /> Return
+              {lines.map((l, i) => {
+                const b = billable(l)
+                return (
+                  <tr key={l.key} className="table-tr !cursor-default">
+                    <td className="table-td text-gray-400">{i + 1}</td>
+                    <td className="table-td">
+                      <ComboBox value={l.category} options={categoryOpts}
+                                placeholder="category"
+                                onChange={v => setLine(l.key, { category: v })} />
+                      {b === 'no-category' && (
+                        <span className="text-[10px] text-amber-700">no contract prices this category</span>
+                      )}
+                      {b === 'no-size' && (
+                        <span className="text-[10px] text-amber-700">no rate for this size</span>
+                      )}
+                    </td>
+                    <td className="table-td">
+                      <ComboBox value={l.size} options={sizeOpts} placeholder="size"
+                                onChange={v => setLine(l.key, { size: v })} />
+                    </td>
+                    <td className="table-td">
+                      <input className="field-input table-ref" value={l.assetNo}
+                             placeholder="what we call it"
+                             onChange={e => setLine(l.key, { assetNo: e.target.value })} />
+                    </td>
+                    <td className="table-td">
+                      <input className="field-input table-ref" value={l.oemSerial}
+                             onChange={e => setLine(l.key, { oemSerial: e.target.value })} />
+                    </td>
+                    <td className="table-td">
+                      <input className="field-input" value={l.description}
+                             onChange={e => setLine(l.key, { description: e.target.value })} />
+                    </td>
+                    <td className="table-td">
+                      <input type="number" min={1} className="field-input text-right" value={l.qty}
+                             onChange={e => setLine(l.key, { qty: e.target.value })} />
+                    </td>
+                    <td className="table-td text-center">
+                      <input type="checkbox" checked={l.requiresInspection}
+                             onChange={e => setLine(l.key, { requiresInspection: e.target.checked })} />
+                    </td>
+                    <td className="table-td">
+                      <select className="field-input" value={l.destination}
+                              onChange={e => setLine(l.key, { destination: e.target.value })}>
+                        <ListOptions name="GRNDestination" current={l.destination} />
+                      </select>
+                    </td>
+                    <td className="table-td">
+                      {lines.length > 1 && (
+                        <button className="text-gray-300 hover:text-red-600"
+                                title="Remove this line"
+                                onClick={() => setLines(ls => ls.filter(x => x.key !== l.key))}>
+                          <Trash2 size={13} />
                         </button>
-                        <button className="btn-ghost text-xs text-red-600" disabled={busy}
-                                onClick={() => sendBack(h, 'Lost in Hole')}>LIH</button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">
-                  No third-party hires recorded.
-                </td></tr>
-              )}
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
+        </div>
+
+        <div className="shrink-0 flex items-center gap-2 px-2 py-1 bg-gray-50 border border-t-0
+                        border-gray-300 rounded-b text-[11px] text-gray-500">
+          <button className="btn-mini" onClick={() => setLines(ls => [...ls, blankLine()])}>
+            <Plus size={12} /> Add line
+          </button>
+          <span>{lines.length} line(s)</span>
+          <span className="ml-auto">
+            No day rate is entered here — these go to Pending Rental Costs for Billing.
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Register ──────────────────────────────────────────────────────────────
+  return (
+    <div className="screen gap-1.5">
+      <div className="screen-bar">
+        <div className="relative w-56">
+          <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input className="field-input !pl-7" placeholder="supplier, asset or serial…"
+                 value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <select className="field-input w-auto" value={status} onChange={e => setStatus(e.target.value)}>
+          <option value="">All statuses</option>
+          <ListOptions name="RentalInStatus" />
+        </select>
+        <button className="btn-mini" onClick={() => { refetch(); refetchSummary() }} title="Refresh">
+          <RefreshCw size={12} />
+        </button>
+        {canEdit && (
+          <button className="btn-accent ml-auto" onClick={startReceipt}>
+            <Plus size={12} /> New receipt
+          </button>
         )}
+      </div>
 
-        {tab === 'report' && summary && (
-          <div className="p-4 space-y-5">
-            {Number(t?.noRate) > 0 && (
-              <div className="card p-3 border-l-4 border-l-amber-400">
-                <p className="text-sm text-gray-700">
-                  <strong>{t!.noRate}</strong> hire(s) have no day rate, so they contribute
-                  nothing to the costs below. The figures are a floor, not the full cost.
-                </p>
-              </div>
-            )}
+      {t && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 shrink-0">
+          <Stat label="On hire now" value={Number(t.onHire || 0).toLocaleString()}
+                icon={<PackagePlus size={18} className="text-blue-600" />} iconBg="bg-blue-100" />
+          <Stat label="Cost to date" value={money(t.cost)} sub="day rate × days held" />
+          <Stat label="Lost in hole" value={Number(t.lostInHole || 0).toLocaleString()}
+                tone={Number(t.lostInHole) ? 'warn' : 'default'} />
+          <Stat label="Awaiting a day rate" value={Number(t.noRate || 0).toLocaleString()}
+                tone={Number(t.noRate) ? 'warn' : 'default'}
+                sub={Number(t.noRate) ? 'Billing sets these' : undefined}
+                icon={<AlertTriangle size={18} className="text-amber-600" />} iconBg="bg-amber-100" />
+        </div>
+      )}
 
-            <Panel title="By supplier" subtitle="Cost is day rate × days held">
-              <div className="py-1">
-                {summary.bySupplier.map(s => (
-                  <Bar key={s.supplierName}
-                       label={`${s.supplierName} — ${money(s.cost)} · ${s.tools} tool(s), ${s.onHire} still out`}
-                       value={Number(s.cost)} total={maxCost} tone="bg-blue-500" />
+      <div className="flex border-b border-gray-200 shrink-0">
+        {(['hires', 'report'] as Tab[]).map(x => (
+          <button key={x} onClick={() => setTab(x)}
+            className={`px-3 py-1.5 text-xs font-medium border-b-2 -mb-px ${
+              tab === x ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+            {x === 'hires' ? 'Hires' : 'Sub-contractor rentals report'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'hires' && (
+        <>
+          <div ref={scrollRef} className="flex-1 min-h-0 overflow-auto bg-white border border-gray-300 rounded-t">
+            <table className="w-full border-collapse">
+              <thead className="sticky top-0 z-10">
+                <tr>
+                  <th className="table-th">Supplier</th>
+                  <th className="table-th">Asset</th>
+                  <th className="table-th">Category</th>
+                  <th className="table-th">Size</th>
+                  <th className="table-th">Their serial</th>
+                  <th className="table-th">Job</th>
+                  <th className="table-th">In</th>
+                  <th className="table-th !text-right">Days</th>
+                  <th className="table-th !text-right">Cost</th>
+                  <th className="table-th">Status</th>
+                  <th className="table-th w-28"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map(h => (
+                  <tr key={h.id} className="table-tr !cursor-default whitespace-nowrap">
+                    <td className="table-td font-medium">{h.supplierName}</td>
+                    <td className="table-td table-ref text-brand-600">{h.assetNo || <span className="table-empty">—</span>}</td>
+                    <td className="table-td">{h.shortDesc || <span className="table-empty">—</span>}</td>
+                    <td className="table-td text-gray-500">{h.size || <span className="table-empty">—</span>}</td>
+                    <td className="table-td table-ref text-gray-500">{h.oemSerial || <span className="table-empty">—</span>}</td>
+                    <td className="table-td table-ref text-gray-500">{h.jobId || <span className="table-empty">—</span>}</td>
+                    <td className="table-td table-ref text-gray-500">{String(h.dateIn).slice(0, 10)}</td>
+                    <td className="table-td table-num">{h.daysOnHire}</td>
+                    <td className="table-td table-num">
+                      {h.dayRate == null
+                        ? <span className="text-amber-600 text-[11px]">no rate</span>
+                        : money(h.costToDate)}
+                    </td>
+                    <td className="table-td">
+                      <span className={`badge ${
+                        h.status === 'On Hire' ? 'status-active'
+                        : h.status === 'Lost in Hole' ? 'status-cancelled'
+                        : 'status-closed'}`}>{h.status}</span>
+                    </td>
+                    <td className="table-td">
+                      {canEdit && !h.dateOut && (
+                        <div className="flex gap-1">
+                          <button className="btn-mini" disabled={busy}
+                                  onClick={() => sendBack(h, 'Returned')}>
+                            <Undo2 size={11} /> Return
+                          </button>
+                          <button className="btn-mini text-red-600" disabled={busy}
+                                  onClick={() => sendBack(h, 'Lost in Hole')}>LIH</button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
                 ))}
-                {summary.bySupplier.length === 0 && (
-                  <p className="text-sm text-gray-400 py-4 text-center">Nothing yet.</p>
+                {rows.length === 0 && (
+                  <tr><td colSpan={11} className="table-td text-center py-10 text-gray-400">
+                    No third-party hires recorded.
+                  </td></tr>
                 )}
-              </div>
-            </Panel>
-
-            <Panel title="By job" subtitle="What sub-contractor tools cost each job">
-              <div className="max-h-80 overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr>
-                      <th className="text-left px-4 py-2 font-medium text-gray-600">Job</th>
-                      <th className="text-right px-4 py-2 font-medium text-gray-600">Tools</th>
-                      <th className="text-right px-4 py-2 font-medium text-gray-600">Days</th>
-                      <th className="text-right px-4 py-2 font-medium text-gray-600">Cost</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summary.byJob.map(j => (
-                      <tr key={j.jobId} className="border-t border-gray-100">
-                        <td className="px-4 py-2 text-gray-800">{j.jobId}</td>
-                        <td className="px-4 py-2 text-right text-gray-600">{j.tools}</td>
-                        <td className="px-4 py-2 text-right text-gray-600">{j.days}</td>
-                        <td className="px-4 py-2 text-right font-medium text-gray-900">{money(j.cost)}</td>
-                      </tr>
-                    ))}
-                    {summary.byJob.length === 0 && (
-                      <tr><td colSpan={4} className="px-4 py-6 text-center text-sm text-gray-400">
-                        Nothing yet.
-                      </td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </Panel>
+              </tbody>
+            </table>
           </div>
-        )}
+          <Pager page={page} pageCount={pageCount} setPage={setPage}
+                 from={from} to={to} total={total} noun="hire" />
+        </>
+      )}
+
+      {tab === 'report' && summary && (
+        <div className="flex-1 min-h-0 overflow-auto card p-3 space-y-4">
+          {Number(t?.noRate) > 0 && (
+            <div className="card p-2 border-l-4 border-l-amber-400 text-xs text-gray-700">
+              <strong>{t!.noRate}</strong> hire(s) have no day rate, so they contribute nothing
+              to the costs below. The figures are a floor, not the full cost.
+            </div>
+          )}
+
+          <Panel title="By supplier" subtitle="Cost is day rate × days held">
+            <div className="py-1">
+              {summary.bySupplier.map(s => (
+                <Bar key={s.supplierName}
+                     label={`${s.supplierName} — ${money(s.cost)} · ${s.tools} tool(s), ${s.onHire} still out`}
+                     value={Number(s.cost)} total={maxCost} tone="bg-blue-500" />
+              ))}
+              {summary.bySupplier.length === 0 && (
+                <p className="text-sm text-gray-400 py-4 text-center">Nothing yet.</p>
+              )}
+            </div>
+          </Panel>
+
+          <Panel title="By job" subtitle="What sub-contractor tools cost each job">
+            <table className="w-full border-collapse">
+              <thead className="sticky top-0 z-10">
+                <tr>
+                  <th className="table-th">Job</th>
+                  <th className="table-th !text-right">Tools</th>
+                  <th className="table-th !text-right">Days</th>
+                  <th className="table-th !text-right">Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.byJob.map(j => (
+                  <tr key={j.jobId} className="table-tr !cursor-default">
+                    <td className="table-td table-ref">{j.jobId}</td>
+                    <td className="table-td table-num">{j.tools}</td>
+                    <td className="table-td table-num">{j.days}</td>
+                    <td className="table-td table-num font-medium">{money(j.cost)}</td>
+                  </tr>
+                ))}
+                {summary.byJob.length === 0 && (
+                  <tr><td colSpan={4} className="table-td text-center py-6 text-gray-400">
+                    Nothing yet.
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </Panel>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Panel({ title, subtitle, children }:
+  { title: string; subtitle?: string; children: React.ReactNode }) {
+  return (
+    <div className="card overflow-hidden">
+      <div className="px-3 py-2 border-b border-gray-200">
+        <p className="text-xs font-semibold text-navy-900">{title}</p>
+        {subtitle && <p className="text-[11px] text-gray-500">{subtitle}</p>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function Bar({ label, value, total, tone }:
+  { label: string; value: number; total: number; tone: string }) {
+  const pct = total > 0 ? Math.round((value / total) * 100) : 0
+  return (
+    <div className="px-3 py-1.5">
+      <div className="flex justify-between text-[11px] text-gray-700 mb-0.5">
+        <span>{label}</span>
+      </div>
+      <div className="h-1.5 bg-gray-100 rounded">
+        <div className={`h-1.5 rounded ${tone}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   )

@@ -6,7 +6,8 @@ import {
   Receipt, Building2, BarChart3, Settings, ChevronDown, Upload,
   ChevronRight, BookOpen, Factory, Tag, History, Boxes,
   ShoppingCart, PackagePlus, Database, LogOut, KeyRound,
-  Gauge, ClipboardList, Coins, FileSpreadsheet, HardHat, PackageSearch
+  Gauge, ClipboardList, Coins, FileSpreadsheet, HardHat, PackageSearch,
+  AlertTriangle
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import type { UserRole } from '../types'
@@ -85,6 +86,10 @@ const MODULES: NavModule[] = [
       { label: 'Invoicing',                      to: '/invoices',          icon: <FileText size={ICON} /> },
       { label: 'Tool Revenue & Utilization',     to: '/tool-revenue',      icon: <Coins size={ICON} /> },
       { label: 'Sub-Contractor Rentals',         to: '/sub-rentals',       icon: <Building2 size={ICON} /> },
+      // Stores receive hired-in tools without a cost; this is the queue
+      // Billing works from. It sits here rather than in Inventory because
+      // this is where the people who hold the sub-contract already work.
+      { label: 'Pending Rental Costs',           to: '/pending-rental-costs', icon: <AlertTriangle size={ICON} /> },
       { label: 'Monthly Expense Grid & P&L',     to: '/monthly-expenses',  icon: <FileSpreadsheet size={ICON} /> },
     ],
   },
