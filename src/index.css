@@ -3,9 +3,27 @@
 @tailwind utilities;
 
 @layer base {
+  /*
+   * Matching the previous app's base type exactly: 13px at 1.5, slate-800
+   * rather than near-black, and IBM Plex Mono for every figure and
+   * reference. The sans face was already right, but the mono was never
+   * loaded, so asset numbers and serials fell back to the browser's
+   * default monospace - the typewriter look that made these screens read
+   * as unfinished next to the old ones.
+   *
+   * Tailwind's text-* sizes are rem and resolve against <html>, not body,
+   * so this moves only the text that carries no size class of its own.
+   */
   body {
-    font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
-    @apply text-gray-900 bg-canvas;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont,
+                 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    @apply text-slate-800 bg-canvas;
+  }
+
+  .font-mono, code, kbd, pre, samp {
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   }
 }
 
@@ -109,6 +127,66 @@
   .table-td.pin-l, .table-td.pin-r { z-index: 20; background-color: inherit; }
   .pin-l { box-shadow: 2px 0 4px -2px rgb(0 0 0 / 0.08); }
   .pin-r { box-shadow: -2px 0 4px -2px rgb(0 0 0 / 0.08); }
+  /*
+   * Datasheet grid — the receipt form as Access presents it.
+   *
+   * The difference from an ordinary form is that the cell border is the
+   * field boundary. A rounded, shadowed input floating inside a roomy cell
+   * reads as ten separate controls; a field that fills its cell edge to
+   * edge reads as one continuous grid, which is what makes a twelve-line
+   * receipt scannable and what the operator's own form does.
+   */
+  .sheet-th {
+    @apply px-3 py-2 text-left text-[11px] font-semibold text-slate-600 uppercase
+           tracking-wide bg-slate-100 border-b border-slate-200 whitespace-nowrap;
+  }
+  /* Row lines only. Boxing every cell is what a spreadsheet does and it
+     makes a twelve-column row read as twelve separate things; the old app's
+     registers are legible because the only rule is between rows. */
+  .sheet-td  { @apply border-b border-slate-100 p-0 align-middle; }
+  .sheet-num { @apply border-b border-slate-100 text-center text-[11px]
+                      text-slate-400 w-9 select-none; }
+  .sheet-row { @apply hover:bg-brand-50/40 transition-colors; }
+  /* The field carries no edge of its own, so a row of them reads as a row
+     of values rather than a row of boxes. The outline appears on focus,
+     which is the only moment it means anything. */
+  .sheet-input {
+    @apply w-full h-[30px] px-3 text-[12.5px] text-slate-800 bg-transparent
+           border-0 rounded-none outline-none placeholder:text-slate-300
+           focus:bg-white focus:ring-1 focus:ring-inset focus:ring-brand-400;
+  }
+  /* Label sitting to the left of its field, as on the Access header block,
+     rather than stacked above it - the header is reference data being read,
+     not a form being filled top to bottom. */
+  .sheet-label {
+    @apply text-[11px] font-semibold text-slate-600 text-right pr-2 w-[88px] shrink-0;
+  }
+  .sheet-field {
+    @apply h-[28px] px-2 text-[12.5px] text-slate-800 bg-white border border-slate-200
+           rounded outline-none w-full
+           focus:border-brand-400 focus:ring-1 focus:ring-brand-400;
+  }
+
+  /*
+   * Page banner, as every screen in the old app opened: a navy band with the
+   * title in caps, a badge saying what the screen is for, one line of
+   * explanation, and the actions on the right. The new screens had a thin
+   * grey strip instead, which is most of why they did not look like the
+   * same product.
+   */
+  .banner {
+    @apply bg-navy-head text-white rounded px-3 py-2 flex flex-wrap items-center
+           gap-x-3 gap-y-1 shrink-0;
+  }
+  .banner-title {
+    @apply text-[14px] font-bold uppercase tracking-wide text-amber-300;
+  }
+  .banner-badge {
+    @apply px-2 py-0.5 rounded text-[10px] font-semibold bg-white/15 text-white
+           border border-white/20 whitespace-nowrap;
+  }
+  .banner-sub { @apply w-full text-[11px] text-slate-300; }
+
   /* Page title block, as used across the old app's screens */
   .page-crumb {
     @apply text-[10px] uppercase tracking-wide text-gray-400;
