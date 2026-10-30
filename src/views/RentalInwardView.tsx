@@ -219,7 +219,7 @@ export function RentalInwardView() {
           <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
             <div className="md:col-span-2">
               <label className="label">Supplier</label>
-              <ComboBox value={head.supplierName} options={supplierOpts}
+              <ComboBox value={head.supplierName} options={supplierOpts} showAll={false}
                         placeholder="who it came from"
                         onChange={v => setHead(h => ({ ...h, supplierName: v }))} />
             </div>
@@ -270,7 +270,7 @@ export function RentalInwardView() {
                   <tr key={l.key} className="table-tr !cursor-default">
                     <td className="table-td text-gray-400">{i + 1}</td>
                     <td className="table-td">
-                      <ComboBox value={l.category} options={categoryOpts}
+                      <ComboBox value={l.category} options={categoryOpts} showAll={false}
                                 placeholder="category"
                                 onChange={v => setLine(l.key, { category: v })} />
                       {b === 'no-category' && (
@@ -281,7 +281,8 @@ export function RentalInwardView() {
                       )}
                     </td>
                     <td className="table-td">
-                      <ComboBox value={l.size} options={sizeOpts} placeholder="size"
+                      <ComboBox value={l.size} options={sizeOpts} showAll={false}
+                                placeholder="size"
                                 onChange={v => setLine(l.key, { size: v })} />
                     </td>
                     <td className="table-td">

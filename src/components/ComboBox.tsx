@@ -14,6 +14,13 @@ interface Props {
   options: ComboOption[]
   /** Shown when nothing is selected, and as the "no filter" row at the top. */
   allLabel?: string
+  /**
+   * The leading "All" row. It belongs on a filter bar, where clearing the
+   * choice means "show everything". On a data-entry grid it is a trap: the
+   * row sits at the top of the list and picking it silently blanks the
+   * field. Pass false there.
+   */
+  showAll?: boolean
   placeholder?: string
   disabled?: boolean
   className?: string
@@ -36,6 +43,7 @@ export function ComboBox({
   onChange,
   options,
   allLabel = 'All',
+  showAll = true,
   placeholder = 'Type to search…',
   disabled,
   className = '',
@@ -63,8 +71,9 @@ export function ComboBox({
     return [...starts, ...contains]
   }, [options, term])
 
-  // Rows include the "all" row at index 0, so the active index is offset by one.
-  const rowCount = filtered.length + 1
+  // The "all" row, when shown, sits at index 0 and offsets everything below it.
+  const offset   = showAll ? 1 : 0
+  const rowCount = filtered.length + offset
 
   useEffect(() => { setActive(0) }, [term, open])
 
@@ -103,9 +112,9 @@ export function ComboBox({
     } else if (e.key === 'Enter') {
       e.preventDefault()
       if (!open) { setOpen(true); return }
-      if (active === 0) choose('')
+      if (showAll && active === 0) choose('')
       else {
-        const o = filtered[active - 1]
+        const o = filtered[active - offset]
         if (o) choose(o.value)
       }
     } else if (e.key === 'Escape') {
@@ -149,15 +158,17 @@ export function ComboBox({
           className="absolute z-50 left-0 right-0 mt-0.5 max-h-72 overflow-auto bg-white
                      border border-gray-300 rounded shadow-lg text-[12px]"
         >
-          <div
-            data-row={0}
-            onMouseDown={e => { e.preventDefault(); choose('') }}
-            onMouseEnter={() => setActive(0)}
-            className={`px-2 py-1 cursor-pointer border-b border-gray-100 text-gray-500
-                        ${active === 0 ? 'bg-brand-50' : ''}`}
-          >
-            {allLabel}
-          </div>
+          {showAll && (
+            <div
+              data-row={0}
+              onMouseDown={e => { e.preventDefault(); choose('') }}
+              onMouseEnter={() => setActive(0)}
+              className={`px-2 py-1 cursor-pointer border-b border-gray-100 text-gray-500
+                          ${active === 0 ? 'bg-brand-50' : ''}`}
+            >
+              {allLabel}
+            </div>
+          )}
 
           {filtered.length === 0 ? (
             <div className="px-2 py-2 text-gray-400">No match</div>
@@ -165,11 +176,11 @@ export function ComboBox({
             filtered.map((o, i) => (
               <div
                 key={o.value}
-                data-row={i + 1}
+                data-row={i + offset}
                 onMouseDown={e => { e.preventDefault(); choose(o.value) }}
-                onMouseEnter={() => setActive(i + 1)}
+                onMouseEnter={() => setActive(i + offset)}
                 className={`px-2 py-1 cursor-pointer flex items-center gap-2
-                            ${active === i + 1 ? 'bg-brand-50' : ''}
+                            ${active === i + offset ? 'bg-brand-50' : ''}
                             ${o.value === value ? 'font-semibold text-brand-700' : ''}`}
               >
                 <span className="truncate">{o.label}</span>
