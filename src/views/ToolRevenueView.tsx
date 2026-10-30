@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Coins, AlertTriangle, PencilLine, RefreshCw } from 'lucide-react'
+import { Coins, AlertTriangle, PencilLine, RefreshCw, Building2 } from 'lucide-react'
 import { useFetch } from '../hooks/useFetch'
 import { PageLoader } from '../components/Spinner'
 import { Stat, Panel, Bar } from '../components/Stat'
@@ -33,6 +33,8 @@ interface Row {
   opsAmount: number; standbyAmount: number; amount: number
   unpricedDays: number; editedDays: number
   tools: number; jobs: number
+  subDays: number; cost: number; margin: number
+  unpricedSubDays: number; subDaysNoHireRecord: number
 }
 interface Payload {
   from: string; to: string
@@ -105,8 +107,51 @@ export function ToolRevenueView() {
               sub={t ? `across ${t.jobs} job(s)` : undefined} />
       </div>
 
+      {/* Sub-contractor cost sits apart from the revenue tiles above: it is a
+          different side of the ledger and mixing them in one row invites the
+          two to be read as comparable totals when one is money in and the
+          other money out. Shown only when hired-in tools were actually on
+          hire in the period. */}
+      {!!t?.subDays && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Stat label="Sub-contractor cost" value={money(t.cost)}
+                sub={`${t.subDays.toLocaleString()} hired-in tool-day(s)`}
+                icon={<Building2 size={22} className="text-blue-600" />} iconBg="bg-blue-100" />
+          <Stat label="Margin after hire cost" value={money(t.margin)}
+                tone={t.margin < 0 ? 'bad' : 'good'}
+                sub="revenue less what we pay their owners" />
+          <Stat label="Hired-in days with no rate" value={t.unpricedSubDays.toLocaleString()}
+                tone={t.unpricedSubDays ? 'warn' : 'default'}
+                sub={t.unpricedSubDays ? 'waiting in Pending Rental Costs' : undefined} />
+          <Stat label="Hired-in, no inward record" value={t.subDaysNoHireRecord.toLocaleString()}
+                tone={t.subDaysNoHireRecord ? 'warn' : 'default'}
+                sub={t.subDaysNoHireRecord ? 'nothing to price — needs a receipt' : undefined} />
+        </div>
+      )}
+
       {/* The honest caveat, stated before the numbers are read rather than
           buried under them. */}
+      {!!(t?.unpricedSubDays || t?.subDaysNoHireRecord) && (
+        <div className="card p-4 border-l-4 border-l-blue-400">
+          <p className="text-sm font-medium text-gray-900 flex items-center gap-2">
+            <AlertTriangle size={15} className="text-blue-600" />
+            The cost side is incomplete, so the margin above is flattering
+          </p>
+          <p className="text-sm text-gray-600 mt-1">
+            {!!t?.unpricedSubDays && <>
+              {t.unpricedSubDays.toLocaleString()} hired-in day(s) sit against a tool that
+              has been received but not yet priced — Billing sets those in Pending Rental
+              Costs, and doing so prices every past day of that hire at once.{' '}
+            </>}
+            {!!t?.subDaysNoHireRecord && <>
+              {t.subDaysNoHireRecord.toLocaleString()} day(s) are on a tool marked as someone
+              else's with no inward record at all, so there is nothing to price against it
+              until the receipt is entered.
+            </>}
+          </p>
+        </div>
+      )}
+
       {!!t?.unpricedDays && (
         <div className="card p-4 border-l-4 border-l-amber-400">
           <p className="text-sm font-medium text-gray-900 flex items-center gap-2">

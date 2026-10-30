@@ -78,12 +78,44 @@ module.exports = async function (context, req) {
          SUM(CASE WHEN d.RateCharged IS NULL THEN 1 ELSE 0 END)                      AS UnpricedDays,
          SUM(CASE WHEN d.RateSource  = 'Edited' THEN 1 ELSE 0 END)                   AS EditedDays,
          COUNT(DISTINCT d.ToolSerial)                                                AS Tools,
-         COUNT(DISTINCT d.JobID)                                                     AS Jobs`
+         COUNT(DISTINCT d.JobID)                                                     AS Jobs,
+         -- Sub-contractor cost. A hired-in tool earns at the client contract
+         -- rate like any other, but it also costs us the rate we pay its
+         -- owner, and that difference is the only margin figure in the app.
+         SUM(CASE WHEN i.IsEmdad = 0 THEN 1 ELSE 0 END)                              AS SubDays,
+         SUM(CASE WHEN i.IsEmdad = 0 THEN COALESCE(ri.dayRate, 0) ELSE 0 END)        AS CostAmount,
+         -- Two separate holes, counted apart because they need different
+         -- fixes: a hire that nobody has priced yet, and a sub-contracted
+         -- tool with no inward record at all to price.
+         SUM(CASE WHEN i.IsEmdad = 0 AND ri.id IS NOT NULL AND ri.dayRate IS NULL
+                  THEN 1 ELSE 0 END)                                                 AS UnpricedSubDays,
+         SUM(CASE WHEN i.IsEmdad = 0 AND ri.id IS NULL THEN 1 ELSE 0 END)             AS SubDaysNoHireRecord`
 
+  // The hire that covered this tool on this day.
+  //
+  // OUTER APPLY with TOP 1 rather than a LEFT JOIN: a tool can be hired in
+  // more than once, and a plain join would multiply the day across every
+  // hire and double-count both days and money.
+  //
+  // The rate is read here rather than stored on the log, because pricing
+  // happens after the fact - Stores receive the tool, Billing sets the rate
+  // days or weeks later. A cost written when the day was marked would be
+  // null for almost every row and would never correct itself; read this way,
+  // setting a rate prices all of that tool's past days at once.
   const joins = `
         FROM tbl_DailyFieldLogs d
         LEFT JOIN tbl_Inventory i ON i.SystemID = d.ToolSerial
-        LEFT JOIN tbl_Jobs      j ON j.JobID    = d.JobID`
+        LEFT JOIN tbl_Jobs      j ON j.JobID    = d.JobID
+        OUTER APPLY (
+          SELECT TOP 1 r.id, r.dayRate
+            FROM tbl_RentalInward r
+           WHERE (r.systemId = d.ToolSerial
+                  OR r.assetNo   = d.ToolSerial
+                  OR r.oemSerial = d.ToolSerial)
+             AND d.LogDate >= r.dateIn
+             AND (r.dateOut IS NULL OR d.LogDate <= r.dateOut)
+           ORDER BY r.dateIn DESC
+        ) ri`
 
   try {
     const [rows, totals, currencies] = await Promise.all([
@@ -118,6 +150,11 @@ module.exports = async function (context, req) {
         amount:        num(r.OpsAmount) + num(r.StandbyAmount),
         unpricedDays:  num(r.UnpricedDays),
         editedDays:    num(r.EditedDays),
+        subDays:       num(r.SubDays),
+        cost:          num(r.CostAmount),
+        margin:        num(r.OpsAmount) + num(r.StandbyAmount) - num(r.CostAmount),
+        unpricedSubDays:     num(r.UnpricedSubDays),
+        subDaysNoHireRecord: num(r.SubDaysNoHireRecord),
         tools:         num(r.Tools),
         jobs:          num(r.Jobs),
       })),
@@ -132,6 +169,11 @@ module.exports = async function (context, req) {
         tools:         num(t.Tools),
         jobs:          num(t.Jobs),
         days:          num(t.OpsDays) + num(t.StandbyDays),
+        subDays:       num(t.SubDays),
+        cost:          num(t.CostAmount),
+        margin:        num(t.OpsAmount) + num(t.StandbyAmount) - num(t.CostAmount),
+        unpricedSubDays:     num(t.UnpricedSubDays),
+        subDaysNoHireRecord: num(t.SubDaysNoHireRecord),
       },
       currencies: currencies.recordset.map(c => ({
         currency: c.Currency, days: num(c.Days), amount: num(c.Amount),
