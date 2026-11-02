@@ -24,6 +24,12 @@ interface Props {
   placeholder?: string
   disabled?: boolean
   className?: string
+  /**
+   * Classes for the input itself. A combo sitting in a grid cell needs to
+   * fill that cell with no edge of its own, so the row reads as a row of
+   * values; the default is the ordinary bordered field.
+   */
+  inputClassName?: string
 }
 
 /**
@@ -47,6 +53,7 @@ export function ComboBox({
   placeholder = 'Type to search…',
   disabled,
   className = '',
+  inputClassName = 'field-input pr-9',
 }: Props) {
   const [open, setOpen] = useState(false)
   const [term, setTerm] = useState('')
@@ -126,7 +133,7 @@ export function ComboBox({
   return (
     <div ref={boxRef} className={`relative ${className}`}>
       <input
-        className="field-input pr-9"
+        className={inputClassName}
         // While open the box is a search field; closed it shows the selection.
         value={open ? term : (selected?.label ?? '')}
         placeholder={selected ? selected.label : placeholder}

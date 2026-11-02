@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Plus, Search, RefreshCw, Undo2, Trash2, PackagePlus, AlertTriangle } from 'lucide-react'
+import { Plus, Search, RefreshCw, Undo2, Trash2, PackagePlus, AlertTriangle, ArrowLeft } from 'lucide-react'
 import { useFetch } from '../hooks/useFetch'
 import { api } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -202,45 +202,50 @@ export function RentalInwardView() {
     return (
       <div className="screen gap-1.5">
         <div className="screen-bar">
-          <span className="text-[13px] font-semibold text-navy-900">New third-party receipt</span>
+          {/* Back, not just Cancel. Cancel reads as "throw this away"; the
+              way out of a screen you opened by mistake should say so. */}
+          <button className="btn-mini" onClick={() => setAdding(false)}>
+            <ArrowLeft size={12} /> Back to register
+          </button>
           <span className="text-[11px] text-gray-500">
             Stores record what arrived — Billing adds the day rate afterwards
           </span>
-          <div className="ml-auto flex items-center gap-2">
-            <button className="btn-ghost" onClick={() => setAdding(false)}>Cancel</button>
-            <button className="btn-primary" disabled={busy} onClick={saveReceipt}>
-              Save receipt
-            </button>
-          </div>
+          <button className="btn-primary ml-auto" disabled={busy} onClick={saveReceipt}>
+            Save receipt
+          </button>
         </div>
 
         {/* Header — typed once for the whole delivery note */}
-        <div className="card p-2 shrink-0">
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-            <div className="md:col-span-2">
-              <label className="label">Supplier</label>
+        {/* Header: label beside its field in three columns, as the operator's
+            own receipt form reads. Reference data being read, not a form
+            filled top to bottom. */}
+        <div className="card px-3 py-2 shrink-0">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-1.5">
+            <div className="flex items-center">
+              <span className="sheet-label">Supplier</span>
               <ComboBox value={head.supplierName} options={supplierOpts} showAll={false}
+                        className="flex-1" inputClassName="sheet-field pr-7"
                         placeholder="who it came from"
                         onChange={v => setHead(h => ({ ...h, supplierName: v }))} />
             </div>
-            <div>
-              <label className="label">Their DN / ref</label>
-              <input className="field-input" value={head.rentalRef}
+            <div className="flex items-center">
+              <span className="sheet-label">Their DN</span>
+              <input className="sheet-field font-mono" value={head.rentalRef}
                      onChange={e => setHead(h => ({ ...h, rentalRef: e.target.value }))} />
             </div>
-            <div>
-              <label className="label">PO number</label>
-              <input className="field-input" value={head.poNumber}
+            <div className="flex items-center">
+              <span className="sheet-label">PO number</span>
+              <input className="sheet-field font-mono" value={head.poNumber}
                      onChange={e => setHead(h => ({ ...h, poNumber: e.target.value }))} />
             </div>
-            <div>
-              <label className="label">Date in</label>
-              <input type="date" className="field-input" value={head.dateIn}
+            <div className="flex items-center">
+              <span className="sheet-label">Date in</span>
+              <input type="date" className="sheet-field font-mono" value={head.dateIn}
                      onChange={e => setHead(h => ({ ...h, dateIn: e.target.value }))} />
             </div>
-            <div>
-              <label className="label">Expected back</label>
-              <input type="date" className="field-input" value={head.expectedOut}
+            <div className="flex items-center">
+              <span className="sheet-label">Expected back</span>
+              <input type="date" className="sheet-field font-mono" value={head.expectedOut}
                      onChange={e => setHead(h => ({ ...h, expectedOut: e.target.value }))} />
             </div>
           </div>
@@ -251,73 +256,77 @@ export function RentalInwardView() {
           <table className="w-full border-collapse">
             <thead className="sticky top-0 z-10">
               <tr>
-                <th className="table-th w-8">#</th>
-                <th className="table-th min-w-[170px]">Category</th>
-                <th className="table-th min-w-[110px]">Size</th>
-                <th className="table-th min-w-[120px]">Our asset no</th>
-                <th className="table-th min-w-[120px]">Their serial</th>
-                <th className="table-th min-w-[200px]">Description</th>
-                <th className="table-th w-16 !text-right">Qty</th>
-                <th className="table-th w-16 text-center">Insp</th>
-                <th className="table-th min-w-[110px]">Goes to</th>
-                <th className="table-th w-8"></th>
+                <th className="sheet-th w-9 !text-center">#</th>
+                <th className="sheet-th min-w-[180px]">Category</th>
+                <th className="sheet-th min-w-[110px]">Size</th>
+                <th className="sheet-th min-w-[130px]">Our asset no</th>
+                <th className="sheet-th min-w-[130px]">Their serial</th>
+                <th className="sheet-th min-w-[220px]">Description</th>
+                <th className="sheet-th w-16 !text-right">Qty</th>
+                <th className="sheet-th w-14 !text-center">Insp</th>
+                <th className="sheet-th min-w-[120px]">Goes to</th>
+                <th className="sheet-th w-9"></th>
               </tr>
             </thead>
             <tbody>
               {lines.map((l, i) => {
                 const b = billable(l)
                 return (
-                  <tr key={l.key} className="table-tr !cursor-default">
-                    <td className="table-td text-gray-400">{i + 1}</td>
-                    <td className="table-td">
+                  <tr key={l.key} className="sheet-row">
+                    <td className="sheet-num">{i + 1}</td>
+                    <td className="sheet-td">
                       <ComboBox value={l.category} options={categoryOpts} showAll={false}
+                                inputClassName="sheet-input pr-6"
                                 placeholder="category"
                                 onChange={v => setLine(l.key, { category: v })} />
-                      {b === 'no-category' && (
-                        <span className="text-[10px] text-amber-700">no contract prices this category</span>
-                      )}
-                      {b === 'no-size' && (
-                        <span className="text-[10px] text-amber-700">no rate for this size</span>
+                      {(b === 'no-category' || b === 'no-size') && (
+                        <span className="block px-3 pb-1 text-[10px] text-amber-700">
+                          {b === 'no-category'
+                            ? 'no contract prices this category'
+                            : 'no rate for this size'}
+                        </span>
                       )}
                     </td>
-                    <td className="table-td">
+                    <td className="sheet-td">
                       <ComboBox value={l.size} options={sizeOpts} showAll={false}
+                                inputClassName="sheet-input pr-6"
                                 placeholder="size"
                                 onChange={v => setLine(l.key, { size: v })} />
                     </td>
-                    <td className="table-td">
-                      <input className="field-input table-ref" value={l.assetNo}
+                    <td className="sheet-td">
+                      <input className="sheet-input font-mono" value={l.assetNo}
                              placeholder="what we call it"
                              onChange={e => setLine(l.key, { assetNo: e.target.value })} />
                     </td>
-                    <td className="table-td">
-                      <input className="field-input table-ref" value={l.oemSerial}
+                    <td className="sheet-td">
+                      <input className="sheet-input font-mono" value={l.oemSerial}
                              onChange={e => setLine(l.key, { oemSerial: e.target.value })} />
                     </td>
-                    <td className="table-td">
-                      <input className="field-input" value={l.description}
+                    <td className="sheet-td">
+                      <input className="sheet-input" value={l.description}
                              onChange={e => setLine(l.key, { description: e.target.value })} />
                     </td>
-                    <td className="table-td">
-                      <input type="number" min={1} className="field-input text-right" value={l.qty}
+                    <td className="sheet-td">
+                      <input type="number" min={1} className="sheet-input font-mono text-right"
+                             value={l.qty}
                              onChange={e => setLine(l.key, { qty: e.target.value })} />
                     </td>
-                    <td className="table-td text-center">
+                    <td className="sheet-td text-center">
                       <input type="checkbox" checked={l.requiresInspection}
                              onChange={e => setLine(l.key, { requiresInspection: e.target.checked })} />
                     </td>
-                    <td className="table-td">
-                      <select className="field-input" value={l.destination}
+                    <td className="sheet-td">
+                      <select className="sheet-input" value={l.destination}
                               onChange={e => setLine(l.key, { destination: e.target.value })}>
                         <ListOptions name="GRNDestination" current={l.destination} />
                       </select>
                     </td>
-                    <td className="table-td">
+                    <td className="sheet-td text-center">
                       {lines.length > 1 && (
-                        <button className="text-gray-300 hover:text-red-600"
+                        <button className="text-slate-300 hover:text-red-600"
                                 title="Remove this line"
                                 onClick={() => setLines(ls => ls.filter(x => x.key !== l.key))}>
-                          <Trash2 size={13} />
+                          <Trash2 size={12} />
                         </button>
                       )}
                     </td>
