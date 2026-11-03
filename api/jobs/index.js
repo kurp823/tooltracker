@@ -693,12 +693,21 @@ module.exports = safe(async function (context, req) {
 
   // ── GET /api/jobs/{id}/personnel ──────────────────────────────────────────
   if (method === 'GET' && sub === 'personnel') {
+    const p = [{ name: 'id', type: sql.NVarChar, value: jobId }]
     try {
-      const result = await query(
-        `SELECT * FROM tbl_JobPersonnel WHERE JobID = @id ORDER BY MobDate`,
-        [{ name: 'id', type: sql.NVarChar, value: jobId }]
-      )
-      return jsonResponse(context, 200, result.recordset)
+      // Register details (badge, type, company) come along when the register
+      // exists; before anyone has used it, the plain job rows are returned.
+      let rows
+      try {
+        rows = (await query(
+          `SELECT jp.*, r.BadgeNo, r.PersonType, r.Company, r.RigPassNo, r.H2SExpiry
+             FROM tbl_JobPersonnel jp
+             LEFT JOIN tbl_Personnel r ON r.PersonnelID = jp.PersonnelID
+            WHERE jp.JobID = @id ORDER BY jp.MobDate`, p)).recordset
+      } catch {
+        rows = (await query(`SELECT * FROM tbl_JobPersonnel WHERE JobID = @id ORDER BY MobDate`, p)).recordset
+      }
+      return jsonResponse(context, 200, rows)
     } catch (err) {
       context.log.error(err)
       return jsonResponse(context, 500, { error: 'Failed to load personnel' })
@@ -706,30 +715,50 @@ module.exports = safe(async function (context, req) {
   }
 
   // ── POST /api/jobs/{id}/personnel ─────────────────────────────────────────
+  // Crew is picked from the personnel register (api/personnel), never typed.
+  // Body: { PersonnelID, MobDate?, DemobDate?, Notes? } - or an array of
+  // them to mobilise several people at once.
   if (method === 'POST' && sub === 'personnel') {
     if (!['Admin', 'Operations'].includes(user.Role)) {
       return jsonResponse(context, 403, { error: 'Insufficient permissions' })
     }
     if (await blockIfLocked(context, jobId)) return
-    const b = req.body || {}
+    const list = Array.isArray(req.body) ? req.body : [req.body || {}]
     try {
-      await query(
-        `INSERT INTO tbl_JobPersonnel (JobID, UserID, Name, Role, MobDate, DemobDate, Notes)
-         VALUES (@job, @uid, @name, @role, @mob, @demob, @notes)`,
-        [
-          { name: 'job',   type: sql.NVarChar, value: jobId },
-          { name: 'uid',   type: sql.Int,      value: b.UserID   || null },
-          { name: 'name',  type: sql.NVarChar, value: b.Name     || null },
-          { name: 'role',  type: sql.NVarChar, value: b.Role     || null },
-          { name: 'mob',   type: sql.Date,     value: b.MobDate  ? new Date(b.MobDate)  : null },
-          { name: 'demob', type: sql.Date,     value: b.DemobDate? new Date(b.DemobDate): null },
-          { name: 'notes', type: sql.NVarChar, value: b.Notes    || null },
-        ]
-      )
-      return jsonResponse(context, 201, { success: true })
+      await query(`IF COL_LENGTH('dbo.tbl_JobPersonnel', 'PersonnelID') IS NULL
+                     ALTER TABLE dbo.tbl_JobPersonnel ADD PersonnelID int NULL`)
+      let added = 0; const skipped = []
+      for (const b of list) {
+        const pid = Number(b.PersonnelID)
+        if (!pid) return jsonResponse(context, 400, { error: 'Choose people from the personnel register (PersonnelID required)' })
+        const p = await query(
+          `SELECT Name, Designation, Active FROM tbl_Personnel WHERE PersonnelID = @p`, [{ name: 'p', value: pid }])
+        if (!p.recordset.length || !p.recordset[0].Active)
+          return jsonResponse(context, 400, { error: `Person ${pid} is not in the register` })
+        // Already on this job and not demobilised: refuse rather than duplicate.
+        const dup = await query(
+          `SELECT TOP 1 id FROM tbl_JobPersonnel WHERE JobID = @job AND PersonnelID = @p AND DemobDate IS NULL`,
+          [{ name: 'job', type: sql.NVarChar, value: jobId }, { name: 'p', value: pid }])
+        if (dup.recordset.length) { skipped.push(p.recordset[0].Name); continue }
+        await query(
+          `INSERT INTO tbl_JobPersonnel (JobID, UserID, PersonnelID, Name, Role, MobDate, DemobDate, Notes)
+           VALUES (@job, NULL, @p, @name, @role, @mob, @demob, @notes)`,
+          [
+            { name: 'job',   type: sql.NVarChar, value: jobId },
+            { name: 'p',     value: pid },
+            { name: 'name',  type: sql.NVarChar, value: p.recordset[0].Name },
+            { name: 'role',  type: sql.NVarChar, value: b.Role || p.recordset[0].Designation || null },
+            { name: 'mob',   type: sql.Date,     value: b.MobDate  ? new Date(b.MobDate)  : new Date() },
+            { name: 'demob', type: sql.Date,     value: b.DemobDate? new Date(b.DemobDate): null },
+            { name: 'notes', type: sql.NVarChar, value: b.Notes    || null },
+          ]
+        )
+        added++
+      }
+      return jsonResponse(context, 201, { success: true, added, alreadyOnJob: skipped })
     } catch (err) {
       context.log.error(err)
-      return jsonResponse(context, 500, { error: 'Failed to add personnel' })
+      return jsonResponse(context, 500, { error: 'Failed to add personnel', detail: err.message })
     }
   }
 
