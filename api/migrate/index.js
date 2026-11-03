@@ -816,6 +816,18 @@ const MIGRATIONS = [
       UPDATE dbo.tbl_GatePass SET Direction = 'Outward' WHERE Direction IS NULL;
       UPDATE dbo.tbl_GatePass SET Status    = 'Draft'   WHERE Status    IS NULL;`,
   },
+  {
+    name: 'seed:gate-pass-lists',
+    sql: `
+      DECLARE @v TABLE (ListName varchar(50), Value varchar(50), SortOrder int);
+      INSERT INTO @v VALUES
+        ('GatePassPurpose','Repair',1), ('GatePassPurpose','Return to Supplier',2), ('GatePassPurpose','Other',3),
+        ('GatePassStatus','Draft',1), ('GatePassStatus','Released',2), ('GatePassStatus','Closed',3);
+      INSERT INTO dbo.tbl_Lists (ListName, Value, Label, SortOrder, ActiveFlag, IsSystem, UpdatedAt, UpdatedBy)
+      SELECT v.ListName, v.Value, v.Value, v.SortOrder, 1, 1, GETDATE(), 'migrate'
+        FROM @v v
+       WHERE NOT EXISTS (SELECT 1 FROM dbo.tbl_Lists l WHERE l.ListName = v.ListName AND l.Value = v.Value);`,
+  },
 ]
 
 module.exports = safe(async function (context, req) {

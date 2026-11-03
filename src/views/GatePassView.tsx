@@ -7,6 +7,7 @@ import {
 import { useRealtimeFetch } from '../hooks/useRealtimeFetch'
 import { useFetch }         from '../hooks/useFetch'
 import { useAuth }          from '../contexts/AuthContext'
+import { useListValues }    from '../contexts/ListsContext'
 import { useToast }         from '../components/Toast'
 import { api }              from '../utils/api'
 import { formatDate }       from '../utils/format'
@@ -66,8 +67,9 @@ interface OutwardGP {
   UnreturnedTools: number
 }
 
-const PURPOSES = ['Repair', 'Return to Supplier', 'Other']
-const STATUSES = ['Draft', 'Released', 'Closed']
+// Purpose and Status options come from tbl_Lists (GatePassPurpose / GatePassStatus),
+// editable in Settings -> Lists. The values are seeded as system values because the
+// outward-open filter and status logic branch on them.
 
 // ─── Tool Picker — from inventory ────────────────────────────────────────────
 
@@ -218,6 +220,7 @@ function CreateGPModal({
   onCreated: () => void
 }) {
   const { success, error: toastErr } = useToast()
+  const PURPOSES = useListValues('GatePassPurpose')
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     Direction: 'Outward' as 'Outward' | 'Inward',
@@ -388,6 +391,8 @@ function GPDetailPanel({
   const { hasRole } = useAuth()
   const { success, error: toastErr } = useToast()
   const canEdit = hasRole('Admin', 'Operations')
+  const PURPOSES = useListValues('GatePassPurpose', gp.Purpose)
+  const STATUSES = useListValues('GatePassStatus', gp.Status)
 
   const isOutward = gp.Direction === 'Outward'
   const isInward  = gp.Direction === 'Inward'
@@ -632,6 +637,7 @@ function GPDetailPanel({
 // ─── Main View — Register ────────────────────────────────────────────────────
 
 export function GatePassView() {
+  const STATUSES = useListValues('GatePassStatus')
   const { hasRole } = useAuth()
   const [search,     setSearch]     = useState('')
   const [direction,  setDirection]  = useState('All')
