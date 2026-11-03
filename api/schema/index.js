@@ -1,5 +1,5 @@
 'use strict'
-const { sql, query, jsonResponse, requireAuth } = require('../db')
+const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
 
 /**
  * GET /api/schema            — every table with its row count
@@ -11,7 +11,7 @@ const { sql, query, jsonResponse, requireAuth } = require('../db')
  * deploy is unworkable. It reads INFORMATION_SCHEMA only — never row data —
  * so it exposes structure and counts, not records.
  */
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
   if (user.Role !== 'Admin') {
@@ -86,4 +86,4 @@ module.exports = async function (context, req) {
     context.log.error('Schema inspect error:', err)
     return jsonResponse(context, 500, { error: 'Failed to read schema', detail: err.message })
   }
-}
+})

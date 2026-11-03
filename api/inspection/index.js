@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth } = require('../db')
+const { query, jsonResponse, requireAuth, safe } = require('../db')
 
 // NOTE: the table this code originally assumed, `tbl_Inspections`, does
 // not exist. There are two real candidates — `tbl_Inspection` (tied to a
@@ -17,7 +17,7 @@ const { query, jsonResponse, requireAuth } = require('../db')
 //   findings, actions, qcApprovedBy, qcApprovedDate, vendorOrderRef, cost,
 //   status, attachmentRef, notes, createdBy, createdAt, updatedAt
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user   = requireAuth(context, req)
   if (!user) return
 
@@ -108,4 +108,4 @@ module.exports = async function (context, req) {
   }
 
   return jsonResponse(context, 405, { error: 'Method not allowed' })
-}
+})

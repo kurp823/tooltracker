@@ -5,7 +5,7 @@
  * PUT    /api/users/{id}             — update user (Admin only)
  * POST   /api/users/change-password  — change own password
  */
-const { sql, query, jsonResponse, requireAuth } = require('../db')
+const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
 const bcrypt = require('bcryptjs')
 const crypto = require('crypto')
 
@@ -28,7 +28,7 @@ function generateActivationCode() {
   return `${out.slice(0, 4)}-${out.slice(4)}`
 }
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user   = requireAuth(context, req)
   if (!user) return
 
@@ -177,4 +177,4 @@ module.exports = async function (context, req) {
   }
 
   jsonResponse(context, 405, { error: 'Method not allowed' })
-}
+})

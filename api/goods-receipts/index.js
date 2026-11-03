@@ -1,5 +1,5 @@
 'use strict'
-const { sql, query, jsonResponse, requireAuth } = require('../db')
+const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
 const { refreshStatus } = require('../po-status')
 
 /**
@@ -47,7 +47,7 @@ async function headerById (id) {
   return r.recordset[0] || null
 }
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
 
@@ -384,4 +384,4 @@ module.exports = async function (context, req) {
     context.log.error('Goods receipts error:', err)
     return jsonResponse(context, 500, { error: 'Goods receipt operation failed', detail: err.message })
   }
-}
+})

@@ -172,4 +172,23 @@ function jobKeyOf(value) {
   return s
 }
 
-module.exports = { sql, getPool, query, jsonResponse, verifyToken, requireAuth, jobKey, jobKeyOf }
+/**
+ * Wrap a function handler so an unexpected error (bad column, timeout, lost
+ * connection) comes back as a JSON 500 with a message, instead of an empty
+ * 500 body that the screen can only show as "Request failed". Handlers that
+ * already catch their own errors are unaffected.
+ */
+function safe(handler) {
+  return async function (context, req) {
+    try {
+      return await handler(context, req)
+    } catch (err) {
+      context.log.error(`[${context.executionContext && context.executionContext.functionName}] unhandled:`, err)
+      if (!context.res || !context.res.status || context.res.status < 400) {
+        jsonResponse(context, 500, { error: 'Server error', detail: err && err.message })
+      }
+    }
+  }
+}
+
+module.exports = { sql, getPool, query, jsonResponse, verifyToken, requireAuth, jobKey, jobKeyOf, safe }

@@ -1,5 +1,5 @@
 'use strict'
-const { sql, query, jsonResponse, requireAuth, jobKey } = require('../db')
+const { sql, query, jsonResponse, requireAuth, jobKey, safe } = require('../db')
 const { ORDER, STAGES, WINDOWED, runStage } = require('./apply')
 
 /**
@@ -33,7 +33,7 @@ function text(v) {
   return (s === 'nan' || s === 'NaN' || s === 'undefined' || s === 'null') ? '' : s
 }
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
   if (user.Role !== 'Admin') return jsonResponse(context, 403, { error: 'Admin only' })
@@ -410,4 +410,4 @@ module.exports = async function (context, req) {
   }
 
   return jsonResponse(context, 404, { error: 'Unknown import-dtrt route' })
-}
+})

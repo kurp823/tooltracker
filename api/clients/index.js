@@ -14,9 +14,9 @@
  * real counterpart and comes back null; "ShortName" is mapped to the
  * real clientCode column.)
  */
-const { sql, query, jsonResponse, requireAuth } = require('../db')
+const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
 
@@ -100,4 +100,4 @@ module.exports = async function (context, req) {
   }
 
   jsonResponse(context, 405, { error: 'Method not allowed' })
-}
+})

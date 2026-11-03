@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, jobKey, jobKeyOf } = require('../db')
+const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe } = require('../db')
 
 // Real tbl_ReceivingTickets columns (confirmed via INFORMATION_SCHEMA):
 //   id, rtNumber, jobNumber, linkedDtNumber, clientCode, receivingDate,
@@ -84,7 +84,7 @@ async function setInventoryStatus(key, status, location) {
   }
 }
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
 
@@ -517,4 +517,4 @@ module.exports = async function (context, req) {
   }
 
   return jsonResponse(context, 405, { error: 'Method not allowed' })
-}
+})

@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, jobKey } = require('../db')
+const { query, jsonResponse, requireAuth, jobKey, safe } = require('../db')
 
 /*
  * Strip an invoice-revision suffix from a raw job id.
@@ -1116,7 +1116,7 @@ const CHECKS = [
   },
 ]
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
   if (user.Role !== 'Admin') return jsonResponse(context, 403, { error: 'Admin only' })
@@ -1137,4 +1137,4 @@ module.exports = async function (context, req) {
   }
 
   return jsonResponse(context, 200, results)
-}
+})

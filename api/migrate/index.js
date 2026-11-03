@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, jobKey } = require('../db')
+const { query, jsonResponse, requireAuth, jobKey, safe } = require('../db')
 
 /**
  * POST /api/migrate  — create missing tables (Admin only, idempotent)
@@ -818,7 +818,7 @@ const MIGRATIONS = [
   },
 ]
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
   if (user.Role !== 'Admin') {
@@ -885,4 +885,4 @@ module.exports = async function (context, req) {
   }
 
   return jsonResponse(context, 200, { results })
-}
+})

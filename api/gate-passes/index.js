@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth } = require('../db')
+const { query, jsonResponse, requireAuth, safe } = require('../db')
 
 // tbl_GatePass columns (after migration seed:gate-pass-columns):
 //   GatePassID (varchar PK), GPNumber, Supplier, GPDate,
@@ -16,7 +16,7 @@ const { query, jsonResponse, requireAuth } = require('../db')
 //  - Return to Supplier: one-way out — no inward GP expected
 //  - OriginalSupplier on lines is looked up from tbl_Inventory when adding a tool
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
 
@@ -255,4 +255,4 @@ module.exports = async function (context, req) {
   }
 
   return jsonResponse(context, 405, { error: 'Method not allowed' })
-}
+})

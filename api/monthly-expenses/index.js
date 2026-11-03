@@ -1,5 +1,5 @@
 'use strict'
-const { sql, query, jsonResponse, requireAuth } = require('../db')
+const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
 
 /**
  * Monthly expenses, and the P&L they complete.
@@ -26,7 +26,7 @@ const VIEWERS = ['Admin', 'Finance', 'Billing', 'Operations', 'CostController']
 
 const thisPeriod = () => new Date().toISOString().slice(0, 7)
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
   if (!VIEWERS.includes(user.Role))
@@ -200,4 +200,4 @@ module.exports = async function (context, req) {
     context.log.error('Monthly expenses error:', err)
     return jsonResponse(context, 500, { error: 'Monthly expenses operation failed', detail: err.message })
   }
-}
+})

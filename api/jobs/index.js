@@ -13,7 +13,7 @@
  * POST   /api/jobs/{id}/personnel  — add person
  * DELETE /api/jobs/{id}/personnel/{pid} — remove person
  */
-const { sql, query, jsonResponse, requireAuth, jobKey } = require('../db')
+const { sql, query, jsonResponse, requireAuth, jobKey, safe } = require('../db')
 
 /**
  * A finished job is read-only.
@@ -124,7 +124,7 @@ async function toolsStillOut (sourceJobId) {
   return r.recordset
 }
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
 
@@ -693,4 +693,4 @@ module.exports = async function (context, req) {
   }
 
   jsonResponse(context, 405, { error: 'Method not allowed' })
-}
+})

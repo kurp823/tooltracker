@@ -1,5 +1,5 @@
 'use strict'
-const { sql, query, jsonResponse, requireAuth } = require('../db')
+const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
 
 /**
  * GET /api/tool-history
@@ -52,7 +52,7 @@ function jobIdVariants(raw) {
   return [...variants].slice(0, 12)
 }
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
 
@@ -171,4 +171,4 @@ module.exports = async function (context, req) {
     context.log.error('Tool history error:', err)
     return jsonResponse(context, 500, { error: 'Failed to load tool history', detail: err.message })
   }
-}
+})

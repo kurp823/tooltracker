@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth } = require('../db')
+const { query, jsonResponse, requireAuth, safe } = require('../db')
 
 /**
  * Dropdown values, held in the database so a user can add one without a
@@ -43,7 +43,7 @@ const shape = (r) => ({
   notes:     r.Notes || null,
 })
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
 
@@ -229,4 +229,4 @@ module.exports = async function (context, req) {
   }
 
   return jsonResponse(context, 405, { error: 'Method not allowed' })
-}
+})

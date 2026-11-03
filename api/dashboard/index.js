@@ -7,7 +7,7 @@
  * live DB schema has drifted from what some endpoints assume, and a single
  * combined SELECT meant one invalid column blanked the entire page.
  */
-const { query, jsonResponse, requireAuth } = require('../db')
+const { query, jsonResponse, requireAuth, safe } = require('../db')
 
 /** Run a scalar COUNT query; never throws. Returns { value, error }. */
 async function scalar(sqlText) {
@@ -21,7 +21,7 @@ async function scalar(sqlText) {
   }
 }
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
 
@@ -83,4 +83,4 @@ module.exports = async function (context, req) {
   if (Object.keys(issues).length) body._schemaIssues = issues
 
   return jsonResponse(context, 200, body)
-}
+})
