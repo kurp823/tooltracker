@@ -979,9 +979,9 @@ function DTHeaderTab({
                   ) : lines.map((line, idx) => (
                     <tr key={line.LineID} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-3 py-[5px] text-[12px] text-gray-400 tabular-nums">{idx + 1}</td>
-                      <td className="px-3 py-[5px] text-[12.5px] font-mono font-semibold text-gray-900 whitespace-nowrap">{line.AssetNo || '—'}</td>
-                      <td className="px-3 py-[5px] text-[12.5px] font-medium text-gray-800 tracking-normal">{line.ToolDescription}</td>
-                      <td className="px-3 py-[5px] text-[12.5px] text-center font-mono tabular-nums text-gray-800">{line.Quantity}</td>
+                      <td className="px-3 py-[5px] text-[12px] font-mono font-medium text-slate-900 whitespace-nowrap">{line.AssetNo || '—'}</td>
+                      <td className="px-3 py-[5px] text-[12px] text-slate-800">{line.ToolDescription}</td>
+                      <td className="px-3 py-[5px] text-[12px] text-center font-mono tabular-nums text-slate-800">{line.Quantity}</td>
                       <td className="px-3 py-[5px] text-[12px] text-gray-500">{line.Notes || '—'}</td>
                       {canEdit && (
                         <td className="table-td">

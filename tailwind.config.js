@@ -39,7 +39,10 @@ export default {
         canvas: '#eef3f8',
       },
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', 'Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
+        // The previous app never loaded Plus Jakarta Sans, so its text rendered in the
+        // operating system's UI font (SF Pro / Segoe UI). That is the crisp look being
+        // matched, so the system stack comes first.
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'system-ui', 'sans-serif'],
       },
     },
   },
