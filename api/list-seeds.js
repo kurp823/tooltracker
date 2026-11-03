@@ -9,6 +9,8 @@ const { query } = require('./db')
 const SEEDS = {
   BillingStatus: ['Draft', 'In Billing', 'Draft Invoiced', 'SES Submitted',
                   'Draft Invoice Under Approval', 'Final Invoiced', 'On Hold'],
+  // How a sub-contractor charges for a hire. Quantity is days, months or 1.
+  SubContractBasis: ['Day rate', 'Monthly rate', 'Lump sum'],
   CrewDesignation: ['Supervisor', 'Tool Pusher', 'Fishing Supervisor', 'Operator',
                     'Technician', 'Rigger', 'Workshop Coordinator', 'Engineer'],
 }

@@ -14,7 +14,7 @@ import { formatDate } from '../utils/format'
 /*
  * Sub-contract POs & Accruals.
  *
- * A hired-in tool is paid for after the job, on the days it actually worked.
+ * A hired-in tool is paid for after the job, on what was agreed for the hire.
  * The final PO is raised when the job is complete and the supplier invoices
  * against it, so between the first day a tool works and the invoice landing
  * the cost is an accrual. This screen is the answer to two questions:
@@ -22,15 +22,15 @@ import { formatDate } from '../utils/format'
  *   - which POs are still to be issued to a sub-contractor?
  *   - which supplier invoices are still to arrive against an accrual?
  *
- * The accrued figure is worked out by the server from the marked days and the
- * day rate held for each tool - it is not typed here. Only the paperwork is:
+ * The accrued figure is the settlement agreed for each tool on the job (how it
+ * is charged, quantity, rate), set in the job's Sub-contract tab - it is not typed here. Only the paperwork is:
  * PO number and date, supplier invoice number, date and amount.
  */
 
 interface Row {
   supplierName: string; jobId: string; client: string | null; rig: string | null
   jobStatus: string | null; jobDone: boolean
-  tools: number; days: number; accrued: number; unpricedDays: number
+  tools: number; days: number; accrued: number; unsettled: number
   currency: string | null; firstDay: string | null; lastDay: string | null
   poNumber: string | null; poDate: string | null
   invoiceNo: string | null; invoiceDate: string | null; invoiceAmount: number | null
@@ -85,8 +85,8 @@ export function SubAccrualsView() {
     const v = Object.entries(counts[s]?.value || {}).filter(([, x]) => x > 0)
     return v.length ? v.map(([c, x]) => `${num(x)} ${c}`).join(' · ') : 'nothing accrued'
   }
-  const unpriced = rows.reduce((a, r) => a + (r.unpricedDays || 0), 0)
-  const unpricedRows = rows.filter(r => r.unpricedDays > 0).length
+  const unsettled = rows.reduce((a, r) => a + (r.unsettled || 0), 0)
+  const unsettledRows = rows.filter(r => r.unsettled > 0).length
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -101,9 +101,9 @@ export function SubAccrualsView() {
 
   function exportXlsx() {
     const head = ['Supplier', 'Job', 'Client', 'Job status', 'Stage', 'Tools', 'Days', 'Accrued', 'Currency',
-                  'Unpriced days', 'PO number', 'PO date', 'Invoice no', 'Invoice date', 'Invoice amount', 'Invoice less accrual']
+                  'Tools to settle', 'PO number', 'PO date', 'Invoice no', 'Invoice date', 'Invoice amount', 'Invoice less accrual']
     const aoa = [head, ...filtered.map(r => [r.supplierName, r.jobId, r.client || '', r.jobStatus || '', r.stage, r.tools, r.days,
-      Number(r.accrued || 0), r.currency || '', r.unpricedDays, r.poNumber || '', day(r.poDate), r.invoiceNo || '',
+      Number(r.accrued || 0), r.currency || '', r.unsettled, r.poNumber || '', day(r.poDate), r.invoiceNo || '',
       day(r.invoiceDate), r.invoiceAmount ?? '', r.invoiceAmount != null ? Number(r.invoiceAmount) - Number(r.accrued || 0) : ''])]
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet(aoa)
@@ -127,11 +127,11 @@ export function SubAccrualsView() {
         ))}
       </div>
 
-      {unpriced > 0 && (
+      {unsettled > 0 && (
         <div className="shrink-0">
-          <Notice title={`${unpriced.toLocaleString()} days on hired-in tools have no day rate (${unpricedRows} supplier/job lines)`}>
-            Those days are counted but add nothing to the accrual, so the figures below are lower than the real cost.
-            Set the rate from the job's Utilization → Sub-contract tab, or from Pending Rental Costs.
+          <Notice title={`${unsettled.toLocaleString()} hired-in tools have no agreed charge yet (${unsettledRows} supplier/job lines)`}>
+            Their cost is not in the accrual, so the figures below are lower than the real cost.
+            Settle each one in the job's Utilization → Sub-contract tab: how it is charged, the quantity and the rate.
           </Notice>
         </div>
       )}
@@ -198,7 +198,7 @@ export function SubAccrualsView() {
                   <td className="table-td !text-right tabular-nums">{r.days}</td>
                   <td className="table-td !text-right tabular-nums font-medium">
                     {num(r.accrued)}
-                    {r.unpricedDays > 0 && <span className="ml-1 text-amber-600 text-[11px]" title={`${r.unpricedDays} days with no day rate`}>+{r.unpricedDays}d unpriced</span>}
+                    {r.unsettled > 0 && <span className="ml-1 text-amber-600 text-[11px]" title={`${r.unsettled} tool(s) not settled yet`}>{r.unsettled} to settle</span>}
                   </td>
                   <td className="table-td text-slate-400">{r.currency || '—'}</td>
                   <td className="table-td font-mono text-slate-600">{r.poNumber || <span className="text-slate-300">—</span>}</td>
@@ -254,7 +254,7 @@ function PaperworkModal({ row, canEdit, onClose, onSaved }: {
             <h3 className="font-semibold text-gray-900">{row.supplierName} · <span className="font-mono">{row.jobId}</span></h3>
             <p className="text-[12px] text-slate-500 mt-0.5">
               {row.tools} tool{row.tools === 1 ? '' : 's'} · {row.days} days · accrued <b className="text-slate-800">{num(row.accrued)} {row.currency || ''}</b>
-              {row.unpricedDays > 0 && <span className="text-amber-700"> (+{row.unpricedDays} days with no rate)</span>}
+              {row.unsettled > 0 && <span className="text-amber-700"> ({row.unsettled} tool{row.unsettled === 1 ? '' : 's'} still to settle)</span>}
             </p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
