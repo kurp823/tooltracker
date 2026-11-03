@@ -1,5 +1,6 @@
 'use strict'
 const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
+const { ensureLines, ownerSql, sheetApply, amountSql } = require('../sub-lines')
 
 /**
  * Sub-contract POs and accruals.
@@ -26,7 +27,7 @@ const EDITORS = ['Admin', 'Billing', 'Finance', 'CostController']
 let ready = null
 function ensureTable() {
   if (!ready) {
-    ready = require('../sub-lines').ensureLines().then(() => query(`
+    ready = ensureLines().then(() => query(`
       IF OBJECT_ID('dbo.tbl_SubContractPOs', 'U') IS NULL
       BEGIN
         CREATE TABLE dbo.tbl_SubContractPOs (
@@ -75,20 +76,22 @@ module.exports = safe(async function (context, req) {
                   MIN(x.firstDay)        AS firstDay,
                   MAX(x.lastDay)         AS lastDay
              FROM (
-               SELECT d.JobID AS jobId, d.ToolSerial AS tool,
-                      COUNT(*) AS days, MIN(d.LogDate) AS firstDay, MAX(d.LogDate) AS lastDay,
-                      CASE WHEN NULLIF(LTRIM(RTRIM(i.Ownership)), '') IS NOT NULL AND UPPER(LTRIM(RTRIM(i.Ownership))) NOT IN ('RENTED','EMDAD')
-                           THEN LTRIM(RTRIM(i.Ownership))
-                           WHEN NULLIF(LTRIM(RTRIM(i.Supplier)), '') IS NOT NULL AND UPPER(LTRIM(RTRIM(i.Supplier))) <> 'EMDAD'
-                           THEN LTRIM(RTRIM(i.Supplier))
-                           ELSE 'Unknown supplier' END AS supplier,
-                      MAX(l.amount) AS amount, MAX(l.currency) AS cur
-                 FROM tbl_DailyFieldLogs d
-                 JOIN tbl_Inventory i ON i.SystemID = d.ToolSerial AND i.IsEmdad = 0
-                  AND NOT (UPPER(COALESCE(i.Ownership, '')) = 'EMDAD' AND UPPER(COALESCE(i.Supplier, '')) IN ('EMDAD', ''))
-                 LEFT JOIN tbl_SubContractLines l ON l.jobId = d.JobID AND l.toolSerial = d.ToolSerial
-                WHERE d.StatusType IN ('1','S')
-                GROUP BY d.JobID, d.ToolSerial, i.Ownership, i.Supplier
+               SELECT t.jobId, t.tool, t.days, t.firstDay, t.lastDay, t.supplier,
+                      ${amountSql('t.days')} AS amount,
+                      COALESCE(l.currency, sh.sheetCurrency) AS cur
+                 FROM (
+                   SELECT d.JobID AS jobId, d.ToolSerial AS tool,
+                          COUNT(*) AS days, MIN(d.LogDate) AS firstDay, MAX(d.LogDate) AS lastDay,
+                          ${ownerSql('i')} AS supplier, i.ShortDesc AS category, i.Size AS size, j.Contract AS contract
+                     FROM tbl_DailyFieldLogs d
+                     JOIN tbl_Inventory i ON i.SystemID = d.ToolSerial AND i.IsEmdad = 0
+                      AND NOT (UPPER(COALESCE(i.Ownership, '')) = 'EMDAD' AND UPPER(COALESCE(i.Supplier, '')) IN ('EMDAD', ''))
+                     LEFT JOIN tbl_Jobs j ON j.JobID = d.JobID
+                    WHERE d.StatusType IN ('1','S')
+                    GROUP BY d.JobID, d.ToolSerial, i.Ownership, i.Supplier, i.ShortDesc, i.Size, j.Contract
+                 ) t
+                 LEFT JOIN tbl_SubContractLines l ON l.jobId = t.jobId AND l.toolSerial = t.tool
+                 ${sheetApply('t.supplier', 't.category', 't.size', 't.contract')}
              ) x
             GROUP BY x.supplier, x.jobId
          ) a

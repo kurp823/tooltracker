@@ -31,7 +31,7 @@ module.exports = safe(async function (context, req) {
     const jobId = String((req.query || {}).jobId || '').trim()
     if (!jobId) return jsonResponse(context, 400, { error: 'jobId is required' })
     const r = await query(
-      `SELECT jobId, toolSerial, supplierName, basis, qty, rate, amount, currency, notes
+      `SELECT jobId, toolSerial, supplierName, basis, qty, rate, currency, notes
          FROM tbl_SubContractLines WHERE jobId = @j`,
       [{ name: 'j', type: sql.NVarChar, value: jobId }])
     return jsonResponse(context, 200, r.recordset)
@@ -53,12 +53,14 @@ module.exports = safe(async function (context, req) {
     }
 
     const rate = Number(b.rate)
-    const qty = b.qty === '' || b.qty == null ? NaN : Number(b.qty)
     const basis = String(b.basis || '').trim()
     if (!basis) return jsonResponse(context, 400, { error: 'Choose how this hire is charged' })
     if (!(rate >= 0)) return jsonResponse(context, 400, { error: 'The rate must be a number' })
-    if (!(qty >= 0)) return jsonResponse(context, 400, { error: 'The quantity must be a number' })
-    const amount = Math.round(qty * rate * 100) / 100
+    // Quantity is only stored when someone agreed something other than the days billed
+    // (8 days paid when 10 were billed, 0.5 of a month). Blank follows the days marked.
+    const qty = b.qty === '' || b.qty == null ? null : Number(b.qty)
+    if (qty != null && !(qty >= 0)) return jsonResponse(context, 400, { error: 'The quantity must be a number' })
+    const amount = /lump/i.test(basis) ? rate : (qty == null ? null : Math.round(qty * rate * 100) / 100)
 
     await query(
       `MERGE tbl_SubContractLines AS t
@@ -80,7 +82,7 @@ module.exports = safe(async function (context, req) {
         { name: 'notes', type: sql.NVarChar, value: b.notes ? String(b.notes) : null },
         { name: 'by',    type: sql.NVarChar, value: user.Username || null },
       ])
-    return jsonResponse(context, 200, { ok: true, amount })
+    return jsonResponse(context, 200, { ok: true })
   }
   return jsonResponse(context, 405, { error: 'Method not allowed' })
 })
