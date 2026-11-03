@@ -28,11 +28,11 @@
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white text-xs font-semibold rounded
-           hover:bg-brand-700 active:bg-brand-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center gap-1.5 px-3.5 h-[30px] bg-navy-head text-white text-xs font-semibold rounded
+           hover:bg-navy-800 active:bg-navy-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-secondary {
-    @apply inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-xs font-medium rounded border
+    @apply inline-flex items-center gap-1.5 px-3 h-[30px] bg-white text-slate-600 text-xs font-semibold rounded border
            border-gray-300 hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-danger {
@@ -71,11 +71,11 @@
      header, and a navy band over a long grid is what made these screens read
      as heavier than the ones they replace. */
   .table-th {
-    @apply px-2.5 py-1.5 text-left text-[10.5px] font-bold text-gray-600 uppercase tracking-wide
+    @apply px-3 py-2 text-left text-[11px] font-bold text-slate-600 uppercase tracking-[0.05em]
            bg-gray-100 border-b border-gray-200 whitespace-nowrap;
   }
   .table-td {
-    @apply px-2.5 py-[3px] text-[12px] text-gray-700;
+    @apply px-3 py-1.5 text-[12px] text-slate-800;
   }
   /* White rows separated by a hairline, no striping. The old app's registers
      carry twelve columns on plain white and stay legible because the only
@@ -174,17 +174,17 @@
    * same product.
    */
   .banner {
-    @apply bg-navy-head text-white rounded px-3 py-1 flex items-center
-           gap-x-3 shrink-0 min-h-[28px] overflow-hidden;
+    @apply bg-white text-slate-800 rounded-lg border border-slate-200 px-3 py-2 flex items-center
+           gap-x-3 shrink-0 min-h-[40px] overflow-hidden;
   }
   .banner-title {
-    @apply text-[12.5px] font-bold uppercase tracking-wide text-amber-300 whitespace-nowrap;
+    @apply text-[15px] font-bold tracking-tight text-navy-head whitespace-nowrap;
   }
   .banner-badge {
-    @apply px-2 py-0.5 rounded text-[10px] font-semibold bg-white/15 text-white
-           border border-white/20 whitespace-nowrap;
+    @apply px-2 py-0.5 rounded text-[10.5px] font-semibold bg-slate-100 text-slate-600
+           border border-slate-200 whitespace-nowrap;
   }
-  .banner-sub { @apply text-[11px] text-slate-300 truncate min-w-0 hidden md:block; }
+  .banner-sub { @apply text-[12px] text-slate-500 truncate min-w-0 hidden md:block; }
 
   /* Page title block, as used across the old app's screens */
   .page-crumb {
@@ -234,8 +234,8 @@
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-mini {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-1 bg-white text-gray-700 text-xs font-medium
-           rounded border border-gray-300 hover:bg-gray-50 transition-colors;
+    @apply inline-flex items-center gap-1.5 px-3 h-[28px] bg-white text-slate-600 text-xs font-semibold
+           rounded border border-slate-300 hover:bg-gray-50 transition-colors;
   }
   .tab {
     @apply px-3 py-2 text-sm font-medium border-b-2 transition-colors;
