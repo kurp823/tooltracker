@@ -11,6 +11,27 @@ import { ListOptions } from '../components/ListOptions'
 
 
 
+/** The old register's six lifecycle stages, read from the stored Status. */
+const STAGES = [
+  { key: 'open',    label: 'Open',         dot: 'bg-slate-400',   on: 'bg-slate-800 text-white',   off: 'bg-slate-50 text-slate-700 border-slate-200' },
+  { key: 'ongoing', label: 'Ongoing',      dot: 'bg-blue-500',    on: 'bg-blue-600 text-white',    off: 'bg-blue-50/60 text-blue-900 border-blue-200' },
+  { key: 'docs',    label: 'Waiting Docs', dot: 'bg-rose-500',    on: 'bg-rose-600 text-white',    off: 'bg-rose-50/60 text-rose-900 border-rose-200' },
+  { key: 'billing', label: 'In Billing',   dot: 'bg-amber-500',   on: 'bg-amber-600 text-white',   off: 'bg-amber-50/60 text-amber-900 border-amber-200' },
+  { key: 'ses',     label: 'Under SES',    dot: 'bg-purple-500',  on: 'bg-purple-600 text-white',  off: 'bg-purple-50/60 text-purple-900 border-purple-200' },
+  { key: 'done',    label: 'Completed',    dot: 'bg-emerald-500', on: 'bg-emerald-700 text-white', off: 'bg-emerald-50/60 text-emerald-900 border-emerald-200' },
+] as const
+type StageKey = typeof STAGES[number]['key']
+
+function stageOf(status: string | null | undefined): StageKey {
+  const s = (status || '').toLowerCase()
+  if (s === 'ongoing' || s === 'active') return 'ongoing'
+  if (s.includes('waiting')) return 'docs'
+  if (s.includes('billing')) return 'billing'
+  if (s.includes('ses') || s.includes('draft invoice')) return 'ses'
+  if (s === 'completed' || s === 'jobcompleted' || s === 'closed' || s.includes('final')) return 'done'
+  return 'open'
+}
+
 /**
  * A cell value, or a faded dash when there isn't one.
  *
@@ -32,6 +53,10 @@ export function JobsView() {
   const [search,    setSearch]    = useState('')
   const [statusFilter, setStatus] = useState<JobStatus | 'All'>('All')
   const [yearFilter,   setYear]   = useState<string>('All')
+  const [stage,   setStage]   = useState<StageKey | 'all'>('all')
+  const [rigFilter,    setRig]    = useState('All')
+  const [clientFilter, setClient] = useState('All')
+  const [dense, setDense] = useState(true)
 
   const { data: jobs, isLoading, error, refetch } = useFetch<Job[]>('/jobs')
 
@@ -41,9 +66,22 @@ export function JobsView() {
     return ['All', ...Array.from(ys).sort().reverse()]
   }, [jobs])
 
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: 0 }
+    ;(jobs || []).forEach(j => { c.all++; const k = stageOf(j.Status); c[k] = (c[k] || 0) + 1 })
+    return c
+  }, [jobs])
+  const rigs = useMemo(() => Array.from(new Set((jobs || []).map(j => (j.Rig || '').trim()).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [jobs])
+  const clients = useMemo(() => Array.from(new Set((jobs || []).map(j => (j.Client || '').trim()).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b)), [jobs])
+
   const filtered = useMemo(() => {
     if (!jobs) return []
     return jobs.filter(j => {
+      if (stage !== 'all' && stageOf(j.Status) !== stage) return false
+      if (rigFilter !== 'All' && (j.Rig || '').trim() !== rigFilter) return false
+      if (clientFilter !== 'All' && (j.Client || '').trim() !== clientFilter) return false
       if (statusFilter !== 'All' && j.Status !== statusFilter) return false
       if (yearFilter   !== 'All' && j.FiscalYear !== yearFilter) return false
       if (search) {
@@ -58,7 +96,7 @@ export function JobsView() {
       }
       return true
     })
-  }, [jobs, statusFilter, yearFilter, search])
+  }, [jobs, statusFilter, yearFilter, search, stage, rigFilter, clientFilter])
 
   // One screenful per page, measured from the rendered row height. Putting
   // all 3,700+ rows in the DOM was most of the delay before first paint.
@@ -69,6 +107,26 @@ export function JobsView() {
 
   return (
     <div className="screen gap-1.5">
+      {/* Lifecycle ribbon: click a stage to filter, click again to clear. */}
+      <div className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 flex-wrap shrink-0">
+        <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mr-1">Lifecycle</span>
+        <button onClick={() => setStage('all')}
+          className={`px-2.5 py-1 rounded-md font-semibold text-xs flex items-center gap-1.5 ${stage === 'all' ? 'bg-[#1a3055] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+          All Jobs <span className={`text-[10px] px-1.5 rounded-full font-mono ${stage === 'all' ? 'bg-white/20' : 'bg-slate-200'}`}>{(counts.all || 0).toLocaleString()}</span>
+        </button>
+        {STAGES.map(st => (
+          <React.Fragment key={st.key}>
+            <span className="text-slate-300 text-xs hidden md:inline">➔</span>
+            <button onClick={() => setStage(stage === st.key ? 'all' : st.key)}
+              className={`px-2.5 py-1 rounded-md font-semibold text-xs flex items-center gap-1.5 border ${stage === st.key ? st.on + ' border-transparent' : st.off + ' hover:brightness-95'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+              {st.label}
+              <span className="text-[10px] px-1.5 rounded-full font-mono bg-black/10">{(counts[st.key] || 0).toLocaleString()}</span>
+            </button>
+          </React.Fragment>
+        ))}
+      </div>
+
       {/* Toolbar — one row; the New Job button had a 40px row to itself. */}
       <div className="screen-bar">
         <div className="relative w-64">
@@ -100,6 +158,22 @@ export function JobsView() {
           ))}
         </select>
 
+        <select className="field-input w-auto max-w-[130px]" value={rigFilter} onChange={e => setRig(e.target.value)} title="Rig">
+          <option value="All">All rigs ({rigs.length})</option>
+          {rigs.map(r => <option key={r} value={r}>{r}</option>)}
+        </select>
+
+        <select className="field-input w-auto max-w-[190px]" value={clientFilter} onChange={e => setClient(e.target.value)} title="Client">
+          <option value="All">All clients ({clients.length})</option>
+          {clients.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+
+        {(stage !== 'all' || rigFilter !== 'All' || clientFilter !== 'All' || statusFilter !== 'All' || yearFilter !== 'All' || search) && (
+          <button className="btn-mini" onClick={() => { setStage('all'); setRig('All'); setClient('All'); setStatus('All'); setYear('All'); setSearch('') }}>
+            Clear filters
+          </button>
+        )}
+
         <button onClick={refetch} className="btn-mini" title="Refresh">
           <RefreshCw size={12} />
         </button>
@@ -108,8 +182,15 @@ export function JobsView() {
           {`${total.toLocaleString()} job${total === 1 ? '' : 's'}`}
         </span>
 
+        <div className="ml-auto flex items-center border border-slate-200 rounded p-0.5 bg-slate-100 text-[11px]">
+          {([['Compact', true], ['Comfortable', false]] as const).map(([l, v]) => (
+            <button key={l} onClick={() => setDense(v)}
+              className={`px-2 py-0.5 rounded font-medium ${dense === v ? 'bg-white text-[#1a3055] shadow-sm font-bold' : 'text-slate-600'}`}>{l}</button>
+          ))}
+        </div>
+
         {hasRole('Admin', 'Operations') && (
-          <button onClick={() => navigate('/jobs/new')} className="btn-accent ml-auto">
+          <button onClick={() => navigate('/jobs/new')} className="btn-accent">
             <Plus size={12} /> New Job
           </button>
         )}
@@ -135,13 +216,14 @@ export function JobsView() {
               <th className="table-th !text-right">Job Value</th>
               <th className="table-th">Invoice No</th>
               <th className="table-th">Billing</th>
-              <th className="table-th pin-r">Status</th>
+              <th className="table-th">Status</th>
+              <th className="table-th pin-r !text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={13} className="table-td text-center text-gray-400 py-10">
+                <td colSpan={14} className="table-td text-center text-gray-400 py-10">
                   {search || statusFilter !== 'All' ? 'No jobs match your filters' : 'No jobs found'}
                 </td>
               </tr>
@@ -149,7 +231,7 @@ export function JobsView() {
               visible.map(job => (
                 <tr
                   key={job.JobID}
-                  className="table-tr whitespace-nowrap"
+                  className={`table-tr whitespace-nowrap ${dense ? '' : '[&>td]:!py-2.5'}`}
                   onClick={() => navigate(`/jobs/${job.JobID}`)}
                 >
                   <td className="table-td pin-l font-mono font-medium text-brand-600">{job.JobID}</td>
@@ -176,10 +258,17 @@ export function JobsView() {
                       ? <span className={`badge ${billingStatusClass(job.BillingStatus)}`}>{job.BillingStatus}</span>
                       : <span className="table-empty">—</span>}
                   </td>
-                  <td className="table-td pin-r">
+                  <td className="table-td">
                     <span className={`badge ${statusBadgeClass(job.Status)}`}>
                       {job.Status}
                     </span>
+                  </td>
+                  <td className="table-td pin-r text-right">
+                    <button
+                      onClick={e => { e.stopPropagation(); navigate(`/jobs/${job.JobID}`) }}
+                      className="h-6 px-2.5 rounded bg-blue-50 hover:bg-[#1a3055] hover:text-white text-blue-900 font-medium text-[11px] border border-blue-200 inline-flex items-center gap-1"
+                      title="Open the job file: tickets, tools, utilization and invoicing"
+                    >🗂️ Job File</button>
                   </td>
                 </tr>
               ))
