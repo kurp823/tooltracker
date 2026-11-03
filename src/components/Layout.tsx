@@ -3,8 +3,10 @@ import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { PageBanner } from './PageBanner'
+import { useAutoColumnResize } from './useAutoColumnResize'
 
 export function Layout() {
+  useAutoColumnResize()
   // Hiding the menu gives the grids the full width; the choice is remembered.
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('tt_sidebar') === '1' } catch { return false }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Briefcase, Package, Users, FileText,
@@ -135,13 +135,15 @@ function Module({ mod }: { mod: NavModule }) {
     i => i.to === location.pathname || (i.to !== '/' && location.pathname.startsWith(i.to))
   )
   const [open, setOpen] = useState(containsActive)
+  // Going to a screen from anywhere (a link, the back button) opens its module.
+  useEffect(() => { if (containsActive) setOpen(true) }, [containsActive])
 
   if (mod.roles && !hasRole(...mod.roles)) return null
 
   return (
-    <div className="mb-0.5">
-      <button className="sidebar-group" onClick={() => setOpen(o => !o)}>
-        <span className="text-accent-500">{mod.icon}</span>
+    <div className={`sidebar-module ${containsActive ? 'has-active' : ''}`}>
+      <button className="sidebar-group" onClick={() => setOpen(o => !o)} aria-expanded={open}>
+        <span className="w-6 h-6 rounded bg-accent-500/15 text-accent-500 flex items-center justify-center shrink-0">{mod.icon}</span>
         <span className="flex-1 text-left">{mod.module}</span>
         {mod.adminBadge && (
           <span className="px-1.5 py-px rounded bg-accent-500 text-navy-950 text-[9px] font-bold tracking-normal">
@@ -152,7 +154,7 @@ function Module({ mod }: { mod: NavModule }) {
       </button>
 
       {open && (
-        <div className="pb-1">
+        <div className="sidebar-items">
           {mod.items.filter(item => !item.roles || hasRole(...item.roles)).map(item =>
             item.pending ? (
               <div
@@ -186,18 +188,18 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
   const { user, logout } = useAuth()
 
   return (
-    <aside className={`${collapsed ? 'w-0 border-r-0' : 'w-[210px] border-r'} shrink-0 overflow-hidden transition-[width] duration-150 bg-navy-900 flex flex-col border-navy-950`}>
+    <aside className={`${collapsed ? 'w-0 border-r-0' : 'w-[236px] border-r'} shrink-0 overflow-hidden transition-[width] duration-150 bg-navy-900 flex flex-col border-navy-950`}>
       {/* Brand — one compact row; the strap lines cost 100px and said nothing. */}
-      <div className="px-2.5 h-[34px] border-b border-navy-800 flex items-center gap-2">
-        <div className="w-5 h-5 rounded bg-white flex items-center justify-center shrink-0">
-          <Package size={13} className="text-brand-700" />
+      <div className="px-3 h-[46px] border-b border-navy-800 flex items-center gap-2.5">
+        <div className="w-7 h-7 rounded bg-white flex items-center justify-center shrink-0">
+          <Package size={16} className="text-brand-700" />
         </div>
-        <div className="text-white font-bold text-[13px] leading-none truncate">EMDAD LLC</div>
+        <div className="min-w-0"><div className="text-white font-bold text-[13px] leading-tight truncate">EMDAD LLC</div><div className="text-[9.5px] uppercase tracking-[0.12em] text-accent-500 leading-tight">Operations Platform</div></div>
         <span className="ml-auto w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0" title="Operations Platform" />
       </div>
 
       {/* Modules */}
-      <nav className="flex-1 min-h-0 overflow-y-auto px-1 py-1 dark-scroll">
+      <nav className="flex-1 min-h-0 overflow-y-auto px-2 py-2 dark-scroll">
         {MODULES.map(m => <Module key={m.module} mod={m} />)}
       </nav>
 
