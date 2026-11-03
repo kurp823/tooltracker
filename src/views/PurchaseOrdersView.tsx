@@ -90,6 +90,31 @@ export function PurchaseOrdersView() {
     } catch (e: any) { showToast(e.message || 'Could not load that PO', 'error') }
   }
 
+  // Receipts already made against this PO, and whether they have been posted.
+  interface GRNRow { id: number; grnNumber: string; receiptDate: string | null
+                     deliveryNote: string | null; lineCount: number; postedCount: number }
+  const [receipts, setReceipts] = useState<GRNRow[]>([])
+  async function loadReceipts(poNumber: string) {
+    try {
+      const all = await api.get<(GRNRow & { poNumber: string })[]>(
+        `/goods-receipts?search=${encodeURIComponent(poNumber)}`)
+      setReceipts((all || []).filter(g => g.poNumber === poNumber))
+    } catch { setReceipts([]) }
+  }
+  async function postGRN(g: GRNRow) {
+    setBusy(true)
+    try {
+      const r = await api(`/goods-receipts/${g.id}/post`, { method: 'POST', body: '{}' }) as any
+      const skipped = (r.skipped || []).length
+      showToast(`${g.grnNumber} posted — ${r.posted?.length ?? r.posted ?? 0} item(s) created`
+        + (skipped ? `, ${skipped} skipped (${r.skipped.map((x: any) => x.reason).join('; ')})` : ''),
+        skipped ? 'error' : 'success')
+      if (openPO) loadReceipts(openPO.poNumber)
+      refetch(); refetchSummary()
+    } catch (e: any) { showToast(e.message || 'Could not post the receipt', 'error') }
+    finally { setBusy(false) }
+  }
+
   async function loadOpenLines(poNumber: string) {
     try {
       setOpenLines(await api.get<OpenLine[]>(`/goods-receipts/open/${encodeURIComponent(poNumber)}`))
@@ -97,7 +122,7 @@ export function PurchaseOrdersView() {
     } catch (e: any) { showToast(e.message || 'Could not load the PO lines', 'error') }
   }
   useEffect(() => {
-    if (tab === 'grn' && openPO) loadOpenLines(openPO.poNumber)
+    if (tab === 'grn' && openPO) { loadOpenLines(openPO.poNumber); loadReceipts(openPO.poNumber) }
   }, [tab, openPO?.poNumber])
 
   async function createPO() {
@@ -179,7 +204,7 @@ export function PurchaseOrdersView() {
         body: JSON.stringify({ poNumber: openPO.poNumber, ...grnHead, lines }),
       }) as any
       showToast(`${r.grnNumber} created — post it to create the items`, 'success')
-      loadOpenLines(openPO.poNumber); refetch(); refetchSummary()
+      loadOpenLines(openPO.poNumber); loadReceipts(openPO.poNumber); refetch(); refetchSummary()
     } catch (e: any) { showToast(e.message || 'Could not create the receipt', 'error') }
     finally { setBusy(false) }
   }
@@ -527,6 +552,38 @@ export function PurchaseOrdersView() {
                   </tbody>
                 </table>
               </div>
+
+              {receipts.length > 0 && (
+                <div className="border border-gray-200 rounded overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    Receipts against this PO
+                  </div>
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {receipts.map(g => {
+                        const done = g.postedCount >= g.lineCount
+                        return (
+                          <tr key={g.id} className="border-t border-gray-100">
+                            <td className="px-3 py-1.5 font-medium text-gray-800">{g.grnNumber}</td>
+                            <td className="px-3 py-1.5 text-gray-500">{g.receiptDate ? String(g.receiptDate).slice(0, 10) : '—'}</td>
+                            <td className="px-3 py-1.5 text-gray-500">{g.deliveryNote || '—'}</td>
+                            <td className="px-3 py-1.5 text-gray-600">{g.postedCount} of {g.lineCount} posted</td>
+                            <td className="px-3 py-1.5 text-right">
+                              {done
+                                ? <span className="text-xs text-green-700">In inventory</span>
+                                : canEdit && (
+                                  <button className="btn-primary" disabled={busy} onClick={() => postGRN(g)}>
+                                    Post to inventory
+                                  </button>
+                                )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               {canEdit && (
                 <div className="flex items-center gap-3 flex-wrap">
