@@ -159,6 +159,10 @@ module.exports = safe(async function (context, req) {
             problems.push(`Line ${line.lineNo}: a consumable needs an item`)
         } else if (!String(p.assetNo || '').trim()) {
           problems.push(`Line ${line.lineNo}: ${dest} needs an asset number`)
+        } else if (dest === 'Asset' && qty > 1) {
+          // One asset number = one tool. Three bit subs under one number cannot
+          // be dispatched, returned or inspected separately.
+          problems.push(`Line ${line.lineNo}: an Asset is one tool - receive ${qty} separate times (qty 1, own asset number each), or send it to Inventory`)
         }
         prepared.push({ p, line, qty, dest })
       }
@@ -227,6 +231,15 @@ module.exports = safe(async function (context, req) {
         return jsonResponse(context, 200, { ok: true, posted: 0, skipped: [], message: 'Nothing left to post.' })
 
       const posted = [], skipped = []
+
+      // The name EMDAD-owned tools already carry in tbl_Inventory.Supplier,
+      // taken from the data rather than typed here, so a received asset reads
+      // the same as the rest of the fleet (Gate Pass checks it on return).
+      const own = await query(
+        `SELECT TOP 1 Supplier FROM tbl_Inventory
+          WHERE IsEmdad = 1 AND NULLIF(Supplier, '') IS NOT NULL
+          GROUP BY Supplier ORDER BY COUNT(*) DESC`, [])
+      const ownerName = own.recordset[0]?.Supplier || null
 
       for (const l of lines.recordset) {
         // ── Consumable: a positive movement, no inventory record ──────────
@@ -318,7 +331,7 @@ module.exports = safe(async function (context, req) {
             { name: 'status', type: sql.VarChar,
               value: String(l.condition || 'Good').toLowerCase() === 'good' ? 'Good' : 'Inspection' },
             { name: 'serial', type: sql.VarChar, value: l.oemSerial || null },
-            { name: 'sup',    type: sql.VarChar, value: null },
+            { name: 'sup',    type: sql.VarChar, value: ownerName },
             { name: 'type',   type: sql.VarChar, value: l.destination },
             { name: 'by',     type: sql.VarChar, value: user.Username || null },
           ]
