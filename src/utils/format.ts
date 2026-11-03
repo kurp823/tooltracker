@@ -84,7 +84,7 @@ export function billingStatusClass(status: string | null | undefined): string {
   if (s.includes('ses'))      return 'status-open'
   if (s.includes('hold'))     return 'status-cancelled'
   if (s.includes('draft') || s.includes('billing')) return 'status-draft'
-  return 'bg-gray-100 text-gray-600'
+  return 'text-slate-700'
 }
 
 export function toDateInput(val: string | null | undefined): string {
