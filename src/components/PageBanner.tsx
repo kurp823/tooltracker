@@ -162,7 +162,9 @@ function resolve(pathname: string): Page | null {
 export function PageBanner() {
   const { pathname } = useLocation()
   const page = resolve(pathname)
-  if (!page) return null
+  // A record opened from a register (/jobs/Job-…) is its own workspace with its
+  // own header; a register banner above it only costs height.
+  if (!page || pathname.split('/').filter(Boolean).length > 1) return null
 
   return (
     <div className="banner">
