@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
-import { Coins, AlertTriangle, PencilLine, RefreshCw, Building2 } from 'lucide-react'
+import { AlertTriangle, PencilLine, RefreshCw } from 'lucide-react'
 import { useFetch } from '../hooks/useFetch'
 import { PageLoader } from '../components/Spinner'
-import { Stat, Panel, Bar } from '../components/Stat'
+import { Tile, Notice } from '../components/Kpi'
 
 /*
  * Tool Revenue & Utilization.
@@ -75,150 +75,128 @@ export function ToolRevenueView() {
   const multiCurrency = (data?.currencies || []).filter(c => c.amount > 0).length > 1
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Tool Revenue &amp; Utilization</h2>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Days on hire and what they earned, from the daily field logs
-          </p>
-        </div>
-        <div className="flex gap-2 items-center flex-wrap">
-          <input type="date" className="input w-auto" value={from} onChange={e => setFrom(e.target.value)} />
-          <span className="text-gray-400 text-sm">to</span>
-          <input type="date" className="input w-auto" value={to} onChange={e => setTo(e.target.value)} />
-          <select className="input w-auto" value={groupBy}
+    <div className="screen gap-2">
+      <div className="screen-bar !mb-0">
+        <h2 className="text-[15px] font-bold text-slate-900">Tool revenue &amp; utilization</h2>
+        <span className="text-[12px] text-slate-500">days on hire and what they earned, from the daily field logs</span>
+        <div className="ml-auto flex gap-1.5 items-center flex-wrap">
+          <input type="date" className="field-input w-auto" value={from} onChange={e => setFrom(e.target.value)} />
+          <span className="text-slate-400 text-[12px]">to</span>
+          <input type="date" className="field-input w-auto" value={to} onChange={e => setTo(e.target.value)} />
+          <select className="field-input w-auto" value={groupBy}
                   onChange={e => setGroupBy(e.target.value as GroupBy)}>
             {GROUPS.map(g => <option key={g.id} value={g.id}>By {g.label}</option>)}
           </select>
-          <button className="btn-ghost" onClick={refetch} title="Refresh"><RefreshCw size={15} /></button>
+          <button className="btn-mini" onClick={refetch} title="Refresh"><RefreshCw size={12} /></button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Stat label="Revenue" value={t ? money(t.amount) : '—'}
-              sub={multiCurrency ? 'mixed currencies — see below' : undefined}
-              icon={<Coins size={22} className="text-emerald-600" />} iconBg="bg-emerald-100" />
-        <Stat label="Operating days" value={(t?.opsDays ?? 0).toLocaleString()}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 shrink-0">
+        <Tile label="Revenue" value={t ? money(t.amount) : '—'}
+              sub={multiCurrency ? 'mixed currencies, see below' : undefined} />
+        <Tile label="Operating days" value={(t?.opsDays ?? 0).toLocaleString()}
               sub={t ? `${money(t.opsAmount)} earned` : undefined} />
-        <Stat label="Standby days" value={(t?.standbyDays ?? 0).toLocaleString()}
+        <Tile label="Standby days" value={(t?.standbyDays ?? 0).toLocaleString()}
               sub={t ? `${money(t.standbyAmount)} earned` : undefined} />
-        <Stat label="Tools on hire" value={(t?.tools ?? 0).toLocaleString()}
+        <Tile label="Tools on hire" value={(t?.tools ?? 0).toLocaleString()}
               sub={t ? `across ${t.jobs} job(s)` : undefined} />
       </div>
 
-      {/* Sub-contractor cost sits apart from the revenue tiles above: it is a
-          different side of the ledger and mixing them in one row invites the
-          two to be read as comparable totals when one is money in and the
-          other money out. Shown only when hired-in tools were actually on
-          hire in the period. */}
+      {/* Sub-contractor cost is the other side of the ledger from the revenue
+          tiles above, so it sits in its own row, shown only when hired-in
+          tools were actually on hire in the period. */}
       {!!t?.subDays && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Stat label="Sub-contractor cost" value={money(t.cost)}
-                sub={`${t.subDays.toLocaleString()} hired-in tool-day(s)`}
-                icon={<Building2 size={22} className="text-blue-600" />} iconBg="bg-blue-100" />
-          <Stat label="Margin after hire cost" value={money(t.margin)}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 shrink-0">
+          <Tile label="Sub-contractor cost" value={money(t.cost)}
+                sub={`${t.subDays.toLocaleString()} hired-in tool-day(s)`} />
+          <Tile label="Margin after hire cost" value={money(t.margin)}
                 tone={t.margin < 0 ? 'bad' : 'good'}
                 sub="revenue less what we pay their owners" />
-          <Stat label="Hired-in days with no rate" value={t.unpricedSubDays.toLocaleString()}
-                tone={t.unpricedSubDays ? 'warn' : 'default'}
+          <Tile label="Hired-in days with no rate" value={t.unpricedSubDays.toLocaleString()}
+                tone={t.unpricedSubDays ? 'warn' : undefined}
                 sub={t.unpricedSubDays ? 'waiting in Pending Rental Costs' : undefined} />
-          <Stat label="Hired-in, no inward record" value={t.subDaysNoHireRecord.toLocaleString()}
-                tone={t.subDaysNoHireRecord ? 'warn' : 'default'}
-                sub={t.subDaysNoHireRecord ? 'nothing to price — needs a receipt' : undefined} />
+          <Tile label="Hired-in, no inward record" value={t.subDaysNoHireRecord.toLocaleString()}
+                tone={t.subDaysNoHireRecord ? 'warn' : undefined}
+                sub={t.subDaysNoHireRecord ? 'nothing to price, needs a receipt' : undefined} />
         </div>
       )}
 
-      {/* The honest caveat, stated before the numbers are read rather than
-          buried under them. */}
       {!!(t?.unpricedSubDays || t?.subDaysNoHireRecord) && (
-        <div className="card p-4 border-l-4 border-l-blue-400">
-          <p className="text-sm font-medium text-gray-900 flex items-center gap-2">
-            <AlertTriangle size={15} className="text-blue-600" />
-            The cost side is incomplete, so the margin above is flattering
-          </p>
-          <p className="text-sm text-gray-600 mt-1">
-            {!!t?.unpricedSubDays && <>
-              {t.unpricedSubDays.toLocaleString()} hired-in day(s) sit against a tool that
-              has been received but not yet priced — Billing sets those in Pending Rental
-              Costs, and doing so prices every past day of that hire at once.{' '}
-            </>}
-            {!!t?.subDaysNoHireRecord && <>
-              {t.subDaysNoHireRecord.toLocaleString()} day(s) are on a tool marked as someone
-              else's with no inward record at all, so there is nothing to price against it
-              until the receipt is entered.
-            </>}
-          </p>
-        </div>
+        <Notice tone="blue" title="The cost side is incomplete, so the margin is flattering">
+          {!!t?.unpricedSubDays && <>
+            {t.unpricedSubDays.toLocaleString()} hired-in day(s) sit against a tool that has been
+            received but not yet priced. Billing sets those in Pending Rental Costs, which prices
+            every past day of that hire at once.{' '}
+          </>}
+          {!!t?.subDaysNoHireRecord && <>
+            {t.subDaysNoHireRecord.toLocaleString()} day(s) are on a tool marked as someone else's
+            with no inward record, so there is nothing to price until the receipt is entered.
+          </>}
+        </Notice>
       )}
 
       {!!t?.unpricedDays && (
-        <div className="card p-4 border-l-4 border-l-amber-400">
-          <p className="text-sm font-medium text-gray-900 flex items-center gap-2">
-            <AlertTriangle size={15} className="text-amber-600" />
-            {t.unpricedDays.toLocaleString()} of {t.days.toLocaleString()} days carry no rate
-          </p>
-          <p className="text-sm text-gray-600 mt-1">
-            Those days are counted in the day totals but contribute nothing to the money,
-            so the revenue above is a floor, not the full figure. A day is priced when it
-            is marked; days recorded before the contract rates were loaded were never
-            priced, and a tool whose category has no rate on its contract cannot be
-            priced at all.
-          </p>
-        </div>
+        <Notice title={`${t.unpricedDays.toLocaleString()} of ${t.days.toLocaleString()} days carry no rate`}>
+          They are counted in the day totals but add nothing to the money, so revenue is a floor,
+          not the full figure. A day is priced when it is marked; days recorded before the contract
+          rates were loaded were never priced, and a tool whose category has no rate on its
+          contract cannot be priced at all.
+        </Notice>
       )}
 
       {multiCurrency && (
-        <Panel title="By currency"
-               subtitle="Rates are held per contract, so totals across contracts are not one currency">
-          <div className="py-1">
-            {data!.currencies.filter(c => c.days > 0).map(c => (
-              <Bar key={c.currency} label={`${c.currency} — ${money(c.amount)}`}
-                   value={c.days} total={t?.days || 1} tone="bg-emerald-500" />
-            ))}
-          </div>
-        </Panel>
+        <div className="bg-white border border-slate-200 rounded-lg px-4 py-2 shrink-0 text-[12px] text-slate-700">
+          <span className="text-slate-500 mr-3">Rates are held per contract, so totals are not one currency:</span>
+          {data!.currencies.filter(c => c.days > 0).map(c => (
+            <span key={c.currency} className="mr-4">
+              <strong className="text-slate-900">{c.currency}</strong> {money(c.amount)}
+              <span className="text-slate-400"> · {c.days.toLocaleString()} days</span>
+            </span>
+          ))}
+        </div>
       )}
 
-      <Panel title={`By ${data?.groupLabel?.toLowerCase() || 'category'}`}
-             subtitle={`${rows.length} row(s), highest earning first`}>
-        <div className="max-h-[32rem] overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 sticky top-0">
+      <div className="flex-1 min-h-0 flex flex-col bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="px-4 py-2 border-b border-slate-200 shrink-0 flex items-baseline gap-2">
+          <h3 className="text-[13px] font-semibold text-slate-900">By {data?.groupLabel?.toLowerCase() || 'category'}</h3>
+          <span className="text-[12px] text-slate-500">{rows.length} row(s), highest earning first</span>
+        </div>
+        <div className="flex-1 min-h-0 overflow-auto">
+          <table className="w-full border-collapse">
+            <thead className="sticky top-0 z-10">
               <tr>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">{data?.groupLabel}</th>
-                <th className="text-right px-4 py-2 font-medium text-gray-600">Ops days</th>
-                <th className="text-right px-4 py-2 font-medium text-gray-600">Standby</th>
-                <th className="text-right px-4 py-2 font-medium text-gray-600">Revenue</th>
-                <th className="text-right px-4 py-2 font-medium text-gray-600">Share</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600 w-28"></th>
+                <th className="table-th">{data?.groupLabel}</th>
+                <th className="table-th !text-right">Ops days</th>
+                <th className="table-th !text-right">Standby</th>
+                <th className="table-th !text-right">Revenue</th>
+                <th className="table-th w-28">Share</th>
+                <th className="table-th">Flags</th>
               </tr>
             </thead>
             <tbody>
               {rows.map(r => (
-                <tr key={r.group} className="border-t border-gray-100">
-                  <td className="px-4 py-2 text-gray-800 truncate max-w-xs" title={r.group}>{r.group}</td>
-                  <td className="px-4 py-2 text-right text-gray-700">{r.opsDays.toLocaleString()}</td>
-                  <td className="px-4 py-2 text-right text-gray-500">{r.standbyDays.toLocaleString()}</td>
-                  <td className="px-4 py-2 text-right font-medium text-gray-900">{money(r.amount)}</td>
-                  <td className="px-4 py-2 text-right text-gray-500">
-                    <div className="inline-block w-16 h-1.5 bg-gray-100 rounded overflow-hidden align-middle">
-                      <div className="h-full bg-emerald-500"
-                           style={{ width: `${Math.round((r.amount / maxAmount) * 100)}%` }} />
+                <tr key={r.group} className="table-tr whitespace-nowrap">
+                  <td className="table-td max-w-xs truncate" title={r.group}>{r.group}</td>
+                  <td className="table-td !text-right tabular-nums">{r.opsDays.toLocaleString()}</td>
+                  <td className="table-td !text-right tabular-nums text-slate-500">{r.standbyDays.toLocaleString()}</td>
+                  <td className="table-td !text-right tabular-nums font-medium">{money(r.amount)}</td>
+                  <td className="table-td">
+                    <div className="w-20 h-2 bg-slate-100 rounded-sm overflow-hidden">
+                      <div className="h-full" style={{ width: `${Math.round((r.amount / maxAmount) * 100)}%`, background: '#1a3055' }} />
                     </div>
                   </td>
-                  <td className="px-4 py-2">
+                  <td className="table-td">
                     <div className="flex gap-1.5">
                       {r.unpricedDays > 0 && (
                         <span title={`${r.unpricedDays} day(s) with no rate`}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-800">
-                          <AlertTriangle size={10} />{r.unpricedDays}
+                              className="inline-flex items-center gap-1 px-1.5 rounded text-[11px] bg-amber-100 text-amber-800">
+                          <AlertTriangle size={10} />{r.unpricedDays} unpriced
                         </span>
                       )}
                       {r.editedDays > 0 && (
                         <span title={`${r.editedDays} day(s) priced by hand`}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
-                          <PencilLine size={10} />{r.editedDays}
+                              className="inline-flex items-center gap-1 px-1.5 rounded text-[11px] bg-blue-100 text-blue-800">
+                          <PencilLine size={10} />{r.editedDays} by hand
                         </span>
                       )}
                     </div>
@@ -226,14 +204,14 @@ export function ToolRevenueView() {
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
+                <tr><td colSpan={6} className="table-td text-center text-slate-400 py-10">
                   No days recorded between {from} and {to}.
                 </td></tr>
               )}
             </tbody>
           </table>
         </div>
-      </Panel>
+      </div>
     </div>
   )
 }
