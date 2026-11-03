@@ -1563,7 +1563,7 @@ function UtilizationTab({ jobId, job, gate }: {
   const [loading, setLoading] = useState(true)
   const [saving,  setSaving]  = useState(false)
   const [ym,      setYm]      = useState<string>('')            // month on screen
-  const [view,    setView]    = useState<'days' | 'money'>('days')
+  const [view,    setView]    = useState<'days' | 'sub' | 'money'>('days')
   const [q,       setQ]       = useState('')
   const [onlyActive, setOnlyActive] = useState(false)          // hide tools with no days this month
   const [pending, setPending] = useState<Record<string, '1' | 'S' | null>>({})
@@ -1571,6 +1571,10 @@ function UtilizationTab({ jobId, job, gate }: {
   const [rot,      setRot]      = useState<Record<string, number>>({})
   const [rotPend,  setRotPend]  = useState<Record<string, string>>({})
   const [subs,     setSubs]     = useState<Record<string, boolean>>({})   // `ym|dt|tool` hired-in tools
+  // Day rate we pay the owner of a hired-in tool, by serial, and the rate being typed.
+  const [rates,    setRates]    = useState<Record<string, { rate: number; cur: string | null }>>({})
+  const [rateDraft, setRateDraft] = useState<Record<string, string>>({})
+  const [rateCur,  setRateCur]  = useState<Record<string, string>>({})
   const pendingCount = Object.keys(pending).length + Object.keys(rotPend).length
 
   const cKey = (r: UtilRow) => `${r.dtNumber ?? ''}|${String(r.toolId ?? '')}`
@@ -1587,8 +1591,8 @@ function UtilizationTab({ jobId, job, gate }: {
     return back && !back.startsWith('1900') ? day <= back : day <= todayStr
   }
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true)
     try {
       const normJobId = normalizeJobId(jobId)
       const mv = await api.get<ToolMovement[]>(`/tool-history?job=${encodeURIComponent(jobId)}&limit=2000`)
@@ -1601,6 +1605,8 @@ function UtilizationTab({ jobId, job, gate }: {
           dateOut: c.DateOut ?? null, dateIn: c.DateIn ?? null,
           assetNo: c.PartNo ?? serial, size: c.Size ?? null, days: {},
           rtNo: c.RgtNo ?? null,
+          // Owner of a hired-in tool; the movement report says EMDAD for our own.
+          supplier: c.Supplier && c.Supplier.trim() && c.Supplier.trim().toUpperCase() !== 'EMDAD' ? c.Supplier.trim() : null,
         }
       })
       built.sort((a, b) => String(a.dateOut || '').localeCompare(String(b.dateOut || '')))
@@ -1621,23 +1627,26 @@ function UtilizationTab({ jobId, job, gate }: {
 
       const all: Record<string, Record<string, Record<number, UtilCellR>>> = {}
       const subMap: Record<string, boolean> = {}
+      const rateMap: Record<string, { rate: number; cur: string | null }> = {}
       const rotRes = await api.get<{ rows: { DTNumber: string; ToolSerial: string; YearMonth: string; RotHours: number | null }[] }>(
         `/utilization/rothours?jobId=${encodeURIComponent(jobId)}`).catch(() => ({ rows: [] }))
       const rotMap: Record<string, number> = {}
       for (const r of rotRes.rows || []) if (r.RotHours != null) rotMap[`${r.YearMonth}|${r.DTNumber ?? ''}|${r.ToolSerial}`] = Number(r.RotHours)
       await Promise.all(list.map(async ym => {
         const [y, m] = ym.split('-').map(Number)
-        const res = await api.get<{ rows: (UtilRow & { jobId: string; isSub?: boolean })[] }>(
+        const res = await api.get<{ rows: (UtilRow & { jobId: string; isSub?: boolean; hireRate?: number | null; hireCurrency?: string | null })[] }>(
           `/utilization?year=${y}&month=${m}&jobId=${encodeURIComponent(jobId)}`).catch(() => ({ rows: [] }))
         const mm: Record<string, Record<number, UtilCellR>> = {}
         for (const r of (res.rows || [])) {
           if (normalizeJobId(r.jobId) !== normJobId) continue
           mm[`${r.dtNumber ?? ''}|${String(r.toolId ?? '')}`] = r.days as any
           if (r.isSub) subMap[`${ym}|${r.dtNumber ?? ''}|${String(r.toolId ?? '')}`] = true
+          if (r.isSub && r.hireRate != null) rateMap[String(r.toolId ?? '')] = { rate: Number(r.hireRate), cur: r.hireCurrency ?? null }
         }
         all[ym] = mm
       }))
-      setCycles(built); setMonths(list); setMarks(all); setPending({}); setRot(rotMap); setRotPend({}); setSubs(subMap)
+      setCycles(built); setMonths(list); setMarks(all); setRot(rotMap); setSubs(subMap); setRates(rateMap)
+      if (!quiet) { setPending({}); setRotPend({}) }
       setYm(cur => cur && list.includes(cur) ? cur : (list.includes(todayStr.slice(0, 7)) ? todayStr.slice(0, 7) : list[list.length - 1]))
     } catch {
       showToast('Failed to load utilization', 'error')
@@ -1701,6 +1710,25 @@ function UtilizationTab({ jobId, job, gate }: {
     return true
   }, [pending, rotPend, cycles, marks, jobId, load])
 
+  const canPrice = hasRole('Admin', 'Billing', 'Finance', 'CostController')
+  /** Set what we pay the owner per day for a hired-in tool; every day already marked is costed at once. */
+  async function saveRate(r: UtilRow) {
+    const tool = String(r.toolId ?? '')
+    const raw = rateDraft[tool]
+    if (raw === undefined) return
+    const clear = () => setRateDraft(d => { const n = { ...d }; delete n[tool]; return n })
+    if (raw.trim() === '' || isNaN(Number(raw))) { clear(); return }
+    if (rates[tool] && Number(raw) === rates[tool].rate && !(tool in rateCur)) { clear(); return }
+    try {
+      await api.post('/rental-inward/price-tool', {
+        toolSerial: tool, dayRate: Number(raw),
+        currency: rateCur[tool] || rates[tool]?.cur || (job as any)?.Currency || 'USD' })
+      clear(); setRateCur(c => { const n = { ...c }; delete n[tool]; return n })
+      showToast(`Day rate saved for ${r.assetNo || tool}`, 'success')
+      await load(true)
+    } catch (e: any) { showToast(e?.message || 'Could not save the day rate', 'error') }
+  }
+
   useEffect(() => { gate.current = { dirty: pendingCount > 0, save: () => save() } })
   useEffect(() => () => { gate.current = null }, [])
   useEffect(() => {
@@ -1731,7 +1759,7 @@ function UtilizationTab({ jobId, job, gate }: {
       else { ops++; opsV += c.rate || 0; if (c.rate) opsRate = c.rate }
       if (c.cost != null) { cost += c.cost; costDays++ }
     }
-    const isSub = !!subs[`${ym}|${cKey(r)}`]
+    const isSub = !!subs[`${ym}|${cKey(r)}`] || !!(r as any).supplier
     return { sb, ops, sbV, opsV, sbRate, opsRate, total: sbV + opsV, cost, costDays, isSub,
              costMissing: isSub && (sb + ops) > costDays }
   }
@@ -1811,6 +1839,16 @@ function UtilizationTab({ jobId, job, gate }: {
   const mCost = all.reduce((a, r) => { const v = revenue(ym, r); return a + (v.isSub ? v.cost : 0) }, 0)
   const revByMonth = (m: string) => rowsFor(m).reduce((a, r) => a + revenue(m, r).total, 0)
   const stick = 'sticky left-0 z-[5] bg-white'
+  const isSubRow = (r: UtilRow) => !!(r as any).supplier || !!subs[`${ym}|${cKey(r)}`]
+  const subAll = all.filter(isSubRow)
+  const rowsV = view === 'sub' ? shown.filter(isSubRow) : shown
+  const jobCur = (job as any)?.Currency || 'USD'
+  const subDays = (r: UtilRow) => { let c = 0; for (let d = 1; d <= n; d++) if (valueOf(ym, r, d)) c++; return c }
+  const subTot = subAll.reduce((a, r) => {
+    const rt = rates[String(r.toolId ?? '')]
+    a.days += subDays(r); a.cost += rt ? subDays(r) * rt.rate : 0; a.unrated += rt ? 0 : (subDays(r) > 0 ? 1 : 0)
+    return a
+  }, { days: 0, cost: 0, unrated: 0 })
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-2">
@@ -1827,7 +1865,7 @@ function UtilizationTab({ jobId, job, gate }: {
         <button className="btn-mini" disabled={mi < 0 || mi >= months.length - 1} onClick={() => setYm(months[mi + 1])} title="Next month">›</button>
 
         <div className="inline-flex rounded border border-gray-300 overflow-hidden ml-1" role="tablist" aria-label="View">
-          {([['days', 'Mark days'], ...(canSeeMoney ? [['money', 'Revenue & cost']] : [])] as [string, string][]).map(([k, l]) => (
+          {([['days', 'Mark days'], ...(canSeeMoney ? [['sub', `Sub-contract · ${subAll.length}`], ['money', 'Revenue & cost']] : [])] as [string, string][]).map(([k, l]) => (
             <button key={k} role="tab" aria-selected={view === k} onClick={() => setView(k as any)}
                     className={`px-3 h-[28px] text-[12px] font-semibold ${view === k ? 'bg-navy-head text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>{l}</button>
           ))}
@@ -1851,11 +1889,12 @@ function UtilizationTab({ jobId, job, gate }: {
         </div>
       </div>
 
-      {view === 'days' && (
+      {(view === 'days' || view === 'sub') && (
         <div className="flex-1 min-h-0 flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden">
           <div className="shrink-0 flex items-center gap-4 px-3 py-1 border-b border-gray-200 text-[11.5px] text-gray-600 flex-wrap">
             <span className="flex items-center gap-1.5"><span className="inline-flex w-5 h-5 items-center justify-center rounded font-mono font-semibold bg-[#f0f6ff] text-[#1e3a5f] border border-[#bfdbfe]">S</span> Standby</span>
             <span className="flex items-center gap-1.5"><span className="inline-flex w-5 h-5 items-center justify-center rounded font-mono font-semibold bg-[#f0faf4] text-[#14532d] border border-[#bbf7d0]">1</span> Operating</span>
+            {view === 'sub' && <span className="font-semibold text-orange-700">Hired-in tools only — mark their days here and set what we pay per day</span>}
             <span className="ml-auto text-[10.5px] text-gray-400">Type S / 1, it moves to the next day · click cycles · right-click fills to month end · Del clears · nothing is saved until you click Save</span>
           </div>
           <div className="flex-1 min-h-0 overflow-auto">
@@ -1870,12 +1909,19 @@ function UtilizationTab({ jobId, job, gate }: {
                   <th className={`${th} text-center border-l border-gray-200`}>Rot Hrs</th>
                   <th className={`${th} text-center text-blue-700`}>SB</th>
                   <th className={`${th} text-center text-green-700`}>Ops</th>
+                  {view === 'sub' && <>
+                    <th className={`${th} border-l border-gray-200`}>Supplier</th>
+                    <th className={th}>Day rate we pay</th>
+                    <th className={`${th} text-right`}>Cost</th>
+                  </>}
                 </tr>
               </thead>
               <tbody>
-                {shown.length === 0 && <tr><td colSpan={n + 10} className="text-center text-gray-400 py-8">
-                  {all.length === 0 ? 'No tools on hire this month.' : 'No tools match the search.'}</td></tr>}
-                {shown.map((r, ri) => {
+                {rowsV.length === 0 && <tr><td colSpan={n + 13} className="text-center text-gray-400 py-8">
+                  {all.length === 0 ? 'No tools on hire this month.'
+                    : view === 'sub' && subAll.length === 0 ? 'No hired-in tools on this job this month.'
+                    : 'No tools match the search.'}</td></tr>}
+                {rowsV.map((r, ri) => {
                   let ops = 0, sb = 0
                   for (let d = 1; d <= n; d++) { const v = valueOf(ym, r, d); if (v === '1') ops++; else if (v === 'S') sb++ }
                   return (
@@ -1917,15 +1963,47 @@ function UtilizationTab({ jobId, job, gate }: {
                       </td>
                       <td className="px-2 text-center font-mono font-semibold text-blue-700">{sb}</td>
                       <td className="px-2 text-center font-mono font-semibold text-green-700">{ops}</td>
+                      {view === 'sub' && (() => {
+                        const tool = String(r.toolId ?? '')
+                        const rt = rates[tool]
+                        const curNow = rateCur[tool] ?? rt?.cur ?? jobCur
+                        const cost = rt ? (sb + ops) * rt.rate : 0
+                        return (<>
+                          <td className="px-2 text-gray-700 whitespace-nowrap border-l border-gray-200">{(r as any).supplier || '—'}</td>
+                          <td className="px-1 whitespace-nowrap">
+                            {canPrice ? (
+                              <div className="flex items-center gap-1">
+                                <input inputMode="decimal" placeholder="rate"
+                                  className={`w-[70px] h-[22px] text-right text-[11px] font-mono border rounded bg-white focus:outline-none focus:border-brand-500 ${rt || rateDraft[tool] ? 'border-gray-200' : 'border-amber-400 bg-amber-50'}`}
+                                  value={rateDraft[tool] ?? (rt ? String(rt.rate) : '')}
+                                  onChange={e => setRateDraft(d => ({ ...d, [tool]: e.target.value.replace(/[^0-9.]/g, '') }))}
+                                  onBlur={() => saveRate(r)}
+                                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                                <select className="h-[22px] w-[58px] text-[11px] border border-gray-200 rounded bg-white" value={curNow}
+                                  onChange={e => { setRateCur(c => ({ ...c, [tool]: e.target.value })); setRateDraft(d => ({ ...d, [tool]: d[tool] ?? (rt ? String(rt.rate) : '') })) }}
+                                  onBlur={() => saveRate(r)}>
+                                  <ListOptions name="Currency" current={curNow} />
+                                </select>
+                              </div>
+                            ) : (rt ? <span className="font-mono">{fmtMoney(rt.rate)} {rt.cur || ''}</span> : <span className="text-amber-600">no rate</span>)}
+                          </td>
+                          <td className={`px-2 text-right font-mono ${rt ? 'text-gray-800' : 'text-amber-600'}`}
+                              title={rt ? undefined : 'No day rate yet — type it in the box to cost this tool'}>{rt ? fmtMoney(cost) : '—'}</td>
+                        </>)
+                      })()}
                     </tr>
                   )
                 })}
               </tbody>
               <tfoot className="sticky bottom-0 z-10">
                 <tr className="bg-gray-50 border-t border-gray-300">
-                  <td colSpan={7 + n + 1} className="px-3 py-1.5 text-right text-[10.5px] font-semibold text-gray-500">{monthLabel(ym)} totals</td>
-                  <td className="text-center font-mono font-bold text-blue-700">{tot.sb}</td>
-                  <td className="text-center font-mono font-bold text-green-700">{tot.ops}</td>
+                  <td colSpan={7 + n + 1} className="px-3 py-1.5 text-right text-[10.5px] font-semibold text-gray-500">{monthLabel(ym)} {view === 'sub' ? 'hired-in totals' : 'totals'}</td>
+                  <td className="text-center font-mono font-bold text-blue-700">{view === 'sub' ? '' : tot.sb}</td>
+                  <td className="text-center font-mono font-bold text-green-700">{view === 'sub' ? subTot.days : tot.ops}</td>
+                  {view === 'sub' && <>
+                    <td colSpan={2} className="px-2 text-right text-[10.5px] text-amber-700">{subTot.unrated > 0 ? `${subTot.unrated} tool(s) with days and no rate` : ''}</td>
+                    <td className="px-2 text-right font-mono font-bold">{fmtMoney(subTot.cost)}</td>
+                  </>}
                 </tr>
               </tfoot>
             </table>
@@ -1976,7 +2054,7 @@ function UtilizationTab({ jobId, job, gate }: {
                       <td className={`px-2 text-right font-mono font-bold ${unpriced ? 'text-amber-600' : ''}`}
                           title={unpriced ? 'Days saved with no contract rate' : undefined}>{fmtMoney(v.total)}</td>
                       <td className={`px-2 text-right font-mono ${v.costMissing ? 'text-amber-600' : 'text-gray-700'}`}
-                          title={v.costMissing ? 'Hired-in tool: some days have no hire rate yet (set in Pending Rental Costs)' : undefined}>
+                          title={v.costMissing ? 'Hired-in tool: some days have no day rate yet — set it in the Sub-contract tab' : undefined}>
                         {v.isSub ? fmtMoney(v.cost) : '—'}</td>
                       <td className="px-2 text-right font-mono font-bold">{fmtMoney(v.total - (v.isSub ? v.cost : 0))}</td>
                     </tr>

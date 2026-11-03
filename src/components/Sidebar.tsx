@@ -95,6 +95,9 @@ const MODULES: NavModule[] = [
       // Billing works from. It sits here rather than in Inventory because
       // this is where the people who hold the sub-contract already work.
       { label: 'Pending Rental Costs',           to: '/pending-rental-costs', icon: <AlertTriangle size={ICON} /> },
+      // Which POs are still to issue to a sub-contractor, and which supplier
+      // invoices are still to arrive against what has been accrued.
+      { label: 'Sub-Contract POs & Accruals',    to: '/sub-accruals',      icon: <ClipboardList size={ICON} /> },
       { label: 'Monthly Expense Grid & P&L',     to: '/monthly-expenses',  icon: <FileSpreadsheet size={ICON} /> },
     ],
   },

@@ -39,6 +39,7 @@ import { PurchaseOrdersView }      from './views/PurchaseOrdersView'
 import { ConsumablesView }         from './views/ConsumablesView'
 import { RentalInwardView }        from './views/RentalInwardView'
 import { PendingRentalCostsView }  from './views/PendingRentalCostsView'
+import { SubAccrualsView }         from './views/SubAccrualsView'
 import { MonthlyExpensesView }     from './views/MonthlyExpensesView'
 import { MaintenanceDashboardView } from './views/MaintenanceDashboardView'
 import { BillingDashboardView }     from './views/BillingDashboardView'
@@ -125,6 +126,7 @@ export default function App() {
               {/* Finance */}
               <Route path="billing-dashboard" element={<BillingDashboardView />} />
               <Route path="invoices" element={<InvoicesView />} />
+              <Route path="sub-accruals" element={<SubAccrualsView />} />
               <Route
                 path="pending-rental-costs"
                 element={
