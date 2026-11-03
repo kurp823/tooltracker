@@ -951,16 +951,6 @@ function DTHeaderTab({
               </F>
               <F label="RM Ref">{txt('RMRef', 'MR-XXXX')}</F>
               <F label="RM Date">{dat('RMDate')}</F>
-              <F label="Dispatched By">{txt('DispatchedBy', 'Full name')}</F>
-              <F label="Designation">{txt('Designation', 'e.g. Workshop Coordinator')}</F>
-              <F label="Dispatch Date">{dat('DispatchDate')}</F>
-              <F label="Delivered To">{txt('DeliveredTo', 'e.g. Esnad Jetty / Yard 08')}</F>
-              <F label="Vessel / Boat">{txt('Vessel', 'e.g. Zakher Star')}</F>
-              <F label="Transport">{txt('Transport', 'e.g. Emdad Logistics')}</F>
-              <F label="Vehicle No">{txt('VehicleNo', 'e.g. 54912 / 70136 AD')}</F>
-              <F label="Driver Name">{txt('DriverName', 'Driver full name')}</F>
-              <F label="Contact No">{txt('ContactNo', '+971 …')}</F>
-              <F label="Notes">{txt('Notes', 'Slings, protectors, non-invoiced spares — prints on DSF-001')}</F>
             </div>
           </div>
 
@@ -988,11 +978,11 @@ function DTHeaderTab({
                     </td></tr>
                   ) : lines.map((line, idx) => (
                     <tr key={line.LineID} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="table-td text-gray-400">{idx + 1}</td>
-                      <td className="table-td font-mono font-semibold text-gray-900">{line.AssetNo || '—'}</td>
-                      <td className="table-td text-gray-700">{line.ToolDescription}</td>
-                      <td className="table-td text-center">{line.Quantity}</td>
-                      <td className="table-td text-gray-400">{line.Notes || '—'}</td>
+                      <td className="px-3 py-[5px] text-[12px] text-gray-400 tabular-nums">{idx + 1}</td>
+                      <td className="px-3 py-[5px] text-[12.5px] font-mono font-semibold text-gray-900 whitespace-nowrap">{line.AssetNo || '—'}</td>
+                      <td className="px-3 py-[5px] text-[12.5px] font-medium text-gray-800 tracking-normal">{line.ToolDescription}</td>
+                      <td className="px-3 py-[5px] text-[12.5px] text-center font-mono tabular-nums text-gray-800">{line.Quantity}</td>
+                      <td className="px-3 py-[5px] text-[12px] text-gray-500">{line.Notes || '—'}</td>
                       {canEdit && (
                         <td className="table-td">
                           <button onClick={() => removeLine(line.LineID)} className="text-gray-300 hover:text-red-500 transition-colors">
@@ -1004,6 +994,36 @@ function DTHeaderTab({
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* Footer: dispatch, destination, haulage and notes stay at the bottom */}
+          <div className="card px-3 py-2 shrink-0 grid gap-x-6 gap-y-1 grid-cols-1 lg:grid-cols-3">
+            <div className="space-y-1">
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500">1. Warehouse &amp; Operations Dispatch</div>
+              <F label="Dispatched By">{txt('DispatchedBy', 'Full name')}</F>
+              <F label="Designation">{txt('Designation', 'e.g. Workshop Coordinator')}</F>
+              <F label="Dispatch Date">{dat('DispatchDate')}</F>
+            </div>
+            <div className="space-y-1">
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500">2. Destination &amp; Marine Logistics</div>
+              <F label="Delivered To">{txt('DeliveredTo', 'e.g. Esnad Jetty / Yard 08')}</F>
+              <F label="Vessel / Boat">{txt('Vessel', 'e.g. Zakher Star')}</F>
+              <F label="Transport">{txt('Transport', 'e.g. Emdad Logistics')}</F>
+            </div>
+            <div className="space-y-1">
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500">3. Haulage &amp; Driver Details</div>
+              <F label="Vehicle No">{txt('VehicleNo', 'e.g. 54912 / 70136 AD')}</F>
+              <F label="Driver Name">{txt('DriverName', 'Driver full name')}</F>
+              <F label="Contact No">{txt('ContactNo', '+971 …')}</F>
+            </div>
+            <div className="lg:col-span-3">
+              <label className="flex items-start gap-2">
+                <span className="field-label w-[88px] shrink-0 text-right pt-1">Notes</span>
+                <textarea rows={2} className="input flex-1 resize-y" disabled={!canEdit}
+                  value={form.Notes || ''} placeholder="Slings, protectors, non-invoiced spares, baskets — prints on Delivery Ticket DSF-001 under Notes"
+                  onChange={e => setForm(p => ({ ...p, Notes: e.target.value }))} />
+              </label>
             </div>
           </div>
         </>
