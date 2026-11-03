@@ -86,7 +86,10 @@ module.exports = safe(async function (context, req) {
     params.push({ name: 'serial', type: sql.NVarChar, value: serial })
   }
   if (search) {
-    where.push(`(dtl.serial LIKE @q OR dtl.toolDescription LIKE @q OR i.AssetNo LIKE @q OR i.ShortDesc LIKE @q)`)
+    where.push(`(dtl.serial LIKE @q OR dtl.toolDescription LIKE @q
+                 OR EXISTS (SELECT 1 FROM tbl_Inventory x
+                             WHERE (x.SystemID = dtl.serial OR x.AssetNo = dtl.serial OR x.OEMSerial = dtl.serial)
+                               AND (x.AssetNo LIKE @q OR x.ShortDesc LIKE @q)))`)
     params.push({ name: 'q', type: sql.NVarChar, value: `%${search}%` })
   }
 
@@ -94,76 +97,92 @@ module.exports = safe(async function (context, req) {
 
   try {
     const result = await query(
-      `SELECT TOP (@limit)
-          dt.dtNumber                                            AS TicketNo,
-          dt.deliveryDate                                        AS DateOut,
-          dtl.itemNo                                             AS Item,
-          COALESCE(NULLIF(i.AssetNo, ''), dtl.serial)            AS PartNo,
-          dtl.serial                                             AS Serial,
-          COALESCE(NULLIF(dtl.toolDescription, ''), i.ShortDesc) AS Description,
+      // Performance: the receiving-ticket and field-log lookups used to run
+      // as a correlated OUTER APPLY per line, costing 1-2 s per line (a
+      // 19-line job took 20 s; a large job exceeded SWA's 45 s limit). They
+      // are now computed ONCE, restricted to the jobs / tickets / tools in
+      // the result, and joined back. Same output, set-based.
+      `WITH base AS (
+          SELECT TOP (@limit)
+                 dt.dtNumber, dt.deliveryDate, dt.jobNumber, dt.rig, dt.well, dt.poNumber,
+                 dtl.itemNo, dtl.serial, dtl.toolDescription, dtl.qty
+            FROM tbl_DeliveryTicketLines dtl
+            JOIN tbl_DeliveryTickets     dt ON dtl.dtNumber = dt.dtNumber
+          ${whereClause}
+           ORDER BY dt.deliveryDate DESC, dt.dtNumber DESC, dtl.itemNo
+        ),
+        rtj AS (
+          -- latest receiving ticket that brought each tool back on its job
+          SELECT x.serial, x.jobNumber, x.rtNumber, x.receivingDate, x.usedStatus, x.condition
+            FROM (
+              SELECT rtl.serial, rth.jobNumber, rth.rtNumber, rth.receivingDate,
+                     rtl.usedStatus, rtl.condition,
+                     ROW_NUMBER() OVER (PARTITION BY rtl.serial, rth.jobNumber
+                                        ORDER BY rth.receivingDate DESC) AS rn
+                FROM tbl_ReceivingTicketLines rtl
+                JOIN tbl_ReceivingTickets     rth ON rtl.rtNumber = rth.rtNumber
+               WHERE rth.jobNumber IN (SELECT jobNumber FROM base)
+                 AND rtl.serial    IN (SELECT serial    FROM base)
+            ) x
+           WHERE x.rn = 1
+        ),
+        ul AS (
+          -- operating / standby days and money per tool per ticket
+          SELECT d.ToolSerial, d.DTNumber,
+                 SUM(CASE WHEN d.StatusType = '1' THEN 1 ELSE 0 END) AS OpsDays,
+                 SUM(CASE WHEN d.StatusType = 'S' THEN 1 ELSE 0 END) AS StandbyDays,
+                 SUM(CASE WHEN d.StatusType = '1' THEN COALESCE(d.RateCharged, 0) ELSE 0 END) AS OpsAmount,
+                 SUM(CASE WHEN d.StatusType = 'S' THEN COALESCE(d.RateCharged, 0) ELSE 0 END) AS StandbyAmount
+            FROM tbl_DailyFieldLogs d
+           WHERE d.DTNumber IN (SELECT dtNumber FROM base)
+           GROUP BY d.ToolSerial, d.DTNumber
+        )
+       SELECT
+          b.dtNumber                                             AS TicketNo,
+          b.deliveryDate                                         AS DateOut,
+          b.itemNo                                               AS Item,
+          COALESCE(NULLIF(i.AssetNo, ''), b.serial)              AS PartNo,
+          b.serial                                               AS Serial,
+          COALESCE(NULLIF(b.toolDescription, ''), i.ShortDesc)   AS Description,
           i.[Size]                                               AS [Size],
-          dtl.qty                                                AS Qty,
+          b.qty                                                  AS Qty,
           r.rtNumber                                             AS RgtNo,
           r.receivingDate                                        AS DateIn,
           r.usedStatus                                           AS Comments,
           r.condition                                            AS Condition,
           -- Show the actual sub-contractor name, not a generic label.
-          -- Ownership is the reliable field here (only 1 blank across 269
-          -- sub-contract tools); Supplier has 41 blanks and wrongly reads
-          -- 'EMDAD' on 10 of them.
           CASE WHEN i.IsEmdad = 1 THEN 'EMDAD'
                ELSE COALESCE(NULLIF(i.Ownership, ''), NULLIF(i.Supplier, '')) END AS Supplier,
-          dt.jobNumber                                           AS JobID,
-          dt.rig                                                 AS Rig,
-          dt.well                                                AS Well,
-          dt.poNumber                                            AS PONumber,
+          b.jobNumber                                            AS JobID,
+          b.rig                                                  AS Rig,
+          b.well                                                 AS Well,
+          b.poNumber                                             AS PONumber,
           COALESCE(u.OpsDays, 0)                                 AS OpsDays,
           COALESCE(u.StandbyDays, 0)                             AS StandbyDays,
           COALESCE(u.OpsAmount, 0)                               AS OpsAmount,
           COALESCE(u.StandbyAmount, 0)                           AS StandbyAmount,
           COALESCE(u.OpsAmount, 0) + COALESCE(u.StandbyAmount, 0) AS TotalAmount
-        FROM      tbl_DeliveryTicketLines dtl
-        JOIN      tbl_DeliveryTickets     dt ON dtl.dtNumber = dt.dtNumber
+        FROM base b
         OUTER APPLY (
-          -- Resolved by SystemID, else AssetNo, else OEMSerial. Written as
-          -- separate UNION ALL branches rather than an OR so each branch can
-          -- seek its own index; the OR form scanned tbl_Inventory per line.
-          SELECT TOP 1 u.AssetNo, u.ShortDesc, u.[Size], u.IsEmdad,
-                       u.Supplier, u.Ownership
+          -- Resolved by SystemID, else AssetNo, else OEMSerial (UNION ALL
+          -- branches so each can seek its own index).
+          SELECT TOP 1 iu.AssetNo, iu.ShortDesc, iu.[Size], iu.IsEmdad,
+                       iu.Supplier, iu.Ownership
           FROM (
             SELECT 0 AS pref, a.AssetNo, a.ShortDesc, a.[Size], a.IsEmdad, a.Supplier, a.Ownership
-              FROM tbl_Inventory a WHERE a.SystemID = dtl.serial
+              FROM tbl_Inventory a WHERE a.SystemID = b.serial
             UNION ALL
-            SELECT 1, b.AssetNo, b.ShortDesc, b.[Size], b.IsEmdad, b.Supplier, b.Ownership
-              FROM tbl_Inventory b WHERE b.AssetNo = dtl.serial AND NULLIF(b.AssetNo, '') IS NOT NULL
+            SELECT 1, c1.AssetNo, c1.ShortDesc, c1.[Size], c1.IsEmdad, c1.Supplier, c1.Ownership
+              FROM tbl_Inventory c1 WHERE c1.AssetNo = b.serial AND NULLIF(c1.AssetNo, '') IS NOT NULL
             UNION ALL
-            SELECT 2, c.AssetNo, c.ShortDesc, c.[Size], c.IsEmdad, c.Supplier, c.Ownership
-              FROM tbl_Inventory c WHERE c.OEMSerial = dtl.serial AND NULLIF(c.OEMSerial, '') IS NOT NULL
-          ) u
-          ORDER BY u.pref
+            SELECT 2, c2.AssetNo, c2.ShortDesc, c2.[Size], c2.IsEmdad, c2.Supplier, c2.Ownership
+              FROM tbl_Inventory c2 WHERE c2.OEMSerial = b.serial AND NULLIF(c2.OEMSerial, '') IS NOT NULL
+          ) iu
+          ORDER BY iu.pref
         ) i
-        OUTER APPLY (
-          -- The receiving ticket that brought this same tool back on this job.
-          SELECT TOP 1 rth.rtNumber, rth.receivingDate, rtl.usedStatus, rtl.condition
-          FROM      tbl_ReceivingTicketLines rtl
-          JOIN      tbl_ReceivingTickets     rth ON rtl.rtNumber = rth.rtNumber
-          WHERE     rtl.serial     = dtl.serial
-            AND     rth.jobNumber  = dt.jobNumber
-          ORDER BY  rth.receivingDate DESC
-        ) r
-        OUTER APPLY (
-          -- Operating / standby days and money, from the daily field logs.
-          SELECT
-            SUM(CASE WHEN d.StatusType = '1' THEN 1 ELSE 0 END) AS OpsDays,
-            SUM(CASE WHEN d.StatusType = 'S' THEN 1 ELSE 0 END) AS StandbyDays,
-            SUM(CASE WHEN d.StatusType = '1' THEN COALESCE(d.RateCharged, 0) ELSE 0 END) AS OpsAmount,
-            SUM(CASE WHEN d.StatusType = 'S' THEN COALESCE(d.RateCharged, 0) ELSE 0 END) AS StandbyAmount
-          FROM  tbl_DailyFieldLogs d
-          WHERE d.ToolSerial = dtl.serial
-            AND d.DTNumber   = dt.dtNumber
-        ) u
-        ${whereClause}
-        ORDER BY dt.deliveryDate DESC, dt.dtNumber DESC, dtl.itemNo`,
+        LEFT JOIN rtj r ON r.serial = b.serial AND r.jobNumber = b.jobNumber
+        LEFT JOIN ul  u ON u.ToolSerial = b.serial AND u.DTNumber = b.dtNumber
+        ORDER BY b.deliveryDate DESC, b.dtNumber DESC, b.itemNo`,
       params
     )
     return jsonResponse(context, 200, result.recordset)
