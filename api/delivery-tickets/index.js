@@ -138,7 +138,7 @@ module.exports = safe(async function (context, req) {
          OUTPUT INSERTED.id
          VALUES (
            (SELECT dtNumber FROM tbl_DeliveryTickets WHERE id = @id),
-           COALESCE((SELECT MAX(itemNo) FROM tbl_DeliveryTicketLines WHERE dtNumber=(SELECT dtNumber FROM tbl_DeliveryTickets WHERE id = @id)),0)+1,
+           COALESCE((SELECT MAX(itemNo) FROM tbl_DeliveryTicketLines WITH (UPDLOCK, HOLDLOCK) WHERE dtNumber=(SELECT dtNumber FROM tbl_DeliveryTickets WHERE id = @id)),0)+1,
            @serial, @desc, @qty, @notes
          )`,
         [
