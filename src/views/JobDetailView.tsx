@@ -1546,9 +1546,9 @@ const shortDate = (s: string | null) => {
 }
 
 /**
- * Utilization for the whole job on one screen, laid out like the reference
- * sheet: a section per month (collapsible) with the day grid, then job revenue
- * by month underneath. Edits are staged locally and written only on Save.
+ * Utilization for the whole job, one month on screen at a time: pick the month,
+ * switch between marking days and revenue & cost, find a tool, and scroll the
+ * table inside its own box. Edits are staged locally and written only on Save.
  */
 function UtilizationTab({ jobId, job, gate }: {
   jobId: string; job: Partial<Job>; gate: React.MutableRefObject<UtilGate | null>
@@ -1562,7 +1562,10 @@ function UtilizationTab({ jobId, job, gate }: {
   const [marks,   setMarks]   = useState<Record<string, Record<string, Record<number, UtilCellR>>>>({})
   const [loading, setLoading] = useState(true)
   const [saving,  setSaving]  = useState(false)
-  const [open,    setOpen]    = useState<Record<string, boolean>>({})
+  const [ym,      setYm]      = useState<string>('')            // month on screen
+  const [view,    setView]    = useState<'days' | 'money'>('days')
+  const [q,       setQ]       = useState('')
+  const [onlyActive, setOnlyActive] = useState(false)          // hide tools with no days this month
   const [pending, setPending] = useState<Record<string, '1' | 'S' | null>>({})
   // Rotating hours are typed by hand: saved values and staged edits, keyed `ym|dt|tool`.
   const [rot,      setRot]      = useState<Record<string, number>>({})
@@ -1635,7 +1638,7 @@ function UtilizationTab({ jobId, job, gate }: {
         all[ym] = mm
       }))
       setCycles(built); setMonths(list); setMarks(all); setPending({}); setRot(rotMap); setRotPend({}); setSubs(subMap)
-      setOpen(o => Object.keys(o).length ? o : Object.fromEntries(list.map(ym => [ym, ym === list[list.length - 1]])))
+      setYm(cur => cur && list.includes(cur) ? cur : (list.includes(todayStr.slice(0, 7)) ? todayStr.slice(0, 7) : list[list.length - 1]))
     } catch {
       showToast('Failed to load utilization', 'error')
     } finally { setLoading(false) }
@@ -1786,210 +1789,224 @@ function UtilizationTab({ jobId, job, gate }: {
   const cell = 'w-[26px] h-[28px] flex items-center justify-center font-mono text-[11.5px] font-semibold select-none outline-none'
   const canSeeMoney = hasRole('Admin', 'Operations', 'Finance', 'Billing', 'CostController', 'Executive')
 
+  // ── One month at a time ───────────────────────────────────────────────────
+  // With 100-200 tools a job could not be read as one long page, so the screen
+  // shows a month, switches between marking days and money, filters by search,
+  // and scrolls the table inside its own box with the header and totals pinned.
+  const mi = months.indexOf(ym)
+  const n = daysIn(ym || todayStr.slice(0, 7))
+  const days = Array.from({ length: n }, (_, i) => i + 1)
+  const all = ym ? rowsFor(ym) : []
+  const needle = q.trim().toLowerCase()
+  const dayCount = (r: UtilRow) => { let c = 0; for (let d = 1; d <= n; d++) if (valueOf(ym, r, d)) c++; return c }
+  const shown = all.filter(r =>
+    (!needle || [r.assetNo, r.toolId, r.label, r.dtNumber, (r as any).rtNo].some(x => String(x ?? '').toLowerCase().includes(needle))) &&
+    (!onlyActive || dayCount(r) > 0))
+  const tot = all.reduce((a, r) => {
+    for (let d = 1; d <= n; d++) { const v = valueOf(ym, r, d); if (v === '1') a.ops++; else if (v === 'S') a.sb++ }
+    return a
+  }, { ops: 0, sb: 0 })
+  const monthDirty = Object.keys(pending).filter(k => k.startsWith(ym + '|')).length + Object.keys(rotPend).filter(k => k.startsWith(ym + '|')).length
+  const mRev = all.reduce((a, r) => a + revenue(ym, r).total, 0)
+  const mCost = all.reduce((a, r) => { const v = revenue(ym, r); return a + (v.isSub ? v.cost : 0) }, 0)
+  const revByMonth = (m: string) => rowsFor(m).reduce((a, r) => a + revenue(m, r).total, 0)
+  const stick = 'sticky left-0 z-[5] bg-white'
+
   return (
-    <div className="flex flex-col gap-3 pb-14">
-      {/* Job strip */}
-      <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="font-mono font-bold text-[15px] text-gray-900">{jobId}</span>
-          {job?.Status && <span className="text-[12px] font-semibold text-green-700">{String(job.Status)}</span>}
-          {job?.HoleSection && <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{job.HoleSection}</span>}
-          {!canEdit && <span className="text-[11px] text-gray-400 italic">View only</span>}
-        </div>
-        <div className="flex gap-8 mt-2 text-[12px] flex-wrap">
-          {([['Client', job?.Client], ['Rig', job?.Rig], ['Well', job?.Well], ['PO', job?.PONumber],
-             ['ERP', job?.ERPRef], ['Service', job?.ServiceType]] as [string, any][]).map(([l, v]) => (
-            <div key={l}><div className="text-[9.5px] uppercase tracking-wide text-gray-400 font-semibold">{l}</div>
-              <div className="text-gray-800">{v || '—'}</div></div>
+    <div className="h-full min-h-0 flex flex-col gap-2">
+      {/* Controls: month, view, find */}
+      <div className="shrink-0 bg-white border border-gray-200 rounded-lg px-3 py-1.5 flex items-center gap-2 flex-wrap">
+        <button className="btn-mini" disabled={mi <= 0} onClick={() => setYm(months[mi - 1])} title="Previous month">‹</button>
+        <select className="field-input w-auto font-semibold" value={ym} onChange={e => setYm(e.target.value)}>
+          {months.map(m => (
+            <option key={m} value={m}>
+              {monthLabel(m)} · {rowsFor(m).length} tools{canSeeMoney ? ` · ${fmtMoney(revByMonth(m))}` : ''}
+            </option>
+          ))}
+        </select>
+        <button className="btn-mini" disabled={mi < 0 || mi >= months.length - 1} onClick={() => setYm(months[mi + 1])} title="Next month">›</button>
+
+        <div className="inline-flex rounded border border-gray-300 overflow-hidden ml-1" role="tablist" aria-label="View">
+          {([['days', 'Mark days'], ...(canSeeMoney ? [['money', 'Revenue & cost']] : [])] as [string, string][]).map(([k, l]) => (
+            <button key={k} role="tab" aria-selected={view === k} onClick={() => setView(k as any)}
+                    className={`px-3 h-[28px] text-[12px] font-semibold ${view === k ? 'bg-navy-head text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>{l}</button>
           ))}
         </div>
+
+        <div className="relative w-56">
+          <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input className="field-input !pl-7" placeholder="Find serial, description, DT…" value={q} onChange={e => setQ(e.target.value)} />
+        </div>
+        <label className="flex items-center gap-1.5 text-[12px] text-gray-600 cursor-pointer select-none">
+          <input type="checkbox" checked={onlyActive} onChange={e => setOnlyActive(e.target.checked)} /> Only tools with days
+        </label>
+
+        <div className="ml-auto flex items-center gap-1.5 text-[11px]">
+          <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">SB {tot.sb}</span>
+          <span className="px-2 py-0.5 rounded bg-green-50 text-green-700 border border-green-200">Ops {tot.ops}</span>
+          <span className="px-2 py-0.5 rounded bg-white text-gray-600 border border-gray-200">
+            {shown.length === all.length ? `${all.length} tools` : `${shown.length} of ${all.length} tools`}</span>
+          {monthDirty > 0 && <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-300">{monthDirty} unsaved</span>}
+          {!canEdit && <span className="text-gray-400 italic">View only</span>}
+        </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-4 bg-white border border-gray-200 rounded-lg px-4 py-2 text-[11.5px] text-gray-600 flex-wrap">
-        <span className="flex items-center gap-1.5"><span className="inline-flex w-5 h-5 items-center justify-center rounded font-mono font-semibold bg-[#f0f6ff] text-[#1e3a5f] border border-[#bfdbfe]">S</span> Standby</span>
-        <span className="flex items-center gap-1.5"><span className="inline-flex w-5 h-5 items-center justify-center rounded font-mono font-semibold bg-[#f0faf4] text-[#14532d] border border-[#bbf7d0]">1</span> Operating</span>
-        <span className="ml-auto text-[10.5px] text-gray-400">Type S / 1 · Auto-advances to next cell · Click cycles · Right-click fills to month end · Del to clear · Nothing is saved until you click Save</span>
-      </div>
-
-      {months.map(ym => {
-        const rows = rowsFor(ym)
-        const n = daysIn(ym)
-        const days = Array.from({ length: n }, (_, i) => i + 1)
-        const tot = rows.reduce((a, r) => {
-          for (let d = 1; d <= n; d++) { const v = valueOf(ym, r, d); if (v === '1') a.ops++; else if (v === 'S') a.sb++ }
-          return a
-        }, { ops: 0, sb: 0 })
-        const dirty = Object.keys(pending).filter(k => k.startsWith(ym + '|')).length + Object.keys(rotPend).filter(k => k.startsWith(ym + '|')).length
-        const isOpen = !!open[ym]
-        return (
-          <div key={ym} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-200 cursor-pointer"
-                 onClick={() => setOpen(o => ({ ...o, [ym]: !o[ym] }))}>
-              <span className="text-[10px] text-gray-500">{isOpen ? '▼' : '▶'}</span>
-              <span className="text-[13px] font-semibold text-gray-900 mr-1">{monthLabel(ym)}</span>
-              <span className="text-[11px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">SB {tot.sb} days</span>
-              <span className="text-[11px] px-2 py-0.5 rounded bg-green-50 text-green-700 border border-green-200">Ops {tot.ops} days</span>
-              <span className="text-[11px] px-2 py-0.5 rounded bg-white text-gray-600 border border-gray-200">{rows.length} tools</span>
-              {dirty > 0 && <span className="text-[11px] px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-300">Unsaved changes</span>}
-              <span className="ml-auto flex gap-2" onClick={e => e.stopPropagation()}>
-                {canEdit && <button className="btn-mini" disabled={saving || !dirty} onClick={() => save(ym)}><Save size={12} /> Save</button>}
-                <button className="btn-mini" onClick={() => exportXlsx(ym)}>Export</button>
-              </span>
-            </div>
-            {isOpen && (
-              <div className="overflow-auto">
-                <table className="border-collapse text-[11.5px]" style={{ minWidth: `${860 + n * 26}px` }}>
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className={th}>#</th><th className={th}>Asset/S/N</th><th className={th}>Description</th>
-                      <th className={th}>DT #</th><th className={th}>RM Dispatch</th><th className={th}>RT #</th><th className={th}>RM Backload</th>
-                      {days.map(d => <th key={d} className="p-0 w-[26px] text-center font-mono text-[10px] font-medium text-gray-500 border-l border-gray-100">{d}</th>)}
-                      <th className={`${th} text-center border-l border-gray-200`}>Rot Hrs</th>
-                      <th className={`${th} text-center text-blue-700`}>SB Days</th>
-                      <th className={`${th} text-center text-green-700`}>Ops Days</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.length === 0 && <tr><td colSpan={n + 10} className="text-center text-gray-400 py-6">No tools on hire this month.</td></tr>}
-                    {rows.map((r, ri) => {
-                      let ops = 0, sb = 0
-                      for (let d = 1; d <= n; d++) { const v = valueOf(ym, r, d); if (v === '1') ops++; else if (v === 'S') sb++ }
-                      return (
-                        <tr key={cKey(r) + ri} className="border-b border-gray-100 hover:bg-gray-50/60">
-                          <td className="px-2 text-gray-400">{ri + 1}</td>
-                          <td className="px-2 font-mono font-semibold text-gray-900 whitespace-nowrap">{r.assetNo || r.toolId}</td>
-                          <td className="px-2 text-gray-700 max-w-[280px] truncate" title={r.label}>{r.label}</td>
-                          <td className="px-2 font-mono text-gray-500 whitespace-nowrap">{r.dtNumber || '—'}</td>
-                          <td className="px-2 text-gray-500 whitespace-nowrap">{shortDate(r.dateOut) || '—'}</td>
-                          <td className="px-2 font-mono text-gray-500 whitespace-nowrap">{(r as any).rtNo || '—'}</td>
-                          <td className="px-2 text-gray-500 whitespace-nowrap">{shortDate(r.dateIn) || <span className="text-amber-600">on rig</span>}</td>
-                          {days.map(d => {
-                            const v = valueOf(ym, r, d)
-                            const ok = inWindow(r, ym, d)
-                            const changed = `${ym}|${cKey(r)}|${d}` in pending
-                            const tone = !ok ? 'bg-gray-100 cursor-not-allowed'
-                              : v === '1' ? 'bg-[#f0faf4] text-[#14532d]' : v === 'S' ? 'bg-[#f0f6ff] text-[#1e3a5f]'
-                              : 'bg-white hover:bg-blue-50'
-                            return (
-                              <td key={d} className="p-0 border-l border-gray-100">
-                                <div data-util={`${ym}-${ri}-${d}`} tabIndex={ok && canEdit ? 0 : -1}
-                                  className={`${cell} ${tone} ${ok && canEdit ? 'cursor-pointer focus:shadow-[inset_0_0_0_2px_#2563eb]' : ''} ${changed ? 'shadow-[inset_0_0_0_2px_#fbbf24]' : ''}`}
-                                  title={ok ? undefined : 'Outside this tool’s DT–RT dates'}
-                                  onClick={() => ok && stage(ym, r, d, v === null ? '1' : v === '1' ? 'S' : null)}
-                                  onContextMenu={e => { e.preventDefault(); if (ok) for (let x = d + 1; x <= n; x++) stage(ym, r, x, v) }}
-                                  onKeyDown={e => ok && onKey(e, ym, r, ri, d)}>{v ?? ''}</div>
-                              </td>
-                            )
-                          })}
-                          <td className="px-1 border-l border-gray-200">
-                            <input className="w-[56px] h-[22px] text-center text-[11px] font-mono border border-gray-200 rounded bg-white focus:outline-none focus:border-brand-500 disabled:bg-gray-50"
-                              inputMode="decimal" placeholder="hrs" disabled={!canEdit}
-                              value={rotPend[`${ym}|${cKey(r)}`] ?? (rot[`${ym}|${cKey(r)}`] ?? '')}
-                              onChange={e => {
-                                const v = e.target.value.replace(/[^0-9.]/g, '')
-                                const k = `${ym}|${cKey(r)}`
-                                setRotPend(p => { const n = { ...p }; if (v === String(rot[k] ?? '')) delete n[k]; else n[k] = v; return n })
-                              }} />
+      {view === 'days' && (
+        <div className="flex-1 min-h-0 flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div className="shrink-0 flex items-center gap-4 px-3 py-1 border-b border-gray-200 text-[11.5px] text-gray-600 flex-wrap">
+            <span className="flex items-center gap-1.5"><span className="inline-flex w-5 h-5 items-center justify-center rounded font-mono font-semibold bg-[#f0f6ff] text-[#1e3a5f] border border-[#bfdbfe]">S</span> Standby</span>
+            <span className="flex items-center gap-1.5"><span className="inline-flex w-5 h-5 items-center justify-center rounded font-mono font-semibold bg-[#f0faf4] text-[#14532d] border border-[#bbf7d0]">1</span> Operating</span>
+            <span className="ml-auto text-[10.5px] text-gray-400">Type S / 1, it moves to the next day · click cycles · right-click fills to month end · Del clears · nothing is saved until you click Save</span>
+          </div>
+          <div className="flex-1 min-h-0 overflow-auto">
+            <table className="border-collapse text-[11.5px]" style={{ minWidth: `${860 + n * 26}px` }}>
+              <thead className="sticky top-0 z-10 bg-white">
+                <tr className="border-b border-gray-200">
+                  <th className={`${th} ${stick} !z-20 w-[34px]`}>#</th>
+                  <th className={`${th} sticky left-[34px] z-20 bg-white`}>Asset/S/N</th>
+                  <th className={th}>Description</th>
+                  <th className={th}>DT #</th><th className={th}>RM Dispatch</th><th className={th}>RT #</th><th className={th}>RM Backload</th>
+                  {days.map(d => <th key={d} className="p-0 w-[26px] text-center font-mono text-[10px] font-medium text-gray-500 border-l border-gray-100">{d}</th>)}
+                  <th className={`${th} text-center border-l border-gray-200`}>Rot Hrs</th>
+                  <th className={`${th} text-center text-blue-700`}>SB</th>
+                  <th className={`${th} text-center text-green-700`}>Ops</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.length === 0 && <tr><td colSpan={n + 10} className="text-center text-gray-400 py-8">
+                  {all.length === 0 ? 'No tools on hire this month.' : 'No tools match the search.'}</td></tr>}
+                {shown.map((r, ri) => {
+                  let ops = 0, sb = 0
+                  for (let d = 1; d <= n; d++) { const v = valueOf(ym, r, d); if (v === '1') ops++; else if (v === 'S') sb++ }
+                  return (
+                    <tr key={cKey(r) + ri} className="group border-b border-gray-100 hover:bg-gray-50/60">
+                      <td className={`px-2 text-gray-400 ${stick} group-hover:bg-gray-50`}>{ri + 1}</td>
+                      <td className="px-2 font-mono font-semibold text-gray-900 whitespace-nowrap sticky left-[34px] z-[5] bg-white group-hover:bg-gray-50">{r.assetNo || r.toolId}</td>
+                      <td className="px-2 text-gray-700 max-w-[260px] truncate" title={r.label}>{r.label}</td>
+                      <td className="px-2 font-mono text-gray-500 whitespace-nowrap">{r.dtNumber || '—'}</td>
+                      <td className="px-2 text-gray-500 whitespace-nowrap">{shortDate(r.dateOut) || '—'}</td>
+                      <td className="px-2 font-mono text-gray-500 whitespace-nowrap">{(r as any).rtNo || '—'}</td>
+                      <td className="px-2 text-gray-500 whitespace-nowrap">{shortDate(r.dateIn) || <span className="text-amber-600">on rig</span>}</td>
+                      {days.map(d => {
+                        const v = valueOf(ym, r, d)
+                        const ok = inWindow(r, ym, d)
+                        const changed = `${ym}|${cKey(r)}|${d}` in pending
+                        const tone = !ok ? 'bg-gray-100 cursor-not-allowed'
+                          : v === '1' ? 'bg-[#f0faf4] text-[#14532d]' : v === 'S' ? 'bg-[#f0f6ff] text-[#1e3a5f]'
+                          : 'bg-white hover:bg-blue-50'
+                        return (
+                          <td key={d} className="p-0 border-l border-gray-100">
+                            <div data-util={`${ym}-${ri}-${d}`} tabIndex={ok && canEdit ? 0 : -1}
+                              className={`${cell} ${tone} ${ok && canEdit ? 'cursor-pointer focus:shadow-[inset_0_0_0_2px_#2563eb]' : ''} ${changed ? 'shadow-[inset_0_0_0_2px_#fbbf24]' : ''}`}
+                              title={ok ? undefined : 'Outside this tool’s DT–RT dates'}
+                              onClick={() => ok && stage(ym, r, d, v === null ? '1' : v === '1' ? 'S' : null)}
+                              onContextMenu={e => { e.preventDefault(); if (ok) for (let x = d + 1; x <= n; x++) stage(ym, r, x, v) }}
+                              onKeyDown={e => ok && onKey(e, ym, r, ri, d)}>{v ?? ''}</div>
                           </td>
-                          <td className="px-2 text-center font-mono font-semibold text-blue-700">{sb}</td>
-                          <td className="px-2 text-center font-mono font-semibold text-green-700">{ops}</td>
-                        </tr>
-                      )
-                    })}
-                    <tr className="bg-gray-50 border-t border-gray-300">
-                      <td colSpan={7 + n + 1} className="px-3 py-1.5 text-right text-[10.5px] font-semibold uppercase tracking-wide text-gray-500">Month totals</td>
-                      <td className="text-center font-mono font-bold text-blue-700">{tot.sb}</td>
-                      <td className="text-center font-mono font-bold text-green-700">{tot.ops}</td>
+                        )
+                      })}
+                      <td className="px-1 border-l border-gray-200">
+                        <input className="w-[56px] h-[22px] text-center text-[11px] font-mono border border-gray-200 rounded bg-white focus:outline-none focus:border-brand-500 disabled:bg-gray-50"
+                          inputMode="decimal" placeholder="hrs" disabled={!canEdit}
+                          value={rotPend[`${ym}|${cKey(r)}`] ?? (rot[`${ym}|${cKey(r)}`] ?? '')}
+                          onChange={e => {
+                            const v = e.target.value.replace(/[^0-9.]/g, '')
+                            const k = `${ym}|${cKey(r)}`
+                            setRotPend(p => { const nn = { ...p }; if (v === String(rot[k] ?? '')) delete nn[k]; else nn[k] = v; return nn })
+                          }} />
+                      </td>
+                      <td className="px-2 text-center font-mono font-semibold text-blue-700">{sb}</td>
+                      <td className="px-2 text-center font-mono font-semibold text-green-700">{ops}</td>
                     </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )
-      })}
-
-      {/* Job revenue, by month */}
-      {canSeeMoney && (
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200">
-            <span className="text-[13px] font-semibold text-gray-900">Job Revenue Details</span>
-            <span className="text-[11px] text-gray-400">All months · from saved days, priced from the contract when a day is saved · hired-in tool cost from their hire rate</span>
-            <span className="ml-auto text-[11px] text-gray-500">Revenue <b className="font-mono text-gray-900">{fmtMoney(grand)}</b></span>
-            <span className="text-[11px] text-gray-500">Sub-contract cost <b className="font-mono text-gray-900">{fmtMoney(grandCost)}</b></span>
-            <span className="text-[11px] text-gray-500">Margin <b className="font-mono text-gray-900">{fmtMoney(grand - grandCost)}</b></span>
-          </div>
-          {months.map(ym => {
-            const rows = rowsFor(ym)
-            const sum = rows.reduce((a, r) => a + revenue(ym, r).total, 0)
-            return (
-              <div key={ym} className="px-4 pt-3 pb-2">
-                <div className="text-[10.5px] font-semibold uppercase tracking-wide text-gray-500 mb-1">{monthLabel(ym)}</div>
-                <table className="w-full text-[11.5px] border-collapse">
-                  <thead><tr className="border-b border-gray-200">
-                    <th className={th}>#</th><th className={th}>Serial / Asset</th><th className={th}>Description</th>
-                    <th className={th}>DT#</th><th className={th}>RT#</th>
-                    <th className={`${th} text-right`}>SB Days</th><th className={`${th} text-right`}>Ops Days</th>
-                    <th className={`${th} text-right`}>SB Rate</th><th className={`${th} text-right`}>Ops Rate</th>
-                    <th className={`${th} text-right`}>SB Value</th><th className={`${th} text-right`}>Ops Value</th>
-                    <th className={`${th} text-right`}>Revenue</th>
-                    <th className={`${th} text-right`}>Sub-contract Cost</th>
-                    <th className={`${th} text-right`}>Margin</th>
-                  </tr></thead>
-                  <tbody>
-                    {rows.map((r, i) => {
-                      const v = revenue(ym, r)
-                      const unpriced = (v.sb + v.ops) > 0 && v.total === 0
-                      return (
-                        <tr key={cKey(r) + i} className="border-b border-gray-100">
-                          <td className="px-2 text-gray-400">{i + 1}</td>
-                          <td className="px-2 font-mono text-blue-700">{r.assetNo || r.toolId}</td>
-                          <td className="px-2 text-gray-700">{r.label}</td>
-                          <td className="px-2 font-mono text-gray-500">{r.dtNumber || '—'}</td>
-                          <td className="px-2 font-mono text-gray-500">{(r as any).rtNo || '—'}</td>
-                          <td className="px-2 text-right font-mono text-blue-700">{v.sb}</td>
-                          <td className="px-2 text-right font-mono text-green-700">{v.ops}</td>
-                          <td className="px-2 text-right font-mono text-gray-500">{v.sbRate ? fmtMoney(v.sbRate) : '—'}</td>
-                          <td className="px-2 text-right font-mono text-gray-500">{v.opsRate ? fmtMoney(v.opsRate) : '—'}</td>
-                          <td className="px-2 text-right font-mono">{fmtMoney(v.sbV)}</td>
-                          <td className="px-2 text-right font-mono">{fmtMoney(v.opsV)}</td>
-                          <td className={`px-2 text-right font-mono font-bold ${unpriced ? 'text-amber-600' : ''}`}
-                              title={unpriced ? 'Days saved with no contract rate' : undefined}>{fmtMoney(v.total)}</td>
-                          <td className={`px-2 text-right font-mono ${v.costMissing ? 'text-amber-600' : 'text-gray-700'}`}
-                              title={v.costMissing ? 'Hired-in tool: some days have no hire rate yet (set in Pending Rental Costs)' : undefined}>
-                            {v.isSub ? fmtMoney(v.cost) : '—'}</td>
-                          <td className="px-2 text-right font-mono font-bold">{fmtMoney(v.total - (v.isSub ? v.cost : 0))}</td>
-                        </tr>
-                      )
-                    })}
-                    <tr className="bg-gray-50"><td colSpan={11} className="px-2 py-1.5 text-right font-semibold text-gray-600">{monthLabel(ym)} Total</td>
-                      <td className="px-2 text-right font-mono font-bold">{fmtMoney(sum)}</td>
-                      <td className="px-2 text-right font-mono font-bold">{fmtMoney(rows.reduce((a, r) => a + (revenue(ym, r).isSub ? revenue(ym, r).cost : 0), 0))}</td>
-                      <td className="px-2 text-right font-mono font-bold">{fmtMoney(sum - rows.reduce((a, r) => a + (revenue(ym, r).isSub ? revenue(ym, r).cost : 0), 0))}</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            )
-          })}
-          <div className="flex justify-end items-baseline gap-3 px-4 py-3 border-t border-gray-200">
-            <span className="text-[10.5px] uppercase tracking-wide text-gray-500 font-semibold">Grand total</span>
-            <span className="font-mono font-bold text-[18px]">{fmtMoney(grand)}</span>
-            <span className="text-[10.5px] uppercase tracking-wide text-gray-500 font-semibold ml-4">Cost</span>
-            <span className="font-mono font-bold text-[18px]">{fmtMoney(grandCost)}</span>
-            <span className="text-[10.5px] uppercase tracking-wide text-gray-500 font-semibold ml-4">Margin</span>
-            <span className="font-mono font-bold text-[18px]">{fmtMoney(grand - grandCost)}</span>
+                  )
+                })}
+              </tbody>
+              <tfoot className="sticky bottom-0 z-10">
+                <tr className="bg-gray-50 border-t border-gray-300">
+                  <td colSpan={7 + n + 1} className="px-3 py-1.5 text-right text-[10.5px] font-semibold text-gray-500">{monthLabel(ym)} totals</td>
+                  <td className="text-center font-mono font-bold text-blue-700">{tot.sb}</td>
+                  <td className="text-center font-mono font-bold text-green-700">{tot.ops}</td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         </div>
       )}
 
-      {/* Sticky footer */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 px-6 py-2 flex items-center gap-3 justify-end">
-        {pendingCount > 0 && <span className="text-[11.5px] font-semibold text-amber-700 mr-auto">{pendingCount} unsaved change{pendingCount === 1 ? '' : 's'}</span>}
+      {view === 'money' && canSeeMoney && (
+        <div className="flex-1 min-h-0 flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div className="shrink-0 flex items-center gap-4 px-3 py-1.5 border-b border-gray-200 text-[12px] text-gray-500 flex-wrap">
+            <span className="font-semibold text-gray-900">{monthLabel(ym)}</span>
+            <span>Revenue <b className="font-mono text-gray-900">{fmtMoney(mRev)}</b></span>
+            <span>Sub-contract cost <b className="font-mono text-gray-900">{fmtMoney(mCost)}</b></span>
+            <span>Margin <b className="font-mono text-gray-900">{fmtMoney(mRev - mCost)}</b></span>
+            <span className="ml-auto text-[11px] text-gray-400">Whole job: revenue <b className="font-mono text-gray-700">{fmtMoney(grand)}</b> · cost <b className="font-mono text-gray-700">{fmtMoney(grandCost)}</b> · margin <b className="font-mono text-gray-700">{fmtMoney(grand - grandCost)}</b></span>
+          </div>
+          <div className="flex-1 min-h-0 overflow-auto">
+            <table className="w-full text-[11.5px] border-collapse">
+              <thead className="sticky top-0 z-10 bg-white"><tr className="border-b border-gray-200">
+                <th className={th}>#</th><th className={th}>Serial / Asset</th><th className={th}>Description</th>
+                <th className={th}>DT#</th><th className={th}>RT#</th>
+                <th className={`${th} text-right`}>SB Days</th><th className={`${th} text-right`}>Ops Days</th>
+                <th className={`${th} text-right`}>SB Rate</th><th className={`${th} text-right`}>Ops Rate</th>
+                <th className={`${th} text-right`}>SB Value</th><th className={`${th} text-right`}>Ops Value</th>
+                <th className={`${th} text-right`}>Revenue</th>
+                <th className={`${th} text-right`}>Sub-contract Cost</th>
+                <th className={`${th} text-right`}>Margin</th>
+              </tr></thead>
+              <tbody>
+                {shown.length === 0 && <tr><td colSpan={14} className="text-center text-gray-400 py-8">
+                  {all.length === 0 ? 'No tools on hire this month.' : 'No tools match the search.'}</td></tr>}
+                {shown.map((r, i) => {
+                  const v = revenue(ym, r)
+                  const unpriced = (v.sb + v.ops) > 0 && v.total === 0
+                  return (
+                    <tr key={cKey(r) + i} className="border-b border-gray-100 hover:bg-gray-50/60 whitespace-nowrap">
+                      <td className="px-2 text-gray-400">{i + 1}</td>
+                      <td className="px-2 font-mono text-blue-700">{r.assetNo || r.toolId}</td>
+                      <td className="px-2 text-gray-700 max-w-[280px] truncate" title={r.label}>{r.label}</td>
+                      <td className="px-2 font-mono text-gray-500">{r.dtNumber || '—'}</td>
+                      <td className="px-2 font-mono text-gray-500">{(r as any).rtNo || '—'}</td>
+                      <td className="px-2 text-right font-mono text-blue-700">{v.sb}</td>
+                      <td className="px-2 text-right font-mono text-green-700">{v.ops}</td>
+                      <td className="px-2 text-right font-mono text-gray-500">{v.sbRate ? fmtMoney(v.sbRate) : '—'}</td>
+                      <td className="px-2 text-right font-mono text-gray-500">{v.opsRate ? fmtMoney(v.opsRate) : '—'}</td>
+                      <td className="px-2 text-right font-mono">{fmtMoney(v.sbV)}</td>
+                      <td className="px-2 text-right font-mono">{fmtMoney(v.opsV)}</td>
+                      <td className={`px-2 text-right font-mono font-bold ${unpriced ? 'text-amber-600' : ''}`}
+                          title={unpriced ? 'Days saved with no contract rate' : undefined}>{fmtMoney(v.total)}</td>
+                      <td className={`px-2 text-right font-mono ${v.costMissing ? 'text-amber-600' : 'text-gray-700'}`}
+                          title={v.costMissing ? 'Hired-in tool: some days have no hire rate yet (set in Pending Rental Costs)' : undefined}>
+                        {v.isSub ? fmtMoney(v.cost) : '—'}</td>
+                      <td className="px-2 text-right font-mono font-bold">{fmtMoney(v.total - (v.isSub ? v.cost : 0))}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot className="sticky bottom-0 z-10">
+                <tr className="bg-gray-50 border-t border-gray-300 font-bold">
+                  <td colSpan={5} className="px-2 py-1.5 text-right text-gray-600">{monthLabel(ym)} total{shown.length !== all.length ? ' (all tools)' : ''}</td>
+                  <td className="px-2 text-right font-mono text-blue-700">{tot.sb}</td>
+                  <td className="px-2 text-right font-mono text-green-700">{tot.ops}</td>
+                  <td colSpan={4}></td>
+                  <td className="px-2 text-right font-mono">{fmtMoney(mRev)}</td>
+                  <td className="px-2 text-right font-mono">{fmtMoney(mCost)}</td>
+                  <td className="px-2 text-right font-mono">{fmtMoney(mRev - mCost)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="shrink-0 bg-white border border-gray-200 rounded-lg px-3 py-1.5 flex items-center gap-2 justify-end">
+        {pendingCount > 0 && <span className="text-[11.5px] font-semibold text-amber-700 mr-auto">{pendingCount} unsaved change{pendingCount === 1 ? '' : 's'}{monthDirty !== pendingCount ? ` (${monthDirty} in ${monthLabel(ym)})` : ''}</span>}
         {pendingCount > 0 && <button className="btn-mini" disabled={saving} onClick={() => { setPending({}); setRotPend({}) }}>Discard</button>}
+        <button className="btn-mini" onClick={() => exportXlsx(ym)}>Export month</button>
+        <button className="btn-mini" onClick={() => exportXlsx()}>Export all months</button>
         {canEdit && <button className="btn-primary text-xs py-1.5" disabled={saving || !pendingCount} onClick={() => save()}>
           {saving ? <><Spinner size="sm" /> Saving…</> : <><Save size={13} /> Save All</>}</button>}
-        <button className="btn-mini" onClick={() => exportXlsx()}>Export Excel</button>
       </div>
     </div>
   )
@@ -2668,7 +2685,7 @@ export function JobDetailView() {
       </div>
 
       {/* Tab content */}
-      <div className={`flex-1 min-h-0 pt-2 ${tab === 'dt' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}>
+      <div className={`flex-1 min-h-0 pt-2 ${tab === 'dt' || tab === 'util' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}>
         {isNew && tab !== 'header' && (
           <div className="card p-8 text-center text-gray-400 text-sm">
             Save the job first to access this tab
