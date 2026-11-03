@@ -76,10 +76,15 @@ module.exports = safe(async function (context, req) {
                   MAX(x.logDate)         AS lastDay
              FROM (
                SELECT d.JobID AS jobId, d.ToolSerial AS tool, d.LogDate AS logDate,
-                      COALESCE(NULLIF(i.Supplier, ''), NULLIF(i.Ownership, ''), 'Unknown supplier') AS supplier,
+                      CASE WHEN NULLIF(LTRIM(RTRIM(i.Ownership)), '') IS NOT NULL AND UPPER(LTRIM(RTRIM(i.Ownership))) NOT IN ('RENTED','EMDAD')
+                           THEN LTRIM(RTRIM(i.Ownership))
+                           WHEN NULLIF(LTRIM(RTRIM(i.Supplier)), '') IS NOT NULL AND UPPER(LTRIM(RTRIM(i.Supplier))) <> 'EMDAD'
+                           THEN LTRIM(RTRIM(i.Supplier))
+                           ELSE 'Unknown supplier' END AS supplier,
                       ri.dayRate AS rate, ri.currency AS cur
                  FROM tbl_DailyFieldLogs d
                  JOIN tbl_Inventory i ON i.SystemID = d.ToolSerial AND i.IsEmdad = 0
+                  AND NOT (UPPER(COALESCE(i.Ownership, '')) = 'EMDAD' AND UPPER(COALESCE(i.Supplier, '')) IN ('EMDAD', ''))
                  OUTER APPLY (
                    SELECT TOP 1 r.dayRate, r.currency
                      FROM tbl_RentalInward r
