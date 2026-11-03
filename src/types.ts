@@ -425,6 +425,9 @@ export interface Supplier {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export interface DashboardStats {
+  jobsByClient?: { name: string; jobs: number }[]
+  jobsByService?: { name: string; jobs: number }[]
+  activeRigs?: number
   totalJobs: number
   activeJobs: number
   openJobs: number

@@ -1,70 +1,62 @@
 import React from 'react'
 import { useLocation } from 'react-router-dom'
-import { RefreshCw, Database, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { RefreshCw, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { useFetch } from '../hooks/useFetch'
+import type { DashboardStats } from '../types'
 
-/** Module → breadcrumb, screen → title, matching the previous app's chrome. */
-const PAGES: Record<string, { crumb: string; title: string }> = {
-  '/':                  { crumb: 'Operations Module',        title: 'Operations Dashboard' },
-  '/jobs':              { crumb: 'Operations Module',        title: 'Drilling Jobs' },
-  '/job-tools-list':    { crumb: 'Operations Module',        title: 'Job Tools List' },
-  '/tool-history':      { crumb: 'Operations Module',        title: 'Tool Movement History' },
-  '/delivery-tickets':  { crumb: 'Operations Module',        title: 'Delivery Tickets' },
-  '/receiving-tickets': { crumb: 'Operations Module',        title: 'Receiving Tickets' },
-  '/utilization':       { crumb: 'Operations Module',        title: 'Utilization' },
-  '/gate-pass':         { crumb: 'Operations Module',        title: 'Security Gate Pass' },
-  '/inventory':         { crumb: 'Assets & Inventory Management', title: 'Assets and Inventory Catalog' },
-  '/missing-tools':     { crumb: 'Inventory Module',         title: 'Tools Not in Inventory' },
-  '/categories':        { crumb: 'Inventory Module',         title: 'Tool Categories & Sizes' },
-  '/inspection':        { crumb: 'Maintenance & QC Module',  title: 'QC Inspection Bay' },
-  '/maintenance':       { crumb: 'Maintenance & QC Module',  title: 'Maintenance Orders' },
-  '/invoices':          { crumb: 'Billing & Cost Control',   title: 'Invoicing' },
-  '/pending-rental-costs': { crumb: 'Billing & Cost Control', title: 'Pending Rental Costs' },
-  '/sub-rates': { crumb: 'Billing & Cost Control', title: 'Sub-Contractor Rate Sheets' },
-  '/sub-accruals': { crumb: 'Billing & Cost Control', title: 'Sub-Contract POs & Accruals' },
-  '/contracts':         { crumb: 'Contracts Module',         title: 'Master Contract Register' },
-  '/clients':           { crumb: 'Contracts Module',         title: 'Clients' },
-  '/suppliers':         { crumb: 'Contracts Module',         title: 'Suppliers' },
-  '/users':             { crumb: 'Administration',           title: 'User Management' },
-  '/settings':          { crumb: 'Administration',           title: 'Global Configurations' },
-}
-
-function resolve(pathname: string) {
-  if (PAGES[pathname]) return PAGES[pathname]
-  const base = '/' + pathname.split('/')[1]
-  return PAGES[base] || { crumb: 'Operations Platform', title: 'Tool Tracker' }
-}
-
+/*
+ * The old app's top bar: dark navy across the whole window with the EMDAD
+ * logo on a white tile, the company name, a live-database badge that says
+ * how many jobs and tools it is looking at, and Refresh on the right.
+ * The sidebar sits underneath it instead of running the full height.
+ */
 export function Header({ collapsed = false, onToggleSidebar }: { collapsed?: boolean; onToggleSidebar?: () => void }) {
-  const location = useLocation()
-  const { crumb, title } = resolve(location.pathname)
+  useLocation() // re-render on navigation so the badge stays current
+  const { data: s, error } = useFetch<DashboardStats>('/dashboard/stats')
+  const live = !!s && !error
 
   return (
-    // One 34px row, not two stacked lines — the screen below needs the height.
-    <header className="bg-white border-b border-gray-300 px-3 h-[38px] flex items-center gap-2 shrink-0">
-      {onToggleSidebar && (
-        <button onClick={onToggleSidebar} className="text-gray-500 hover:text-navy-900 shrink-0"
-                title={collapsed ? 'Show menu' : 'Hide menu'}>
-          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </button>
-      )}
-      <nav className="flex items-center gap-1.5 text-[12px] min-w-0 truncate" aria-label="Breadcrumb">
-        <span className="text-gray-400 truncate">{crumb}</span>
-        <span className="text-gray-300">/</span>
-        <h1 className="font-semibold text-navy-900 truncate">{title}</h1>
-      </nav>
-
-      <div className="ml-auto flex items-center gap-1.5 shrink-0">
-        <span className="hidden lg:inline-flex items-center gap-1 px-1.5 py-px rounded bg-brand-50 border border-brand-200 text-brand-800 text-[10px] font-semibold">
-          <Database size={11} /> Azure SQL
-        </span>
-        <button
-          className="btn-mini"
-          onClick={() => window.location.reload()}
-          title="Reload this screen"
-        >
-          <RefreshCw size={12} /> Refresh
-        </button>
+    <header className="bg-[#0b192c] text-white px-4 h-[50px] flex items-center justify-between shadow-md border-b border-[#182944] shrink-0 z-40">
+      <div className="flex items-center gap-3 min-w-0">
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className="p-1.5 rounded-lg bg-[#14263f] hover:bg-[#1f375a] text-slate-300 hover:text-white border border-[#233d63] transition"
+            title={collapsed ? 'Show menu' : 'Hide menu'}
+          >
+            {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+          </button>
+        )}
+        <div className="bg-white px-2 py-1 rounded shadow flex items-center justify-center">
+          <img src="/emdad-logo.png" alt="EMDAD" className="h-6 w-auto object-contain" />
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-extrabold text-sm tracking-wide">EMDAD LLC</span>
+            {live ? (
+              <span className="hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                    title="Connected to the live Azure SQL database">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                AZURE SQL LIVE ({s!.totalJobs.toLocaleString()} Jobs · {s!.totalInventory.toLocaleString()} Tools)
+              </span>
+            ) : (
+              <span className="hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                {error ? 'DATABASE NOT REACHABLE' : 'CONNECTING…'}
+              </span>
+            )}
+          </div>
+          <div className="text-[10px] text-amber-300/90 font-medium leading-tight">Well Intervention - Upstream Services</div>
+        </div>
       </div>
+
+      <button
+        onClick={() => window.location.reload()}
+        className="px-3 py-1 bg-[#14263f] hover:bg-[#1f375a] text-slate-200 hover:text-white rounded-md border border-[#25426b] text-[11px] font-semibold flex items-center gap-1.5 transition"
+        title="Reload this screen from the database"
+      >
+        <RefreshCw size={12} /> Refresh
+      </button>
     </header>
   )
 }

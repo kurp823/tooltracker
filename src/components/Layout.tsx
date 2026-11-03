@@ -17,10 +17,11 @@ export function Layout() {
     return n
   })
   return (
-    <div className="flex h-screen overflow-hidden bg-canvas">
+    <div className="flex flex-col h-screen overflow-hidden bg-canvas">
+      <Header collapsed={collapsed} onToggleSidebar={toggle} />
+      <div className="flex flex-1 min-h-0">
       <Sidebar collapsed={collapsed} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Header collapsed={collapsed} onToggleSidebar={toggle} />
         {/*
           The banner sits here rather than inside each screen, so every screen
           opens the same way the old app's did without thirty files having to
@@ -35,6 +36,7 @@ export function Layout() {
             <Outlet />
           </div>
         </main>
+      </div>
       </div>
     </div>
   )
