@@ -99,15 +99,54 @@ module.exports = async function (context, req) {
 
   // ── GET list ─────────────────────────────────────────────────────────────
   if (!id && method === 'GET') {
+    const jobQ = String((req.query || {}).job || '').trim()
+    const jobFilter = jobQ ? `AND j.JobID = @jobQ` : ''
+    const jobParam  = jobQ ? [{ name: 'jobQ', value: jobQ }] : []
+
     const result = await query(
-      // tbl_Invoices is empty (0 rows) — no invoice record has ever been
-      // created in it. The real billing data lives on tbl_Jobs, which carries
-      // the whole pipeline: SubmittedToBillingDate -> DraftInvoicedDate/
-      // DraftInvoiceNumber -> SesSubmittedDate/SesNumber ->
-      // FinalInvoicedDate/LegalInvoiceNumber, plus InvoiceAmount and
-      // InvoiceDate. So the invoice list is derived from the jobs that have
-      // billing activity, mirroring the original app's invoicing workflow.
-      `SELECT
+      // Two billing worlds live side-by-side.
+      //
+      // LEGACY (per-job billing): The original app stored invoice milestones
+      // on tbl_Jobs: Draft/Final invoice numbers, SES numbers, dates and
+      // amounts. 3,666 jobs carry this data. We derive one invoice row per
+      // job from that history.
+      //
+      // NEW MONTHLY BILLING: New invoices are created via POST and land in
+      // tbl_Invoices with a proper invoice number, periodFrom/periodTo and
+      // a PO number. Monthly jobs can have multiple invoices, one per period.
+      //
+      // Both are shown in the same register, with monthly invoices listed
+      // first because they are newer. A 'Source' column lets the UI
+      // distinguish them for the detail view.
+      `-- New monthly invoices from tbl_Invoices
+       SELECT
+          CAST(i.id AS VARCHAR) AS InvoiceID,
+          i.invoiceNumber       AS InvoiceNumber,
+          i.jobNumber           AS JobID,
+          i.invoiceDate         AS InvoiceDate,
+          NULL                  AS DueDate,
+          i.currency            AS Currency,
+          i.totalAmount         AS TotalAmount,
+          NULL                  AS NetAmount,
+          i.status              AS Status,
+          YEAR(i.invoiceDate)   AS FiscalYear,
+          i.createdAt           AS CreatedDate,
+          COALESCE(c.clientName, NULLIF(i.clientCode,'')) AS Client,
+          i.rig                 AS Rig,
+          i.well                AS Well,
+          i.contract            AS Contract,
+          i.poNumber            AS PONumber,
+          i.periodFrom          AS PeriodFrom,
+          i.periodTo            AS PeriodTo,
+          'monthly'             AS Source
+       FROM tbl_Invoices i
+       LEFT JOIN tbl_Clients c ON i.clientCode = c.clientCode
+       ${jobQ ? 'WHERE i.jobNumber = @jobQ' : ''}
+
+       UNION ALL
+
+       -- Legacy per-job billing derived from tbl_Jobs pipeline columns
+       SELECT
           j.JobID AS InvoiceID,
           COALESCE(
             NULLIF(j.LegalInvoiceNumber, ''),
@@ -137,9 +176,13 @@ module.exports = async function (context, req) {
           j.Rig AS Rig,
           j.Well AS Well,
           j.Contract AS Contract,
-          j.PONumber AS PONumber
+          j.PONumber AS PONumber,
+          NULL AS PeriodFrom,
+          NULL AS PeriodTo,
+          'job' AS Source
         FROM tbl_Jobs j
-       WHERE j.InvoiceAmount > 0
+       WHERE (
+           j.InvoiceAmount > 0
           OR j.InvoiceDate             IS NOT NULL
           OR j.SubmittedToBillingDate  IS NOT NULL
           OR j.DraftInvoicedDate       IS NOT NULL
@@ -148,8 +191,11 @@ module.exports = async function (context, req) {
           OR NULLIF(j.DraftInvoiceNumber, '') IS NOT NULL
           OR NULLIF(j.SesNumber, '')          IS NOT NULL
           OR NULLIF(j.LegalInvoiceNumber, '') IS NOT NULL
-       ORDER BY COALESCE(j.InvoiceDate, j.CreatedDate) DESC`,
-      []
+       )
+       ${jobQ ? 'AND j.JobID = @jobQ' : ''}
+
+       ORDER BY InvoiceDate DESC, InvoiceID DESC`,
+      jobParam
     )
     return jsonResponse(context, 200, result.recordset)
   }
@@ -181,7 +227,14 @@ module.exports = async function (context, req) {
     const b = req.body
     if (!b.JobID) return jsonResponse(context, 400, { error: 'JobID required' })
 
-    const yr = new Date().getFullYear()
+    // Carry over contract, client, rig, well from the job.
+    const jobRow = await query(
+      `SELECT TOP 1 Client, Contract, Rig, Well, PONumber, Currency
+         FROM tbl_Jobs WHERE JobID = @jid`,
+      [{ name: 'jid', value: b.JobID }]
+    )
+    const job    = jobRow.recordset[0] || {}
+    const yr     = new Date().getFullYear()
     const lastRow = await query(
       `SELECT TOP 1 invoiceNumber FROM tbl_Invoices
         WHERE invoiceNumber LIKE 'INV-${yr}-%'
@@ -194,19 +247,59 @@ module.exports = async function (context, req) {
     }
     const InvoiceNumber = `INV-${yr}-${String(seq).padStart(5, '0')}`
 
+    // Block duplicate period: one invoice per job per billing period.
+    // An empty periodFrom means a one-off invoice, not subject to this check.
+    if (b.PeriodFrom) {
+      const dup = await query(
+        `SELECT TOP 1 invoiceNumber FROM tbl_Invoices
+          WHERE jobNumber   = @job
+            AND periodFrom  = @pf
+            AND periodTo    = @pt`,
+        [
+          { name: 'job', value: b.JobID },
+          { name: 'pf',  value: b.PeriodFrom },
+          { name: 'pt',  value: b.PeriodTo || b.PeriodFrom },
+        ]
+      )
+      if (dup.recordset.length) {
+        return jsonResponse(context, 409, {
+          error: `Invoice ${dup.recordset[0].invoiceNumber} already covers this period for job ${b.JobID}`,
+        })
+      }
+    }
+
     const r = await query(
       `INSERT INTO tbl_Invoices
-         (invoiceNumber, jobNumber, clientCode, invoiceDate, currency, subtotal, vatAmount, totalAmount, status, notes, createdBy, createdAt)
+         (invoiceNumber, invoiceType, jobNumber, clientCode, contract, rig, well,
+          poNumber, invoiceDate, periodFrom, periodTo,
+          currency, subtotal, vatAmount, totalAmount, status, notes, createdBy, createdAt)
        OUTPUT INSERTED.id
-       VALUES (@num, @job, @client, @date, @currency, 0, 0, 0, 'Draft', @notes, @by, GETDATE())`,
+       SELECT
+         @num, 'Monthly', @job,
+         COALESCE(@client, j.Client, ''),
+         COALESCE(@contract, j.Contract),
+         COALESCE(@rig, j.Rig),
+         COALESCE(@well, j.Well),
+         COALESCE(@po, j.PONumber),
+         @date, @pf, @pt,
+         COALESCE(@currency, j.Currency, 'USD'),
+         0, 0, 0, 'Draft', @notes, @by, GETDATE()
+       FROM (SELECT 1 AS one) seed
+       LEFT JOIN tbl_Jobs j ON j.JobID = @job`,
       [
-        { name: 'num',      value: InvoiceNumber           },
-        { name: 'job',      value: b.JobID                 },
-        { name: 'client',   value: b.ClientCode || null    },
+        { name: 'num',      value: InvoiceNumber                  },
+        { name: 'job',      value: b.JobID                        },
+        { name: 'client',   value: b.ClientCode || null           },
+        { name: 'contract', value: b.Contract   || null           },
+        { name: 'rig',      value: b.Rig        || null           },
+        { name: 'well',     value: b.Well       || null           },
+        { name: 'po',       value: b.PONumber   || null           },
         { name: 'date',     value: b.InvoiceDate || new Date().toISOString().split('T')[0] },
-        { name: 'currency', value: b.Currency || 'USD'     },
-        { name: 'notes',    value: b.Notes || null          },
-        { name: 'by',       value: user.Username            },
+        { name: 'pf',       value: b.PeriodFrom  || null          },
+        { name: 'pt',       value: b.PeriodTo    || null          },
+        { name: 'currency', value: b.Currency || job.Currency || 'USD' },
+        { name: 'notes',    value: b.Notes || null                },
+        { name: 'by',       value: user.Username                  },
       ]
     )
     return jsonResponse(context, 201, { InvoiceID: r.recordset[0].id, InvoiceNumber })
@@ -220,15 +313,24 @@ module.exports = async function (context, req) {
     const b = req.body
     await query(
       `UPDATE tbl_Invoices
-          SET invoiceDate = @date, status = @status,
-              currency = @currency, notes = @notes, updatedAt = GETDATE()
+          SET invoiceDate  = COALESCE(@date,     invoiceDate),
+              status       = COALESCE(@status,   status),
+              currency     = COALESCE(@currency, currency),
+              poNumber     = COALESCE(@po,       poNumber),
+              periodFrom   = COALESCE(@pf,       periodFrom),
+              periodTo     = COALESCE(@pt,       periodTo),
+              notes        = COALESCE(@notes,    notes),
+              updatedAt    = GETDATE()
         WHERE id = @id`,
       [
         { name: 'id',       value: Number(id)          },
         { name: 'date',     value: b.InvoiceDate || null },
-        { name: 'status',   value: b.Status || null     },
-        { name: 'currency', value: b.Currency || null   },
-        { name: 'notes',    value: b.Notes || null      },
+        { name: 'status',   value: b.Status     || null  },
+        { name: 'currency', value: b.Currency   || null  },
+        { name: 'po',       value: b.PONumber   || null  },
+        { name: 'pf',       value: b.PeriodFrom || null  },
+        { name: 'pt',       value: b.PeriodTo   || null  },
+        { name: 'notes',    value: b.Notes      || null  },
       ]
     )
     return jsonResponse(context, 200, { ok: true })
