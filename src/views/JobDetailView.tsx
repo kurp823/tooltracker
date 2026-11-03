@@ -22,6 +22,7 @@ import { useToast } from '../components/Toast'
 import { toDateInput, normalizeJobId } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
 import { ComboBox } from '../components/ComboBox'
+import { Modal } from '../components/Modal'
 import { useRowWindow } from '../components/useRowWindow'
 import type { Job, JobStatus, InvoicingType, ToolMovement } from '../types'
 import { ListOptions } from '../components/ListOptions'
@@ -2245,115 +2246,127 @@ const CREW_ROLES = [
  * DELETE endpoints already existed; only the screen was missing, so crew
  * could never be recorded against a job.
  */
+interface Person {
+  PersonnelID: number; BadgeNo: string | null; Name: string; Designation: string | null
+  PersonType: string; Company: string | null; RigPassNo: string | null; H2SExpiry: string | null
+}
+
+/**
+ * Crew on a job. People are picked from the personnel register (our own staff
+ * and sub-contractor staff) and never typed onto the job, so one person cannot
+ * appear twice under different spellings. A person missing from the register
+ * is added there once, from the picker.
+ */
 function ManpowerTab({ jobId, canEdit }: { jobId: string; canEdit: boolean }) {
   const { showToast } = useToast()
   const { data: crew, isLoading, refetch } =
     useFetch<Array<Record<string, unknown>>>(`/jobs/${jobId}/personnel`)
 
-  const blank = { Name: '', Role: '', MobDate: '', DemobDate: '', Notes: '' }
-  const [draft, setDraft] = useState(blank)
+  const [pickOpen, setPickOpen] = useState(false)
+  const [register, setRegister] = useState<Person[]>([])
+  const [regLoading, setRegLoading] = useState(false)
+  const [role, setRole] = useState('')
+  const [type, setType] = useState('')
+  const [q, setQ] = useState('')
+  const [checked, setChecked] = useState<Set<number>>(new Set())
+  const [mob, setMob] = useState(new Date().toISOString().slice(0, 10))
   const [busy, setBusy] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const blank = { Name: '', BadgeNo: '', Designation: '', PersonType: 'EMDAD', Company: '', RigPassNo: '', H2SExpiry: '', Phone: '' }
+  const [np, setNp] = useState(blank)
 
-  const add = async () => {
-    if (!draft.Name.trim()) { showToast('Name is required', 'error'); return }
+  const loadRegister = async () => {
+    setRegLoading(true)
+    try { setRegister(await api.get<Person[]>('/personnel')) }
+    catch { showToast('Failed to load the personnel register', 'error') }
+    finally { setRegLoading(false) }
+  }
+  const openPicker = () => { setChecked(new Set()); setPickOpen(true); loadRegister() }
+
+  const onJob = new Set((crew || []).filter(c => !c.DemobDate).map(c => Number(c.PersonnelID)))
+  const roles = Array.from(new Set(register.map(p => p.Designation).filter(Boolean) as string[])).sort()
+  const shown = register.filter(p =>
+    (!role || p.Designation === role) && (!type || p.PersonType === type) &&
+    (!q || `${p.Name} ${p.BadgeNo || ''} ${p.Company || ''}`.toLowerCase().includes(q.toLowerCase())))
+
+  const insert = async () => {
+    if (!checked.size) return
     setBusy(true)
-    document.body.style.cursor = 'wait'
     try {
-      await api.post(`/jobs/${jobId}/personnel`, draft)
-      setDraft(blank)
-      showToast('Crew member added', 'success')
-      refetch()
+      const res = await api.post<{ added: number; alreadyOnJob: string[] }>(`/jobs/${jobId}/personnel`,
+        Array.from(checked).map(PersonnelID => ({ PersonnelID, MobDate: mob })))
+      showToast(`${res.added} added to the job${res.alreadyOnJob?.length ? ` (already on it: ${res.alreadyOnJob.join(', ')})` : ''}`, 'success')
+      setPickOpen(false); refetch()
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to add crew member', 'error')
-    } finally {
-      document.body.style.cursor = ''
-      setBusy(false)
-    }
+      showToast(err instanceof Error ? err.message : 'Failed to add crew', 'error')
+    } finally { setBusy(false) }
+  }
+
+  const addPerson = async () => {
+    setBusy(true)
+    try {
+      await api.post('/personnel', np)
+      showToast('Added to the register', 'success')
+      setNp(blank); setAdding(false); loadRegister()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to add', 'error')
+    } finally { setBusy(false) }
   }
 
   const remove = async (pid: unknown, name: unknown) => {
     if (!window.confirm(`Remove ${name || 'this crew member'} from the job?`)) return
     try {
       await api.delete(`/jobs/${jobId}/personnel/${pid}`)
-      showToast('Removed', 'success')
-      refetch()
+      showToast('Removed', 'success'); refetch()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to remove', 'error')
     }
   }
 
   const str = (v: unknown) => (v == null || v === '' ? '—' : String(v))
+  const th = 'table-th'
+  const activeCount = (crew || []).filter(c => !c.DemobDate).length
 
   return (
-    <div className="space-y-1.5">
-      {canEdit && (
-        <div className="bg-white border border-gray-300 rounded">
-          <div className="px-2 h-[22px] flex items-center bg-gray-100 border-b border-gray-300
-                          text-[10px] font-bold uppercase tracking-wider text-gray-600">
-            Add crew member
-          </div>
-          <div className="field-row px-2 py-1.5 grid-cols-[auto_1fr] lg:grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto_1fr_auto]">
-            <span className="field-label">Name *</span>
-            <input className="field-input" value={draft.Name}
-                   onChange={e => setDraft(d => ({ ...d, Name: e.target.value }))} />
-
-            <span className="field-label">Role</span>
-            <input className="field-input" list="dl-crew-role" value={draft.Role}
-                   onChange={e => setDraft(d => ({ ...d, Role: e.target.value }))} />
-            <datalist id="dl-crew-role">
-              {CREW_ROLES.map(r => <option key={r} value={r} />)}
-            </datalist>
-
-            <span className="field-label">Mob</span>
-            <input type="date" className="field-input" value={draft.MobDate}
-                   onChange={e => setDraft(d => ({ ...d, MobDate: e.target.value }))} />
-
-            <span className="field-label">Demob</span>
-            <input type="date" className="field-input" value={draft.DemobDate}
-                   onChange={e => setDraft(d => ({ ...d, DemobDate: e.target.value }))} />
-
-            <button className="btn-accent" onClick={add} disabled={busy || !draft.Name.trim()}>
-              {busy ? <Spinner size="sm" /> : <Plus size={12} />} Add
-            </button>
-          </div>
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2 bg-white border border-gray-300 rounded px-3 py-2">
+        <div className="min-w-0">
+          <div className="text-[13px] font-bold text-navy-head">Field Engineers &amp; Rig Crew</div>
+          <div className="text-[11.5px] text-gray-500">Pick from the personnel register — our own staff and sub-contractor staff.</div>
         </div>
-      )}
+        {canEdit && (
+          <button className="btn-primary ml-auto" onClick={openPicker}><Plus size={12} /> Select Personnel / Crew</button>
+        )}
+      </div>
 
       <div className="bg-white border border-gray-300 rounded overflow-hidden">
-        <div className="px-2 h-[22px] flex items-center bg-gray-100 border-b border-gray-300
-                        text-[10px] font-bold uppercase tracking-wider text-gray-600">
-          Crew on this job ({crew?.length ?? 0})
-        </div>
         {isLoading ? (
           <div className="py-8 flex justify-center"><Spinner size="md" /></div>
         ) : !crew?.length ? (
-          <div className="py-8 text-center text-gray-400 text-xs">
-            No crew recorded against this job yet.
-          </div>
+          <div className="py-8 text-center text-gray-400 text-xs">No personnel assigned to this job yet.</div>
         ) : (
-          <table className="w-full text-[12px] border-collapse">
-            <thead>
-              <tr>
-                <th className="table-th">Name</th>
-                <th className="table-th">Role</th>
-                <th className="table-th">Mob Date</th>
-                <th className="table-th">Demob Date</th>
-                <th className="table-th">Notes</th>
-                {canEdit && <th className="table-th w-8"></th>}
-              </tr>
-            </thead>
+          <table className="w-full border-collapse">
+            <thead><tr>
+              <th className={`${th} w-10`}>Seq</th><th className={th}>Badge #</th><th className={th}>Name</th>
+              <th className={th}>Designation</th><th className={th}>Type / Company</th>
+              <th className={th}>Mob</th><th className={th}>Demob</th><th className={th}>Rig Pass</th><th className={th}>H2S Expiry</th>
+              {canEdit && <th className={`${th} w-8`}></th>}
+            </tr></thead>
             <tbody>
               {crew.map((p, i) => (
-                <tr key={String(p.id ?? i)} className="border-b border-gray-100 hover:bg-brand-50/40">
-                  <td className="table-td font-medium">{str(p.Name)}</td>
-                  <td className="table-td text-gray-600">{str(p.Role)}</td>
+                <tr key={String(p.id ?? i)} className="border-b border-gray-100 hover:bg-blue-50/50">
+                  <td className="table-td text-gray-400">{i + 1}</td>
+                  <td className="table-td font-mono">{str(p.BadgeNo)}</td>
+                  <td className="table-td font-semibold text-navy-head">{str(p.Name)}</td>
+                  <td className="table-td text-gray-700">{str(p.Role)}</td>
+                  <td className="table-td text-gray-600">{p.PersonType === 'Sub-contractor' ? `Sub-contractor · ${str(p.Company)}` : (p.PersonType ? 'EMDAD' : '—')}</td>
                   <td className="table-td text-gray-500">{toDateInput(p.MobDate as string) || '—'}</td>
-                  <td className="table-td text-gray-500">{toDateInput(p.DemobDate as string) || '—'}</td>
-                  <td className="table-td text-gray-500">{str(p.Notes)}</td>
+                  <td className="table-td text-gray-500">{toDateInput(p.DemobDate as string) || <span className="text-green-700">Active</span>}</td>
+                  <td className="table-td font-mono text-blue-700">{str(p.RigPassNo)}</td>
+                  <td className="table-td text-gray-500">{toDateInput(p.H2SExpiry as string) || '—'}</td>
                   {canEdit && (
                     <td className="table-td">
-                      <button onClick={() => remove(p.id, p.Name)}
-                              className="text-gray-300 hover:text-red-500" title="Remove">
+                      <button onClick={() => remove(p.id, p.Name)} className="text-gray-300 hover:text-red-500" title="Remove">
                         <Trash2 size={12} />
                       </button>
                     </td>
@@ -2364,6 +2377,98 @@ function ManpowerTab({ jobId, canEdit }: { jobId: string; canEdit: boolean }) {
           </table>
         )}
       </div>
+      <div className="bg-navy-head text-white rounded px-3 py-1.5 text-[12px] flex gap-6">
+        <span>Total assigned: <b className="text-accent-300">{crew?.length ?? 0}</b></span>
+        <span>Active on rig: <b className="text-green-400">{activeCount}</b></span>
+      </div>
+
+      <Modal open={pickOpen} onClose={() => setPickOpen(false)} title="Field Crew Assignment Picker" size="2xl"
+        footer={
+          <div className="flex items-center gap-3 w-full">
+            <span className="text-[12px] text-gray-500">Selected: <b>{checked.size}</b></span>
+            <label className="flex items-center gap-1.5 text-[12px] text-gray-600 ml-4">Mob date
+              <input type="date" className="field-input !w-[140px]" value={mob} onChange={e => setMob(e.target.value)} />
+            </label>
+            <button className="btn-secondary ml-auto" onClick={() => setPickOpen(false)}>Cancel</button>
+            <button className="btn-primary" disabled={!checked.size || busy} onClick={insert}>
+              {busy ? <Spinner size="sm" /> : null} Insert Selected ({checked.size})
+            </button>
+          </div>
+        }>
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <select className="field-input !w-auto" value={role} onChange={e => setRole(e.target.value)}>
+            <option value="">All designations</option>
+            {roles.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <select className="field-input !w-auto" value={type} onChange={e => setType(e.target.value)}>
+            <option value="">EMDAD + Sub-contractors</option>
+            <option value="EMDAD">EMDAD staff</option>
+            <option value="Sub-contractor">Sub-contractor staff</option>
+          </select>
+          <input className="field-input !w-[220px]" placeholder="Search name, badge, company" value={q} onChange={e => setQ(e.target.value)} />
+          <span className="text-[11.5px] text-gray-500">{shown.length} available</span>
+          <button className="btn-mini ml-auto" onClick={() => setAdding(a => !a)}><Plus size={12} /> Add Personnel</button>
+        </div>
+
+        {adding && (
+          <div className="border border-gray-300 rounded p-2 mb-2 bg-gray-50 grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1.5">
+            {([['Name *', 'Name'], ['Badge #', 'BadgeNo'], ['Designation', 'Designation'], ['Rig Pass #', 'RigPassNo'], ['Phone', 'Phone']] as [string, keyof typeof blank][]).map(([l, k]) => (
+              <label key={k} className="text-[11px] font-semibold text-gray-600">{l}
+                <input className="field-input mt-0.5" list={k === 'Designation' ? 'dl-crew-role' : undefined}
+                       value={np[k]} onChange={e => setNp(p => ({ ...p, [k]: e.target.value }))} />
+              </label>
+            ))}
+            <datalist id="dl-crew-role">{CREW_ROLES.map(r => <option key={r} value={r} />)}</datalist>
+            <label className="text-[11px] font-semibold text-gray-600">H2S expiry
+              <input type="date" className="field-input mt-0.5" value={np.H2SExpiry} onChange={e => setNp(p => ({ ...p, H2SExpiry: e.target.value }))} />
+            </label>
+            <label className="text-[11px] font-semibold text-gray-600">Belongs to
+              <select className="field-input mt-0.5" value={np.PersonType} onChange={e => setNp(p => ({ ...p, PersonType: e.target.value }))}>
+                <option value="EMDAD">EMDAD</option><option value="Sub-contractor">Sub-contractor</option>
+              </select>
+            </label>
+            {np.PersonType === 'Sub-contractor' && (
+              <label className="text-[11px] font-semibold text-gray-600">Company *
+                <input className="field-input mt-0.5" value={np.Company} onChange={e => setNp(p => ({ ...p, Company: e.target.value }))} />
+              </label>
+            )}
+            <div className="flex items-end">
+              <button className="btn-primary" disabled={busy || !np.Name.trim()} onClick={addPerson}>Save to register</button>
+            </div>
+          </div>
+        )}
+
+        <div className="max-h-[50vh] overflow-auto border border-gray-200 rounded">
+          {regLoading ? <div className="py-8 flex justify-center"><Spinner size="md" /></div> : (
+            <table className="w-full border-collapse">
+              <thead className="sticky top-0"><tr>
+                <th className={`${th} w-8`}></th><th className={th}>Badge #</th><th className={th}>Name</th><th className={th}>Designation</th>
+                <th className={th}>Type / Company</th><th className={th}>Rig Pass</th><th className={th}>H2S Expiry</th>
+              </tr></thead>
+              <tbody>
+                {shown.length === 0 && <tr><td colSpan={7} className="table-td text-center text-gray-400 py-6">
+                  Nobody in the register matches. Use “Add Personnel” to add them once.</td></tr>}
+                {shown.map(p => {
+                  const already = onJob.has(p.PersonnelID)
+                  const on = checked.has(p.PersonnelID)
+                  return (
+                    <tr key={p.PersonnelID} className={`border-b border-gray-100 ${already ? 'opacity-50' : 'cursor-pointer hover:bg-blue-50/50'} ${on ? 'bg-blue-50' : ''}`}
+                        onClick={() => !already && setChecked(prev => { const n = new Set(prev); n.has(p.PersonnelID) ? n.delete(p.PersonnelID) : n.add(p.PersonnelID); return n })}>
+                      <td className="table-td"><input type="checkbox" checked={on} disabled={already} readOnly /></td>
+                      <td className="table-td font-mono">{str(p.BadgeNo)}</td>
+                      <td className="table-td font-semibold text-navy-head">{p.Name}{already && <span className="ml-2 text-[10px] text-gray-500">on this job</span>}</td>
+                      <td className="table-td">{str(p.Designation)}</td>
+                      <td className="table-td text-gray-600">{p.PersonType === 'Sub-contractor' ? `Sub-contractor · ${str(p.Company)}` : 'EMDAD'}</td>
+                      <td className="table-td font-mono text-blue-700">{str(p.RigPassNo)}</td>
+                      <td className="table-td text-gray-500">{toDateInput(p.H2SExpiry) || '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Modal>
     </div>
   )
 }
