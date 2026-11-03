@@ -307,6 +307,22 @@ module.exports = safe(async function (context, req) {
     if (await blockIfLocked(context, jobId)) return
     const b = req.body || {}
     try {
+      // A field the caller did not send keeps its stored value. This used to
+      // write every column from the body, so a request carrying only Notes
+      // blanked the client, rig, contract, dates and invoice fields.
+      // (A field sent as '' or null is still a deliberate clear.)
+      const cur = await query(`SELECT * FROM tbl_Jobs WHERE JobID = @id`,
+        [{ name: 'id', type: sql.NVarChar, value: jobId }])
+      if (!cur.recordset.length) return jsonResponse(context, 404, { error: 'Job not found' })
+      const row = cur.recordset[0]
+      for (const k of ['Client','Rig','Well','Contract','PONumber','ClientRef','ERPRef','ServiceType',
+                       'HoleSection','Status','InvoicingType','Currency','FiscalYear','MobDate','DemobDate',
+                       'Notes','FirstDtDate','LastRtDate','DocsSignedDate','SubmittedToBillingDate',
+                       'DraftInvoicedDate','DraftInvoiceNumber','SesSubmittedDate','SesNumber',
+                       'FinalInvoicedDate','LegalInvoiceNumber','InvoiceDate','InvoiceAmount',
+                       'NetInvoiceAmount','NetSubcontract']) {
+        if (!(k in b)) b[k] = row[k]
+      }
       await query(
         `UPDATE tbl_Jobs SET
            Client = @client, Rig = @rig, Well = @well,
