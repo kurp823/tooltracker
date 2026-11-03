@@ -222,6 +222,7 @@ module.exports = safe(async function (context, req) {
         `DECLARE @job NVARCHAR(50) = (SELECT TOP 1 jobNumber FROM tbl_ReceivingTickets WHERE id = @id);
          DECLARE @seq NVARCHAR(100) = ${jobKey('@job')};
 
+         SELECT * FROM (
          SELECT dt.dtNumber        AS TicketNo,
                 dt.deliveryDate    AS DateOut,
                 dtl.itemNo         AS ItemNo,
@@ -247,7 +248,35 @@ module.exports = safe(async function (context, req) {
                WHERE rl.serial = dtl.serial
                  AND ${jobKey('rh.jobNumber')} = @seq
             )
-          ORDER BY dt.dtNumber, dtl.itemNo`,
+
+         UNION ALL
+
+         -- Tools rolled over from last month's job. Their delivery ticket
+         -- belongs to the PREVIOUS job, so the branch above never sees them
+         -- and next month's return ticket showed an empty pool.
+         SELECT jt.SourceDTNumber  AS TicketNo,
+                dt.deliveryDate    AS DateOut,
+                dtl.itemNo         AS ItemNo,
+                dtl.serial         AS Serial,
+                COALESCE(NULLIF(jt.AssetNo, ''), dtl.serial) AS AssetNo,
+                COALESCE(NULLIF(dtl.toolDescription, ''), jt.ShortDesc) AS Description,
+                jt.[Size]          AS [Size],
+                dtl.qty            AS Qty
+           FROM tbl_JobTools jt
+           JOIN tbl_DeliveryTickets     dt  ON dt.dtNumber  = jt.SourceDTNumber
+           JOIN tbl_DeliveryTicketLines dtl ON dtl.dtNumber = jt.SourceDTNumber
+                                           AND (dtl.serial = jt.SystemID OR dtl.serial = jt.AssetNo)
+          WHERE ${jobKey('jt.JobID')} = @seq
+            AND jt.SourceDTNumber IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+                FROM tbl_ReceivingTicketLines rl
+                JOIN tbl_ReceivingTickets     rh ON rh.rtNumber = rl.rtNumber
+               WHERE rl.serial = dtl.serial
+                 AND ${jobKey('rh.jobNumber')} = @seq
+            )
+         ) pool
+         ORDER BY pool.TicketNo, pool.ItemNo`,
         [{ name: 'id', value: Number(id) }]
       )
       return jsonResponse(context, 200, result.recordset)
