@@ -7,12 +7,12 @@ const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
  *   GET /api/sub-accruals          one row per supplier and job
  *   PUT /api/sub-accruals          record the PO and/or the supplier invoice
  *
- * A hired-in tool is paid for after the job, on the days it actually worked:
+ * A hired-in tool is paid for after the job, on what was agreed for the hire:
  * the final PO is raised when the job is complete, and the supplier then
  * invoices against it. Until then the cost is an accrual. This screen answers
  * two questions - which POs are still to be issued, and which supplier
  * invoices are still to arrive - from the days already marked on the jobs
- * and the day rate held for each tool.
+ * and the settlement lines (basis x quantity x rate) agreed for each tool.
  *
  * The cost is not stored. It is worked out from the field logs and the hire
  * rate every time, so setting a rate or correcting a day moves it. Only the
@@ -26,7 +26,7 @@ const EDITORS = ['Admin', 'Billing', 'Finance', 'CostController']
 let ready = null
 function ensureTable() {
   if (!ready) {
-    ready = query(`
+    ready = require('../sub-lines').ensureLines().then(() => query(`
       IF OBJECT_ID('dbo.tbl_SubContractPOs', 'U') IS NULL
       BEGIN
         CREATE TABLE dbo.tbl_SubContractPOs (
@@ -44,7 +44,7 @@ function ensureTable() {
           updatedAt     datetime      NULL CONSTRAINT DF_SCPO_At DEFAULT (GETDATE()),
           CONSTRAINT UQ_tbl_SubContractPOs UNIQUE (supplierName, jobId)
         );
-      END`, []).catch(e => { ready = null; throw e })
+      END`, [])).catch(e => { ready = null; throw e })
   }
   return ready
 }
@@ -60,40 +60,35 @@ module.exports = safe(async function (context, req) {
 
   if (method === 'GET') {
     const r = await query(
-      `SELECT a.supplier AS supplierName, a.jobId, a.tools, a.days, a.accrued, a.unpricedDays,
+      `SELECT a.supplier AS supplierName, a.jobId, a.tools, a.days, a.accrued, a.unsettled,
               a.currency, a.firstDay, a.lastDay,
               j.Status AS jobStatus, j.Client AS client, j.Rig AS rig, j.DemobDate AS demobDate,
               p.poNumber, p.poDate, p.invoiceNo, p.invoiceDate, p.invoiceAmount,
               COALESCE(p.currency, a.currency) AS poCurrency, p.notes
          FROM (
            SELECT x.supplier, x.jobId,
-                  COUNT(DISTINCT x.tool) AS tools,
-                  COUNT(*)               AS days,
-                  SUM(COALESCE(x.rate, 0)) AS accrued,
-                  SUM(CASE WHEN x.rate IS NULL THEN 1 ELSE 0 END) AS unpricedDays,
+                  COUNT(*)               AS tools,
+                  SUM(x.days)            AS days,
+                  SUM(COALESCE(x.amount, 0)) AS accrued,
+                  SUM(CASE WHEN x.amount IS NULL THEN 1 ELSE 0 END) AS unsettled,
                   MAX(x.cur)             AS currency,
-                  MIN(x.logDate)         AS firstDay,
-                  MAX(x.logDate)         AS lastDay
+                  MIN(x.firstDay)        AS firstDay,
+                  MAX(x.lastDay)         AS lastDay
              FROM (
-               SELECT d.JobID AS jobId, d.ToolSerial AS tool, d.LogDate AS logDate,
+               SELECT d.JobID AS jobId, d.ToolSerial AS tool,
+                      COUNT(*) AS days, MIN(d.LogDate) AS firstDay, MAX(d.LogDate) AS lastDay,
                       CASE WHEN NULLIF(LTRIM(RTRIM(i.Ownership)), '') IS NOT NULL AND UPPER(LTRIM(RTRIM(i.Ownership))) NOT IN ('RENTED','EMDAD')
                            THEN LTRIM(RTRIM(i.Ownership))
                            WHEN NULLIF(LTRIM(RTRIM(i.Supplier)), '') IS NOT NULL AND UPPER(LTRIM(RTRIM(i.Supplier))) <> 'EMDAD'
                            THEN LTRIM(RTRIM(i.Supplier))
                            ELSE 'Unknown supplier' END AS supplier,
-                      ri.dayRate AS rate, ri.currency AS cur
+                      MAX(l.amount) AS amount, MAX(l.currency) AS cur
                  FROM tbl_DailyFieldLogs d
                  JOIN tbl_Inventory i ON i.SystemID = d.ToolSerial AND i.IsEmdad = 0
                   AND NOT (UPPER(COALESCE(i.Ownership, '')) = 'EMDAD' AND UPPER(COALESCE(i.Supplier, '')) IN ('EMDAD', ''))
-                 OUTER APPLY (
-                   SELECT TOP 1 r.dayRate, r.currency
-                     FROM tbl_RentalInward r
-                    WHERE (r.systemId = d.ToolSerial OR r.assetNo = d.ToolSerial OR r.oemSerial = d.ToolSerial)
-                      AND d.LogDate >= r.dateIn
-                      AND (r.dateOut IS NULL OR d.LogDate <= r.dateOut)
-                    ORDER BY r.dateIn DESC
-                 ) ri
+                 LEFT JOIN tbl_SubContractLines l ON l.jobId = d.JobID AND l.toolSerial = d.ToolSerial
                 WHERE d.StatusType IN ('1','S')
+                GROUP BY d.JobID, d.ToolSerial, i.Ownership, i.Supplier
              ) x
             GROUP BY x.supplier, x.jobId
          ) a
