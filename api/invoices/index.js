@@ -259,8 +259,7 @@ module.exports = safe(async function (context, req) {
               WHEN j.DraftInvoicedDate IS NOT NULL
                 OR NULLIF(j.DraftInvoiceNumber, '') IS NOT NULL THEN 'Draft Invoiced'
               WHEN j.SubmittedToBillingDate IS NOT NULL         THEN 'In Billing'
-              WHEN j.DocsSignedDate IS NOT NULL                 THEN 'Docs Signed'
-              ELSE j.Status
+              WHEN j.DocsSignedDate IS NOT NULL                 THEN 'In Billing'
             END) AS Status,
           j.FiscalYear AS FiscalYear,
           j.CreatedDate AS CreatedDate,

@@ -142,10 +142,10 @@ export function BillingDashboardView() {
     const byMonth = new Map<string, number>()
     let finalN = 0, finalV = 0, openN = 0, openV = 0
     const today = Date.now()
-    const waiting: { r: Invoice; days: number }[] = []
+    const waiting: { r: Invoice; days: number | null }[] = []
 
     mine.forEach(r => {
-      const st = s(r.Status) || 'No status'
+      const st = s(r.Status) || 'No billing status yet'
       const v = r.TotalAmount || 0
       const a = byStatus.get(st) || { n: 0, v: 0 }; a.n++; a.v += v; byStatus.set(st, a)
       const c = s(r.Client) || 'No client'
@@ -157,8 +157,8 @@ export function BillingDashboardView() {
       if (isFinal(st)) { finalN++; finalV += v }
       else if (!/cancel/i.test(st)) {
         openN++; openV += v
-        if (validDate(r.InvoiceDate))
-          waiting.push({ r, days: Math.floor((today - new Date(String(r.InvoiceDate)).getTime()) / 864e5) })
+        waiting.push({ r, days: validDate(r.InvoiceDate)
+          ? Math.floor((today - new Date(String(r.InvoiceDate)).getTime()) / 864e5) : null })
       }
     })
 
@@ -182,8 +182,8 @@ export function BillingDashboardView() {
         .sort((a, b) => (order.get(a[0]) ?? 99) - (order.get(b[0]) ?? 99) || b[1].v - a[1].v),
       clients: Array.from(byClient.entries()).sort((a, b) => b[1].v - a[1].v).slice(0, 8),
       series,
-      waiting: waiting.sort((a, b) => b.days - a.days),
-      stale: waiting.filter(w => w.days > 30).length,
+      waiting: waiting.sort((a, b) => (b.days ?? -1) - (a.days ?? -1)),
+      stale: waiting.filter(w => (w.days ?? 0) > 30).length,
     }
   }, [rows, stages, ccy])
 
@@ -194,7 +194,6 @@ export function BillingDashboardView() {
     <div className="h-full overflow-auto">
       <div className="space-y-3 pb-4">
         <div className="flex items-center gap-3">
-          <h2 className="text-[15px] font-bold text-slate-900">Billing overview</h2>
           <span className="text-[12px] text-slate-500">{rows.length.toLocaleString()} invoices on record</span>
           <div className="ml-auto flex items-center gap-1" role="tablist" aria-label="Currency">
             {currencies.map(c => (
@@ -210,7 +209,7 @@ export function BillingDashboardView() {
           <Tile label="Final invoiced" value={formatCurrency(m.finalV)} sub={`${m.finalN.toLocaleString()} invoices`} />
           <Tile label="Not yet final" value={formatCurrency(m.openV)} sub={`${m.openN.toLocaleString()} invoices in progress`} />
           <Tile label="Waiting over 30 days" value={m.stale.toLocaleString()} tone={m.stale ? 'warn' : undefined}
-                sub="not final, invoice dated more than 30 days ago" />
+                sub="not final, invoice dated over 30 days ago" />
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
@@ -242,12 +241,12 @@ export function BillingDashboardView() {
                       <td className="table-td"><Link className="text-brand-600 font-medium" to="/invoices">{r.InvoiceNumber || r.JobID || '—'}</Link></td>
                       <td className="table-td max-w-[180px] truncate" title={r.Client || ''}>{r.Client || '—'}</td>
                       <td className="table-td"><span className={`badge ${billingStatusClass(r.Status)}`}>{r.Status || '—'}</span></td>
-                      <td className="table-td !text-right tabular-nums">{days}</td>
+                      <td className="table-td !text-right tabular-nums">{days ?? '—'}</td>
                       <td className="table-td !text-right tabular-nums">{formatCurrency(r.TotalAmount || 0)}</td>
                     </tr>
                   ))}
                   {m.waiting.length === 0 && (
-                    <tr><td colSpan={5} className="table-td text-center text-slate-400 py-6">Everything dated is final invoiced.</td></tr>
+                    <tr><td colSpan={5} className="table-td text-center text-slate-400 py-6">Every invoice is final invoiced.</td></tr>
                   )}
                 </tbody>
               </table>
