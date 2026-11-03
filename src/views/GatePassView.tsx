@@ -124,7 +124,7 @@ function ToolPickerModal({
           {results.map(item => (
             <button key={item.SystemID}
               className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0"
-              onClick={() => { onSelect(item); onClose(); setSearch(''); setResults([]) }}>
+              onClick={() => { onSelect(item); setSearch(''); setResults([]) }}>
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-medium text-sm text-gray-900">
@@ -183,7 +183,7 @@ function UnreturnedToolPickerModal({
           {(tools || []).map(item => (
             <button key={item.ItemID}
               className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0"
-              onClick={() => { onSelect(item); onClose() }}>
+              onClick={() => { onSelect(item) }}>
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-medium text-sm text-gray-900">
@@ -423,6 +423,7 @@ function GPDetailPanel({
 
   // Add tool from inventory (Outward GP)
   const handleAddFromInventory = async (item: InventoryItem) => {
+    setShowPicker(false)
     try {
       await api.post(`/gate-passes/${gp.GatePassID}/items`, {
         Serial: item.Serial,
@@ -438,6 +439,7 @@ function GPDetailPanel({
 
   // Add tool from unreturned list (Inward GP)
   const handleAddFromUnreturned = async (item: GPItem) => {
+    setShowUnretPicker(false)
     try {
       await api.post(`/gate-passes/${gp.GatePassID}/items`, {
         Serial: item.SerialNumber,
