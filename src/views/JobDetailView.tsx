@@ -1673,7 +1673,11 @@ function ReturnTicketTab({
     </div>
   )
 }
-function UtilizationTab({ jobId, job }: { jobId: string; job: Partial<Job> }) {
+type UtilGate = { dirty: boolean; save: () => Promise<boolean> }
+
+function UtilizationTab({ jobId, job, gate }: {
+  jobId: string; job: Partial<Job>; gate: React.MutableRefObject<UtilGate | null>
+}) {
   const { hasRole } = useAuth()
   const { showToast } = useToast()
   // A finished job is read-only. The API enforces this too - the disabled
@@ -1685,13 +1689,21 @@ function UtilizationTab({ jobId, job }: { jobId: string; job: Partial<Job> }) {
   const [month, setMonth] = useState(today.getMonth() + 1)
   const [rows,    setRows]    = useState<UtilRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [saving,  setSaving]  = useState(0)
+  const [saving,  setSaving]  = useState(false)
+  /**
+   * Edits are held here and only written when the user clicks Save. Key is
+   * `rowIdx|day`; value is the new code, or null for "clear this day". Typing
+   * therefore never waits on the network and the cursor can move straight on.
+   */
+  const [pending, setPending] = useState<Record<string, '1' | 'S' | null>>({})
+  const pendingCount = Object.keys(pending).length
 
   const daysInMonth = new Date(year, month, 0).getDate()
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1)
   const monthName = new Date(year, month - 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' })
-
   const dayOf = (d: number) => `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  const dow = (d: number) => new Date(year, month - 1, d).getDay()
+  const isWeekend = (d: number) => dow(d) === 5 || dow(d) === 6   // Fri/Sat in the Gulf
 
   /**
    * A day can only be marked between the tool going out on its delivery ticket
@@ -1713,16 +1725,6 @@ function UtilizationTab({ jobId, job }: { jobId: string; job: Partial<Job> }) {
     setLoading(true)
     try {
       const normJobId = normalizeJobId(jobId)
-
-      /*
-       * The dispatch cycles come straight from /api/tool-history, which already
-       * returns one row per DT line paired with its matching RT — exactly the
-       * DT->RT cycle this sheet charges against, with the two dates on it.
-       *
-       * This replaces fetching all 3,700 delivery tickets and then every one
-       * of their line sets on each month change, which is what made this tab
-       * appear not to work at all.
-       */
       const [cycles, logs] = await Promise.all([
         api.get<ToolMovement[]>(`/tool-history?job=${encodeURIComponent(jobId)}&limit=2000`)
           .catch(() => [] as ToolMovement[]),
@@ -1754,6 +1756,7 @@ function UtilizationTab({ jobId, job }: { jobId: string; job: Partial<Job> }) {
       // Newest dispatch first, so the run being worked on is at the top.
       built.sort((a, b) => String(b.dateOut || '').localeCompare(String(a.dateOut || '')))
       setRows(built)
+      setPending({})
     } catch {
       showToast('Failed to load utilization', 'error')
     } finally {
@@ -1763,79 +1766,130 @@ function UtilizationTab({ jobId, job }: { jobId: string; job: Partial<Job> }) {
 
   useEffect(() => { load() }, [load])
 
-  /**
-   * Typed entry, not click-cycling: '1' for operating, 'S' for standby,
-   * anything else clears the day. The cursor stays busy until the write lands,
-   * so a typed day is never silently lost.
-   */
-  async function setCell(rowIdx: number, day: number, raw: string) {
+  /** What the cell shows: the unsaved edit if there is one, else what is stored. */
+  const valueOf = (rowIdx: number, d: number): '1' | 'S' | null => {
+    const k = `${rowIdx}|${d}`
+    if (k in pending) return pending[k]
+    return rows[rowIdx]?.days[d]?.code ?? null
+  }
+
+  /** Stage a change locally. Nothing is sent until Save. */
+  function stage(rowIdx: number, d: number, code: '1' | 'S' | null) {
     if (!canEdit) return
     const row = rows[rowIdx]
-    if (!inWindow(row, day)) return
+    if (!row || !inWindow(row, d)) return
+    const k = `${rowIdx}|${d}`
+    const stored = row.days[d]?.code ?? null
+    setPending(p => {
+      const next = { ...p }
+      if (code === stored) delete next[k]      // back to what is saved: not a change
+      else next[k] = code
+      return next
+    })
+  }
 
-    const v = (raw || '').trim().toUpperCase()
-    const code: '1' | 'S' | null = v === '1' ? '1' : v === 'S' ? 'S' : null
-    const current = row.days[day]
-    if (current && current.code === code) return
-
-    const apply = (next: UtilCell | null) =>
-      setRows(prev => prev.map((r, i) => {
-        if (i !== rowIdx) return r
-        const d = { ...r.days }
-        if (next) d[day] = next
-        else delete d[day]
-        return { ...r, days: d }
-      }))
-
-    setSaving(n => n + 1)
+  /** Write every staged change, a few at a time, then reload to pick up the priced results. */
+  const save = useCallback(async (): Promise<boolean> => {
+    const entries = Object.entries(pending)
+    if (!entries.length) return true
+    setSaving(true)
     document.body.style.cursor = 'wait'
+    let failed = 0
     try {
-      if (!code && current) {
-        await api.delete(`/utilization/${current.logId}`)
-        apply(null)
-      } else if (code && !current) {
-        const res = await api.post<{ LogID: number }>('/utilization', {
-          JobID: jobId,
-          DTNumber: row.dtNumber,   // keys the revenue rollup — must be stored
-          ToolID: row.toolId,
-          LogDate: dayOf(day),
-          UtilizationCode: code,
-        })
-        apply({ code, logId: res.LogID })
-      } else if (code && current) {
-        await api.put(`/utilization/${current.logId}`, { UtilizationCode: code })
-        apply({ code, logId: current.logId })
-      }
-    } catch {
-      showToast('Failed to save — try again', 'error')
+      const jobs = entries.map(([k, code]) => async () => {
+        const [ri, dd] = k.split('|').map(Number)
+        const row = rows[ri]
+        const cur = row.days[dd]
+        try {
+          if (!code && cur) await api.delete(`/utilization/${cur.logId}`)
+          else if (code && !cur) await api.post('/utilization', {
+            JobID: jobId, DTNumber: row.dtNumber, ToolID: row.toolId,
+            LogDate: dayOf(dd), UtilizationCode: code,
+          })
+          else if (code && cur) await api.put(`/utilization/${cur.logId}`, { UtilizationCode: code })
+        } catch { failed++ }
+      })
+      const lanes = 4
+      let i = 0
+      await Promise.all(Array.from({ length: lanes }, async () => {
+        while (i < jobs.length) { const j = jobs[i++]; await j() }
+      }))
     } finally {
       document.body.style.cursor = ''
-      setSaving(n => n - 1)
+      setSaving(false)
     }
+    await load()
+    if (failed) { showToast(`${failed} day(s) could not be saved — they are shown again below`, 'error'); return false }
+    showToast(`Utilization saved (${entries.length} change${entries.length === 1 ? '' : 's'})`, 'success')
+    return true
+  }, [pending, rows, jobId, year, month, load])
+
+  // Let the workspace's Save Job File button and tab bar see the unsaved state.
+  useEffect(() => { gate.current = { dirty: pendingCount > 0, save } })
+  useEffect(() => () => { gate.current = null }, [])
+  useEffect(() => {
+    if (!pendingCount) return
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [pendingCount])
+
+  /**
+   * Spreadsheet-style entry: type 1 or S, the cursor moves on by itself;
+   * Delete/Backspace clears; arrows and Enter move. No network involved.
+   */
+  function onKey(e: React.KeyboardEvent<HTMLDivElement>, rowIdx: number, d: number) {
+    const go = (r: number, dd: number) => {
+      const el = document.querySelector<HTMLElement>(`[data-util="${r}-${dd}"]`)
+      if (el) el.focus()
+    }
+    const k = e.key
+    if (k === '1' || k === 's' || k === 'S') {
+      e.preventDefault(); stage(rowIdx, d, k === '1' ? '1' : 'S'); go(rowIdx, d + 1)
+    } else if (k === 'Delete' || k === 'Backspace' || k === ' ' || k === '0') {
+      e.preventDefault(); stage(rowIdx, d, null); if (k !== 'Backspace') go(rowIdx, d + 1)
+    } else if (k === 'ArrowRight' || k === 'Enter') { e.preventDefault(); go(rowIdx, d + 1) }
+    else if (k === 'ArrowLeft')  { e.preventDefault(); go(rowIdx, d - 1) }
+    else if (k === 'ArrowDown')  { e.preventDefault(); go(rowIdx + 1, d) }
+    else if (k === 'ArrowUp')    { e.preventDefault(); go(rowIdx - 1, d) }
   }
 
-  /** Arrow keys and Enter move through the sheet like a spreadsheet. */
-  function onKey(e: React.KeyboardEvent<HTMLInputElement>, rowIdx: number, day: number) {
-    const go = (r: number, d: number) => {
-      const el = document.querySelector<HTMLInputElement>(`[data-util="${r}-${d}"]`)
-      if (el) { el.focus(); el.select() }
-    }
-    if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); go(rowIdx, day + 1) }
-    else if (e.key === 'ArrowLeft')  { e.preventDefault(); go(rowIdx, day - 1) }
-    else if (e.key === 'ArrowDown')  { e.preventDefault(); go(rowIdx + 1, day) }
-    else if (e.key === 'ArrowUp')    { e.preventDefault(); go(rowIdx - 1, day) }
+  /** Click cycles blank → 1 → S → blank, like the reference sheet. */
+  function onClickCell(rowIdx: number, d: number) {
+    const v = valueOf(rowIdx, d)
+    stage(rowIdx, d, v === null ? '1' : v === '1' ? 'S' : null)
   }
 
-  function prevMonth() { if (month === 1) { setYear(y => y - 1); setMonth(12) } else setMonth(m => m - 1) }
-  function nextMonth() { if (month === 12) { setYear(y => y + 1); setMonth(1) } else setMonth(m => m + 1) }
+  /** Right-click a cell: fill from it to the end of that tool's window with the same value. */
+  function fillRight(e: React.MouseEvent, rowIdx: number, d: number) {
+    e.preventDefault()
+    if (!canEdit) return
+    const v = valueOf(rowIdx, d)
+    for (let x = d + 1; x <= daysInMonth; x++) stage(rowIdx, x, v)
+  }
 
-  const totals = rows.reduce((a, r) => {
-    for (const d of Object.values(r.days)) {
-      if (d.code === '1') a.ops++
-      else if (d.code === 'S') a.sb++
+  function leaveMonth(fn: () => void) {
+    if (pendingCount && !window.confirm('You have unsaved utilization changes. Discard them?')) return
+    fn()
+  }
+  function prevMonth() { leaveMonth(() => { if (month === 1) { setYear(y => y - 1); setMonth(12) } else setMonth(m => m - 1) }) }
+  function nextMonth() { leaveMonth(() => { if (month === 12) { setYear(y => y + 1); setMonth(1) } else setMonth(m => m + 1) }) }
+
+  // Totals follow the screen (including unsaved edits) so the user sees the effect before saving.
+  const rowTotals = rows.map((_, ri) => {
+    let ops = 0, sb = 0
+    for (let d = 1; d <= daysInMonth; d++) {
+      const v = valueOf(ri, d)
+      if (v === '1') ops++; else if (v === 'S') sb++
     }
-    return a
-  }, { ops: 0, sb: 0 })
+    return { ops, sb }
+  })
+  const totals = rowTotals.reduce((a, r) => ({ ops: a.ops + r.ops, sb: a.sb + r.sb }), { ops: 0, sb: 0 })
+  const dayTotals = days.map(d => {
+    let ops = 0, sb = 0
+    rows.forEach((_, ri) => { const v = valueOf(ri, d); if (v === '1') ops++; else if (v === 'S') sb++ })
+    return { ops, sb }
+  })
 
   if (loading) return (
     <div className="bg-white border border-gray-300 rounded py-12 flex items-center justify-center">
@@ -1843,84 +1897,125 @@ function UtilizationTab({ jobId, job }: { jobId: string; job: Partial<Job> }) {
     </div>
   )
 
+  const cellBase = 'w-[26px] h-[30px] flex items-center justify-center font-mono text-[11.5px] font-semibold select-none outline-none'
+
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="screen-bar">
-        <div className="flex items-center gap-0.5 border border-gray-300 rounded bg-white">
-          <button onClick={prevMonth} className="px-1.5 h-[24px] hover:bg-gray-100">‹</button>
-          <span className="text-[12px] font-semibold px-2 min-w-[130px] text-center">{monthName}</span>
-          <button onClick={nextMonth} className="px-1.5 h-[24px] hover:bg-gray-100">›</button>
+    <div className="flex flex-col gap-2">
+      {/* Top bar: month, stats, save */}
+      <div className="flex items-center gap-3 flex-wrap bg-white border border-gray-200 rounded-lg px-3 py-2">
+        <div className="flex items-center border border-gray-300 rounded-md bg-white">
+          <button onClick={prevMonth} className="px-2 h-[28px] hover:bg-gray-100 text-gray-600">‹</button>
+          <span className="text-[12.5px] font-semibold px-3 min-w-[140px] text-center text-gray-900">{monthName}</span>
+          <button onClick={nextMonth} className="px-2 h-[28px] hover:bg-gray-100 text-gray-600">›</button>
         </div>
-        <span className="text-[11px] text-gray-500">
-          {rows.length} dispatch cycle{rows.length === 1 ? '' : 's'} · {totals.ops} operating · {totals.sb} standby
-        </span>
-        {saving > 0 && <span className="text-[11px] text-amber-700 font-semibold">Saving…</span>}
+        <div className="flex items-center gap-1.5 text-[11px]">
+          <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-600">{rows.length} cycle{rows.length === 1 ? '' : 's'}</span>
+          <span className="px-2 py-0.5 rounded bg-green-50 text-green-700 border border-green-200">{totals.ops} operating</span>
+          <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">{totals.sb} standby</span>
+        </div>
         {!canEdit && <span className="text-[11px] text-gray-400 italic">View only</span>}
-        <span className="ml-auto text-[10px] text-gray-400">
-          Type <strong>1</strong> operating or <strong>S</strong> standby. Only days between the DT and RT dates accept entry.
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          {pendingCount > 0 && (
+            <>
+              <span className="text-[11px] font-semibold text-amber-700">{pendingCount} unsaved change{pendingCount === 1 ? '' : 's'}</span>
+              <button className="text-[11.5px] px-2.5 h-[28px] rounded-md border border-gray-300 hover:bg-gray-50"
+                      disabled={saving} onClick={() => setPending({})}>Discard</button>
+            </>
+          )}
+          {canEdit && (
+            <button className="btn-primary text-xs py-1.5" disabled={saving || pendingCount === 0} onClick={save}>
+              {saving ? <><Spinner size="sm" /> Saving…</> : <><Save size={13} /> Save Utilization</>}
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="bg-white border border-gray-300 rounded overflow-auto">
-        <table className="text-[11px] border-collapse" style={{ minWidth: `${340 + daysInMonth * 24}px` }}>
+      {/* Legend */}
+      <div className="flex items-center gap-4 text-[11px] text-gray-500 px-1 flex-wrap">
+        <span className="flex items-center gap-1.5"><span className="inline-flex w-5 h-5 items-center justify-center rounded font-mono font-semibold bg-[#f0faf4] text-[#14532d] border border-[#bbf7d0]">1</span> Operating</span>
+        <span className="flex items-center gap-1.5"><span className="inline-flex w-5 h-5 items-center justify-center rounded font-mono font-semibold bg-[#f0f6ff] text-[#1e3a5f] border border-[#bfdbfe]">S</span> Standby</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-5 h-5 rounded bg-gray-100 border border-gray-200" /> Outside DT–RT dates</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-5 h-5 rounded border-2 border-amber-400 bg-white" /> Unsaved</span>
+        <span className="ml-auto text-gray-400">Type 1 or S · cursor moves on · Del clears · click cycles · right-click fills to month end · nothing is saved until you click Save</span>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-lg overflow-auto max-h-[calc(100vh-330px)]">
+        <table className="text-[11.5px] border-collapse" style={{ minWidth: `${420 + daysInMonth * 26}px` }}>
           <thead className="sticky top-0 z-20">
-            <tr>
-              <th className="table-th sticky left-0 z-30 bg-gray-100 w-[150px]">Tool</th>
-              <th className="table-th">DT No</th>
-              <th className="table-th">Out</th>
-              <th className="table-th">In</th>
+            <tr className="bg-gray-50">
+              <th className="sticky left-0 z-30 bg-gray-50 text-left px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-gray-500 border-b border-gray-200 min-w-[200px]">Tool</th>
+              <th className="px-2 py-2 text-left text-[10.5px] font-semibold uppercase tracking-wide text-gray-500 border-b border-gray-200">DT</th>
+              <th className="px-2 py-2 text-left text-[10.5px] font-semibold uppercase tracking-wide text-gray-500 border-b border-gray-200">Out</th>
+              <th className="px-2 py-2 text-left text-[10.5px] font-semibold uppercase tracking-wide text-gray-500 border-b border-gray-200">In</th>
               {days.map(d => (
-                <th key={d} className="table-th !px-0 w-6 text-center">{d}</th>
+                <th key={d} className={`p-0 text-center font-mono text-[10.5px] font-medium border-b border-gray-200 border-l border-l-gray-100 w-[26px] ${isWeekend(d) ? 'text-gray-400 bg-gray-100/60' : 'text-gray-500'}`}>{d}</th>
               ))}
+              <th className="px-2 py-2 text-center text-[10.5px] font-semibold uppercase tracking-wide text-green-700 border-b border-gray-200 border-l border-gray-200">Ops</th>
+              <th className="px-2 py-2 text-center text-[10.5px] font-semibold uppercase tracking-wide text-blue-700 border-b border-gray-200">SB</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={daysInMonth + 4} className="table-td text-center text-gray-400 py-10">
+                <td colSpan={daysInMonth + 6} className="text-center text-gray-400 py-10">
                   No tools have been dispatched on this job yet, so there is nothing to charge.
                 </td>
               </tr>
             ) : (
               rows.map((row, rowIdx) => (
-                <tr key={`${row.dtNumber}-${row.toolId}-${rowIdx}`} className="border-b border-gray-100">
-                  <td className="table-td sticky left-0 z-10 bg-white font-medium truncate max-w-[150px]"
-                      title={row.label}>
-                    {row.label}
+                <tr key={`${row.dtNumber}-${row.toolId}-${rowIdx}`} className="border-b border-gray-100 hover:bg-gray-50/60">
+                  <td className="sticky left-0 z-10 bg-white px-3 py-1 max-w-[260px] truncate text-gray-800" title={row.label}>
+                    <span className="font-mono font-semibold text-gray-900">{row.assetNo || row.toolId}</span>
+                    <span className="text-gray-500"> {row.label.includes(' – ') ? '– ' + row.label.split(' – ').slice(1).join(' – ') : ''}</span>
                   </td>
-                  <td className="table-td font-mono text-gray-500">{row.dtNumber || '—'}</td>
-                  <td className="table-td text-gray-500">{(row.dateOut || '').slice(0, 10) || '—'}</td>
-                  <td className="table-td text-gray-500">
+                  <td className="px-2 font-mono text-gray-500 whitespace-nowrap">{row.dtNumber || '—'}</td>
+                  <td className="px-2 text-gray-500 whitespace-nowrap">{(row.dateOut || '').slice(0, 10) || '—'}</td>
+                  <td className="px-2 text-gray-500 whitespace-nowrap">
                     {(row.dateIn || '').slice(0, 10) || <span className="text-amber-600">on rig</span>}
                   </td>
                   {days.map(d => {
-                    const cell = row.days[d]
+                    const v = valueOf(rowIdx, d)
                     const open = inWindow(row, d)
+                    const changed = `${rowIdx}|${d}` in pending
+                    const tone = !open ? 'bg-gray-100 cursor-not-allowed'
+                      : v === '1' ? 'bg-[#f0faf4] text-[#14532d]'
+                      : v === 'S' ? 'bg-[#f0f6ff] text-[#1e3a5f]'
+                      : 'bg-white text-gray-300 hover:bg-blue-50'
                     return (
-                      <td key={d}
-                          className={`p-0 border-l border-gray-100 ${open ? '' : 'bg-gray-100'}`}>
-                        <input
+                      <td key={d} className="p-0 border-l border-gray-100">
+                        <div
                           data-util={`${rowIdx}-${d}`}
-                          className={`w-6 h-[22px] text-center text-[11px] font-bold border-0 bg-transparent
-                                      focus:outline-none focus:ring-1 focus:ring-brand-500
-                                      ${cell?.code === '1' ? 'text-blue-700' : ''}
-                                      ${cell?.code === 'S' ? 'text-amber-700' : ''}
-                                      ${open ? '' : 'cursor-not-allowed'}`}
-                          value={cell?.code ?? ''}
-                          maxLength={1}
-                          disabled={!canEdit || !open}
+                          tabIndex={open && canEdit ? 0 : -1}
+                          className={`${cellBase} ${tone} ${open && canEdit ? 'cursor-pointer focus:shadow-[inset_0_0_0_2px_#2563eb]' : ''} ${changed ? 'shadow-[inset_0_0_0_2px_#fbbf24]' : ''}`}
                           title={open ? undefined : 'Outside this tool’s DT–RT window'}
-                          onChange={e => setCell(rowIdx, d, e.target.value)}
-                          onFocus={e => e.target.select()}
-                          onKeyDown={e => onKey(e, rowIdx, d)}
-                        />
+                          onClick={() => open && onClickCell(rowIdx, d)}
+                          onContextMenu={e => open && fillRight(e, rowIdx, d)}
+                          onKeyDown={e => open && onKey(e, rowIdx, d)}
+                        >{v ?? ''}</div>
                       </td>
                     )
                   })}
+                  <td className="px-2 text-center font-mono font-semibold text-green-700 border-l border-gray-200">{rowTotals[rowIdx].ops || ''}</td>
+                  <td className="px-2 text-center font-mono font-semibold text-blue-700">{rowTotals[rowIdx].sb || ''}</td>
                 </tr>
               ))
             )}
           </tbody>
+          {rows.length > 0 && (
+            <tfoot className="sticky bottom-0 z-20">
+              <tr className="bg-gray-50 border-t border-gray-300 font-mono text-[10.5px]">
+                <td className="sticky left-0 z-30 bg-gray-50 px-3 py-1.5 font-sans font-semibold text-gray-600" colSpan={4}>Total per day (operating / standby)</td>
+                {dayTotals.map((t, i) => (
+                  <td key={i} className="text-center border-l border-gray-100 leading-tight py-0.5">
+                    <div className="text-green-700">{t.ops || ''}</div>
+                    <div className="text-blue-700">{t.sb || ''}</div>
+                  </td>
+                ))}
+                <td className="px-2 text-center font-semibold text-green-700 border-l border-gray-200">{totals.ops}</td>
+                <td className="px-2 text-center font-semibold text-blue-700">{totals.sb}</td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </div>
@@ -2312,6 +2407,7 @@ export function JobDetailView() {
   const isNew       = id === 'new'
 
   const [tab,     setTab]     = useState<Tab>('header')
+  const utilGate = React.useRef<UtilGate | null>(null)
   const [saving,  setSaving]  = useState(false)
   const [form,    setForm]    = useState<Partial<Job>>({
     Status: 'Open', Currency: 'USD', InvoicingType: 'PerJob',
@@ -2361,6 +2457,7 @@ export function JobDetailView() {
 
   async function handleSave() {
     if (!canEdit) return
+    if (utilGate.current?.dirty) await utilGate.current.save()
     setSaving(true)
     document.body.style.cursor = 'wait'
     try {
@@ -2460,7 +2557,11 @@ export function JobDetailView() {
         {WORKSPACE_TABS.map(t => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => {
+              if (tab === 'util' && t.id !== 'util' && utilGate.current?.dirty &&
+                  !window.confirm('You have unsaved utilization changes. Leave without saving?')) return
+              setTab(t.id)
+            }}
             disabled={isNew && t.id !== 'header'}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition-colors -mb-px shrink-0 ${
               tab === t.id
@@ -2529,7 +2630,7 @@ export function JobDetailView() {
           <ReturnTicketTab jobId={id!} job={form} />
         )}
         {tab === 'util' && !isNew && (
-          <UtilizationTab jobId={id!} job={job || {}} />
+          <UtilizationTab jobId={id!} job={job || {}} gate={utilGate} />
         )}
       </div>
 
