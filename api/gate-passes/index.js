@@ -122,29 +122,24 @@ module.exports = async function (context, req) {
       `SELECT g.GatePassID, g.GPNumber AS GatePassNumber, g.Supplier,
               g.GPDate AS PassDate, g.Purpose,
               (SELECT COUNT(*) FROM tbl_GatePassLines WHERE GatePassID = g.GatePassID) AS TotalTools,
-              (SELECT COUNT(*) FROM tbl_GatePassLines ol
-                WHERE ol.GatePassID = g.GatePassID
-                  AND NOT EXISTS (
-                    SELECT 1 FROM tbl_GatePassLines il
-                    JOIN tbl_GatePass ig ON il.GatePassID = ig.GatePassID
-                    WHERE ig.LinkedGatePassID = g.GatePassID
-                      AND ig.Direction = 'Inward'
-                      AND COALESCE(il.Serial, il.AssetNo) = COALESCE(ol.Serial, ol.AssetNo)
-                  )
-              ) AS UnreturnedTools
+              unreturned.cnt AS UnreturnedTools
          FROM tbl_GatePass g
+        CROSS APPLY (
+          SELECT COUNT(*) AS cnt
+            FROM tbl_GatePassLines ol
+           WHERE ol.GatePassID = g.GatePassID
+             AND NOT EXISTS (
+               SELECT 1 FROM tbl_GatePassLines il
+               JOIN tbl_GatePass ig ON il.GatePassID = ig.GatePassID
+               WHERE ig.LinkedGatePassID = g.GatePassID
+                 AND ig.Direction = 'Inward'
+                 AND COALESCE(il.Serial, il.AssetNo) = COALESCE(ol.Serial, ol.AssetNo)
+             )
+        ) unreturned
         WHERE g.Direction = 'Outward'
           AND g.Purpose IN ('Repair', 'Other')
           AND g.Status IN ('Released', 'Draft')
-       HAVING (SELECT COUNT(*) FROM tbl_GatePassLines ol
-                WHERE ol.GatePassID = g.GatePassID
-                  AND NOT EXISTS (
-                    SELECT 1 FROM tbl_GatePassLines il
-                    JOIN tbl_GatePass ig ON il.GatePassID = ig.GatePassID
-                    WHERE ig.LinkedGatePassID = g.GatePassID
-                      AND ig.Direction = 'Inward'
-                      AND COALESCE(il.Serial, il.AssetNo) = COALESCE(ol.Serial, ol.AssetNo)
-                  )) > 0
+          AND unreturned.cnt > 0
         ORDER BY g.GPDate DESC`,
       []
     )
