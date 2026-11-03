@@ -92,8 +92,12 @@ module.exports = safe(async function (context, req) {
     const b = req.body
     await query(
       `UPDATE tbl_InspectionRecords
-          SET inspectionDate = @date, inspector = @inspector, result = @result,
-              status = @status, notes = @notes, updatedAt = GETDATE()
+          SET inspectionDate = COALESCE(@date, inspectionDate),
+              inspector      = COALESCE(@inspector, inspector),
+              result         = COALESCE(@result, result),
+              status         = COALESCE(@status, status),
+              notes          = COALESCE(@notes, notes),
+              updatedAt      = GETDATE()
         WHERE id = @id`,
       [
         { name: 'id',        value: Number(id)           },
@@ -104,7 +108,30 @@ module.exports = safe(async function (context, req) {
         { name: 'notes',     value: b.Notes || null       },
       ]
     )
-    return jsonResponse(context, 200, { ok: true })
+
+    // The inspection decides where the tool goes next. Without this a tool
+    // sent to the bay by a return ticket stayed 'Inspection' forever (435 rows
+    // today) whatever the result. Only a tool that is actually in the bay is
+    // moved, so a stray record can never override a tool that is on a rig.
+    //   Pass -> 'Good'   Fail -> 'DBR'   Conditional / Pending -> stays
+    let tool = null
+    const res = String(b.Result || '').trim()
+    if (res === 'Pass' || res === 'Fail') {
+      const r = await query(
+        `UPDATE i
+            SET i.Status = @st, i.LastUpdated = GETDATE()
+           FROM tbl_Inventory i
+           JOIN tbl_InspectionRecords r
+             ON r.id = @id
+            AND ( (NULLIF(r.asset,'')  IS NOT NULL AND i.AssetNo  = r.asset)
+               OR (NULLIF(r.serial,'') IS NOT NULL AND (i.SystemID = r.serial OR i.OEMSerial = r.serial)) )
+          WHERE i.Status = 'Inspection'`,
+        [{ name: 'id', value: Number(id) },
+         { name: 'st', value: res === 'Pass' ? 'Good' : 'DBR' }]
+      )
+      tool = r.rowsAffected[0] || 0
+    }
+    return jsonResponse(context, 200, { ok: true, toolsUpdated: tool })
   }
 
   return jsonResponse(context, 405, { error: 'Method not allowed' })
