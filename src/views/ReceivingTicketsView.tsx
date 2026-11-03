@@ -586,7 +586,7 @@ export function ReceivingTicketsView() {
   const [showCreate, setShowCreate] = useState(false)
 
   const { data: tickets, isLoading, error, refetch } =
-    useRealtimeFetch<RT[]>('/receiving-tickets')
+    useRealtimeFetch<RT[]>('/receiving-tickets', 30000)
 
   const filtered = useMemo(() => {
     if (!tickets) return []

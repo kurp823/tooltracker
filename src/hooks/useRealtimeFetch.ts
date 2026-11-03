@@ -51,12 +51,27 @@ export function useRealtimeFetch<T>(
     // Initial load shows spinner
     fetchData(true)
 
-    // Poll silently — no spinner on subsequent refreshes
-    timerRef.current = setInterval(() => fetchData(false), intervalMs)
+    // Poll silently — no spinner on subsequent refreshes.
+    // Two things keep this from hammering the server:
+    //  - a hidden tab does not poll (an open-but-forgotten tab used to fetch
+    //    the whole inventory, 3 MB, every 5 seconds all day), and it catches
+    //    up the moment the tab is shown again;
+    //  - a request still in flight is not stacked with another one.
+    let inFlight = false
+    const tick = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      if (inFlight) return
+      inFlight = true
+      try { await fetchData(false) } finally { inFlight = false }
+    }
+    timerRef.current = setInterval(tick, intervalMs)
+    const onVisible = () => { if (!document.hidden) tick() }
+    document.addEventListener('visibilitychange', onVisible)
 
     return () => {
       mountedRef.current = false
       if (timerRef.current) clearInterval(timerRef.current)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [path, intervalMs, fetchData])
 

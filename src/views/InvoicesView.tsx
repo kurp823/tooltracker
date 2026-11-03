@@ -492,7 +492,7 @@ export function InvoicesView() {
   const [showCreate, setShowCreate] = useState(false)
   const [selected,   setSelected]   = useState<Invoice | null>(null)
 
-  const { data: invoices, isLoading, error, refetch } = useRealtimeFetch<Invoice[]>('/invoices')
+  const { data: invoices, isLoading, error, refetch } = useRealtimeFetch<Invoice[]>('/invoices', 30000)
 
   const filtered = useMemo(() => {
     if (!invoices) return []
