@@ -46,39 +46,45 @@ module.exports = async function (context, req) {
       if (!['Admin','Operations'].includes(user.Role))
         return jsonResponse(context, 403, { error: 'Forbidden' })
 
-      const b = req.body
-      // Look up the tool's registered supplier from inventory
-      let origSupplier = b.OriginalSupplier || null
-      if (!origSupplier && (b.Serial || b.AssetNo)) {
-        const inv = await query(
-          `SELECT TOP 1 Supplier FROM tbl_Inventory
-            WHERE (@serial IS NOT NULL AND Serial = @serial)
-               OR (@asset  IS NOT NULL AND AssetNo = @asset)`,
+      try {
+        const b = req.body
+        // Look up the tool's registered supplier from inventory
+        // tbl_Inventory uses OEMSerial (aliased as Serial in the inventory API)
+        let origSupplier = b.OriginalSupplier || null
+        if (!origSupplier && (b.Serial || b.AssetNo)) {
+          const inv = await query(
+            `SELECT TOP 1 Supplier FROM tbl_Inventory
+              WHERE (@serial IS NOT NULL AND OEMSerial = @serial)
+                 OR (@asset  IS NOT NULL AND AssetNo   = @asset)`,
+            [
+              { name: 'serial', value: b.Serial  || null },
+              { name: 'asset',  value: b.AssetNo || null },
+            ]
+          )
+          if (inv.recordset.length) origSupplier = inv.recordset[0].Supplier
+        }
+
+        const r = await query(
+          `INSERT INTO tbl_GatePassLines
+             (GatePassID, Serial, AssetNo, ShortDesc, Size, Qty, Condition, OriginalSupplier)
+           OUTPUT INSERTED.LineID
+           VALUES (@gid, @serial, @asset, @desc, @size, @qty, @cond, @origSup)`,
           [
-            { name: 'serial', value: b.Serial  || null },
-            { name: 'asset',  value: b.AssetNo || null },
+            { name: 'gid',     value: id },
+            { name: 'serial',  value: b.Serial          || null },
+            { name: 'asset',   value: b.AssetNo         || null },
+            { name: 'desc',    value: b.ToolDescription || null },
+            { name: 'size',    value: b.Size            || null },
+            { name: 'qty',     value: b.Quantity        || 1    },
+            { name: 'cond',    value: b.Condition       || null },
+            { name: 'origSup', value: origSupplier              },
           ]
         )
-        if (inv.recordset.length) origSupplier = inv.recordset[0].Supplier
+        return jsonResponse(context, 201, { ItemID: r.recordset[0].LineID })
+      } catch (err) {
+        context.log.error('Gate pass add-item error:', err)
+        return jsonResponse(context, 500, { error: err.message || 'Failed to add item' })
       }
-
-      const r = await query(
-        `INSERT INTO tbl_GatePassLines
-           (GatePassID, Serial, AssetNo, ShortDesc, Size, Qty, Condition, OriginalSupplier)
-         OUTPUT INSERTED.LineID
-         VALUES (@gid, @serial, @asset, @desc, @size, @qty, @cond, @origSup)`,
-        [
-          { name: 'gid',     value: id },
-          { name: 'serial',  value: b.Serial          || null },
-          { name: 'asset',   value: b.AssetNo         || null },
-          { name: 'desc',    value: b.ToolDescription || null },
-          { name: 'size',    value: b.Size            || null },
-          { name: 'qty',     value: b.Quantity        || 1    },
-          { name: 'cond',    value: b.Condition       || null },
-          { name: 'origSup', value: origSupplier              },
-        ]
-      )
-      return jsonResponse(context, 201, { ItemID: r.recordset[0].LineID })
     }
 
     if (method === 'DELETE' && subId) {
