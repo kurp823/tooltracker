@@ -26,6 +26,7 @@ import { useRowWindow } from '../components/useRowWindow'
 import type { Job, JobStatus, InvoicingType, ToolMovement } from '../types'
 import { ListOptions } from '../components/ListOptions'
 import { RolloverPanel } from '../components/RolloverPanel'
+import * as XLSX from 'xlsx'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1674,7 +1675,7 @@ function ReturnTicketTab({
   )
 }
 type UtilGate = { dirty: boolean; save: () => Promise<boolean> }
-interface UtilCellR extends UtilCell { rate?: number | null }
+interface UtilCellR extends UtilCell { rate?: number | null; cost?: number | null }
 
 const fmtMoney = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 })
 const monthLabel = (ym: string) => {
@@ -1706,7 +1707,11 @@ function UtilizationTab({ jobId, job, gate }: {
   const [saving,  setSaving]  = useState(false)
   const [open,    setOpen]    = useState<Record<string, boolean>>({})
   const [pending, setPending] = useState<Record<string, '1' | 'S' | null>>({})
-  const pendingCount = Object.keys(pending).length
+  // Rotating hours are typed by hand: saved values and staged edits, keyed `ym|dt|tool`.
+  const [rot,      setRot]      = useState<Record<string, number>>({})
+  const [rotPend,  setRotPend]  = useState<Record<string, string>>({})
+  const [subs,     setSubs]     = useState<Record<string, boolean>>({})   // `ym|dt|tool` hired-in tools
+  const pendingCount = Object.keys(pending).length + Object.keys(rotPend).length
 
   const cKey = (r: UtilRow) => `${r.dtNumber ?? ''}|${String(r.toolId ?? '')}`
   const daysIn = (ym: string) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate() }
@@ -1755,18 +1760,24 @@ function UtilizationTab({ jobId, job, gate }: {
       } else list.push(nowYm)
 
       const all: Record<string, Record<string, Record<number, UtilCellR>>> = {}
+      const subMap: Record<string, boolean> = {}
+      const rotRes = await api.get<{ rows: { DTNumber: string; ToolSerial: string; YearMonth: string; RotHours: number | null }[] }>(
+        `/utilization/rothours?jobId=${encodeURIComponent(jobId)}`).catch(() => ({ rows: [] }))
+      const rotMap: Record<string, number> = {}
+      for (const r of rotRes.rows || []) if (r.RotHours != null) rotMap[`${r.YearMonth}|${r.DTNumber ?? ''}|${r.ToolSerial}`] = Number(r.RotHours)
       await Promise.all(list.map(async ym => {
         const [y, m] = ym.split('-').map(Number)
-        const res = await api.get<{ rows: (UtilRow & { jobId: string })[] }>(
+        const res = await api.get<{ rows: (UtilRow & { jobId: string; isSub?: boolean })[] }>(
           `/utilization?year=${y}&month=${m}&jobId=${encodeURIComponent(jobId)}`).catch(() => ({ rows: [] }))
         const mm: Record<string, Record<number, UtilCellR>> = {}
         for (const r of (res.rows || [])) {
           if (normalizeJobId(r.jobId) !== normJobId) continue
           mm[`${r.dtNumber ?? ''}|${String(r.toolId ?? '')}`] = r.days as any
+          if (r.isSub) subMap[`${ym}|${r.dtNumber ?? ''}|${String(r.toolId ?? '')}`] = true
         }
         all[ym] = mm
       }))
-      setCycles(built); setMonths(list); setMarks(all); setPending({})
+      setCycles(built); setMonths(list); setMarks(all); setPending({}); setRot(rotMap); setRotPend({}); setSubs(subMap)
       setOpen(o => Object.keys(o).length ? o : Object.fromEntries(list.map(ym => [ym, ym === list[list.length - 1]])))
     } catch {
       showToast('Failed to load utilization', 'error')
@@ -1797,7 +1808,8 @@ function UtilizationTab({ jobId, job, gate }: {
 
   const save = useCallback(async (onlyYm?: string): Promise<boolean> => {
     const entries = Object.entries(pending).filter(([k]) => !onlyYm || k.startsWith(onlyYm + '|'))
-    if (!entries.length) return true
+    const rotEntries = Object.entries(rotPend).filter(([k]) => !onlyYm || k.startsWith(onlyYm + '|'))
+    if (!entries.length && !rotEntries.length) return true
     setSaving(true); document.body.style.cursor = 'wait'
     let failed = 0
     try {
@@ -1812,14 +1824,22 @@ function UtilizationTab({ jobId, job, gate }: {
           else if (code && cur) await api.put(`/utilization/${cur.logId}`, { UtilizationCode: code })
         } catch { failed++ }
       })
+      for (const [k, v] of rotEntries) {
+        const [ym, dt, ...tl] = k.split('|')
+        jobs.push(async () => {
+          try { await api.put('/utilization/rothours', { JobID: jobId, DTNumber: dt, ToolSerial: tl.join('|'), YearMonth: ym, RotHours: v === '' ? null : Number(v) }) }
+          catch { failed++ }
+        })
+      }
       let i = 0
       await Promise.all(Array.from({ length: 4 }, async () => { while (i < jobs.length) await jobs[i++]() }))
     } finally { document.body.style.cursor = ''; setSaving(false) }
     await load()
     if (failed) { showToast(`${failed} day(s) could not be saved — shown again`, 'error'); return false }
-    showToast(`Utilization saved (${entries.length} change${entries.length === 1 ? '' : 's'})`, 'success')
+    const total = entries.length + rotEntries.length
+    showToast(`Utilization saved (${total} change${total === 1 ? '' : 's'})`, 'success')
     return true
-  }, [pending, cycles, marks, jobId, load])
+  }, [pending, rotPend, cycles, marks, jobId, load])
 
   useEffect(() => { gate.current = { dirty: pendingCount > 0, save: () => save() } })
   useEffect(() => () => { gate.current = null }, [])
@@ -1845,24 +1865,58 @@ function UtilizationTab({ jobId, job, gate }: {
   /** Revenue of one cycle in one month, from the rate stored on each saved day. */
   const revenue = (ym: string, r: UtilRow) => {
     const dm = marks[ym]?.[cKey(r)] || {}
-    let sb = 0, ops = 0, sbV = 0, opsV = 0, sbRate = 0, opsRate = 0
+    let sb = 0, ops = 0, sbV = 0, opsV = 0, sbRate = 0, opsRate = 0, cost = 0, costDays = 0
     for (const c of Object.values(dm)) {
       if (c.code === 'S') { sb++; sbV += c.rate || 0; if (c.rate) sbRate = c.rate }
       else { ops++; opsV += c.rate || 0; if (c.rate) opsRate = c.rate }
+      if (c.cost != null) { cost += c.cost; costDays++ }
     }
-    return { sb, ops, sbV, opsV, sbRate, opsRate, total: sbV + opsV }
+    const isSub = !!subs[`${ym}|${cKey(r)}`]
+    return { sb, ops, sbV, opsV, sbRate, opsRate, total: sbV + opsV, cost, costDays, isSub,
+             costMissing: isSub && (sb + ops) > costDays }
   }
 
-  function exportCsv() {
-    const lines = [['Month', 'Asset', 'Description', 'DT', 'DT Date', 'RT', 'RT Date', 'Standby days', 'Ops days', 'Standby value', 'Ops value', 'Total'].join(',')]
-    for (const ym of months) for (const r of rowsFor(ym)) {
-      const v = revenue(ym, r)
-      lines.push([monthLabel(ym), r.assetNo, `"${(r.label || '').replace(/"/g, '""')}"`, r.dtNumber, shortDate(r.dateOut),
-        (r as any).rtNo || '', shortDate(r.dateIn), v.sb, v.ops, v.sbV.toFixed(2), v.opsV.toFixed(2), v.total.toFixed(2)].join(','))
+  /**
+   * Workbook for Billing: a Revenue sheet (one line per tool per month, with
+   * formulas for revenue, margin and totals so they can adjust figures) and a
+   * sheet per month with the day marks.
+   */
+  function exportXlsx(onlyYm?: string) {
+    const list = onlyYm ? [onlyYm] : months
+    const wb = XLSX.utils.book_new()
+    const head = ['Month', 'Asset', 'Description', 'DT', 'RM Dispatch', 'RT', 'RM Backload', 'Rot Hrs',
+                  'SB Days', 'Ops Days', 'SB Rate', 'Ops Rate', 'SB Value', 'Ops Value', 'Revenue', 'Sub-contract Cost', 'Margin']
+    const aoa: any[][] = [head]
+    for (const ym of list) for (const r of rowsFor(ym)) {
+      const v = revenue(ym, r); const n = aoa.length + 1
+      const hrs = rotPend[`${ym}|${cKey(r)}`] ?? rot[`${ym}|${cKey(r)}`]
+      aoa.push([monthLabel(ym), r.assetNo, r.label, r.dtNumber, shortDate(r.dateOut), (r as any).rtNo || '', shortDate(r.dateIn),
+        hrs === undefined || hrs === '' ? '' : Number(hrs), v.sb, v.ops, v.sbRate || '', v.opsRate || '', v.sbV, v.opsV,
+        { t: 'n', f: `M${n}+N${n}` }, v.isSub ? v.cost : '', { t: 'n', f: `O${n}-IF(P${n}="",0,P${n})` }])
     }
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }))
-    a.download = `utilization-${jobId}.csv`; a.click()
+    const last = aoa.length
+    aoa.push(['Total', '', '', '', '', '', '', '', { t: 'n', f: `SUM(I2:I${last})` }, { t: 'n', f: `SUM(J2:J${last})` }, '', '',
+      { t: 'n', f: `SUM(M2:M${last})` }, { t: 'n', f: `SUM(N2:N${last})` }, { t: 'n', f: `SUM(O2:O${last})` },
+      { t: 'n', f: `SUM(P2:P${last})` }, { t: 'n', f: `SUM(Q2:Q${last})` }])
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    ws['!cols'] = head.map((h, i) => ({ wch: i === 2 ? 40 : Math.max(10, h.length + 2) }))
+    XLSX.utils.book_append_sheet(wb, ws, 'Revenue')
+    for (const ym of list) {
+      const n = daysIn(ym)
+      const g: any[][] = [['Asset', 'Description', 'DT', 'RM Dispatch', 'RT', 'RM Backload', 'Rot Hrs',
+        ...Array.from({ length: n }, (_, i) => i + 1), 'SB Days', 'Ops Days']]
+      rowsFor(ym).forEach(r => {
+        let sb = 0, ops = 0
+        const marksRow = Array.from({ length: n }, (_, i) => {
+          const v = valueOf(ym, r, i + 1); if (v === 'S') sb++; else if (v === '1') ops++; return v ?? ''
+        })
+        const hrs = rotPend[`${ym}|${cKey(r)}`] ?? rot[`${ym}|${cKey(r)}`]
+        g.push([r.assetNo, r.label, r.dtNumber, shortDate(r.dateOut), (r as any).rtNo || '', shortDate(r.dateIn),
+          hrs === undefined || hrs === '' ? '' : Number(hrs), ...marksRow, sb, ops])
+      })
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(g), monthLabel(ym).slice(0, 31))
+    }
+    XLSX.writeFile(wb, `utilization-${jobId}${onlyYm ? '-' + onlyYm : ''}.xlsx`)
   }
 
   if (loading) return (
@@ -1870,6 +1924,7 @@ function UtilizationTab({ jobId, job, gate }: {
   )
 
   const grand = months.reduce((s, ym) => s + rowsFor(ym).reduce((a, r) => a + revenue(ym, r).total, 0), 0)
+  const grandCost = months.reduce((s, ym) => s + rowsFor(ym).reduce((a, r) => { const v = revenue(ym, r); return a + (v.isSub ? v.cost : 0) }, 0), 0)
   const th = 'px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-left whitespace-nowrap'
   const cell = 'w-[26px] h-[28px] flex items-center justify-center font-mono text-[11.5px] font-semibold select-none outline-none'
   const canSeeMoney = hasRole('Admin', 'Operations', 'Finance', 'Billing', 'CostController', 'Executive')
@@ -1908,7 +1963,7 @@ function UtilizationTab({ jobId, job, gate }: {
           for (let d = 1; d <= n; d++) { const v = valueOf(ym, r, d); if (v === '1') a.ops++; else if (v === 'S') a.sb++ }
           return a
         }, { ops: 0, sb: 0 })
-        const dirty = Object.keys(pending).filter(k => k.startsWith(ym + '|')).length
+        const dirty = Object.keys(pending).filter(k => k.startsWith(ym + '|')).length + Object.keys(rotPend).filter(k => k.startsWith(ym + '|')).length
         const isOpen = !!open[ym]
         return (
           <div key={ym} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -1922,23 +1977,24 @@ function UtilizationTab({ jobId, job, gate }: {
               {dirty > 0 && <span className="text-[11px] px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-300">Unsaved changes</span>}
               <span className="ml-auto flex gap-2" onClick={e => e.stopPropagation()}>
                 {canEdit && <button className="btn-mini" disabled={saving || !dirty} onClick={() => save(ym)}><Save size={12} /> Save</button>}
-                <button className="btn-mini" onClick={exportCsv}>Export</button>
+                <button className="btn-mini" onClick={() => exportXlsx(ym)}>Export</button>
               </span>
             </div>
             {isOpen && (
               <div className="overflow-auto">
-                <table className="border-collapse text-[11.5px]" style={{ minWidth: `${760 + n * 26}px` }}>
+                <table className="border-collapse text-[11.5px]" style={{ minWidth: `${860 + n * 26}px` }}>
                   <thead>
                     <tr className="border-b border-gray-200">
                       <th className={th}>#</th><th className={th}>Asset/S/N</th><th className={th}>Description</th>
-                      <th className={th}>DT #</th><th className={th}>DT Date</th><th className={th}>RT #</th><th className={th}>RT Date</th>
+                      <th className={th}>DT #</th><th className={th}>RM Dispatch</th><th className={th}>RT #</th><th className={th}>RM Backload</th>
                       {days.map(d => <th key={d} className="p-0 w-[26px] text-center font-mono text-[10px] font-medium text-gray-500 border-l border-gray-100">{d}</th>)}
-                      <th className={`${th} text-center text-blue-700 border-l border-gray-200`}>SB Days</th>
+                      <th className={`${th} text-center border-l border-gray-200`}>Rot Hrs</th>
+                      <th className={`${th} text-center text-blue-700`}>SB Days</th>
                       <th className={`${th} text-center text-green-700`}>Ops Days</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.length === 0 && <tr><td colSpan={n + 9} className="text-center text-gray-400 py-6">No tools on hire this month.</td></tr>}
+                    {rows.length === 0 && <tr><td colSpan={n + 10} className="text-center text-gray-400 py-6">No tools on hire this month.</td></tr>}
                     {rows.map((r, ri) => {
                       let ops = 0, sb = 0
                       for (let d = 1; d <= n; d++) { const v = valueOf(ym, r, d); if (v === '1') ops++; else if (v === 'S') sb++ }
@@ -1969,14 +2025,24 @@ function UtilizationTab({ jobId, job, gate }: {
                               </td>
                             )
                           })}
-                          <td className="px-2 text-center font-mono font-semibold text-blue-700 border-l border-gray-200">{sb}</td>
+                          <td className="px-1 border-l border-gray-200">
+                            <input className="w-[56px] h-[22px] text-center text-[11px] font-mono border border-gray-200 rounded bg-white focus:outline-none focus:border-brand-500 disabled:bg-gray-50"
+                              inputMode="decimal" placeholder="hrs" disabled={!canEdit}
+                              value={rotPend[`${ym}|${cKey(r)}`] ?? (rot[`${ym}|${cKey(r)}`] ?? '')}
+                              onChange={e => {
+                                const v = e.target.value.replace(/[^0-9.]/g, '')
+                                const k = `${ym}|${cKey(r)}`
+                                setRotPend(p => { const n = { ...p }; if (v === String(rot[k] ?? '')) delete n[k]; else n[k] = v; return n })
+                              }} />
+                          </td>
+                          <td className="px-2 text-center font-mono font-semibold text-blue-700">{sb}</td>
                           <td className="px-2 text-center font-mono font-semibold text-green-700">{ops}</td>
                         </tr>
                       )
                     })}
                     <tr className="bg-gray-50 border-t border-gray-300">
-                      <td colSpan={7 + n} className="px-3 py-1.5 text-right text-[10.5px] font-semibold uppercase tracking-wide text-gray-500">Month totals</td>
-                      <td className="text-center font-mono font-bold text-blue-700 border-l border-gray-200">{tot.sb}</td>
+                      <td colSpan={7 + n + 1} className="px-3 py-1.5 text-right text-[10.5px] font-semibold uppercase tracking-wide text-gray-500">Month totals</td>
+                      <td className="text-center font-mono font-bold text-blue-700">{tot.sb}</td>
                       <td className="text-center font-mono font-bold text-green-700">{tot.ops}</td>
                     </tr>
                   </tbody>
@@ -1992,8 +2058,10 @@ function UtilizationTab({ jobId, job, gate }: {
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200">
             <span className="text-[13px] font-semibold text-gray-900">Job Revenue Details</span>
-            <span className="text-[11px] text-gray-400">All months combined · from saved days · priced from the contract rates when a day is saved</span>
-            <span className="ml-auto font-mono font-bold text-[13px]">{fmtMoney(grand)}</span>
+            <span className="text-[11px] text-gray-400">All months · from saved days, priced from the contract when a day is saved · hired-in tool cost from their hire rate</span>
+            <span className="ml-auto text-[11px] text-gray-500">Revenue <b className="font-mono text-gray-900">{fmtMoney(grand)}</b></span>
+            <span className="text-[11px] text-gray-500">Sub-contract cost <b className="font-mono text-gray-900">{fmtMoney(grandCost)}</b></span>
+            <span className="text-[11px] text-gray-500">Margin <b className="font-mono text-gray-900">{fmtMoney(grand - grandCost)}</b></span>
           </div>
           {months.map(ym => {
             const rows = rowsFor(ym)
@@ -2008,7 +2076,9 @@ function UtilizationTab({ jobId, job, gate }: {
                     <th className={`${th} text-right`}>SB Days</th><th className={`${th} text-right`}>Ops Days</th>
                     <th className={`${th} text-right`}>SB Rate</th><th className={`${th} text-right`}>Ops Rate</th>
                     <th className={`${th} text-right`}>SB Value</th><th className={`${th} text-right`}>Ops Value</th>
-                    <th className={`${th} text-right`}>Total</th>
+                    <th className={`${th} text-right`}>Revenue</th>
+                    <th className={`${th} text-right`}>Sub-contract Cost</th>
+                    <th className={`${th} text-right`}>Margin</th>
                   </tr></thead>
                   <tbody>
                     {rows.map((r, i) => {
@@ -2029,11 +2099,17 @@ function UtilizationTab({ jobId, job, gate }: {
                           <td className="px-2 text-right font-mono">{fmtMoney(v.opsV)}</td>
                           <td className={`px-2 text-right font-mono font-bold ${unpriced ? 'text-amber-600' : ''}`}
                               title={unpriced ? 'Days saved with no contract rate' : undefined}>{fmtMoney(v.total)}</td>
+                          <td className={`px-2 text-right font-mono ${v.costMissing ? 'text-amber-600' : 'text-gray-700'}`}
+                              title={v.costMissing ? 'Hired-in tool: some days have no hire rate yet (set in Pending Rental Costs)' : undefined}>
+                            {v.isSub ? fmtMoney(v.cost) : '—'}</td>
+                          <td className="px-2 text-right font-mono font-bold">{fmtMoney(v.total - (v.isSub ? v.cost : 0))}</td>
                         </tr>
                       )
                     })}
                     <tr className="bg-gray-50"><td colSpan={11} className="px-2 py-1.5 text-right font-semibold text-gray-600">{monthLabel(ym)} Total</td>
-                      <td className="px-2 text-right font-mono font-bold">{fmtMoney(sum)}</td></tr>
+                      <td className="px-2 text-right font-mono font-bold">{fmtMoney(sum)}</td>
+                      <td className="px-2 text-right font-mono font-bold">{fmtMoney(rows.reduce((a, r) => a + (revenue(ym, r).isSub ? revenue(ym, r).cost : 0), 0))}</td>
+                      <td className="px-2 text-right font-mono font-bold">{fmtMoney(sum - rows.reduce((a, r) => a + (revenue(ym, r).isSub ? revenue(ym, r).cost : 0), 0))}</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -2042,6 +2118,10 @@ function UtilizationTab({ jobId, job, gate }: {
           <div className="flex justify-end items-baseline gap-3 px-4 py-3 border-t border-gray-200">
             <span className="text-[10.5px] uppercase tracking-wide text-gray-500 font-semibold">Grand total</span>
             <span className="font-mono font-bold text-[18px]">{fmtMoney(grand)}</span>
+            <span className="text-[10.5px] uppercase tracking-wide text-gray-500 font-semibold ml-4">Cost</span>
+            <span className="font-mono font-bold text-[18px]">{fmtMoney(grandCost)}</span>
+            <span className="text-[10.5px] uppercase tracking-wide text-gray-500 font-semibold ml-4">Margin</span>
+            <span className="font-mono font-bold text-[18px]">{fmtMoney(grand - grandCost)}</span>
           </div>
         </div>
       )}
@@ -2049,10 +2129,10 @@ function UtilizationTab({ jobId, job, gate }: {
       {/* Sticky footer */}
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 px-6 py-2 flex items-center gap-3 justify-end">
         {pendingCount > 0 && <span className="text-[11.5px] font-semibold text-amber-700 mr-auto">{pendingCount} unsaved change{pendingCount === 1 ? '' : 's'}</span>}
-        {pendingCount > 0 && <button className="btn-mini" disabled={saving} onClick={() => setPending({})}>Discard</button>}
+        {pendingCount > 0 && <button className="btn-mini" disabled={saving} onClick={() => { setPending({}); setRotPend({}) }}>Discard</button>}
         {canEdit && <button className="btn-primary text-xs py-1.5" disabled={saving || !pendingCount} onClick={() => save()}>
           {saving ? <><Spinner size="sm" /> Saving…</> : <><Save size={13} /> Save All</>}</button>}
-        <button className="btn-mini" onClick={exportCsv}>Export</button>
+        <button className="btn-mini" onClick={() => exportXlsx()}>Export Excel</button>
       </div>
     </div>
   )

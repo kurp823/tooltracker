@@ -127,6 +127,58 @@ module.exports = safe(async function (context, req) {
   const qs     = req.query || {}
   const load   = rateLoader()
 
+  // ── Rotating hours: typed by hand per tool cycle per month ───────────────
+  // Created on first use so no separate migration step is needed.
+  if (id === 'rothours') {
+    await query(`
+      IF OBJECT_ID('dbo.tbl_UtilizationRotHours', 'U') IS NULL
+        CREATE TABLE dbo.tbl_UtilizationRotHours (
+          JobID      varchar(30) NOT NULL,
+          DTNumber   varchar(30) NOT NULL DEFAULT '',
+          ToolSerial varchar(60) NOT NULL,
+          YearMonth  char(7)     NOT NULL,
+          RotHours   decimal(9,2) NULL,
+          UpdatedBy  varchar(100) NULL,
+          UpdatedAt  datetime NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT PK_UtilizationRotHours PRIMARY KEY (JobID, DTNumber, ToolSerial, YearMonth)
+        )`)
+
+    if (method === 'GET') {
+      const r = await query(
+        `SELECT DTNumber, ToolSerial, YearMonth, RotHours
+           FROM tbl_UtilizationRotHours WHERE ${jobKey('JobID')} = @jk`,
+        [{ name: 'jk', value: jobKeyOf(qs.jobId) }])
+      return jsonResponse(context, 200, { rows: r.recordset })
+    }
+    if (method === 'PUT') {
+      if (!['Admin','Operations'].includes(user.Role))
+        return jsonResponse(context, 403, { error: 'Forbidden' })
+      const b = req.body || {}
+      if (!b.JobID || !b.ToolSerial || !/^\d{4}-\d{2}$/.test(b.YearMonth || ''))
+        return jsonResponse(context, 400, { error: 'JobID, ToolSerial, YearMonth (yyyy-mm) required' })
+      const keys = [
+        { name: 'j', value: b.JobID }, { name: 'dt', value: b.DTNumber || '' },
+        { name: 't', value: String(b.ToolSerial) }, { name: 'ym', value: b.YearMonth },
+      ]
+      const hrs = b.RotHours === null || b.RotHours === '' || b.RotHours === undefined ? null : Number(b.RotHours)
+      if (hrs !== null && (!isFinite(hrs) || hrs < 0))
+        return jsonResponse(context, 400, { error: 'RotHours must be a number, 0 or more' })
+      if (hrs === null) {
+        await query(`DELETE FROM tbl_UtilizationRotHours WHERE JobID=@j AND DTNumber=@dt AND ToolSerial=@t AND YearMonth=@ym`, keys)
+      } else {
+        await query(
+          `UPDATE tbl_UtilizationRotHours SET RotHours=@h, UpdatedBy=@u, UpdatedAt=GETDATE()
+            WHERE JobID=@j AND DTNumber=@dt AND ToolSerial=@t AND YearMonth=@ym;
+           IF @@ROWCOUNT = 0
+             INSERT INTO tbl_UtilizationRotHours (JobID, DTNumber, ToolSerial, YearMonth, RotHours, UpdatedBy)
+             VALUES (@j,@dt,@t,@ym,@h,@u)`,
+          [...keys, { name: 'h', value: hrs }, { name: 'u', value: user.Username || user.Name || null }])
+      }
+      return jsonResponse(context, 200, { ok: true })
+    }
+    return jsonResponse(context, 405, { error: 'Method not allowed' })
+  }
+
   // ── GET rate options for the Edit box ────────────────────────────────────
   if (id === 'options' && method === 'GET') {
     const ctx = await contextFor(qs.jobId, qs.toolSerial, qs.dtNumber)
@@ -165,10 +217,21 @@ module.exports = safe(async function (context, req) {
               d.LogDate, d.StatusType, d.RateCharged, d.RateSource,
               d.RateEditedBy, d.RateEditedAt, d.RateNote,
               i.AssetNo   AS AssetNo,
-              i.ShortDesc AS ToolDescription
+              i.ShortDesc AS ToolDescription,
+              i.IsEmdad   AS IsEmdad,
+              ri.id       AS HireID,
+              ri.dayRate  AS HireRate
          FROM tbl_DailyFieldLogs d
          LEFT JOIN tbl_Inventory i
                 ON i.SystemID = d.ToolSerial
+         OUTER APPLY (
+           SELECT TOP 1 r.id, r.dayRate
+             FROM tbl_RentalInward r
+            WHERE (r.systemId = d.ToolSerial OR r.assetNo = d.ToolSerial OR r.oemSerial = d.ToolSerial)
+              AND d.LogDate >= r.dateIn
+              AND (r.dateOut IS NULL OR d.LogDate <= r.dateOut)
+            ORDER BY r.dateIn DESC
+         ) ri
         WHERE YEAR(d.LogDate)  = @year
           AND MONTH(d.LogDate) = @month
           AND (@jobId IS NULL OR d.JobID = @jobId)
@@ -203,7 +266,7 @@ module.exports = safe(async function (context, req) {
           label, jobId: r.JobID, toolId: r.ToolSerial,
           dtNumber: r.DTNumber || null, days: {},
           opsDays: 0, standbyDays: 0, amount: 0,
-          unpriced: 0, edited: 0,
+          unpriced: 0, edited: 0, isSub: r.IsEmdad === 0 || r.IsEmdad === false,
         })
       }
       const row = rowMap.get(key)
@@ -211,6 +274,8 @@ module.exports = safe(async function (context, req) {
         code: r.StatusType, logId: r.LogID,
         rate: r.RateCharged == null ? null : Number(r.RateCharged),
         source: r.RateSource || null,
+        // what we pay the owner for a hired-in tool that day (null = EMDAD-owned or not yet priced)
+        cost: (r.IsEmdad === 0 || r.IsEmdad === false) && r.HireRate != null ? Number(r.HireRate) : null,
       }
 
       if (r.StatusType === '1') row.opsDays++
