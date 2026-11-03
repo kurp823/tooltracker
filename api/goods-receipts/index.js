@@ -60,7 +60,7 @@ module.exports = safe(async function (context, req) {
     if (method === 'GET' && id === 'open' && sub) {
       const poNumber = decodeURIComponent(sub)
       const r = await query(
-        `SELECT l.id AS poLineId, l.lineNo, l.partNumber, l.description,
+        `SELECT l.id AS poLineId, l.[lineNo], l.partNumber, l.description,
                 l.size, l.qty, l.uom, l.unitRate, l.currency, l.jobId,
                 l.destination AS expectedDestination,
                 COALESCE((SELECT SUM(g.qtyReceived)
@@ -68,7 +68,7 @@ module.exports = safe(async function (context, req) {
                            WHERE g.poLineId = l.id), 0) AS qtyReceived
            FROM tbl_PurchaseOrderLines l
           WHERE l.poNumber = @po
-          ORDER BY l.lineNo`,
+          ORDER BY l.[lineNo]`,
         [{ name: 'po', type: sql.NVarChar, value: poNumber }]
       )
       return jsonResponse(context, 200, r.recordset.map(l => ({
@@ -102,12 +102,12 @@ module.exports = safe(async function (context, req) {
       const head = await headerById(id)
       if (!head) return jsonResponse(context, 404, { error: 'Receipt not found' })
       const lines = await query(
-        `SELECT g.*, l.lineNo, l.description, l.partNumber, l.qty AS orderedQty,
+        `SELECT g.*, l.[lineNo], l.description, l.partNumber, l.qty AS orderedQty,
                 l.uom, l.jobId
            FROM tbl_GoodsReceiptLines g
            LEFT JOIN tbl_PurchaseOrderLines l ON l.id = g.poLineId
           WHERE g.grnNumber = @n
-          ORDER BY l.lineNo`,
+          ORDER BY l.[lineNo]`,
         [{ name: 'n', type: sql.NVarChar, value: head.grnNumber }]
       )
       return jsonResponse(context, 200, { ...head, lines: lines.recordset })
@@ -216,11 +216,11 @@ module.exports = safe(async function (context, req) {
       if (!head) return jsonResponse(context, 404, { error: 'Receipt not found' })
 
       const lines = await query(
-        `SELECT g.*, l.description, l.lineNo, l.jobId, l.uom, l.unitRate
+        `SELECT g.*, l.description, l.[lineNo], l.jobId, l.uom, l.unitRate
            FROM tbl_GoodsReceiptLines g
            LEFT JOIN tbl_PurchaseOrderLines l ON l.id = g.poLineId
           WHERE g.grnNumber = @n AND g.systemId IS NULL
-          ORDER BY l.lineNo`,
+          ORDER BY l.[lineNo]`,
         [{ name: 'n', type: sql.NVarChar, value: head.grnNumber }]
       )
       if (!lines.recordset.length)
