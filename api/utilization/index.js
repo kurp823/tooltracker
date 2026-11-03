@@ -269,6 +269,25 @@ module.exports = safe(async function (context, req) {
         ]
       )
       dtNumber = f.recordset[0]?.dtNumber || null
+
+      // A tool rolled over from last month's job has no ticket on THIS job;
+      // the ticket it went out on travels with it in tbl_JobTools. Without
+      // this fallback every rolled-over day is unpriced ("hole-section-required").
+      if (!dtNumber) {
+        const jt = await query(
+          `SELECT TOP 1 SourceDTNumber
+             FROM tbl_JobTools
+            WHERE ${jobKey('JobID')} = @jk
+              AND (SystemID = @tool OR AssetNo = (SELECT TOP 1 AssetNo FROM tbl_Inventory WHERE SystemID = @tool))
+              AND SourceDTNumber IS NOT NULL
+            ORDER BY JobToolID DESC`,
+          [
+            { name: 'jk',   value: jobKeyOf(b.JobID) },
+            { name: 'tool', value: tool },
+          ]
+        )
+        dtNumber = jt.recordset[0]?.SourceDTNumber || null
+      }
     }
 
     const ctx   = await contextFor(b.JobID, tool, dtNumber)
