@@ -50,6 +50,11 @@ const MODULES: NavModule[] = [
       { label: 'Delivery Tickets',       to: '/delivery-tickets',   icon: <Truck size={ICON} /> },
       { label: 'Receiving Tickets',      to: '/receiving-tickets',  icon: <RotateCcw size={ICON} /> },
       { label: 'Utilization',            to: '/utilization',        icon: <BarChart3 size={ICON} /> },
+      // The people who put tools on hire need to see what those days earn and
+      // what the hired-in ones cost. The screen was only in the Billing module,
+      // so Operations could not find it (the API already allowed them).
+      { label: 'Revenue & Cost',         to: '/tool-revenue',       icon: <Coins size={ICON} />,
+        roles: ['Admin', 'Operations', 'Finance', 'Billing', 'CostController', 'Executive'] },
       { label: 'Security Gate Pass',     to: '/gate-pass',          icon: <DoorOpen size={ICON} /> },
     ],
   },
@@ -143,7 +148,7 @@ function Module({ mod }: { mod: NavModule }) {
 
       {open && (
         <div className="pb-1">
-          {mod.items.map(item =>
+          {mod.items.filter(item => !item.roles || hasRole(...item.roles)).map(item =>
             item.pending ? (
               <div
                 key={item.to}
