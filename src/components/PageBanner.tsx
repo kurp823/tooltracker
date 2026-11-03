@@ -112,6 +112,10 @@ const PAGES: Record<string, Page> = {
     title: 'Monthly Expense Grid & P&L', badge: 'Cost Control',
     sub: 'Costs by month and category, against the revenue they supported.',
   },
+  '/sub-rates': {
+    title: 'Sub-Contractor Rate Sheets', badge: 'Billing & Cost Control',
+    sub: 'What each supplier charges us, by category and size — hired-in tools on a job take their cost from here.',
+  },
   '/sub-accruals': {
     title: 'Sub-Contract POs & Accruals', badge: 'Billing & Cost Control',
     sub: 'POs still to issue to sub-contractors, and supplier invoices still to arrive.',

@@ -1533,7 +1533,10 @@ function ReturnTicketTab({
 }
 type UtilGate = { dirty: boolean; save: () => Promise<boolean> }
 /** What we pay a sub-contractor for one hired-in tool on one job. */
-interface SubLine { toolSerial: string; supplierName: string | null; basis: string; qty: number; rate: number; amount: number; currency: string | null }
+interface SubLine { toolSerial: string; supplierName: string | null; basis: string; qty: number | null; rate: number; currency: string | null }
+interface SubTool { tool: string; assetNo: string; label: string; supplier: string | null; dts: string[]; clientDays: number; billed: number }
+/** A hired-in tool on the job with the supplier's sheet rate that applies to it, if any. */
+interface SubSheet { toolSerial: string; category: string | null; size: string | null; supplier: string | null; sheetId: number | null; sheetBasis: string | null; sheetRate: number | null; sheetCurrency: string | null }
 interface SubDraft { basis: string; qty: string; rate: string; cur: string }
 interface UtilCellR extends UtilCell { rate?: number | null; cost?: number | null }
 
@@ -1578,6 +1581,7 @@ function UtilizationTab({ jobId, job, gate }: {
   // and the edits being typed. How a hire is charged is agreed each time.
   const [lines,    setLines]    = useState<Record<string, SubLine>>({})
   const [lineDraft, setLineDraft] = useState<Record<string, Partial<SubDraft>>>({})
+  const [sheet,    setSheet]    = useState<Record<string, SubSheet>>({})
   const pendingCount = Object.keys(pending).length + Object.keys(rotPend).length
 
   const cKey = (r: UtilRow) => `${r.dtNumber ?? ''}|${String(r.toolId ?? '')}`
@@ -1630,7 +1634,9 @@ function UtilizationTab({ jobId, job, gate }: {
 
       const all: Record<string, Record<string, Record<number, UtilCellR>>> = {}
       const lineRows = await api.get<SubLine[]>(`/sub-settlement?jobId=${encodeURIComponent(jobId)}`).catch(() => [] as SubLine[])
-      setLines(Object.fromEntries((lineRows || []).map(l => [l.toolSerial, { ...l, qty: Number(l.qty), rate: Number(l.rate), amount: Number(l.amount) }])))
+      setLines(Object.fromEntries((lineRows || []).map(l => [l.toolSerial, { ...l, qty: l.qty == null ? null : Number(l.qty), rate: Number(l.rate) }])))
+      const sheetRows = await api.get<SubSheet[]>(`/sub-rates?resolve=${encodeURIComponent(jobId)}`).catch(() => [] as SubSheet[])
+      setSheet(Object.fromEntries((sheetRows || []).map(x => [x.toolSerial, { ...x, sheetRate: x.sheetRate == null ? null : Number(x.sheetRate) }])))
       const subMap: Record<string, boolean> = {}
       const rotRes = await api.get<{ rows: { DTNumber: string; ToolSerial: string; YearMonth: string; RotHours: number | null }[] }>(
         `/utilization/rothours?jobId=${encodeURIComponent(jobId)}`).catch(() => ({ rows: [] }))
@@ -1718,27 +1724,49 @@ function UtilizationTab({ jobId, job, gate }: {
   /** Suggested quantity for a basis, from the days we bill the client. Always editable. */
   const suggestQty = (basis: string, clientDays: number) =>
     /lump/i.test(basis) ? 1 : /month/i.test(basis) ? Math.round((clientDays / 30) * 100) / 100 : clientDays
-  /** Save what we pay for one hired-in tool on this job. A blank rate clears the line. */
-  async function saveLine(tool: string, supplier: string | null, clientDays: number) {
-    const d = lineDraft[tool]
+  /**
+   * Save an exception for one hired-in tool on this job: a rate different from the supplier's
+   * sheet, or days paid that differ from the days billed. A tool that simply follows the sheet
+   * stores nothing. A blank rate removes the exception.
+   */
+  async function saveLine(t: SubTool) {
+    const d = lineDraft[t.tool]
     if (!d) return
-    const base = lines[tool]
-    const basis = d.basis ?? base?.basis ?? 'Day rate'
-    const rateStr = (d.rate ?? (base ? String(base.rate) : '')).trim()
-    const qtyStr = /lump/i.test(basis) ? '1' : (d.qty ?? (base ? String(base.qty) : String(suggestQty(basis, clientDays)))).trim()
-    const cur = d.cur ?? base?.currency ?? jobCur
-    const done = () => setLineDraft(x => { const n = { ...x }; delete n[tool]; return n })
-    if (rateStr === '') { if (base) { try { await api.put('/sub-settlement', { jobId, toolSerial: tool, rate: '' }); done(); await reloadLines() } catch (e: any) { showToast(e?.message || 'Could not clear', 'error') } } return }
-    if (isNaN(Number(rateStr)) || isNaN(Number(qtyStr)) || qtyStr === '') return
-    if (base && base.basis === basis && base.rate === Number(rateStr) && base.qty === Number(qtyStr) && (base.currency || jobCur) === cur) { done(); return }
+    const e = effOf(t)
+    const base = lines[t.tool]
+    const sh = sheet[t.tool]
+    const done = () => setLineDraft(x => { const n = { ...x }; delete n[t.tool]; return n })
+    if (e.rate.trim() === '') {
+      if (base) { try { await api.put('/sub-settlement', { jobId, toolSerial: t.tool, rate: '' }); done(); await reloadLines() } catch (er: any) { showToast(er?.message || 'Could not clear', 'error') } }
+      return
+    }
+    if (isNaN(Number(e.rate)) || isNaN(Number(e.qty)) || e.qty === '') return
+    const qtyTouched = d.qty !== undefined || base?.qty != null
+    const qtyOut = /lump/i.test(e.basis) ? 1 : (qtyTouched ? Number(e.qty) : null)
+    // Same as the sheet and nothing changed on the quantity: nothing to store.
+    if (!base && sh?.sheetRate != null && Number(e.rate) === sh.sheetRate && e.basis === sh.sheetBasis
+        && (e.cur || '') === (sh.sheetCurrency || jobCur) && !qtyTouched) { done(); return }
+    if (base && base.basis === e.basis && base.rate === Number(e.rate) && (base.qty ?? null) === qtyOut && (base.currency || jobCur) === e.cur) { done(); return }
     try {
-      await api.put('/sub-settlement', { jobId, toolSerial: tool, supplierName: supplier, basis, qty: Number(qtyStr), rate: Number(rateStr), currency: cur })
+      await api.put('/sub-settlement', { jobId, toolSerial: t.tool, supplierName: t.supplier, basis: e.basis, qty: qtyOut, rate: Number(e.rate), currency: e.cur })
       done(); await reloadLines()
-    } catch (e: any) { showToast(e?.message || 'Could not save what we pay', 'error') }
+    } catch (er: any) { showToast(er?.message || 'Could not save what we pay', 'error') }
   }
   async function reloadLines() {
     const rows = await api.get<SubLine[]>(`/sub-settlement?jobId=${encodeURIComponent(jobId)}`).catch(() => [] as SubLine[])
-    setLines(Object.fromEntries((rows || []).map(l => [l.toolSerial, { ...l, qty: Number(l.qty), rate: Number(l.rate), amount: Number(l.amount) }])))
+    setLines(Object.fromEntries((rows || []).map(l => [l.toolSerial, { ...l, qty: l.qty == null ? null : Number(l.qty), rate: Number(l.rate) }])))
+  }
+  /** Put this rate on the supplier's sheet so every later job picks it up. */
+  async function addToSheet(t: SubTool, e: { basis: string; rate: string; cur: string }) {
+    const info = sheet[t.tool]
+    if (!info?.category || !t.supplier) { showToast('This tool has no category on file, so it cannot be added to a sheet', 'error'); return }
+    try {
+      await api.put('/sub-rates', { supplierName: t.supplier, category: info.category, size: info.size || '', contractCode: '',
+                                    basis: e.basis, rate: Number(e.rate), currency: e.cur })
+      const rows = await api.get<SubSheet[]>(`/sub-rates?resolve=${encodeURIComponent(jobId)}`).catch(() => [] as SubSheet[])
+      setSheet(Object.fromEntries((rows || []).map(x => [x.toolSerial, { ...x, sheetRate: x.sheetRate == null ? null : Number(x.sheetRate) }])))
+      showToast(`Added to ${t.supplier}'s rate sheet (${info.category}${info.size ? ' ' + info.size : ''})`, 'success')
+    } catch (er: any) { showToast(er?.message || 'Could not add to the rate sheet', 'error') }
   }
 
   useEffect(() => { gate.current = { dirty: pendingCount > 0, save: () => save() } })
@@ -1762,6 +1790,20 @@ function UtilizationTab({ jobId, job, gate }: {
     else if (k === 'ArrowUp')   { e.preventDefault(); go(ri - 1, d) }
   }
 
+  /** What we pay for a tool on this job: the job's own agreement, else the supplier's sheet. */
+  const rateOf = (tool: string) => {
+    const l = lines[tool]; const sh = sheet[tool]
+    if (l) return { basis: l.basis, rate: l.rate, qty: l.qty }
+    if (sh && sh.sheetRate != null) return { basis: sh.sheetBasis || 'Day rate', rate: sh.sheetRate, qty: null as number | null }
+    return null
+  }
+  const amountFor = (tool: string, days: number): number | null => {
+    const r = rateOf(tool); if (!r) return null
+    if (/lump/i.test(r.basis)) return r.rate
+    const q = r.qty ?? (/month/i.test(r.basis) ? days / 30 : days)
+    return Math.round(q * r.rate * 100) / 100
+  }
+
   /** Saved days per tool across every month, to spread a settlement over the months by days. */
   const toolDays = useMemo(() => {
     const t: Record<string, number> = {}
@@ -1783,11 +1825,11 @@ function UtilizationTab({ jobId, job, gate }: {
     const isSub = !!subs[`${ym}|${cKey(r)}`] || !!(r as any).supplier
     // What we pay the supplier is agreed for the whole hire, so each month carries
     // its share by days worked.
-    const ln = lines[String(r.toolId ?? '')]
     const tdays = toolDays[String(r.toolId ?? '')] || 0
-    if (ln && tdays > 0) { cost = ln.amount * (sb + ops) / tdays; costDays = sb + ops }
+    const tAmt = amountFor(String(r.toolId ?? ''), tdays)
+    if (tAmt != null && tdays > 0) { cost = tAmt * (sb + ops) / tdays; costDays = sb + ops }
     return { sb, ops, sbV, opsV, sbRate, opsRate, total: sbV + opsV, cost, costDays, isSub,
-             costMissing: isSub && !ln && (sb + ops) > 0 }
+             costMissing: isSub && tAmt == null && (sb + ops) > 0 }
   }
 
   /**
@@ -1838,7 +1880,10 @@ function UtilizationTab({ jobId, job, gate }: {
   )
 
   const grand = months.reduce((s, ym) => s + rowsFor(ym).reduce((a, r) => a + revenue(ym, r).total, 0), 0)
-  const grandCost = Object.values(lines).reduce((a, l) => a + l.amount, 0)
+  const subSet = new Set<string>()
+  cycles.forEach(c => { if ((c as any).supplier) subSet.add(String(c.toolId ?? '')) })
+  Object.keys(subs).forEach(k => subSet.add(k.split('|').slice(2).join('|')))
+  const grandCost = Array.from(subSet).reduce((a, tool) => a + (amountFor(tool, toolDays[tool] || 0) ?? 0), 0)
   const th = 'px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-left whitespace-nowrap'
   const cell = 'w-[26px] h-[28px] flex items-center justify-center font-mono text-[11.5px] font-semibold select-none outline-none'
   const canSeeMoney = hasRole('Admin', 'Operations', 'Finance', 'Billing', 'CostController', 'Executive')
@@ -1866,12 +1911,8 @@ function UtilizationTab({ jobId, job, gate }: {
   const revByMonth = (m: string) => rowsFor(m).reduce((a, r) => a + revenue(m, r).total, 0)
   const stick = 'sticky left-0 z-[5] bg-white'
   const isSubRow = (r: UtilRow, m: string) => !!(r as any).supplier || !!subs[`${m}|${cKey(r)}`]
-  const subSet = new Set<string>()
-  cycles.forEach(c => { if ((c as any).supplier) subSet.add(String(c.toolId ?? '')) })
-  Object.keys(subs).forEach(k => subSet.add(k.split('|').slice(2).join('|')))
 
   // One line per hired-in tool for the whole job: days billed, what we pay, what we bill.
-  interface SubTool { tool: string; assetNo: string; label: string; supplier: string | null; dts: string[]; clientDays: number; billed: number }
   const subList: SubTool[] = []
   if (view === 'sub') {
     const mp = new Map<string, SubTool>()
@@ -1892,13 +1933,16 @@ function UtilizationTab({ jobId, job, gate }: {
   }
   const subShown = subList.filter(t => !needle || [t.assetNo, t.tool, t.label, t.supplier, ...t.dts].some(x => String(x ?? '').toLowerCase().includes(needle)))
   const effOf = (t: SubTool) => {
-    const base = lines[t.tool]; const d = lineDraft[t.tool] || {}
-    const basis = d.basis ?? base?.basis ?? 'Day rate'
-    const rate = d.rate ?? (base ? String(base.rate) : '')
-    const qty = /lump/i.test(basis) ? '1' : (d.qty ?? (base ? String(base.qty) : String(suggestQty(basis, t.clientDays))))
-    const cur = d.cur ?? base?.currency ?? jobCur
+    const base = lines[t.tool]; const sh = sheet[t.tool]; const d = lineDraft[t.tool] || {}
+    const hasSheet = !!sh && sh.sheetRate != null
+    const basis = d.basis ?? base?.basis ?? (hasSheet ? (sh!.sheetBasis || 'Day rate') : 'Day rate')
+    const rate = d.rate ?? (base ? String(base.rate) : hasSheet ? String(sh!.sheetRate) : '')
+    const qty = /lump/i.test(basis) ? '1' : (d.qty ?? (base?.qty != null ? String(base.qty) : String(suggestQty(basis, t.clientDays))))
+    const cur = d.cur ?? base?.currency ?? (hasSheet ? (sh!.sheetCurrency || jobCur) : jobCur)
     const amount = rate !== '' && !isNaN(Number(rate)) && !isNaN(Number(qty)) ? Math.round(Number(rate) * Number(qty) * 100) / 100 : null
-    return { basis, rate, qty, cur, amount, saved: !!base }
+    // Where the figure comes from: this job's own agreement, the supplier's sheet, or nowhere yet.
+    const source: 'job' | 'sheet' | 'none' = base ? 'job' : hasSheet ? 'sheet' : 'none'
+    return { basis, rate, qty, cur, amount, source }
   }
   const subTotals = subShown.reduce((a, t) => {
     const e = effOf(t); a.pay += e.amount ?? 0; a.billed += t.billed; if (e.amount == null) a.open++
@@ -2032,8 +2076,8 @@ function UtilizationTab({ jobId, job, gate }: {
             <span>We pay <b className="font-mono text-gray-900">{fmtMoney(subTotals.pay)}</b></span>
             <span>We bill <b className="font-mono text-gray-900">{fmtMoney(subTotals.billed)}</b></span>
             <span>Margin <b className="font-mono text-gray-900">{fmtMoney(subTotals.billed - subTotals.pay)}</b></span>
-            {subTotals.open > 0 && <span className="text-amber-700 font-medium">{subTotals.open} to settle</span>}
-            <span className="ml-auto text-[11px] text-gray-400">Choose how each hire is charged, then the quantity and rate you agreed. Quantity starts at the days we bill the client.</span>
+            {subTotals.open > 0 && <span className="text-amber-700 font-medium">{subTotals.open} with no rate</span>}
+            <span className="ml-auto text-[11px] text-gray-400">Rates come from the supplier's rate sheet. Change a rate, how it is charged, or the quantity to agree something different for this job only; an empty rate box is a tool with no sheet rate yet.</span>
           </div>
           <div className="flex-1 min-h-0 overflow-auto">
             <table className="w-full text-[11.5px] border-collapse">
@@ -2048,9 +2092,10 @@ function UtilizationTab({ jobId, job, gate }: {
                 <th className={`${th} text-right`}>We pay</th>
                 <th className={`${th} text-right`}>We bill</th>
                 <th className={`${th} text-right`}>Margin</th>
+                <th className={th}>Rate from</th>
               </tr></thead>
               <tbody>
-                {subShown.length === 0 && <tr><td colSpan={13} className="text-center text-gray-400 py-8">
+                {subShown.length === 0 && <tr><td colSpan={14} className="text-center text-gray-400 py-8">
                   {subList.length === 0 ? 'No hired-in tools have been used on this job.' : 'No tools match the search.'}</td></tr>}
                 {subShown.map((t, i) => {
                   const e = effOf(t)
@@ -2058,7 +2103,7 @@ function UtilizationTab({ jobId, job, gate }: {
                   const inp = 'h-[24px] text-right text-[11.5px] font-mono border rounded bg-white focus:outline-none focus:border-brand-500 disabled:bg-gray-50 '
                   return (
                     <tr key={t.tool} className="border-b border-gray-100 hover:bg-gray-50/60 whitespace-nowrap"
-                        onBlur={ev => { if (!ev.currentTarget.contains(ev.relatedTarget as Node)) saveLine(t.tool, t.supplier, t.clientDays) }}>
+                        onBlur={ev => { if (!ev.currentTarget.contains(ev.relatedTarget as Node)) saveLine(t) }}>
                       <td className="px-2 text-gray-400">{i + 1}</td>
                       <td className="px-2 font-mono font-semibold text-gray-900">{t.assetNo}</td>
                       <td className="px-2 text-gray-700 max-w-[240px] truncate" title={t.label}>{t.label}</td>
@@ -2071,10 +2116,10 @@ function UtilizationTab({ jobId, job, gate }: {
                       <td className="px-1">
                         {canPrice
                           ? <select className="h-[24px] text-[11.5px] border border-gray-200 rounded bg-white" value={e.basis}
-                              onChange={ev => setD({ basis: ev.target.value, qty: String(suggestQty(ev.target.value, t.clientDays)) })}>
+                              onChange={ev => setD({ basis: ev.target.value })}>
                               <ListOptions name="SubContractBasis" current={e.basis} />
                             </select>
-                          : <span>{e.saved ? e.basis : '—'}</span>}
+                          : <span>{e.source !== 'none' ? e.basis : '—'}</span>}
                       </td>
                       <td className="px-1 text-right">
                         <input inputMode="decimal" disabled={!canPrice || /lump/i.test(e.basis)} className={inp + 'w-[64px] border-gray-200'}
@@ -2093,9 +2138,18 @@ function UtilizationTab({ jobId, job, gate }: {
                             </select>
                           : <span className="text-gray-500">{e.cur}</span>}
                       </td>
-                      <td className={`px-2 text-right font-mono font-semibold ${e.amount == null ? 'text-amber-600' : ''}`}>{e.amount == null ? 'to settle' : fmtMoney(e.amount)}</td>
+                      <td className={`px-2 text-right font-mono font-semibold ${e.amount == null ? 'text-amber-600' : ''}`}>{e.amount == null ? 'no rate' : fmtMoney(e.amount)}</td>
                       <td className="px-2 text-right font-mono">{fmtMoney(t.billed)}</td>
                       <td className="px-2 text-right font-mono font-bold">{e.amount == null ? '—' : fmtMoney(t.billed - e.amount)}</td>
+                      <td className="px-2">
+                        {e.source === 'sheet' && <span className="text-blue-700" title="Taken from the supplier's rate sheet">Sheet</span>}
+                        {e.source === 'job' && <span className="text-violet-700" title="Agreed for this job only">This job</span>}
+                        {e.source === 'none' && <span className="text-amber-600">No rate</span>}
+                        {canPrice && e.source !== 'sheet' && e.amount != null && t.supplier && sheet[t.tool]?.category && !(sheet[t.tool]?.sheetRate != null) && (
+                          <button className="ml-1.5 text-[10.5px] text-blue-700 hover:underline" title={`Add this rate to ${t.supplier}'s sheet so later jobs pick it up`}
+                                  onClick={() => addToSheet(t, e)}>+ add to sheet</button>
+                        )}
+                      </td>
                     </tr>
                   )
                 })}
@@ -2108,6 +2162,7 @@ function UtilizationTab({ jobId, job, gate }: {
                   <td className="px-2 text-right font-mono">{fmtMoney(subTotals.pay)}</td>
                   <td className="px-2 text-right font-mono">{fmtMoney(subTotals.billed)}</td>
                   <td className="px-2 text-right font-mono">{fmtMoney(subTotals.billed - subTotals.pay)}</td>
+                  <td></td>
                 </tr>
               </tfoot>
             </table>

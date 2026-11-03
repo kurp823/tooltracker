@@ -91,6 +91,8 @@ const MODULES: NavModule[] = [
       { label: 'Invoicing',                      to: '/invoices',          icon: <FileText size={ICON} /> },
       { label: 'Tool Revenue & Utilization',     to: '/tool-revenue',      icon: <Coins size={ICON} /> },
       { label: 'Sub-Contractor Rentals',         to: '/sub-rentals',       icon: <Building2 size={ICON} /> },
+      // What each supplier charges us - a job's hired-in tools take their cost from here.
+      { label: 'Sub-Contractor Rate Sheets',     to: '/sub-rates',         icon: <Coins size={ICON} /> },
       // Stores receive hired-in tools without a cost; this is the queue
       // Billing works from. It sits here rather than in Inventory because
       // this is where the people who hold the sub-contract already work.
