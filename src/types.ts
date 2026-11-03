@@ -428,6 +428,7 @@ export interface DashboardStats {
   jobsByClient?: { name: string; jobs: number }[]
   jobsByService?: { name: string; jobs: number }[]
   activeRigs?: number
+  totalActiveJobs: number
   totalJobs: number
   activeJobs: number
   openJobs: number
