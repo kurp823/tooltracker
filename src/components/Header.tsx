@@ -1,6 +1,6 @@
 import React from 'react'
 import { useLocation } from 'react-router-dom'
-import { RefreshCw, Database } from 'lucide-react'
+import { RefreshCw, Database, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 
 /** Module → breadcrumb, screen → title, matching the previous app's chrome. */
 const PAGES: Record<string, { crumb: string; title: string }> = {
@@ -32,13 +32,19 @@ function resolve(pathname: string) {
   return PAGES[base] || { crumb: 'Operations Platform', title: 'Tool Tracker' }
 }
 
-export function Header() {
+export function Header({ collapsed = false, onToggleSidebar }: { collapsed?: boolean; onToggleSidebar?: () => void }) {
   const location = useLocation()
   const { crumb, title } = resolve(location.pathname)
 
   return (
     // One 34px row, not two stacked lines — the screen below needs the height.
     <header className="bg-white border-b border-gray-300 px-3 h-[34px] flex items-center gap-2 shrink-0">
+      {onToggleSidebar && (
+        <button onClick={onToggleSidebar} className="text-gray-500 hover:text-navy-900 shrink-0"
+                title={collapsed ? 'Show menu' : 'Hide menu'}>
+          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+        </button>
+      )}
       <h1 className="page-title truncate">{title}</h1>
       <span className="page-crumb hidden md:inline truncate shrink-0">{crumb}</span>
 
