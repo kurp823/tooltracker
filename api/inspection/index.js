@@ -62,7 +62,9 @@ module.exports = safe(async function (context, req) {
     if (!['Admin','Operations','QAQC','ThirdParty'].includes(user.Role))
       return jsonResponse(context, 403, { error: 'Forbidden' })
 
-    const b = req.body
+    const b = req.body || {}
+    if (!b.AssetNo && !b.SerialNumber)
+      return jsonResponse(context, 400, { error: 'Pick the tool being inspected (asset number or serial)' })
     const r = await query(
       `INSERT INTO tbl_InspectionRecords
          (jobNumber, serial, asset, inspectionType, inspectionDate, inspector, result, status, notes, createdBy, createdAt)
@@ -70,7 +72,10 @@ module.exports = safe(async function (context, req) {
        VALUES (@job, @serial, @asset, @type, @date, @inspector, @result, 'Open', @notes, @by, GETDATE())`,
       [
         { name: 'job',       value: b.JobID           || null      },
-        { name: 'serial',    value: b.SerialNumber    || null      },
+        // tbl_InspectionRecords.serial is NOT NULL. A record raised from an asset
+        // number alone sent NULL and the insert failed, so no inspection could
+        // be created from the screen. Fall back to the asset number, then ''.
+        { name: 'serial',    value: b.SerialNumber || b.AssetNo || ''  },
         { name: 'asset',     value: b.AssetNo         || null      },
         { name: 'type',      value: b.InspectionType  || null      },
         { name: 'date',      value: b.InspectionDate  || new Date().toISOString().split('T')[0] },
