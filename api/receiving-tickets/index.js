@@ -465,6 +465,22 @@ module.exports = safe(async function (context, req) {
     const b = req.body
     if (!b.JobID) return jsonResponse(context, 400, { error: 'JobID required' })
 
+    // Store the job's own number, never whatever text the screen sent: the
+    // Oct-2026 tickets were saved as "Job-26-01837" while the job is
+    // "Job-026-01837". Exact match first, else a format-proof match that must
+    // be unique; anything else is rejected rather than guessed.
+    const jr = await query(
+      `SELECT JobID FROM tbl_Jobs WHERE JobID = @j
+       UNION
+       SELECT JobID FROM tbl_Jobs
+        WHERE NOT EXISTS (SELECT 1 FROM tbl_Jobs WHERE JobID = @j)
+          AND ${jobKey('JobID')} = @jk`,
+      [{ name: 'j', value: b.JobID }, { name: 'jk', value: jobKeyOf(b.JobID) }]
+    )
+    if (jr.recordset.length !== 1)
+      return jsonResponse(context, 400, { error: 'Job not found or ambiguous: ' + b.JobID })
+    b.JobID = jr.recordset[0].JobID
+
     // Continue the single historic RT-NNNNN series. Only plain 5-digit numbers
     // count towards the next sequence; placeholder and TEST rows are left as
     // they are and excluded here so they can never shift the numbering.
