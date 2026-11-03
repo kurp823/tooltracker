@@ -174,17 +174,18 @@
    * same product.
    */
   .banner {
-    @apply bg-white text-slate-800 rounded-lg border border-slate-200 px-3 py-2 flex items-center
-           gap-x-3 shrink-0 min-h-[40px] overflow-hidden;
+    @apply bg-white text-slate-800 rounded-lg border border-slate-200 border-l-4 border-l-accent-500
+           pl-3 pr-3 py-1.5 flex items-center gap-x-3 shrink-0 overflow-hidden;
   }
+  .banner-text { @apply min-w-0 flex-1; }
   .banner-title {
-    @apply text-[15px] font-bold tracking-tight text-navy-head whitespace-nowrap;
+    @apply block text-[16px] font-bold tracking-tight text-navy-head leading-tight truncate;
   }
+  .banner-sub { @apply block text-[11.5px] text-slate-500 leading-snug truncate; }
   .banner-badge {
-    @apply px-2 py-0.5 rounded text-[10.5px] font-semibold bg-slate-100 text-slate-600
-           border border-slate-200 whitespace-nowrap;
+    @apply px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-navy-900 text-white
+           whitespace-nowrap shrink-0;
   }
-  .banner-sub { @apply text-[12px] text-slate-500 truncate min-w-0 hidden md:block; }
 
   /* Page title block, as used across the old app's screens */
   .page-crumb {
@@ -258,20 +259,32 @@
 .dark-scroll::-webkit-scrollbar-thumb { background: #1b3a5c; }
 .dark-scroll::-webkit-scrollbar-thumb:hover { background: #26507c; }
 
-/* Sidebar transition */
+/* Sidebar: modules are cards; their screens sit indented underneath. */
+.sidebar-module {
+  @apply rounded-lg border border-white/5 bg-navy-800/40 mb-2 overflow-hidden;
+}
+.sidebar-module.has-active { @apply border-accent-500/30; }
+.sidebar-group {
+  @apply flex items-center gap-2 w-full px-2.5 py-2 text-[11px] font-bold uppercase tracking-[0.08em]
+         text-slate-200 hover:bg-white/5 transition-colors;
+}
+.sidebar-items {
+  @apply bg-black/20 py-1 px-1.5 space-y-px;
+}
 .sidebar-link {
-  @apply flex items-center gap-2 px-2 py-[3px] rounded text-[12px] font-medium transition-colors;
+  @apply flex items-center gap-2 pl-3 pr-2 py-[5px] rounded text-[12.5px] font-medium transition-colors;
 }
 .sidebar-link.active {
   @apply bg-accent-500 text-navy-950 font-semibold;
 }
 .sidebar-link:not(.active) {
-  @apply text-slate-300 hover:bg-navy-800 hover:text-white;
+  @apply text-slate-300 hover:bg-white/10 hover:text-white;
 }
-.sidebar-group {
-  @apply flex items-center gap-1.5 w-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider
-         text-slate-400 hover:text-slate-200 transition-colors;
-}
+
+/* Column edge hint for the global resizer */
+th.col-edge { cursor: col-resize; box-shadow: inset -3px 0 0 rgba(245, 158, 11, .7); }
+thead th:hover { box-shadow: inset -1px 0 0 rgba(148, 163, 184, .45); }
+thead th.col-edge:hover { box-shadow: inset -3px 0 0 rgba(245, 158, 11, .7); }
 
 /* Status colours. Text only: the dot in .badge takes currentColor, so each
    status keeps its colour without a filled pill behind it. The old app's

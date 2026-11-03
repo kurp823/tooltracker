@@ -79,6 +79,7 @@ export function ResizerHandle({
 }) {
   return (
     <span
+      data-resizer="1"
       role="separator"
       aria-orientation="vertical"
       onMouseDown={onMouseDown}

@@ -176,9 +176,11 @@ export function PageBanner() {
 
   return (
     <div className="banner">
-      <span className="banner-title">{page.title}</span>
+      <div className="banner-text">
+        <span className="banner-title">{page.title}</span>
+        {page.sub && <span className="banner-sub">{page.sub}</span>}
+      </div>
       {page.badge && <span className="banner-badge">{page.badge}</span>}
-      {page.sub && <span className="banner-sub">{page.sub}</span>}
     </div>
   )
 }

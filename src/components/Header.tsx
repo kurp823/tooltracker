@@ -40,15 +40,18 @@ export function Header({ collapsed = false, onToggleSidebar }: { collapsed?: boo
 
   return (
     // One 34px row, not two stacked lines — the screen below needs the height.
-    <header className="bg-white border-b border-gray-300 px-3 h-[34px] flex items-center gap-2 shrink-0">
+    <header className="bg-white border-b border-gray-300 px-3 h-[38px] flex items-center gap-2 shrink-0">
       {onToggleSidebar && (
         <button onClick={onToggleSidebar} className="text-gray-500 hover:text-navy-900 shrink-0"
                 title={collapsed ? 'Show menu' : 'Hide menu'}>
           {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
       )}
-      <h1 className="page-title truncate">{title}</h1>
-      <span className="page-crumb hidden md:inline truncate shrink-0">{crumb}</span>
+      <nav className="flex items-center gap-1.5 text-[12px] min-w-0 truncate" aria-label="Breadcrumb">
+        <span className="text-gray-400 truncate">{crumb}</span>
+        <span className="text-gray-300">/</span>
+        <h1 className="font-semibold text-navy-900 truncate">{title}</h1>
+      </nav>
 
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
         <span className="hidden lg:inline-flex items-center gap-1 px-1.5 py-px rounded bg-brand-50 border border-brand-200 text-brand-800 text-[10px] font-semibold">
