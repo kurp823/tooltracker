@@ -128,7 +128,7 @@ module.exports = safe(async function (context, req) {
         `SELECT l.*, ${RECEIVED_SUBQUERY} AS qtyReceived
            FROM tbl_PurchaseOrderLines l
           WHERE l.poNumber = @po
-          ORDER BY l.lineNo`,
+          ORDER BY l.[lineNo]`,
         [{ name: 'po', type: sql.NVarChar, value: head.poNumber }]
       )
       return jsonResponse(context, 200, { ...head, lines: lines.recordset })
@@ -243,7 +243,7 @@ module.exports = safe(async function (context, req) {
       if (!text.trim()) return jsonResponse(context, 400, { error: 'Nothing to paste' })
 
       const start = await query(
-        `SELECT COALESCE(MAX(lineNo), 0) AS n FROM tbl_PurchaseOrderLines WHERE poNumber = @po`,
+        `SELECT COALESCE(MAX([lineNo]), 0) AS n FROM tbl_PurchaseOrderLines WHERE poNumber = @po`,
         [{ name: 'po', type: sql.NVarChar, value: head.poNumber }]
       )
       let lineNo = start.recordset[0].n
@@ -271,7 +271,7 @@ module.exports = safe(async function (context, req) {
         lineNo += 1
         await query(
           `INSERT INTO tbl_PurchaseOrderLines
-             (poNumber, lineNo, partNumber, description, size, qty, uom,
+             (poNumber, [lineNo], partNumber, description, size, qty, uom,
               unitRate, lineAmount, currency)
            VALUES (@po, @no, @part, @desc, @size, @qty, @uom, @rate, @amt, @cur)`,
           [
@@ -305,11 +305,11 @@ module.exports = safe(async function (context, req) {
       const rate = numOrNull(b.unitRate)
       const r = await query(
         `INSERT INTO tbl_PurchaseOrderLines
-           (poNumber, lineNo, partNumber, description, size, qty, uom,
+           (poNumber, [lineNo], partNumber, description, size, qty, uom,
             unitRate, lineAmount, currency, jobId, destination, notes)
          OUTPUT INSERTED.id
          VALUES (@po,
-                 COALESCE((SELECT MAX(lineNo) FROM tbl_PurchaseOrderLines WHERE poNumber = @po), 0) + 1,
+                 COALESCE((SELECT MAX([lineNo]) FROM tbl_PurchaseOrderLines WITH (UPDLOCK, HOLDLOCK) WHERE poNumber = @po), 0) + 1,
                  @part, @desc, @size, @qty, @uom, @rate, @amt, @cur, @job, @dest, @notes)`,
         [
           { name: 'po',   type: sql.NVarChar, value: head.poNumber },
