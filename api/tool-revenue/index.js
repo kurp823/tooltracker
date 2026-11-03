@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth } = require('../db')
+const { query, jsonResponse, requireAuth, safe } = require('../db')
 
 /**
  * Tool revenue and utilization.
@@ -36,7 +36,7 @@ const GROUPS = {
   month:    { expr: `CONVERT(char(7), d.LogDate, 126)`,                                   label: 'Month' },
 }
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
 
@@ -183,4 +183,4 @@ module.exports = async function (context, req) {
     context.log.error('Tool revenue error:', err)
     return jsonResponse(context, 500, { error: 'Failed to load tool revenue', detail: err.message })
   }
-}
+})

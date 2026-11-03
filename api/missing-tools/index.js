@@ -1,5 +1,5 @@
 'use strict'
-const { sql, query, jsonResponse, requireAuth, jobKey } = require('../db')
+const { sql, query, jsonResponse, requireAuth, jobKey, safe } = require('../db')
 
 /**
  * Tools on live jobs that have no inventory record.
@@ -31,7 +31,7 @@ const LIVE_STATUSES = [
   'Waiting on Signed Docs',
 ]
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
 
@@ -216,4 +216,4 @@ module.exports = async function (context, req) {
   }
 
   return jsonResponse(context, 405, { error: 'Method not allowed' })
-}
+})

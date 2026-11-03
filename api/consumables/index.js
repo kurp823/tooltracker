@@ -1,5 +1,5 @@
 'use strict'
-const { sql, query, jsonResponse, requireAuth } = require('../db')
+const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
 
 /**
  * Consumables — the stock register, and issuing against a maintenance job.
@@ -30,7 +30,7 @@ const BALANCE = `
   COALESCE((SELECT SUM(m.qty) FROM tbl_ConsumableMovements m
              WHERE m.consumableId = c.id), 0)`
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
 
@@ -259,4 +259,4 @@ module.exports = async function (context, req) {
     context.log.error('Consumables error:', err)
     return jsonResponse(context, 500, { error: 'Consumables operation failed', detail: err.message })
   }
-}
+})

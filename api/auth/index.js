@@ -2,7 +2,7 @@
  * POST /api/auth  — Login
  * POST /api/auth/change-password — Change password (alias for users endpoint)
  */
-const { sql, query, jsonResponse } = require('../db')
+const { sql, query, jsonResponse, safe } = require('../db')
 const bcrypt = require('bcryptjs')
 const jwt    = require('jsonwebtoken')
 
@@ -16,7 +16,7 @@ const jwt    = require('jsonwebtoken')
 const JWT_SECRET  = process.env.JWT_SECRET
 const JWT_EXPIRES = '12h'
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const method = req.method.toUpperCase()
   const action = context.bindingData.action
 
@@ -168,4 +168,4 @@ module.exports = async function (context, req) {
   }
 
   jsonResponse(context, 405, { error: 'Method not allowed' })
-}
+})

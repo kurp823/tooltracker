@@ -19,7 +19,7 @@
  * Note: Size and Supplier are plain text on this table, not foreign keys, so
  * there is nothing to join. There is no category column at all.
  */
-const { sql, query, jsonResponse, requireAuth } = require('../db')
+const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
 
 // The frontend's InventoryItem type expects `Serial`; the column is OEMSerial.
 const SELECT_COLS = `
@@ -38,7 +38,7 @@ const SELECT_COLS = `
   i.AddedDate,
   i.LastUpdated`
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
 
@@ -187,4 +187,4 @@ module.exports = async function (context, req) {
   }
 
   jsonResponse(context, 405, { error: 'Method not allowed' })
-}
+})

@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth } = require('../db')
+const { query, jsonResponse, requireAuth, safe } = require('../db')
 
 // Real tbl_Suppliers columns (confirmed via INFORMATION_SCHEMA):
 //   id, supplierCode, supplierName, supplierType, contactName,
@@ -11,7 +11,7 @@ const { query, jsonResponse, requireAuth } = require('../db')
 // on supplierName. SQL aliases output back to the PascalCase names the
 // frontend already expects.)
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user   = requireAuth(context, req)
   if (!user) return
 
@@ -91,4 +91,4 @@ module.exports = async function (context, req) {
   }
 
   return jsonResponse(context, 405, { error: 'Method not allowed' })
-}
+})

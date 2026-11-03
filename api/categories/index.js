@@ -1,12 +1,12 @@
 'use strict'
-const { query, jsonResponse, requireAuth } = require('../db')
+const { query, jsonResponse, requireAuth, safe } = require('../db')
 
 // Real tbl_ToolCategories columns (confirmed via INFORMATION_SCHEMA):
 //   CategoryID (int, identity), CategoryName, ToolFamily, InInventory (bit),
 //   IsRentalTool (bit), RequiresInspection (bit), ActiveFlag (bit),
 //   SortOrder (int), Notes
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user   = requireAuth(context, req)
   if (!user) return
 
@@ -96,4 +96,4 @@ module.exports = async function (context, req) {
   }
 
   return jsonResponse(context, 405, { error: 'Method not allowed' })
-}
+})

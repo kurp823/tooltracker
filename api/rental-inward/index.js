@@ -1,5 +1,5 @@
 'use strict'
-const { sql, query, jsonResponse, requireAuth } = require('../db')
+const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
 
 /**
  * Third-party rental inward, and the sub-contractor rental report.
@@ -40,7 +40,7 @@ const VIEWERS = ['Admin', 'Operations', 'Finance', 'Billing', 'CostController']
 const DAYS_ON_HIRE = `
   DATEDIFF(day, r.dateIn, COALESCE(r.dateOut, CAST(GETDATE() AS date))) + 1`
 
-module.exports = async function (context, req) {
+module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
   if (!VIEWERS.includes(user.Role))
@@ -487,4 +487,4 @@ module.exports = async function (context, req) {
     context.log.error('Rental inward error:', err)
     return jsonResponse(context, 500, { error: 'Rental inward operation failed', detail: err.message })
   }
-}
+})
