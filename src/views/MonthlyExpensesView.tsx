@@ -101,16 +101,13 @@ export function MonthlyExpensesView() {
   const maxCat = Math.max(1, ...(pl?.byCategory || []).map(c => Number(c.amount)))
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Monthly Expenses &amp; P&amp;L</h2>
-          <p className="text-sm text-gray-500 mt-0.5">
-            The cost side of the month, against the revenue already invoiced
-          </p>
-        </div>
-        <button className="btn-ghost" onClick={() => { refetch(); refetchPL() }}>
-          <RefreshCw size={15} />
+    <div className="h-full overflow-auto">
+    <div className="space-y-3 pb-4">
+      <div className="flex items-center gap-3">
+        <h2 className="text-[15px] font-bold text-slate-900">Monthly expenses &amp; P&amp;L</h2>
+        <span className="text-[12px] text-slate-500">the cost side of the month, against revenue already invoiced</span>
+        <button className="btn-mini ml-auto" title="Refresh" onClick={() => { refetch(); refetchPL() }}>
+          <RefreshCw size={12} />
         </button>
       </div>
 
@@ -308,6 +305,7 @@ export function MonthlyExpensesView() {
           </div>
         )}
       </div>
+    </div>
     </div>
   )
 }

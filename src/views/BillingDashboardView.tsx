@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useFetch } from '../hooks/useFetch'
 import { PageLoader } from '../components/Spinner'
+import { Tile } from '../components/Kpi'
 import { formatCurrency, billingStatusClass } from '../utils/format'
 
 /*
@@ -38,16 +39,6 @@ const isFinal = (st: string) => /final/i.test(st)
 const validDate = (d: string | null) => !!d && Number(d.slice(0, 4)) >= 2000
 const compact = (n: number) =>
   Math.abs(n) >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : Math.abs(n) >= 1e3 ? `${Math.round(n / 1e3)}k` : String(Math.round(n))
-
-function Tile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'warn' }) {
-  return (
-    <div className="bg-white border border-slate-200 rounded-lg px-4 py-3">
-      <div className="text-[12px] text-slate-500">{label}</div>
-      <div className={`text-[24px] leading-8 font-semibold tabular-nums ${tone === 'warn' ? 'text-amber-700' : 'text-slate-900'}`}>{value}</div>
-      {sub && <div className="text-[12px] text-slate-500 mt-0.5">{sub}</div>}
-    </div>
-  )
-}
 
 function Card({ title, note, children, className = '' }:
   { title: string; note?: string; children: ReactNode; className?: string }) {
