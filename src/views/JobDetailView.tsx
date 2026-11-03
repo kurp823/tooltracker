@@ -801,16 +801,29 @@ function DTHeaderTab({
   async function selectDT(dt: DTRecord) {
     setActiveDT(dt)
     try {
-      const ln = await api.get<DTLine[]>(`/delivery-tickets/${dt.DTID}/lines`)
+      // The list endpoint carries no Notes, and the logistics fields are kept
+      // inside Notes, so the single-ticket record is read. Every field is reset
+      // from THIS ticket - the form used to keep the previous ticket's values
+      // and show today's date, which a Save would then have written over the
+      // ticket's real date.
+      const [ln, full] = await Promise.all([
+        api.get<DTLine[]>(`/delivery-tickets/${dt.DTID}/lines`),
+        api.get<DTRecord>(`/delivery-tickets/${dt.DTID}`).catch(() => dt),
+      ])
       setLines(ln)
-      // Parse logistics from Notes if stored as JSON
+      const day = (v?: string | null) => (v ? String(v).slice(0, 10) : '')
+      const base = {
+        DTDate: day(full.DTDate), Status: full.Status || '',
+        DispatchedBy: '', Designation: '', DispatchDate: '',
+        DeliveredTo: '', Vessel: '', Transport: '', VehicleNo: '', DriverName: '', ContactNo: '',
+        RMRef: '', RMDate: '', Notes: '',
+      }
       try {
-        const parsed = JSON.parse(dt.Notes || '{}')
-        if (parsed._logistics) {
-          setForm(prev => ({ ...prev, ...parsed._logistics, Notes: parsed.notes || '' }))
-        }
+        const parsed = JSON.parse(full.Notes || '{}')
+        if (parsed && parsed._logistics) setForm({ ...base, ...parsed._logistics, Notes: parsed.notes || '' })
+        else setForm({ ...base, Notes: full.Notes || '' })
       } catch {
-        setForm(prev => ({ ...prev, Notes: dt.Notes || '' }))
+        setForm({ ...base, Notes: full.Notes || '' })
       }
     } catch {
       setLines([])
@@ -854,21 +867,6 @@ function DTHeaderTab({
     }
   }
 
-  async function handleNewDT() {
-    try {
-      const res = await api.post<{ DTID: number; DTNumber: string }>('/delivery-tickets', {
-        JobID:  jobId,
-        DTDate: new Date().toISOString().split('T')[0],
-        Status: 'Draft',
-        Notes:  '',
-      })
-      showToast(`${res.DTNumber} created`, 'success')
-      loadDTs()
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to create DT', 'error')
-    }
-  }
-
   async function removeLine(lineId: number) {
     if (!activeDT) return
     try {
@@ -908,7 +906,6 @@ function DTHeaderTab({
             {dts.map(d => <option key={d.DTID} value={d.DTID}>{d.DTNumber} — {d.Status}</option>)}
           </select>
         )}
-        {canEdit && <button onClick={handleNewDT} className="btn-mini"><Plus size={12} /> New DT</button>}
         {activeDT && (
           <span className={`text-[11px] font-mono font-semibold px-1.5 py-px rounded ${
             activeDT.Status === 'Approved' ? 'bg-green-100 text-green-700'
@@ -1020,7 +1017,7 @@ function DTHeaderTab({
             <div className="lg:col-span-3">
               <label className="flex items-start gap-2">
                 <span className="field-label w-[88px] shrink-0 text-right pt-1">Notes</span>
-                <textarea rows={2} className="input flex-1 resize-y" disabled={!canEdit}
+                <textarea rows={4} className="input flex-1 resize-y min-h-[88px]" disabled={!canEdit}
                   value={form.Notes || ''} placeholder="Slings, protectors, non-invoiced spares, baskets — prints on Delivery Ticket DSF-001 under Notes"
                   onChange={e => setForm(p => ({ ...p, Notes: e.target.value }))} />
               </label>

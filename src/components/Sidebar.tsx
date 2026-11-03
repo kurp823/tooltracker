@@ -177,11 +177,11 @@ function Module({ mod }: { mod: NavModule }) {
   )
 }
 
-export function Sidebar() {
+export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
   const { user, logout } = useAuth()
 
   return (
-    <aside className="w-[210px] shrink-0 bg-navy-900 flex flex-col border-r border-navy-950">
+    <aside className={`${collapsed ? 'w-0 border-r-0' : 'w-[210px] border-r'} shrink-0 overflow-hidden transition-[width] duration-150 bg-navy-900 flex flex-col border-navy-950`}>
       {/* Brand — one compact row; the strap lines cost 100px and said nothing. */}
       <div className="px-2.5 h-[34px] border-b border-navy-800 flex items-center gap-2">
         <div className="w-5 h-5 rounded bg-white flex items-center justify-center shrink-0">
