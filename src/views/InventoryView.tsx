@@ -12,7 +12,7 @@ export function InventoryView() {
   const [search, setSearch] = useState('')
   const [owner,  setOwner]  = useState<'all' | 'own' | 'sub'>('all')
 
-  const { data: items, isLoading, error, refetch } = useRealtimeFetch<InventoryItem[]>('/inventory')
+  const { data: items, isLoading, error, refetch } = useRealtimeFetch<InventoryItem[]>('/inventory', 30000)
 
   const filtered = useMemo(() => {
     if (!items) return []

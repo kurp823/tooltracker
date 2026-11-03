@@ -617,7 +617,7 @@ export function DeliveryTicketsView() {
   const [showCreate, setShowCreate] = useState(false)
 
   const { data: tickets, isLoading, error, refetch } =
-    useRealtimeFetch<DT[]>('/delivery-tickets')
+    useRealtimeFetch<DT[]>('/delivery-tickets', 30000)
 
   const filtered = useMemo(() => {
     if (!tickets) return []
