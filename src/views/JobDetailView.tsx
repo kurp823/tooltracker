@@ -727,6 +727,17 @@ function ChecklistTab({
 
 // ─── DT Header Tab ────────────────────────────────────────────────────────────
 
+/** Dense form row: label on the left, field on the right (module scope so inputs keep focus). */
+function F({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex items-center gap-2 min-w-0">
+      <span className="field-label w-[88px] shrink-0 text-right">{label}</span>
+      <span className="flex-1 min-w-0">{children}</span>
+    </label>
+  )
+}
+function RO({ v }: { v: string }) { return <div className="field-value" title={v}>{v || '—'}</div> }
+
 function DTHeaderTab({
   jobId,
   job,
@@ -875,297 +886,125 @@ function DTHeaderTab({
     </div>
   )
 
+  const txt = (k: keyof typeof form, ph = '') => (
+    <input className="field-input" value={(form as any)[k] || ''} placeholder={ph} disabled={!canEdit}
+           onChange={e => setForm(p => ({ ...p, [k]: e.target.value }))} />
+  )
+  const dat = (k: keyof typeof form) => (
+    <input type="date" className="field-input" value={(form as any)[k] || ''} disabled={!canEdit}
+           onChange={e => setForm(p => ({ ...p, [k]: e.target.value }))} />
+  )
+
   return (
-    <div className="space-y-4">
-      {/* DT Selector */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Select Delivery Ticket:</span>
-          {dts.length === 0 ? (
-            <span className="text-sm text-gray-400 italic">No DT Generated (Draft Checklist Manifest)</span>
-          ) : (
-            <select
-              className="input py-1.5 text-sm w-auto"
-              value={activeDT?.DTID || ''}
-              onChange={e => {
-                const dt = dts.find(d => d.DTID === Number(e.target.value))
-                if (dt) selectDT(dt)
-              }}
-            >
-              {dts.map(d => (
-                <option key={d.DTID} value={d.DTID}>
-                  {d.DTNumber} — {d.Status}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-        {canEdit && (
-          <button onClick={handleNewDT} className="btn-secondary text-xs py-1.5">
-            <Plus size={13} /> New DT
-          </button>
+    <div className="flex flex-col gap-1.5 h-full min-h-0">
+      {/* DT selector + actions: one row */}
+      <div className="flex items-center gap-2 flex-wrap shrink-0">
+        <span className="text-[11px] font-semibold text-gray-600">Delivery Ticket</span>
+        {dts.length === 0 ? (
+          <span className="text-[12px] text-gray-400 italic">None generated (draft checklist manifest)</span>
+        ) : (
+          <select className="field-input !w-auto min-w-[170px]" value={activeDT?.DTID || ''}
+            onChange={e => { const dt = dts.find(d => d.DTID === Number(e.target.value)); if (dt) selectDT(dt) }}>
+            {dts.map(d => <option key={d.DTID} value={d.DTID}>{d.DTNumber} — {d.Status}</option>)}
+          </select>
+        )}
+        {canEdit && <button onClick={handleNewDT} className="btn-mini"><Plus size={12} /> New DT</button>}
+        {activeDT && (
+          <span className={`text-[11px] font-mono font-semibold px-1.5 py-px rounded ${
+            activeDT.Status === 'Approved' ? 'bg-green-100 text-green-700'
+            : activeDT.Status === 'Draft' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>{activeDT.DTNumber}</span>
         )}
         {activeDT && canEdit && (
-          <button onClick={handleSave} disabled={saving} className="btn-primary text-xs py-1.5 ml-auto">
-            {saving ? <><Spinner size="sm" /> Saving…</> : <><Save size={13} /> Save DT</>}
+          <button onClick={handleSave} disabled={saving} className="btn-primary ml-auto">
+            {saving ? <><Spinner size="sm" /> Saving…</> : <><Save size={12} /> Save DT</>}
           </button>
         )}
       </div>
 
-      {/* No DT warning */}
       {dts.length === 0 && (
-        <div className="card p-4 border-amber-200 bg-amber-50 flex items-start gap-3">
-          <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
-          <p className="text-sm text-amber-700">
-            <strong>No Delivery Ticket Generated Yet:</strong> Equipment is currently in yard (Emdad Base).
-            Go to the <strong>Checklist Header</strong> tab, select your tools and click
-            "Generate DT from Checklist" to dispatch to Rig <strong>{job.Rig}</strong>.
+        <div className="border border-amber-200 bg-amber-50 rounded px-3 py-2 flex items-start gap-2 shrink-0">
+          <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-[12px] text-amber-700">
+            <strong>No Delivery Ticket yet:</strong> go to the <strong>Checklist Header</strong> tab, select the tools and
+            click "Generate DT from Checklist" to dispatch to rig <strong>{job.Rig}</strong>.
           </p>
         </div>
       )}
 
       {activeDT && (
         <>
-          {/* DT Manifest Header */}
-          <div className="card p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-sm text-gray-800">Rental Ticket / Delivery Manifest</h3>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">Ticket No:</span>
-                <span className={`badge text-xs ${
-                  activeDT.Status === 'Approved' ? 'bg-green-100 text-green-700'
-                  : activeDT.Status === 'Draft' ? 'bg-orange-100 text-orange-700'
-                  : 'bg-blue-100 text-blue-700'
-                }`}>{activeDT.DTNumber}</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-              <div>
-                <label className="label">Customer</label>
-                <input className="input py-1.5 text-xs bg-gray-50" value={job.Client || ''} readOnly />
-              </div>
-              <div>
-                <label className="label">Project No</label>
-                <input className="input py-1.5 text-xs bg-gray-50" value={job.Contract || ''} readOnly />
-              </div>
-              <div>
-                <label className="label">Sub-Division</label>
-                <input className="input py-1.5 text-xs bg-gray-50" value="RENTALS" readOnly />
-              </div>
-              <div>
-                <label className="label">Purpose</label>
-                <input className="input py-1.5 text-xs bg-gray-50" value="Downhole Rentals" readOnly />
-              </div>
-              <div>
-                <label className="label">Rig</label>
-                <input className="input py-1.5 text-xs bg-gray-50" value={job.Rig || ''} readOnly />
-              </div>
-              <div>
-                <label className="label">Job Number</label>
-                <input className="input py-1.5 text-xs bg-gray-50" value={jobId} readOnly />
-              </div>
-              <div>
-                <label className="label">Date Shipped</label>
-                <input type="date" className="input py-1.5 text-xs"
-                  value={form.DTDate}
-                  onChange={e => setForm(p => ({ ...p, DTDate: e.target.value }))}
-                  disabled={!canEdit} />
-              </div>
-              <div>
-                <label className="label">RM Ref / Manifest</label>
-                <input className="input py-1.5 text-xs"
-                  value={form.RMRef}
-                  onChange={e => setForm(p => ({ ...p, RMRef: e.target.value }))}
-                  placeholder="MR-XXXX"
-                  disabled={!canEdit} />
-              </div>
-              <div>
-                <label className="label">RM Date</label>
-                <input type="date" className="input py-1.5 text-xs"
-                  value={form.RMDate}
-                  onChange={e => setForm(p => ({ ...p, RMDate: e.target.value }))}
-                  disabled={!canEdit} />
-              </div>
-              <div>
-                <label className="label">Status</label>
-                <select className="input py-1.5 text-xs"
-                  value={form.Status}
-                  onChange={e => setForm(p => ({ ...p, Status: e.target.value }))}
-                  disabled={!canEdit}>
+          {/* Manifest header: four columns, label left */}
+          <div className="card px-3 py-2 shrink-0">
+            <div className="grid gap-x-4 gap-y-1 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
+              <F label="Customer"><RO v={job.Client || ''} /></F>
+              <F label="Project No"><RO v={job.Contract || ''} /></F>
+              <F label="Sub-Division"><RO v="RENTALS" /></F>
+              <F label="Purpose"><RO v="Downhole Rentals" /></F>
+              <F label="Rig"><RO v={job.Rig || ''} /></F>
+              <F label="Job Number"><RO v={jobId} /></F>
+              <F label="Date Shipped">{dat('DTDate')}</F>
+              <F label="Status">
+                <select className="field-input" value={form.Status} disabled={!canEdit}
+                        onChange={e => setForm(p => ({ ...p, Status: e.target.value }))}>
                   <ListOptions name="DeliveryTicketStatus" current={form.Status} blank blankLabel="Not set" />
                 </select>
-              </div>
+              </F>
+              <F label="RM Ref">{txt('RMRef', 'MR-XXXX')}</F>
+              <F label="RM Date">{dat('RMDate')}</F>
+              <F label="Dispatched By">{txt('DispatchedBy', 'Full name')}</F>
+              <F label="Designation">{txt('Designation', 'e.g. Workshop Coordinator')}</F>
+              <F label="Dispatch Date">{dat('DispatchDate')}</F>
+              <F label="Delivered To">{txt('DeliveredTo', 'e.g. Esnad Jetty / Yard 08')}</F>
+              <F label="Vessel / Boat">{txt('Vessel', 'e.g. Zakher Star')}</F>
+              <F label="Transport">{txt('Transport', 'e.g. Emdad Logistics')}</F>
+              <F label="Vehicle No">{txt('VehicleNo', 'e.g. 54912 / 70136 AD')}</F>
+              <F label="Driver Name">{txt('DriverName', 'Driver full name')}</F>
+              <F label="Contact No">{txt('ContactNo', '+971 …')}</F>
+              <F label="Notes">{txt('Notes', 'Slings, protectors, non-invoiced spares — prints on DSF-001')}</F>
             </div>
           </div>
 
-          {/* Tool Lines Table */}
-          <div className="card overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 text-sm font-medium text-gray-700">
-              Dispatched Tools — {lines.length} item(s)
+          {/* Tool lines: takes all remaining height and scrolls inside, header pinned */}
+          <div className="card flex-1 min-h-[140px] flex flex-col overflow-hidden">
+            <div className="px-3 py-1 border-b border-gray-200 bg-gray-50 text-[11.5px] font-semibold text-gray-700 shrink-0">
+              Dispatched Tools <span className="font-normal text-gray-500">— {lines.length} item{lines.length === 1 ? '' : 's'}</span>
             </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr>
-                  <th className="table-th">#</th>
-                  <th className="table-th">Serial / Asset</th>
-                  <th className="table-th">Description</th>
-                  <th className="table-th text-center">Qty</th>
-                  <th className="table-th">Notes</th>
-                  {canEdit && <th className="table-th"></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {lines.length === 0 ? (
+            <div className="flex-1 min-h-0 overflow-auto">
+              <table className="w-full border-collapse">
+                <thead className="sticky top-0 z-10">
                   <tr>
-                    <td colSpan={canEdit ? 6 : 5} className="table-td text-center py-8 text-gray-400">
-                      No tools on this delivery ticket yet.
-                    </td>
+                    <th className="table-th w-10">#</th>
+                    <th className="table-th w-[150px]">Serial / Asset</th>
+                    <th className="table-th">Description</th>
+                    <th className="table-th text-center w-12">Qty</th>
+                    <th className="table-th w-[200px]">Notes</th>
+                    {canEdit && <th className="table-th w-8"></th>}
                   </tr>
-                ) : (
-                  lines.map((line, idx) => (
+                </thead>
+                <tbody>
+                  {lines.length === 0 ? (
+                    <tr><td colSpan={canEdit ? 6 : 5} className="table-td text-center py-6 text-gray-400">
+                      No tools on this delivery ticket yet.
+                    </td></tr>
+                  ) : lines.map((line, idx) => (
                     <tr key={line.LineID} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="table-td text-gray-500">{idx + 1}</td>
-                      <td className="table-td font-medium text-gray-900">{line.AssetNo || '—'}</td>
+                      <td className="table-td text-gray-400">{idx + 1}</td>
+                      <td className="table-td font-mono font-semibold text-gray-900">{line.AssetNo || '—'}</td>
                       <td className="table-td text-gray-700">{line.ToolDescription}</td>
                       <td className="table-td text-center">{line.Quantity}</td>
-                      <td className="table-td text-gray-400 text-xs">{line.Notes || '—'}</td>
+                      <td className="table-td text-gray-400">{line.Notes || '—'}</td>
                       {canEdit && (
                         <td className="table-td">
-                          <button
-                            onClick={() => removeLine(line.LineID)}
-                            className="text-gray-300 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 size={14} />
+                          <button onClick={() => removeLine(line.LineID)} className="text-gray-300 hover:text-red-500 transition-colors">
+                            <Trash2 size={13} />
                           </button>
                         </td>
                       )}
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* 3 Logistics Sections */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* 1. Warehouse & Operations Dispatch */}
-            <div className="card p-4">
-              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">
-                1. Warehouse & Operations Dispatch
-              </h4>
-              <div className="space-y-2">
-                <div>
-                  <label className="label">Dispatched By</label>
-                  <input className="input text-xs py-1.5"
-                    value={form.DispatchedBy}
-                    onChange={e => setForm(p => ({ ...p, DispatchedBy: e.target.value }))}
-                    placeholder="Full name"
-                    disabled={!canEdit} />
-                </div>
-                <div>
-                  <label className="label">Designation</label>
-                  <input className="input text-xs py-1.5"
-                    value={form.Designation}
-                    onChange={e => setForm(p => ({ ...p, Designation: e.target.value }))}
-                    placeholder="e.g. Workshop Coordinator"
-                    disabled={!canEdit} />
-                </div>
-                <div>
-                  <label className="label">Dispatch Date</label>
-                  <input type="date" className="input text-xs py-1.5"
-                    value={form.DispatchDate}
-                    onChange={e => setForm(p => ({ ...p, DispatchDate: e.target.value }))}
-                    disabled={!canEdit} />
-                </div>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
-
-            {/* 2. Destination & Marine Logistics */}
-            <div className="card p-4">
-              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">
-                2. Destination & Marine Logistics
-              </h4>
-              <div className="space-y-2">
-                <div>
-                  <label className="label">Delivered To</label>
-                  <input className="input text-xs py-1.5"
-                    value={form.DeliveredTo}
-                    onChange={e => setForm(p => ({ ...p, DeliveredTo: e.target.value }))}
-                    placeholder="e.g. Esnad Jetty / Yard 08"
-                    disabled={!canEdit} />
-                </div>
-                <div>
-                  <label className="label">Vessel / Boat</label>
-                  <input className="input text-xs py-1.5"
-                    value={form.Vessel}
-                    onChange={e => setForm(p => ({ ...p, Vessel: e.target.value }))}
-                    placeholder="e.g. Zakher Star / Marsol"
-                    disabled={!canEdit} />
-                </div>
-                <div>
-                  <label className="label">Transport</label>
-                  <input className="input text-xs py-1.5"
-                    value={form.Transport}
-                    onChange={e => setForm(p => ({ ...p, Transport: e.target.value }))}
-                    placeholder="e.g. Emdad Logistics"
-                    disabled={!canEdit} />
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Haulage & Driver Details */}
-            <div className="card p-4">
-              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">
-                3. Haulage & Driver Details
-              </h4>
-              <div className="space-y-2">
-                <div>
-                  <label className="label">Vehicle No</label>
-                  <input className="input text-xs py-1.5"
-                    value={form.VehicleNo}
-                    onChange={e => setForm(p => ({ ...p, VehicleNo: e.target.value }))}
-                    placeholder="e.g. 54912 / 70136 AD"
-                    disabled={!canEdit} />
-                </div>
-                <div>
-                  <label className="label">Driver Name</label>
-                  <input className="input text-xs py-1.5"
-                    value={form.DriverName}
-                    onChange={e => setForm(p => ({ ...p, DriverName: e.target.value }))}
-                    placeholder="Driver full name"
-                    disabled={!canEdit} />
-                </div>
-                <div>
-                  <label className="label">Contact No</label>
-                  <input className="input text-xs py-1.5"
-                    value={form.ContactNo}
-                    onChange={e => setForm(p => ({ ...p, ContactNo: e.target.value }))}
-                    placeholder="e.g. +971 50 123 4567"
-                    disabled={!canEdit} />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div className="card p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wide">
-                📋 Delivery Ticket Notes & Manifest Remarks
-                <span className="normal-case font-normal ml-1 text-gray-400">(Slings, Protectors, Non-Invoiced Spares, Baskets)</span>
-              </h4>
-              <span className="text-xs text-gray-400 italic">Prints directly on Delivery Ticket Form DSF-001 under "Notes"</span>
-            </div>
-            <textarea
-              className="input text-xs py-2 min-h-20 resize-y"
-              value={form.Notes}
-              onChange={e => setForm(p => ({ ...p, Notes: e.target.value }))}
-              placeholder="Enter items with no invoicing value to print on the DT (e.g. 2 nos 3-meter lifting slings, 4 shackles, thread protectors, basket #EMD-04, spare O-rings)…"
-              disabled={!canEdit}
-            />
-            <p className="text-xs text-gray-400 text-right mt-1 italic">
-              Saves when you click Save DT above
-            </p>
           </div>
         </>
       )}
@@ -2603,7 +2442,7 @@ export function JobDetailView() {
   return (
     <div className="flex flex-col h-full">
       {/* Workspace top bar (dark, like reference app) */}
-      <div className="bg-gray-900 text-white px-4 py-3 flex items-center gap-3 rounded-t-xl -mx-0">
+      <div className="bg-gray-900 text-white px-3 py-1.5 flex items-center gap-3 rounded-t shrink-0">
         <button
           onClick={() => navigate('/jobs')}
           className="flex items-center gap-1.5 text-gray-400 hover:text-white transition-colors text-xs"
@@ -2615,7 +2454,7 @@ export function JobDetailView() {
           <span className="text-sm font-bold text-yellow-400">{isNew ? 'NEW' : form.JobID}</span>
         </div>
         {canEdit && (
-          <button onClick={handleSave} disabled={saving} className="btn-primary text-xs py-1.5">
+          <button onClick={handleSave} disabled={saving} className="btn-primary text-xs py-1">
             {saving ? <><Spinner size="sm" /> Saving…</> : <><Save size={13} /> Save Job File</>}
           </button>
         )}
@@ -2623,7 +2462,7 @@ export function JobDetailView() {
 
       {/* Context bar */}
       {!isNew && (
-        <div className="bg-gray-800 text-gray-300 px-4 py-1.5 flex items-center gap-4 text-xs flex-wrap -mx-0">
+        <div className="bg-gray-800 text-gray-300 px-3 py-1 flex items-center gap-4 text-[11.5px] flex-wrap shrink-0">
           <span>Rig: <strong className="text-blue-400">{form.Rig || '—'}</strong></span>
           <span>|</span>
           <span>Client: <strong className="text-white">{form.Client || '—'}</strong></span>
@@ -2669,7 +2508,7 @@ export function JobDetailView() {
       )}
 
       {/* Tab bar */}
-      <div className="flex overflow-x-auto border-b border-gray-200 bg-white -mx-0">
+      <div className="flex overflow-x-auto border-b border-gray-200 bg-white shrink-0">
         {WORKSPACE_TABS.map(t => (
           <button
             key={t.id}
@@ -2679,7 +2518,7 @@ export function JobDetailView() {
               setTab(t.id)
             }}
             disabled={isNew && t.id !== 'header'}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition-colors -mb-px shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border-b-2 whitespace-nowrap transition-colors -mb-px shrink-0 ${
               tab === t.id
                 ? 'border-brand-600 text-brand-600 bg-white'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
@@ -2697,7 +2536,7 @@ export function JobDetailView() {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-y-auto pt-4 space-y-0">
+      <div className={`flex-1 min-h-0 pt-2 ${tab === 'dt' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}>
         {isNew && tab !== 'header' && (
           <div className="card p-8 text-center text-gray-400 text-sm">
             Save the job first to access this tab
@@ -2750,20 +2589,6 @@ export function JobDetailView() {
         )}
       </div>
 
-      {/* Bottom status bar */}
-      {!isNew && (
-        <div className="bg-gray-900 text-gray-400 px-4 py-1.5 text-xs flex items-center gap-3 -mx-0 rounded-b-xl mt-4">
-          <span>Active Job: <strong className="text-yellow-400">{form.JobID}</strong></span>
-          <span>•</span>
-          <span>Client: <strong className="text-white">{form.Client}</strong></span>
-          <span>•</span>
-          <span>Rig: <strong className="text-blue-400">{form.Rig}</strong></span>
-          <span className="ml-auto flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
-            Synced with Azure SQL
-          </span>
-        </div>
-      )}
     </div>
   )
 }

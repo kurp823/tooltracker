@@ -29,31 +29,31 @@
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white text-xs font-semibold rounded
            hover:bg-brand-700 active:bg-brand-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-secondary {
-    @apply inline-flex items-center gap-2 px-4 py-2 bg-white text-gray-700 text-sm font-medium rounded-lg border
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-xs font-medium rounded border
            border-gray-300 hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-danger {
-    @apply inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded
            hover:bg-red-700 active:bg-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-ghost {
-    @apply inline-flex items-center gap-2 px-3 py-1.5 text-gray-600 text-sm font-medium rounded-lg
+    @apply inline-flex items-center gap-1.5 px-2 py-1 text-gray-600 text-xs font-medium rounded
            hover:bg-gray-100 active:bg-gray-200 transition-colors;
   }
   .input {
-    @apply w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white
+    @apply w-full px-2 py-1 min-h-[28px] text-[12px] border border-gray-300 rounded bg-white
            focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent
            placeholder:text-gray-400 disabled:bg-gray-50 disabled:text-gray-500;
   }
   .label {
-    @apply block text-xs font-medium text-gray-600 mb-1;
+    @apply block text-[11px] font-semibold text-gray-600 mb-0.5;
   }
   .card {
-    @apply bg-white rounded-lg border border-gray-300 shadow-sm;
+    @apply bg-white rounded border border-gray-300;
   }
   /* A status marker: a small coloured dot and the word, as the old app's
      registers had it. The dot inherits currentColor, so the .status-* class
@@ -72,11 +72,11 @@
      header, and a navy band over a long grid is what made these screens read
      as heavier than the ones they replace. */
   .table-th {
-    @apply px-3 py-2 text-left text-[11px] font-bold text-gray-600 uppercase tracking-wider
+    @apply px-2.5 py-1.5 text-left text-[10.5px] font-bold text-gray-600 uppercase tracking-wide
            bg-gray-100 border-b border-gray-200 whitespace-nowrap;
   }
   .table-td {
-    @apply px-3 py-1.5 text-xs text-gray-700;
+    @apply px-2.5 py-[3px] text-[12px] text-gray-700;
   }
   /* White rows separated by a hairline, no striping. The old app's registers
      carry twelve columns on plain white and stay legible because the only
@@ -175,17 +175,17 @@
    * same product.
    */
   .banner {
-    @apply bg-navy-head text-white rounded px-3 py-2 flex flex-wrap items-center
-           gap-x-3 gap-y-1 shrink-0;
+    @apply bg-navy-head text-white rounded px-3 py-1 flex items-center
+           gap-x-3 shrink-0 min-h-[28px] overflow-hidden;
   }
   .banner-title {
-    @apply text-[14px] font-bold uppercase tracking-wide text-amber-300;
+    @apply text-[12.5px] font-bold uppercase tracking-wide text-amber-300 whitespace-nowrap;
   }
   .banner-badge {
     @apply px-2 py-0.5 rounded text-[10px] font-semibold bg-white/15 text-white
            border border-white/20 whitespace-nowrap;
   }
-  .banner-sub { @apply w-full text-[11px] text-slate-300; }
+  .banner-sub { @apply text-[11px] text-slate-300 truncate min-w-0 hidden md:block; }
 
   /* Page title block, as used across the old app's screens */
   .page-crumb {
