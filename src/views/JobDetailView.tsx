@@ -1904,16 +1904,17 @@ function UtilizationTab({ jobId, job, gate }: {
                   <th className={`${th} ${stick} !z-20 w-[34px]`}>#</th>
                   <th className={`${th} sticky left-[34px] z-20 bg-white`}>Asset/S/N</th>
                   <th className={th}>Description</th>
-                  <th className={th}>DT #</th><th className={th}>RM Dispatch</th><th className={th}>RT #</th><th className={th}>RM Backload</th>
-                  {days.map(d => <th key={d} className="p-0 w-[26px] text-center font-mono text-[10px] font-medium text-gray-500 border-l border-gray-100">{d}</th>)}
-                  <th className={`${th} text-center border-l border-gray-200`}>Rot Hrs</th>
-                  <th className={`${th} text-center text-blue-700`}>SB</th>
-                  <th className={`${th} text-center text-green-700`}>Ops</th>
                   {view === 'sub' && <>
                     <th className={`${th} border-l border-gray-200`}>Supplier</th>
                     <th className={th}>Day rate we pay</th>
                     <th className={`${th} text-right`}>Cost</th>
                   </>}
+                  <th className={th}>DT #</th>
+                  {view !== 'sub' && <><th className={th}>RM Dispatch</th><th className={th}>RT #</th><th className={th}>RM Backload</th></>}
+                  {days.map(d => <th key={d} className="p-0 w-[26px] text-center font-mono text-[10px] font-medium text-gray-500 border-l border-gray-100">{d}</th>)}
+                  <th className={`${th} text-center border-l border-gray-200`}>Rot Hrs</th>
+                  <th className={`${th} text-center text-blue-700`}>SB</th>
+                  <th className={`${th} text-center text-green-700`}>Ops</th>
                 </tr>
               </thead>
               <tbody>
@@ -1929,10 +1930,40 @@ function UtilizationTab({ jobId, job, gate }: {
                       <td className={`px-2 text-gray-400 ${stick} group-hover:bg-gray-50`}>{ri + 1}</td>
                       <td className="px-2 font-mono font-semibold text-gray-900 whitespace-nowrap sticky left-[34px] z-[5] bg-white group-hover:bg-gray-50">{r.assetNo || r.toolId}</td>
                       <td className="px-2 text-gray-700 max-w-[260px] truncate" title={r.label}>{r.label}</td>
+                      {view === 'sub' && (() => {
+                        const tool = String(r.toolId ?? '')
+                        const rt = rates[tool]
+                        const curNow = rateCur[tool] ?? rt?.cur ?? jobCur
+                        const cost = rt ? (sb + ops) * rt.rate : 0
+                        return (<>
+                          <td className="px-2 text-gray-700 whitespace-nowrap border-l border-gray-200">{(r as any).supplier || '—'}</td>
+                          <td className="px-1 whitespace-nowrap">
+                            {canPrice ? (
+                              <div className="flex items-center gap-1">
+                                <input inputMode="decimal" placeholder="rate"
+                                  className={`w-[70px] h-[22px] text-right text-[11px] font-mono border rounded bg-white focus:outline-none focus:border-brand-500 ${rt || rateDraft[tool] ? 'border-gray-200' : 'border-amber-400 bg-amber-50'}`}
+                                  value={rateDraft[tool] ?? (rt ? String(rt.rate) : '')}
+                                  onChange={e => setRateDraft(d => ({ ...d, [tool]: e.target.value.replace(/[^0-9.]/g, '') }))}
+                                  onBlur={() => saveRate(r)}
+                                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                                <select className="h-[22px] w-[58px] text-[11px] border border-gray-200 rounded bg-white" value={curNow}
+                                  onChange={e => { setRateCur(c => ({ ...c, [tool]: e.target.value })); setRateDraft(d => ({ ...d, [tool]: d[tool] ?? (rt ? String(rt.rate) : '') })) }}
+                                  onBlur={() => saveRate(r)}>
+                                  <ListOptions name="Currency" current={curNow} />
+                                </select>
+                              </div>
+                            ) : (rt ? <span className="font-mono">{fmtMoney(rt.rate)} {rt.cur || ''}</span> : <span className="text-amber-600">no rate</span>)}
+                          </td>
+                          <td className={`px-2 text-right font-mono ${rt ? 'text-gray-800' : 'text-amber-600'}`}
+                              title={rt ? undefined : 'No day rate yet — type it in the box to cost this tool'}>{rt ? fmtMoney(cost) : '—'}</td>
+                        </>)
+                      })()}
                       <td className="px-2 font-mono text-gray-500 whitespace-nowrap">{r.dtNumber || '—'}</td>
-                      <td className="px-2 text-gray-500 whitespace-nowrap">{shortDate(r.dateOut) || '—'}</td>
-                      <td className="px-2 font-mono text-gray-500 whitespace-nowrap">{(r as any).rtNo || '—'}</td>
-                      <td className="px-2 text-gray-500 whitespace-nowrap">{shortDate(r.dateIn) || <span className="text-amber-600">on rig</span>}</td>
+                      {view !== 'sub' && <>
+                        <td className="px-2 text-gray-500 whitespace-nowrap">{shortDate(r.dateOut) || '—'}</td>
+                        <td className="px-2 font-mono text-gray-500 whitespace-nowrap">{(r as any).rtNo || '—'}</td>
+                        <td className="px-2 text-gray-500 whitespace-nowrap">{shortDate(r.dateIn) || <span className="text-amber-600">on rig</span>}</td>
+                      </>}
                       {days.map(d => {
                         const v = valueOf(ym, r, d)
                         const ok = inWindow(r, ym, d)
@@ -1963,46 +1994,23 @@ function UtilizationTab({ jobId, job, gate }: {
                       </td>
                       <td className="px-2 text-center font-mono font-semibold text-blue-700">{sb}</td>
                       <td className="px-2 text-center font-mono font-semibold text-green-700">{ops}</td>
-                      {view === 'sub' && (() => {
-                        const tool = String(r.toolId ?? '')
-                        const rt = rates[tool]
-                        const curNow = rateCur[tool] ?? rt?.cur ?? jobCur
-                        const cost = rt ? (sb + ops) * rt.rate : 0
-                        return (<>
-                          <td className="px-2 text-gray-700 whitespace-nowrap border-l border-gray-200">{(r as any).supplier || '—'}</td>
-                          <td className="px-1 whitespace-nowrap">
-                            {canPrice ? (
-                              <div className="flex items-center gap-1">
-                                <input inputMode="decimal" placeholder="rate"
-                                  className={`w-[70px] h-[22px] text-right text-[11px] font-mono border rounded bg-white focus:outline-none focus:border-brand-500 ${rt || rateDraft[tool] ? 'border-gray-200' : 'border-amber-400 bg-amber-50'}`}
-                                  value={rateDraft[tool] ?? (rt ? String(rt.rate) : '')}
-                                  onChange={e => setRateDraft(d => ({ ...d, [tool]: e.target.value.replace(/[^0-9.]/g, '') }))}
-                                  onBlur={() => saveRate(r)}
-                                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
-                                <select className="h-[22px] w-[58px] text-[11px] border border-gray-200 rounded bg-white" value={curNow}
-                                  onChange={e => { setRateCur(c => ({ ...c, [tool]: e.target.value })); setRateDraft(d => ({ ...d, [tool]: d[tool] ?? (rt ? String(rt.rate) : '') })) }}
-                                  onBlur={() => saveRate(r)}>
-                                  <ListOptions name="Currency" current={curNow} />
-                                </select>
-                              </div>
-                            ) : (rt ? <span className="font-mono">{fmtMoney(rt.rate)} {rt.cur || ''}</span> : <span className="text-amber-600">no rate</span>)}
-                          </td>
-                          <td className={`px-2 text-right font-mono ${rt ? 'text-gray-800' : 'text-amber-600'}`}
-                              title={rt ? undefined : 'No day rate yet — type it in the box to cost this tool'}>{rt ? fmtMoney(cost) : '—'}</td>
-                        </>)
-                      })()}
                     </tr>
                   )
                 })}
               </tbody>
               <tfoot className="sticky bottom-0 z-10">
                 <tr className="bg-gray-50 border-t border-gray-300">
-                  <td colSpan={7 + n + 1} className="px-3 py-1.5 text-right text-[10.5px] font-semibold text-gray-500">{monthLabel(ym)} {view === 'sub' ? 'hired-in totals' : 'totals'}</td>
-                  <td className="text-center font-mono font-bold text-blue-700">{view === 'sub' ? '' : tot.sb}</td>
-                  <td className="text-center font-mono font-bold text-green-700">{view === 'sub' ? subTot.days : tot.ops}</td>
-                  {view === 'sub' && <>
-                    <td colSpan={2} className="px-2 text-right text-[10.5px] text-amber-700">{subTot.unrated > 0 ? `${subTot.unrated} tool(s) with days and no rate` : ''}</td>
+                  {view === 'sub' ? <>
+                    <td colSpan={4} className="px-3 py-1.5 text-right text-[10.5px] font-semibold text-gray-500">{monthLabel(ym)} hired-in totals</td>
+                    <td className="px-2 text-right text-[10.5px] text-amber-700 whitespace-nowrap">{subTot.unrated > 0 ? `${subTot.unrated} with no rate` : ''}</td>
                     <td className="px-2 text-right font-mono font-bold">{fmtMoney(subTot.cost)}</td>
+                    <td colSpan={n + 2}></td>
+                    <td></td>
+                    <td className="text-center font-mono font-bold text-green-700">{subTot.days}</td>
+                  </> : <>
+                    <td colSpan={7 + n + 1} className="px-3 py-1.5 text-right text-[10.5px] font-semibold text-gray-500">{monthLabel(ym)} totals</td>
+                    <td className="text-center font-mono font-bold text-blue-700">{tot.sb}</td>
+                    <td className="text-center font-mono font-bold text-green-700">{tot.ops}</td>
                   </>}
                 </tr>
               </tfoot>
