@@ -16,6 +16,9 @@ const { query, jsonResponse, requireAuth, jobKey, jobKeyOf } = require('../db')
 
 /** Undefined -> null (leave the column alone); '' -> '' (clear it). */
 const nz = (v) => (v === undefined ? null : v === '' ? '' : v)
+// Date columns: an empty string would be stored by SQL Server as 1900-01-01,
+// so an empty date is treated as 'not supplied' (NULL) instead.
+const nzDate = (v) => (v === undefined || v === null || v === '' ? null : v)
 
 /**
  * The old app's rule, taken from JobDossierView.tsx verbatim: the condition a
@@ -495,7 +498,7 @@ module.exports = async function (context, req) {
         WHERE id = @id`,
       [
         { name: 'id',       value: Number(id) },
-        { name: 'date',     value: nz(b.RTDate) },
+        { name: 'date',     value: nzDate(b.RTDate) },
         { name: 'linkdt',   value: nz(b.LinkedDT) },
         { name: 'rig',      value: nz(b.Rig) },
         { name: 'well',     value: nz(b.Well) },
@@ -503,9 +506,9 @@ module.exports = async function (context, req) {
         { name: 'cref',     value: nz(b.ClientRef) },
         { name: 'veh',      value: nz(b.VehicleVessel) },
         { name: 'rep',      value: nz(b.EmdadRep) },
-        { name: 'repdate',  value: nz(b.EmdadSignDate) },
+        { name: 'repdate',  value: nzDate(b.EmdadSignDate) },
         { name: 'csb',      value: nz(b.ClientSignedBy) },
-        { name: 'csd',      value: nz(b.ClientSignDate) },
+        { name: 'csd',      value: nzDate(b.ClientSignDate) },
         { name: 'status',   value: b.Status === undefined ? null : String(b.Status) },
         { name: 'notes',    value: b.Notes  === undefined ? null : String(b.Notes) },
       ]

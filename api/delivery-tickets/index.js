@@ -27,6 +27,9 @@ const { loadContractRates, listHoleSections } = require('../rates')
  * Without this an omitted field and a cleared field look identical.
  */
 const nz = (v) => (v === undefined ? null : v === '' ? '' : v)
+// Date columns: an empty string would be stored by SQL Server as 1900-01-01,
+// so an empty date is treated as 'not supplied' (NULL) instead.
+const nzDate = (v) => (v === undefined || v === null || v === '' ? null : v)
 
 /**
  * Set a tool's status/location by whichever key the ticket line carries.
@@ -362,7 +365,7 @@ module.exports = async function (context, req) {
         WHERE id = @id`,
       [
         { name: 'id',      value: Number(id) },
-        { name: 'date',    value: nz(b.DTDate) },
+        { name: 'date',    value: nzDate(b.DTDate) },
         { name: 'rig',     value: nz(b.Rig) },
         { name: 'well',    value: nz(b.Well) },
         { name: 'po',      value: nz(b.PONumber) },
@@ -372,9 +375,9 @@ module.exports = async function (context, req) {
         { name: 'veh',     value: nz(b.VehicleVessel) },
         { name: 'driver',  value: nz(b.DriverName) },
         { name: 'rep',     value: nz(b.EmdadRep) },
-        { name: 'repdate', value: nz(b.EmdadSignDate) },
+        { name: 'repdate', value: nzDate(b.EmdadSignDate) },
         { name: 'csb',     value: nz(b.ClientSignedBy) },
-        { name: 'csd',     value: nz(b.ClientSignDate) },
+        { name: 'csd',     value: nzDate(b.ClientSignDate) },
         { name: 'status',  value: b.Status === undefined ? null : String(b.Status) },
         { name: 'notes',   value: b.Notes === undefined ? null : String(b.Notes) },
       ]
