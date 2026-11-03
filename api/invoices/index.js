@@ -1,5 +1,6 @@
 'use strict'
 const { query, jsonResponse, requireAuth, safe, jobKey, jobKeyOf } = require('../db')
+const { ensureBillingStatus, setBillingStatus } = require('../billing-status')
 
 // Real tbl_Invoices columns (confirmed via INFORMATION_SCHEMA):
 //   id, invoiceNumber, invoiceType, clientCode, contract, jobNumber, rig,
@@ -188,6 +189,7 @@ module.exports = safe(async function (context, req) {
 
   // ── GET list ─────────────────────────────────────────────────────────────
   if (!id && method === 'GET') {
+    await ensureBillingStatus()
     const jobQ = String((req.query || {}).job || '').trim()
     const jobFilter = jobQ ? `AND j.JobID = @jobQ` : ''
     const jobParam  = jobQ ? [{ name: 'jobQ', value: jobQ }] : []
@@ -248,17 +250,18 @@ module.exports = safe(async function (context, req) {
           j.Currency AS Currency,
           j.InvoiceAmount AS TotalAmount,
           j.NetInvoiceAmount AS NetAmount,
-          CASE
-            WHEN j.FinalInvoicedDate IS NOT NULL
-              OR NULLIF(j.LegalInvoiceNumber, '') IS NOT NULL THEN 'Final Invoiced'
-            WHEN j.SesSubmittedDate IS NOT NULL
-              OR NULLIF(j.SesNumber, '') IS NOT NULL          THEN 'Under SES'
-            WHEN j.DraftInvoicedDate IS NOT NULL
-              OR NULLIF(j.DraftInvoiceNumber, '') IS NOT NULL THEN 'Draft Invoiced'
-            WHEN j.SubmittedToBillingDate IS NOT NULL         THEN 'In Billing'
-            WHEN j.DocsSignedDate IS NOT NULL                 THEN 'Docs Signed'
-            ELSE j.Status
-          END AS Status,
+          COALESCE(NULLIF(j.BillingStatus, ''),
+            CASE
+              WHEN j.FinalInvoicedDate IS NOT NULL
+                OR NULLIF(j.LegalInvoiceNumber, '') IS NOT NULL THEN 'Final Invoiced'
+              WHEN j.SesSubmittedDate IS NOT NULL
+                OR NULLIF(j.SesNumber, '') IS NOT NULL          THEN 'SES Submitted'
+              WHEN j.DraftInvoicedDate IS NOT NULL
+                OR NULLIF(j.DraftInvoiceNumber, '') IS NOT NULL THEN 'Draft Invoiced'
+              WHEN j.SubmittedToBillingDate IS NOT NULL         THEN 'In Billing'
+              WHEN j.DocsSignedDate IS NOT NULL                 THEN 'Docs Signed'
+              ELSE j.Status
+            END) AS Status,
           j.FiscalYear AS FiscalYear,
           j.CreatedDate AS CreatedDate,
           j.Client AS Client,
@@ -400,6 +403,15 @@ module.exports = safe(async function (context, req) {
       return jsonResponse(context, 403, { error: 'Forbidden' })
 
     const b = req.body
+
+    // A job-derived row (id is a Job number): only its billing status can be set.
+    if (!/^\d+$/.test(String(id))) {
+      const st = String(b.Status || '').trim()
+      if (!st) return jsonResponse(context, 400, { error: 'Status required' })
+      await setBillingStatus(String(id), st, user.Username)
+      return jsonResponse(context, 200, { ok: true })
+    }
+
     await query(
       `UPDATE tbl_Invoices
           SET invoiceDate  = COALESCE(@date,     invoiceDate),
@@ -422,6 +434,12 @@ module.exports = safe(async function (context, req) {
         { name: 'notes',    value: b.Notes      || null  },
       ]
     )
+    // The job carries the latest billing status, which Drilling Jobs shows.
+    if (b.Status) {
+      const j = await query(`SELECT jobNumber FROM tbl_Invoices WHERE id = @id`, [{ name: 'id', value: Number(id) }])
+      if (j.recordset[0]?.jobNumber)
+        await setBillingStatus(j.recordset[0].jobNumber, String(b.Status).trim(), user.Username)
+    }
     return jsonResponse(context, 200, { ok: true })
   }
 

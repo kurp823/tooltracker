@@ -73,6 +73,7 @@ export interface Job {
   DraftInvoiceNumber: string | null
   SesNumber: string | null
   LegalInvoiceNumber: string | null
+  BillingStatus?: string | null
   InvoiceAmount: number | null
   NetInvoiceAmount: number | null
   NetSubcontract: number | null

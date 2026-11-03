@@ -1,12 +1,14 @@
 import React, { useState, useMemo } from 'react'
-import { Plus, Search, RefreshCw, FileText, X, ChevronRight, Save, Trash2 } from 'lucide-react'
+import { Plus, Search, RefreshCw, FileText, X, Save, Trash2 } from 'lucide-react'
 import { useRealtimeFetch } from '../hooks/useRealtimeFetch'
 import { useFetch } from '../hooks/useFetch'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import { api } from '../utils/api'
-import { formatDate, formatCurrency, statusBadgeClass } from '../utils/format'
+import { formatDate, formatCurrency, billingStatusClass } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
+import { ListOptions } from '../components/ListOptions'
+import { usePagedRows, Pager } from '../components/usePagedRows'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -187,6 +189,87 @@ function CreateInvoiceModal({
   )
 }
 
+// ─── Billing status ──────────────────────────────────────────────────────────
+
+/**
+ * The billing team's status for a job: chosen from the BillingStatus list
+ * (Settings → Lists) and saved the moment it changes. Drilling Jobs shows it.
+ */
+function BillingStatusSelect({
+  value, id, disabled, onSaved, compact,
+}: {
+  value: string | null
+  id: string
+  disabled?: boolean
+  onSaved: () => void
+  compact?: boolean
+}) {
+  const { success, error: toastErr } = useToast()
+  const [saving, setSaving] = useState(false)
+
+  const change = async (next: string) => {
+    if (!next || next === value) return
+    setSaving(true)
+    try {
+      await api.put(`/invoices/${encodeURIComponent(id)}`, { Status: next })
+      success(`Status set to ${next}`)
+      onSaved()
+    } catch (err: any) {
+      toastErr(err.message || 'Status was not saved')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (disabled) {
+    return (
+      <span className={`badge ${billingStatusClass(value)}`}>{value || '—'}</span>
+    )
+  }
+  return (
+    <select
+      className={compact ? 'field-input !h-[24px] !py-0 w-full min-w-[190px]' : 'field-input'}
+      value={value || ''}
+      disabled={saving}
+      onClick={e => e.stopPropagation()}
+      onChange={e => change(e.target.value)}
+    >
+      <ListOptions name="BillingStatus" current={value} blank blankLabel="— set status —" />
+    </select>
+  )
+}
+
+/** Where a job stands in billing, read from the dates the job already holds. */
+function BillingMilestones({ jobId }: { jobId: string }) {
+  const { data: j } = useFetch<any>(`/jobs/${encodeURIComponent(jobId)}`)
+  if (!j) return null
+  const rows: [string, string | null][] = [
+    ['Docs signed',        j.DocsSignedDate],
+    ['To billing',         j.SubmittedToBillingDate],
+    ['Draft invoiced',     j.DraftInvoicedDate],
+    ['SES submitted',      j.SesSubmittedDate],
+    ['Final invoiced',     j.FinalInvoicedDate],
+  ]
+  const nums: [string, string | null][] = [
+    ['Draft invoice no',   j.DraftInvoiceNumber],
+    ['SES no',             j.SesNumber],
+    ['Legal invoice no',   j.LegalInvoiceNumber],
+  ]
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-px bg-slate-200 border border-slate-200 rounded">
+      {[...rows.map(([l, v]) => [l, v ? formatDate(v) : null] as [string, string | null]),
+        ...nums].map(([label, v]) => (
+        <div key={label} className="bg-white px-3 py-2">
+          <div className="text-[11px] text-slate-500">{label}</div>
+          <div className={`text-[13px] mt-0.5 ${v ? 'text-slate-900 font-medium' : 'text-slate-300'}`}>
+            {v || '—'}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Invoice Detail Panel ─────────────────────────────────────────────────────
 
 function InvoiceDetailPanel({
@@ -206,6 +289,8 @@ function InvoiceDetailPanel({
   // and any edits would need to go through the Job Detail screen.
   const isMonthly = inv.Source === 'monthly'
   const canEdit = isMonthly && hasRole('Admin', 'Billing', 'Finance')
+  // Status is the billing team's to set, on any invoice row - monthly or per-job.
+  const canSetStatus = hasRole('Admin', 'Billing', 'Finance')
 
   const [form, setForm] = useState({
     InvoiceDate: day(inv.InvoiceDate),
@@ -213,7 +298,6 @@ function InvoiceDetailPanel({
     PeriodTo:    day(inv.PeriodTo),
     PONumber:    inv.PONumber ?? '',
     Currency:    inv.Currency ?? 'USD',
-    Status:      inv.Status ?? 'Draft',
     Notes:       '',
   })
   const [dirty,  setDirty]  = useState(false)
@@ -351,19 +435,9 @@ function InvoiceDetailPanel({
           <div className="field-value">{inv.Currency || 'USD'}</div>
         )}
 
-        <span className="field-label">Status</span>
-        {canEdit ? (
-          <select className="field-input" value={form.Status}
-                  onChange={e => set('Status', e.target.value)}>
-            {['Draft','Submitted','Under Review','Approved','Paid','Cancelled'].map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        ) : (
-          <div className="field-value">
-            <span className={`badge ${statusBadgeClass(inv.Status || '')}`}>{inv.Status || '—'}</span>
-          </div>
-        )}
+        <span className="field-label">Billing status</span>
+        <BillingStatusSelect value={inv.Status} id={inv.InvoiceID} disabled={!canSetStatus}
+                             onSaved={onRefresh} />
       </div>
 
       {/* Lines table */}
@@ -391,10 +465,12 @@ function InvoiceDetailPanel({
         </div>
 
         {!isMonthly ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-400 text-xs">
-            <FileText size={24} className="mb-1.5 opacity-30" />
-            <p>This invoice is recorded on the Job and has no editable lines here.</p>
-            <p className="mt-0.5">Open the job to see its billing history.</p>
+          <div className="flex-1 min-h-0 overflow-auto p-4 space-y-3">
+            <p className="text-[12px] text-slate-500">
+              Billed from the job. Set the billing status above as the invoice moves; the dates
+              fill in when you choose SES Submitted or Final Invoiced.
+            </p>
+            <BillingMilestones jobId={inv.JobID || ''} />
           </div>
         ) : !lines || lines.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
@@ -484,67 +560,75 @@ function InvoiceDetailPanel({
 
 // ─── Main View ────────────────────────────────────────────────────────────────
 
+const rowKey = (i: Invoice) => `${i.Source}-${i.InvoiceID}`
+
 export function InvoicesView() {
   const { hasRole } = useAuth()
   const [search,     setSearch]     = useState('')
   const [status,     setStatus]     = useState('All')
   const [year,       setYear]       = useState('All')
   const [showCreate, setShowCreate] = useState(false)
-  const [selected,   setSelected]   = useState<Invoice | null>(null)
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
   const { data: invoices, isLoading, error, refetch } = useRealtimeFetch<Invoice[]>('/invoices', 30000)
 
   const filtered = useMemo(() => {
     if (!invoices) return []
+    const q = search.trim().toLowerCase()
     return invoices.filter(inv => {
       if (status !== 'All' && inv.Status !== status) return false
       if (year   !== 'All' && invoiceYear(inv) !== year) return false
-      if (search) {
-        const q = search.toLowerCase()
-        return (
-          (inv.InvoiceNumber || '').toLowerCase().includes(q) ||
-          (inv.JobID         || '').toLowerCase().includes(q) ||
-          (inv.Client        || '').toLowerCase().includes(q)
-        )
-      }
-      return true
+      if (!q) return true
+      return (
+        (inv.InvoiceNumber || '').toLowerCase().includes(q) ||
+        (inv.JobID         || '').toLowerCase().includes(q) ||
+        (inv.Client        || '').toLowerCase().includes(q) ||
+        (inv.PONumber      || '').toLowerCase().includes(q)
+      )
     })
   }, [invoices, status, year, search])
 
-  const totalAmount = filtered.reduce((sum, inv) => sum + (inv.TotalAmount || 0), 0)
+  // Totals per currency - adding USD to AED gives a number that means nothing.
+  const totals = useMemo(() => {
+    const m = new Map<string, number>()
+    filtered.forEach(i => {
+      const c = i.Currency || 'USD'
+      m.set(c, (m.get(c) || 0) + (i.TotalAmount || 0))
+    })
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1])
+  }, [filtered])
 
-  // Build filter dropdowns from actual data in the register.
+  const statusCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    ;(invoices || []).forEach(i => {
+      const s = String(i.Status || '').trim()
+      if (s) m.set(s, (m.get(s) || 0) + 1)
+    })
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1])
+  }, [invoices])
+
   const yearOptions = useMemo(() => {
     const ys = new Set((invoices || []).map(invoiceYear).filter(Boolean))
     return ['All', ...Array.from(ys).sort().reverse()]
   }, [invoices])
 
-  const statusOptions = useMemo(() => {
-    const ss = new Set((invoices || []).map(i => String(i.Status || '').trim()).filter(Boolean))
-    return ['All', ...Array.from(ss).sort()]
-  }, [invoices])
-
-  const topStatuses = useMemo(() => {
-    const counts = new Map<string, number>()
-    filtered.forEach(i => {
-      const s = String(i.Status || '').trim()
-      if (s) counts.set(s, (counts.get(s) || 0) + 1)
-    })
-    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 2)
-  }, [filtered])
+  const { scrollRef, visible, page, pageCount, setPage, from, to, total } = usePagedRows(filtered)
 
   if (isLoading) return <PageLoader />
 
+  const selected = selectedKey ? (invoices || []).find(i => rowKey(i) === selectedKey) : null
   if (selected) {
     return (
       <InvoiceDetailPanel
-        key={selected.InvoiceID}
+        key={rowKey(selected)}
         inv={selected}
-        onClose={() => setSelected(null)}
+        onClose={() => setSelectedKey(null)}
         onRefresh={refetch}
       />
     )
   }
+
+  const canSetStatus = hasRole('Admin', 'Billing', 'Finance')
 
   return (
     <>
@@ -554,108 +638,98 @@ export function InvoicesView() {
         onCreated={() => { setShowCreate(false); refetch() }}
       />
 
-      <div className="space-y-4">
-        {/* Summary tiles */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[
-            { label: 'Total Shown',  value: filtered.length },
-            { label: 'Total Amount', value: formatCurrency(totalAmount) },
-            ...topStatuses.map(([label, n]) => ({ label, value: n })),
-          ].map(card => (
-            <div key={card.label} className="card p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">{card.label}</p>
-              <p className="text-xl font-semibold text-gray-900 mt-1">{String(card.value)}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-48">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input className="input pl-9" placeholder="Search invoice #, job, client…"
-              value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="screen gap-1.5">
+        {/* Toolbar */}
+        <div className="screen-bar">
+          <div className="relative w-72">
+            <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input className="field-input !pl-7" placeholder="Search invoice, job, client, PO…"
+                   value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <select className="input w-auto" value={status} onChange={e => setStatus(e.target.value)}>
-            {statusOptions.map(s =>
-              <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>
-            )}
+          <select className="field-input w-auto" value={status} onChange={e => setStatus(e.target.value)}>
+            <option value="All">All statuses</option>
+            {statusCounts.map(([s, n]) => <option key={s} value={s}>{s} ({n.toLocaleString()})</option>)}
           </select>
-          <select className="input w-auto" value={year} onChange={e => setYear(e.target.value)}>
-            {yearOptions.map(y => <option key={y} value={y}>{y === 'All' ? 'All Years' : y}</option>)}
+          <select className="field-input w-auto" value={year} onChange={e => setYear(e.target.value)}>
+            {yearOptions.map(y => <option key={y} value={y}>{y === 'All' ? 'All years' : y}</option>)}
           </select>
-          <button onClick={refetch} className="btn-ghost"><RefreshCw size={15} /></button>
+          <button onClick={refetch} className="btn-mini" title="Refresh"><RefreshCw size={12} /></button>
+
+          <div className="flex items-center gap-3 text-[12px] text-slate-600 ml-2">
+            <span><strong className="text-slate-900">{filtered.length.toLocaleString()}</strong> invoices</span>
+            {totals.map(([c, v]) => (
+              <span key={c}><strong className="text-slate-900 tabular-nums">{formatCurrency(v)}</strong> {c}</span>
+            ))}
+          </div>
+
           {hasRole('Admin', 'Billing', 'Finance') && (
-            <button className="btn-primary ml-auto" onClick={() => setShowCreate(true)}>
-              <Plus size={15} /> New Invoice
+            <button className="btn-accent ml-auto" onClick={() => setShowCreate(true)}>
+              <Plus size={12} /> New Invoice
             </button>
           )}
         </div>
 
-        {error && <div className="card p-3 text-red-600 text-sm">{error}</div>}
+        {error && <div className="card p-2 text-red-600 text-xs shrink-0">{error}</div>}
 
-        {/* Register */}
-        <div className="card overflow-hidden">
-          <table className="w-full">
-            <thead>
+        {/* Register: scrolls inside its own box, header stays put, a page at a time */}
+        <div ref={scrollRef}
+             className="flex-1 min-h-0 overflow-auto bg-white border border-gray-300 rounded-t">
+          <table className="w-full border-collapse">
+            <thead className="sticky top-0 z-10">
               <tr>
-                <th className="table-th">Invoice #</th>
-                <th className="table-th">Job ID</th>
+                <th className="table-th pin-l">Invoice</th>
+                <th className="table-th">Job</th>
                 <th className="table-th">Client</th>
-                <th className="table-th">Invoice Date</th>
+                <th className="table-th">Date</th>
                 <th className="table-th">Period</th>
                 <th className="table-th">PO</th>
-                <th className="table-th">Currency</th>
-                <th className="table-th text-right">Amount</th>
-                <th className="table-th">Status</th>
-                <th className="table-th w-6"></th>
+                <th className="table-th">Ccy</th>
+                <th className="table-th !text-right">Amount</th>
+                <th className="table-th pin-r">Billing status</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="table-td text-center py-12">
-                    <FileText size={32} className="mx-auto text-gray-300 mb-2" />
-                    <p className="text-gray-400">No invoices found</p>
+                  <td colSpan={9} className="table-td text-center py-10 text-gray-400">
+                    {search || status !== 'All' || year !== 'All'
+                      ? 'No invoices match these filters.'
+                      : 'No invoices yet.'}
                   </td>
                 </tr>
-              ) : (
-                filtered.map((inv) => (
-                  <tr key={`${inv.Source}-${inv.InvoiceID}`}
-                      className="table-tr whitespace-nowrap cursor-pointer"
-                      onClick={() => setSelected(inv)}>
-                    <td className="table-td font-medium text-brand-600">
-                      {inv.InvoiceNumber || '—'}
-                      {inv.Source === 'monthly' && (
-                        <span className="ml-1 text-[10px] text-brand-400">●</span>
-                      )}
-                    </td>
-                    <td className="table-td font-mono">{inv.JobID || '—'}</td>
-                    <td className="table-td text-gray-500 max-w-[180px] truncate"
-                        title={inv.Client || ''}>{inv.Client || '—'}</td>
-                    <td className="table-td text-gray-500">{formatDate(inv.InvoiceDate) || '—'}</td>
-                    <td className="table-td text-gray-500 text-xs">
-                      {inv.PeriodFrom
-                        ? `${formatDate(inv.PeriodFrom)} → ${formatDate(inv.PeriodTo)}`
-                        : '—'}
-                    </td>
-                    <td className="table-td text-gray-500">{inv.PONumber || '—'}</td>
-                    <td className="table-td text-gray-400 text-xs">{inv.Currency || 'USD'}</td>
-                    <td className="table-td text-right font-medium">
-                      {formatCurrency(inv.TotalAmount ?? 0)}
-                    </td>
-                    <td className="table-td">
-                      {inv.Status
-                        ? <span className={`badge ${statusBadgeClass(inv.Status)}`}>{inv.Status}</span>
-                        : <span className="text-gray-400">—</span>}
-                    </td>
-                    <td className="table-td"><ChevronRight size={12} className="text-gray-300" /></td>
-                  </tr>
-                ))
-              )}
+              ) : visible.map(inv => (
+                <tr key={rowKey(inv)} className="table-tr whitespace-nowrap cursor-pointer"
+                    onClick={() => setSelectedKey(rowKey(inv))}>
+                  <td className="table-td pin-l font-medium text-brand-600">
+                    {inv.InvoiceNumber || '—'}
+                    {inv.Source === 'monthly' && (
+                      <span className="ml-1.5 text-[10px] text-slate-400 font-normal">monthly</span>
+                    )}
+                  </td>
+                  <td className="table-td font-mono text-slate-700">{inv.JobID || '—'}</td>
+                  <td className="table-td max-w-[220px] truncate" title={inv.Client || ''}>{inv.Client || '—'}</td>
+                  <td className="table-td text-slate-500">{formatDate(inv.InvoiceDate) || '—'}</td>
+                  <td className="table-td text-slate-500">
+                    {inv.PeriodFrom ? `${formatDate(inv.PeriodFrom)} – ${formatDate(inv.PeriodTo)}` : '—'}
+                  </td>
+                  <td className="table-td font-mono text-slate-500">{inv.PONumber || '—'}</td>
+                  <td className="table-td text-slate-400">{inv.Currency || 'USD'}</td>
+                  <td className="table-td !text-right font-medium tabular-nums">
+                    {formatCurrency(inv.TotalAmount ?? 0)}
+                  </td>
+                  <td className="table-td pin-r">
+                    {canSetStatus
+                      ? <BillingStatusSelect compact value={inv.Status} id={inv.InvoiceID} onSaved={refetch} />
+                      : <span className={`badge ${billingStatusClass(inv.Status)}`}>{inv.Status || '—'}</span>}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
+
+        <Pager page={page} pageCount={pageCount} setPage={setPage}
+               from={from} to={to} total={total} noun="invoice" />
       </div>
     </>
   )

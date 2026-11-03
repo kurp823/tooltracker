@@ -14,6 +14,7 @@
  * DELETE /api/jobs/{id}/personnel/{pid} — remove person
  */
 const { sql, query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe } = require('../db')
+const { ensureBillingStatus, billingStatusSql } = require('../billing-status')
 
 /**
  * A finished job is read-only.
@@ -189,6 +190,7 @@ module.exports = safe(async function (context, req) {
     if (top > 0) params.push({ name: 'top', type: sql.Int, value: Math.min(top, 5000) })
 
     try {
+      await ensureBillingStatus()
       const result = await query(`
         SELECT ${topClause}
                JobID, Client, Rig, Well, Contract, PONumber, ClientRef,
@@ -197,6 +199,7 @@ module.exports = safe(async function (context, req) {
                -- Job value and legal invoice no: both on the old register and
                -- needed by the executive dashboard, alongside ServiceType.
                InvoiceAmount, NetInvoiceAmount, LegalInvoiceNumber,
+               ${billingStatusSql('tbl_Jobs')} AS BillingStatus,
                CreatedDate, CreatedBy, UpdatedAt,
                -- Lock state travels with the row so the register can show a
                -- finished job as read-only without a call per job.
