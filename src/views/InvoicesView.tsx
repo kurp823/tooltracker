@@ -262,6 +262,21 @@ function InvoiceDetailPanel({
     }
   }
 
+  const handleGenerate = async () => {
+    if (!isMonthly) return
+    if ((lines?.length ?? 0) > 0 &&
+        !window.confirm('Replace the existing lines with lines generated from the utilization grid?')) return
+    try {
+      const res: any = await api.post(`/invoices/${inv.InvoiceID}/generate`, {})
+      refetchLines()
+      onRefresh()
+      success(`${res.lines} line(s) generated` +
+        (res.unpricedDays ? ` — ${res.unpricedDays} day(s) have no rate` : ''))
+    } catch (err: any) {
+      toastErr(err.message || 'Could not generate lines')
+    }
+  }
+
   const handleRemoveLine = async (lineId: number) => {
     if (!isMonthly) return
     try {
@@ -363,9 +378,15 @@ function InvoiceDetailPanel({
             </span>
           )}
           {canEdit && (
-            <button className="btn-mini ml-auto !py-px" onClick={handleAddLine}>
-              <Plus size={11} /> Add Line
-            </button>
+            <div className="ml-auto flex items-center gap-1">
+              <button className="btn-mini !py-px" onClick={handleGenerate}
+                      title="Build the lines from the days marked on the Utilization grid for this job and period">
+                <RefreshCw size={11} /> Generate from Utilization
+              </button>
+              <button className="btn-mini !py-px" onClick={handleAddLine}>
+                <Plus size={11} /> Add Line
+              </button>
+            </div>
           )}
         </div>
 
