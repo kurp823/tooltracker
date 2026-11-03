@@ -1674,158 +1674,154 @@ function ReturnTicketTab({
   )
 }
 type UtilGate = { dirty: boolean; save: () => Promise<boolean> }
+interface UtilCellR extends UtilCell { rate?: number | null }
 
+const fmtMoney = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 })
+const monthLabel = (ym: string) => {
+  const [y, m] = ym.split('-').map(Number)
+  return new Date(y, m - 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' })
+}
+const shortDate = (s: string | null) => {
+  const v = (s || '').slice(0, 10)
+  if (!v || v.startsWith('1900')) return ''
+  return new Date(v + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '-')
+}
+
+/**
+ * Utilization for the whole job on one screen, laid out like the reference
+ * sheet: a section per month (collapsible) with the day grid, then job revenue
+ * by month underneath. Edits are staged locally and written only on Save.
+ */
 function UtilizationTab({ jobId, job, gate }: {
   jobId: string; job: Partial<Job>; gate: React.MutableRefObject<UtilGate | null>
 }) {
   const { hasRole } = useAuth()
   const { showToast } = useToast()
-  // A finished job is read-only. The API enforces this too - the disabled
-  // fields here are the courtesy, the 423 from the server is the control.
   const canEdit = hasRole('Admin', 'Operations') && !job?.IsLocked
 
-  const today = new Date()
-  const [year,  setYear]  = useState(today.getFullYear())
-  const [month, setMonth] = useState(today.getMonth() + 1)
-  const [rows,    setRows]    = useState<UtilRow[]>([])
+  const [cycles,  setCycles]  = useState<UtilRow[]>([])
+  const [months,  setMonths]  = useState<string[]>([])
+  const [marks,   setMarks]   = useState<Record<string, Record<string, Record<number, UtilCellR>>>>({})
   const [loading, setLoading] = useState(true)
   const [saving,  setSaving]  = useState(false)
-  /**
-   * Edits are held here and only written when the user clicks Save. Key is
-   * `rowIdx|day`; value is the new code, or null for "clear this day". Typing
-   * therefore never waits on the network and the cursor can move straight on.
-   */
+  const [open,    setOpen]    = useState<Record<string, boolean>>({})
   const [pending, setPending] = useState<Record<string, '1' | 'S' | null>>({})
   const pendingCount = Object.keys(pending).length
 
-  const daysInMonth = new Date(year, month, 0).getDate()
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1)
-  const monthName = new Date(year, month - 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' })
-  const dayOf = (d: number) => `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-  const dow = (d: number) => new Date(year, month - 1, d).getDay()
-  const isWeekend = (d: number) => dow(d) === 5 || dow(d) === 6   // Fri/Sat in the Gulf
+  const cKey = (r: UtilRow) => `${r.dtNumber ?? ''}|${String(r.toolId ?? '')}`
+  const daysIn = (ym: string) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate() }
+  const dateOf = (ym: string, d: number) => `${ym}-${String(d).padStart(2, '0')}`
+  const todayStr = new Date().toISOString().slice(0, 10)
 
-  /**
-   * A day can only be marked between the tool going out on its delivery ticket
-   * and coming back on the matching receiving ticket. A tool that hasn't
-   * returned is open-ended up to today — nothing can be marked in the future.
-   */
-  const inWindow = useCallback((row: UtilRow, d: number) => {
-    const day = dayOf(d)
-    const out = (row.dateOut || '').slice(0, 10)
-    const back = (row.dateIn || '').slice(0, 10)
-    const cap = new Date().toISOString().slice(0, 10)
-    if (!out) return false
-    if (day < out) return false
-    if (back) return day <= back
-    return day <= cap
-  }, [year, month])
+  /** A day is enterable only between the DT date and the RT date (open-ended up to today). */
+  const inWindow = (r: UtilRow, ym: string, d: number) => {
+    const day = dateOf(ym, d)
+    const out = (r.dateOut || '').slice(0, 10)
+    const back = (r.dateIn || '').slice(0, 10)
+    if (!out || day < out) return false
+    return back && !back.startsWith('1900') ? day <= back : day <= todayStr
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const normJobId = normalizeJobId(jobId)
-      const [cycles, logs] = await Promise.all([
-        api.get<ToolMovement[]>(`/tool-history?job=${encodeURIComponent(jobId)}&limit=2000`)
-          .catch(() => [] as ToolMovement[]),
-        api.get<{ rows: (UtilRow & { jobId: string })[] }>(`/utilization?year=${year}&month=${month}`)
-          .catch(() => ({ rows: [] })),
-      ])
-
-      const marks = new Map<string, Record<number, UtilCell>>()
-      for (const r of (logs.rows || [])) {
-        if (normalizeJobId(r.jobId) !== normJobId) continue
-        marks.set(`${r.dtNumber ?? ''}|${String(r.toolId ?? '')}`, r.days)
-      }
-
-      const built: UtilRow[] = (cycles || []).map(c => {
+      const mv = await api.get<ToolMovement[]>(`/tool-history?job=${encodeURIComponent(jobId)}&limit=2000`)
+        .catch(() => [] as ToolMovement[])
+      const built: (UtilRow & { rtNo?: string | null })[] = (mv || []).map(c => {
         const serial = c.Serial ?? c.PartNo ?? null
-        const key = `${c.TicketNo ?? ''}|${String(serial ?? '')}`
         return {
-          label: [c.PartNo || serial, c.Description].filter(Boolean).join(' – ') || String(serial ?? ''),
-          toolId: serial,
-          dtNumber: c.TicketNo ?? null,
-          dateOut: c.DateOut ?? null,
-          dateIn: c.DateIn ?? null,
-          assetNo: c.PartNo ?? null,
-          size: c.Size ?? null,
-          days: marks.get(key) || {},
+          label: c.Description || String(serial ?? ''),
+          toolId: serial, dtNumber: c.TicketNo ?? null,
+          dateOut: c.DateOut ?? null, dateIn: c.DateIn ?? null,
+          assetNo: c.PartNo ?? serial, size: c.Size ?? null, days: {},
+          rtNo: c.RgtNo ?? null,
         }
       })
+      built.sort((a, b) => String(a.dateOut || '').localeCompare(String(b.dateOut || '')))
 
-      // Newest dispatch first, so the run being worked on is at the top.
-      built.sort((a, b) => String(b.dateOut || '').localeCompare(String(a.dateOut || '')))
-      setRows(built)
-      setPending({})
+      // Months from the first dispatch to the later of today / last return.
+      const first = built.map(b => (b.dateOut || '').slice(0, 7)).filter(x => x && !x.startsWith('1900')).sort()[0]
+      const nowYm = todayStr.slice(0, 7)
+      const lastIn = built.map(b => (b.dateIn || '').slice(0, 7)).filter(x => x && !x.startsWith('1900')).sort().pop() || nowYm
+      const end = lastIn > nowYm ? lastIn : nowYm
+      const list: string[] = []
+      if (first) {
+        let [y, m] = first.split('-').map(Number)
+        while (`${y}-${String(m).padStart(2, '0')}` <= end && list.length < 36) {
+          list.push(`${y}-${String(m).padStart(2, '0')}`)
+          if (++m > 12) { m = 1; y++ }
+        }
+      } else list.push(nowYm)
+
+      const all: Record<string, Record<string, Record<number, UtilCellR>>> = {}
+      await Promise.all(list.map(async ym => {
+        const [y, m] = ym.split('-').map(Number)
+        const res = await api.get<{ rows: (UtilRow & { jobId: string })[] }>(
+          `/utilization?year=${y}&month=${m}&jobId=${encodeURIComponent(jobId)}`).catch(() => ({ rows: [] }))
+        const mm: Record<string, Record<number, UtilCellR>> = {}
+        for (const r of (res.rows || [])) {
+          if (normalizeJobId(r.jobId) !== normJobId) continue
+          mm[`${r.dtNumber ?? ''}|${String(r.toolId ?? '')}`] = r.days as any
+        }
+        all[ym] = mm
+      }))
+      setCycles(built); setMonths(list); setMarks(all); setPending({})
+      setOpen(o => Object.keys(o).length ? o : Object.fromEntries(list.map(ym => [ym, ym === list[list.length - 1]])))
     } catch {
       showToast('Failed to load utilization', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [jobId, year, month])
-
+    } finally { setLoading(false) }
+  }, [jobId])
   useEffect(() => { load() }, [load])
 
-  /** What the cell shows: the unsaved edit if there is one, else what is stored. */
-  const valueOf = (rowIdx: number, d: number): '1' | 'S' | null => {
-    const k = `${rowIdx}|${d}`
+  /** Tool cycles that overlap a month (a tool out all October still shows in November until it returns). */
+  const rowsFor = (ym: string) => cycles.filter(c => {
+    const out = (c.dateOut || '').slice(0, 7)
+    const back = (c.dateIn || '').slice(0, 7)
+    if (!out || out > ym) return false
+    return !back || back.startsWith('1900') || back >= ym
+  })
+
+  const valueOf = (ym: string, r: UtilRow, d: number): '1' | 'S' | null => {
+    const k = `${ym}|${cKey(r)}|${d}`
     if (k in pending) return pending[k]
-    return rows[rowIdx]?.days[d]?.code ?? null
+    return marks[ym]?.[cKey(r)]?.[d]?.code ?? null
   }
 
-  /** Stage a change locally. Nothing is sent until Save. */
-  function stage(rowIdx: number, d: number, code: '1' | 'S' | null) {
-    if (!canEdit) return
-    const row = rows[rowIdx]
-    if (!row || !inWindow(row, d)) return
-    const k = `${rowIdx}|${d}`
-    const stored = row.days[d]?.code ?? null
-    setPending(p => {
-      const next = { ...p }
-      if (code === stored) delete next[k]      // back to what is saved: not a change
-      else next[k] = code
-      return next
-    })
+  function stage(ym: string, r: UtilRow, d: number, code: '1' | 'S' | null) {
+    if (!canEdit || !inWindow(r, ym, d)) return
+    const k = `${ym}|${cKey(r)}|${d}`
+    const stored = marks[ym]?.[cKey(r)]?.[d]?.code ?? null
+    setPending(p => { const n = { ...p }; if (code === stored) delete n[k]; else n[k] = code; return n })
   }
 
-  /** Write every staged change, a few at a time, then reload to pick up the priced results. */
-  const save = useCallback(async (): Promise<boolean> => {
-    const entries = Object.entries(pending)
+  const save = useCallback(async (onlyYm?: string): Promise<boolean> => {
+    const entries = Object.entries(pending).filter(([k]) => !onlyYm || k.startsWith(onlyYm + '|'))
     if (!entries.length) return true
-    setSaving(true)
-    document.body.style.cursor = 'wait'
+    setSaving(true); document.body.style.cursor = 'wait'
     let failed = 0
     try {
       const jobs = entries.map(([k, code]) => async () => {
-        const [ri, dd] = k.split('|').map(Number)
-        const row = rows[ri]
-        const cur = row.days[dd]
+        const [ym, ck, dd] = k.split('|').length === 4 ? [k.split('|')[0], k.split('|').slice(1, 3).join('|'), Number(k.split('|')[3])] : ['', '', 0]
+        const r = cycles.find(c => cKey(c) === ck)!
+        const cur = marks[ym]?.[ck]?.[dd]
         try {
           if (!code && cur) await api.delete(`/utilization/${cur.logId}`)
           else if (code && !cur) await api.post('/utilization', {
-            JobID: jobId, DTNumber: row.dtNumber, ToolID: row.toolId,
-            LogDate: dayOf(dd), UtilizationCode: code,
-          })
+            JobID: jobId, DTNumber: r.dtNumber, ToolID: r.toolId, LogDate: dateOf(ym, dd), UtilizationCode: code })
           else if (code && cur) await api.put(`/utilization/${cur.logId}`, { UtilizationCode: code })
         } catch { failed++ }
       })
-      const lanes = 4
       let i = 0
-      await Promise.all(Array.from({ length: lanes }, async () => {
-        while (i < jobs.length) { const j = jobs[i++]; await j() }
-      }))
-    } finally {
-      document.body.style.cursor = ''
-      setSaving(false)
-    }
+      await Promise.all(Array.from({ length: 4 }, async () => { while (i < jobs.length) await jobs[i++]() }))
+    } finally { document.body.style.cursor = ''; setSaving(false) }
     await load()
-    if (failed) { showToast(`${failed} day(s) could not be saved — they are shown again below`, 'error'); return false }
+    if (failed) { showToast(`${failed} day(s) could not be saved — shown again`, 'error'); return false }
     showToast(`Utilization saved (${entries.length} change${entries.length === 1 ? '' : 's'})`, 'success')
     return true
-  }, [pending, rows, jobId, year, month, load])
+  }, [pending, cycles, marks, jobId, load])
 
-  // Let the workspace's Save Job File button and tab bar see the unsaved state.
-  useEffect(() => { gate.current = { dirty: pendingCount > 0, save } })
+  useEffect(() => { gate.current = { dirty: pendingCount > 0, save: () => save() } })
   useEffect(() => () => { gate.current = null }, [])
   useEffect(() => {
     if (!pendingCount) return
@@ -1834,189 +1830,229 @@ function UtilizationTab({ jobId, job, gate }: {
     return () => window.removeEventListener('beforeunload', warn)
   }, [pendingCount])
 
-  /**
-   * Spreadsheet-style entry: type 1 or S, the cursor moves on by itself;
-   * Delete/Backspace clears; arrows and Enter move. No network involved.
-   */
-  function onKey(e: React.KeyboardEvent<HTMLDivElement>, rowIdx: number, d: number) {
-    const go = (r: number, dd: number) => {
-      const el = document.querySelector<HTMLElement>(`[data-util="${r}-${dd}"]`)
-      if (el) el.focus()
-    }
+  function onKey(e: React.KeyboardEvent, ym: string, r: UtilRow, ri: number, d: number) {
+    const go = (rr: number, dd: number) =>
+      document.querySelector<HTMLElement>(`[data-util="${ym}-${rr}-${dd}"]`)?.focus()
     const k = e.key
-    if (k === '1' || k === 's' || k === 'S') {
-      e.preventDefault(); stage(rowIdx, d, k === '1' ? '1' : 'S'); go(rowIdx, d + 1)
-    } else if (k === 'Delete' || k === 'Backspace' || k === ' ' || k === '0') {
-      e.preventDefault(); stage(rowIdx, d, null); if (k !== 'Backspace') go(rowIdx, d + 1)
-    } else if (k === 'ArrowRight' || k === 'Enter') { e.preventDefault(); go(rowIdx, d + 1) }
-    else if (k === 'ArrowLeft')  { e.preventDefault(); go(rowIdx, d - 1) }
-    else if (k === 'ArrowDown')  { e.preventDefault(); go(rowIdx + 1, d) }
-    else if (k === 'ArrowUp')    { e.preventDefault(); go(rowIdx - 1, d) }
+    if (k === '1' || k === 's' || k === 'S') { e.preventDefault(); stage(ym, r, d, k === '1' ? '1' : 'S'); go(ri, d + 1) }
+    else if (k === 'Delete' || k === 'Backspace' || k === ' ' || k === '0') { e.preventDefault(); stage(ym, r, d, null); if (k !== 'Backspace') go(ri, d + 1) }
+    else if (k === 'ArrowRight' || k === 'Enter') { e.preventDefault(); go(ri, d + 1) }
+    else if (k === 'ArrowLeft') { e.preventDefault(); go(ri, d - 1) }
+    else if (k === 'ArrowDown') { e.preventDefault(); go(ri + 1, d) }
+    else if (k === 'ArrowUp')   { e.preventDefault(); go(ri - 1, d) }
   }
 
-  /** Click cycles blank → 1 → S → blank, like the reference sheet. */
-  function onClickCell(rowIdx: number, d: number) {
-    const v = valueOf(rowIdx, d)
-    stage(rowIdx, d, v === null ? '1' : v === '1' ? 'S' : null)
-  }
-
-  /** Right-click a cell: fill from it to the end of that tool's window with the same value. */
-  function fillRight(e: React.MouseEvent, rowIdx: number, d: number) {
-    e.preventDefault()
-    if (!canEdit) return
-    const v = valueOf(rowIdx, d)
-    for (let x = d + 1; x <= daysInMonth; x++) stage(rowIdx, x, v)
-  }
-
-  function leaveMonth(fn: () => void) {
-    if (pendingCount && !window.confirm('You have unsaved utilization changes. Discard them?')) return
-    fn()
-  }
-  function prevMonth() { leaveMonth(() => { if (month === 1) { setYear(y => y - 1); setMonth(12) } else setMonth(m => m - 1) }) }
-  function nextMonth() { leaveMonth(() => { if (month === 12) { setYear(y => y + 1); setMonth(1) } else setMonth(m => m + 1) }) }
-
-  // Totals follow the screen (including unsaved edits) so the user sees the effect before saving.
-  const rowTotals = rows.map((_, ri) => {
-    let ops = 0, sb = 0
-    for (let d = 1; d <= daysInMonth; d++) {
-      const v = valueOf(ri, d)
-      if (v === '1') ops++; else if (v === 'S') sb++
+  /** Revenue of one cycle in one month, from the rate stored on each saved day. */
+  const revenue = (ym: string, r: UtilRow) => {
+    const dm = marks[ym]?.[cKey(r)] || {}
+    let sb = 0, ops = 0, sbV = 0, opsV = 0, sbRate = 0, opsRate = 0
+    for (const c of Object.values(dm)) {
+      if (c.code === 'S') { sb++; sbV += c.rate || 0; if (c.rate) sbRate = c.rate }
+      else { ops++; opsV += c.rate || 0; if (c.rate) opsRate = c.rate }
     }
-    return { ops, sb }
-  })
-  const totals = rowTotals.reduce((a, r) => ({ ops: a.ops + r.ops, sb: a.sb + r.sb }), { ops: 0, sb: 0 })
-  const dayTotals = days.map(d => {
-    let ops = 0, sb = 0
-    rows.forEach((_, ri) => { const v = valueOf(ri, d); if (v === '1') ops++; else if (v === 'S') sb++ })
-    return { ops, sb }
-  })
+    return { sb, ops, sbV, opsV, sbRate, opsRate, total: sbV + opsV }
+  }
+
+  function exportCsv() {
+    const lines = [['Month', 'Asset', 'Description', 'DT', 'DT Date', 'RT', 'RT Date', 'Standby days', 'Ops days', 'Standby value', 'Ops value', 'Total'].join(',')]
+    for (const ym of months) for (const r of rowsFor(ym)) {
+      const v = revenue(ym, r)
+      lines.push([monthLabel(ym), r.assetNo, `"${(r.label || '').replace(/"/g, '""')}"`, r.dtNumber, shortDate(r.dateOut),
+        (r as any).rtNo || '', shortDate(r.dateIn), v.sb, v.ops, v.sbV.toFixed(2), v.opsV.toFixed(2), v.total.toFixed(2)].join(','))
+    }
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }))
+    a.download = `utilization-${jobId}.csv`; a.click()
+  }
 
   if (loading) return (
-    <div className="bg-white border border-gray-300 rounded py-12 flex items-center justify-center">
-      <Spinner size="md" />
-    </div>
+    <div className="bg-white border border-gray-300 rounded py-12 flex items-center justify-center"><Spinner size="md" /></div>
   )
 
-  const cellBase = 'w-[26px] h-[30px] flex items-center justify-center font-mono text-[11.5px] font-semibold select-none outline-none'
+  const grand = months.reduce((s, ym) => s + rowsFor(ym).reduce((a, r) => a + revenue(ym, r).total, 0), 0)
+  const th = 'px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-left whitespace-nowrap'
+  const cell = 'w-[26px] h-[28px] flex items-center justify-center font-mono text-[11.5px] font-semibold select-none outline-none'
+  const canSeeMoney = hasRole('Admin', 'Operations', 'Finance', 'Billing', 'CostController', 'Executive')
 
   return (
-    <div className="flex flex-col gap-2">
-      {/* Top bar: month, stats, save */}
-      <div className="flex items-center gap-3 flex-wrap bg-white border border-gray-200 rounded-lg px-3 py-2">
-        <div className="flex items-center border border-gray-300 rounded-md bg-white">
-          <button onClick={prevMonth} className="px-2 h-[28px] hover:bg-gray-100 text-gray-600">‹</button>
-          <span className="text-[12.5px] font-semibold px-3 min-w-[140px] text-center text-gray-900">{monthName}</span>
-          <button onClick={nextMonth} className="px-2 h-[28px] hover:bg-gray-100 text-gray-600">›</button>
+    <div className="flex flex-col gap-3 pb-14">
+      {/* Job strip */}
+      <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="font-mono font-bold text-[15px] text-gray-900">{jobId}</span>
+          {job?.Status && <span className="text-[12px] font-semibold text-green-700">{String(job.Status)}</span>}
+          {job?.HoleSection && <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{job.HoleSection}</span>}
+          {!canEdit && <span className="text-[11px] text-gray-400 italic">View only</span>}
         </div>
-        <div className="flex items-center gap-1.5 text-[11px]">
-          <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-600">{rows.length} cycle{rows.length === 1 ? '' : 's'}</span>
-          <span className="px-2 py-0.5 rounded bg-green-50 text-green-700 border border-green-200">{totals.ops} operating</span>
-          <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">{totals.sb} standby</span>
-        </div>
-        {!canEdit && <span className="text-[11px] text-gray-400 italic">View only</span>}
-        <div className="ml-auto flex items-center gap-2">
-          {pendingCount > 0 && (
-            <>
-              <span className="text-[11px] font-semibold text-amber-700">{pendingCount} unsaved change{pendingCount === 1 ? '' : 's'}</span>
-              <button className="text-[11.5px] px-2.5 h-[28px] rounded-md border border-gray-300 hover:bg-gray-50"
-                      disabled={saving} onClick={() => setPending({})}>Discard</button>
-            </>
-          )}
-          {canEdit && (
-            <button className="btn-primary text-xs py-1.5" disabled={saving || pendingCount === 0} onClick={save}>
-              {saving ? <><Spinner size="sm" /> Saving…</> : <><Save size={13} /> Save Utilization</>}
-            </button>
-          )}
+        <div className="flex gap-8 mt-2 text-[12px] flex-wrap">
+          {([['Client', job?.Client], ['Rig', job?.Rig], ['Well', job?.Well], ['PO', job?.PONumber],
+             ['ERP', job?.ERPRef], ['Service', job?.ServiceType]] as [string, any][]).map(([l, v]) => (
+            <div key={l}><div className="text-[9.5px] uppercase tracking-wide text-gray-400 font-semibold">{l}</div>
+              <div className="text-gray-800">{v || '—'}</div></div>
+          ))}
         </div>
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 text-[11px] text-gray-500 px-1 flex-wrap">
-        <span className="flex items-center gap-1.5"><span className="inline-flex w-5 h-5 items-center justify-center rounded font-mono font-semibold bg-[#f0faf4] text-[#14532d] border border-[#bbf7d0]">1</span> Operating</span>
+      <div className="flex items-center gap-4 bg-white border border-gray-200 rounded-lg px-4 py-2 text-[11.5px] text-gray-600 flex-wrap">
         <span className="flex items-center gap-1.5"><span className="inline-flex w-5 h-5 items-center justify-center rounded font-mono font-semibold bg-[#f0f6ff] text-[#1e3a5f] border border-[#bfdbfe]">S</span> Standby</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-5 h-5 rounded bg-gray-100 border border-gray-200" /> Outside DT–RT dates</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-5 h-5 rounded border-2 border-amber-400 bg-white" /> Unsaved</span>
-        <span className="ml-auto text-gray-400">Type 1 or S · cursor moves on · Del clears · click cycles · right-click fills to month end · nothing is saved until you click Save</span>
+        <span className="flex items-center gap-1.5"><span className="inline-flex w-5 h-5 items-center justify-center rounded font-mono font-semibold bg-[#f0faf4] text-[#14532d] border border-[#bbf7d0]">1</span> Operating</span>
+        <span className="ml-auto text-[10.5px] text-gray-400">Type S / 1 · Auto-advances to next cell · Click cycles · Right-click fills to month end · Del to clear · Nothing is saved until you click Save</span>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg overflow-auto max-h-[calc(100vh-330px)]">
-        <table className="text-[11.5px] border-collapse" style={{ minWidth: `${420 + daysInMonth * 26}px` }}>
-          <thead className="sticky top-0 z-20">
-            <tr className="bg-gray-50">
-              <th className="sticky left-0 z-30 bg-gray-50 text-left px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-gray-500 border-b border-gray-200 min-w-[200px]">Tool</th>
-              <th className="px-2 py-2 text-left text-[10.5px] font-semibold uppercase tracking-wide text-gray-500 border-b border-gray-200">DT</th>
-              <th className="px-2 py-2 text-left text-[10.5px] font-semibold uppercase tracking-wide text-gray-500 border-b border-gray-200">Out</th>
-              <th className="px-2 py-2 text-left text-[10.5px] font-semibold uppercase tracking-wide text-gray-500 border-b border-gray-200">In</th>
-              {days.map(d => (
-                <th key={d} className={`p-0 text-center font-mono text-[10.5px] font-medium border-b border-gray-200 border-l border-l-gray-100 w-[26px] ${isWeekend(d) ? 'text-gray-400 bg-gray-100/60' : 'text-gray-500'}`}>{d}</th>
-              ))}
-              <th className="px-2 py-2 text-center text-[10.5px] font-semibold uppercase tracking-wide text-green-700 border-b border-gray-200 border-l border-gray-200">Ops</th>
-              <th className="px-2 py-2 text-center text-[10.5px] font-semibold uppercase tracking-wide text-blue-700 border-b border-gray-200">SB</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={daysInMonth + 6} className="text-center text-gray-400 py-10">
-                  No tools have been dispatched on this job yet, so there is nothing to charge.
-                </td>
-              </tr>
-            ) : (
-              rows.map((row, rowIdx) => (
-                <tr key={`${row.dtNumber}-${row.toolId}-${rowIdx}`} className="border-b border-gray-100 hover:bg-gray-50/60">
-                  <td className="sticky left-0 z-10 bg-white px-3 py-1 max-w-[260px] truncate text-gray-800" title={row.label}>
-                    <span className="font-mono font-semibold text-gray-900">{row.assetNo || row.toolId}</span>
-                    <span className="text-gray-500"> {row.label.includes(' – ') ? '– ' + row.label.split(' – ').slice(1).join(' – ') : ''}</span>
-                  </td>
-                  <td className="px-2 font-mono text-gray-500 whitespace-nowrap">{row.dtNumber || '—'}</td>
-                  <td className="px-2 text-gray-500 whitespace-nowrap">{(row.dateOut || '').slice(0, 10) || '—'}</td>
-                  <td className="px-2 text-gray-500 whitespace-nowrap">
-                    {(row.dateIn || '').slice(0, 10) || <span className="text-amber-600">on rig</span>}
-                  </td>
-                  {days.map(d => {
-                    const v = valueOf(rowIdx, d)
-                    const open = inWindow(row, d)
-                    const changed = `${rowIdx}|${d}` in pending
-                    const tone = !open ? 'bg-gray-100 cursor-not-allowed'
-                      : v === '1' ? 'bg-[#f0faf4] text-[#14532d]'
-                      : v === 'S' ? 'bg-[#f0f6ff] text-[#1e3a5f]'
-                      : 'bg-white text-gray-300 hover:bg-blue-50'
-                    return (
-                      <td key={d} className="p-0 border-l border-gray-100">
-                        <div
-                          data-util={`${rowIdx}-${d}`}
-                          tabIndex={open && canEdit ? 0 : -1}
-                          className={`${cellBase} ${tone} ${open && canEdit ? 'cursor-pointer focus:shadow-[inset_0_0_0_2px_#2563eb]' : ''} ${changed ? 'shadow-[inset_0_0_0_2px_#fbbf24]' : ''}`}
-                          title={open ? undefined : 'Outside this tool’s DT–RT window'}
-                          onClick={() => open && onClickCell(rowIdx, d)}
-                          onContextMenu={e => open && fillRight(e, rowIdx, d)}
-                          onKeyDown={e => open && onKey(e, rowIdx, d)}
-                        >{v ?? ''}</div>
-                      </td>
-                    )
-                  })}
-                  <td className="px-2 text-center font-mono font-semibold text-green-700 border-l border-gray-200">{rowTotals[rowIdx].ops || ''}</td>
-                  <td className="px-2 text-center font-mono font-semibold text-blue-700">{rowTotals[rowIdx].sb || ''}</td>
-                </tr>
-              ))
+      {months.map(ym => {
+        const rows = rowsFor(ym)
+        const n = daysIn(ym)
+        const days = Array.from({ length: n }, (_, i) => i + 1)
+        const tot = rows.reduce((a, r) => {
+          for (let d = 1; d <= n; d++) { const v = valueOf(ym, r, d); if (v === '1') a.ops++; else if (v === 'S') a.sb++ }
+          return a
+        }, { ops: 0, sb: 0 })
+        const dirty = Object.keys(pending).filter(k => k.startsWith(ym + '|')).length
+        const isOpen = !!open[ym]
+        return (
+          <div key={ym} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-200 cursor-pointer"
+                 onClick={() => setOpen(o => ({ ...o, [ym]: !o[ym] }))}>
+              <span className="text-[10px] text-gray-500">{isOpen ? '▼' : '▶'}</span>
+              <span className="text-[13px] font-semibold text-gray-900 mr-1">{monthLabel(ym)}</span>
+              <span className="text-[11px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">SB {tot.sb} days</span>
+              <span className="text-[11px] px-2 py-0.5 rounded bg-green-50 text-green-700 border border-green-200">Ops {tot.ops} days</span>
+              <span className="text-[11px] px-2 py-0.5 rounded bg-white text-gray-600 border border-gray-200">{rows.length} tools</span>
+              {dirty > 0 && <span className="text-[11px] px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-300">Unsaved changes</span>}
+              <span className="ml-auto flex gap-2" onClick={e => e.stopPropagation()}>
+                {canEdit && <button className="btn-mini" disabled={saving || !dirty} onClick={() => save(ym)}><Save size={12} /> Save</button>}
+                <button className="btn-mini" onClick={exportCsv}>Export</button>
+              </span>
+            </div>
+            {isOpen && (
+              <div className="overflow-auto">
+                <table className="border-collapse text-[11.5px]" style={{ minWidth: `${760 + n * 26}px` }}>
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className={th}>#</th><th className={th}>Asset/S/N</th><th className={th}>Description</th>
+                      <th className={th}>DT #</th><th className={th}>DT Date</th><th className={th}>RT #</th><th className={th}>RT Date</th>
+                      {days.map(d => <th key={d} className="p-0 w-[26px] text-center font-mono text-[10px] font-medium text-gray-500 border-l border-gray-100">{d}</th>)}
+                      <th className={`${th} text-center text-blue-700 border-l border-gray-200`}>SB Days</th>
+                      <th className={`${th} text-center text-green-700`}>Ops Days</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.length === 0 && <tr><td colSpan={n + 9} className="text-center text-gray-400 py-6">No tools on hire this month.</td></tr>}
+                    {rows.map((r, ri) => {
+                      let ops = 0, sb = 0
+                      for (let d = 1; d <= n; d++) { const v = valueOf(ym, r, d); if (v === '1') ops++; else if (v === 'S') sb++ }
+                      return (
+                        <tr key={cKey(r) + ri} className="border-b border-gray-100 hover:bg-gray-50/60">
+                          <td className="px-2 text-gray-400">{ri + 1}</td>
+                          <td className="px-2 font-mono font-semibold text-gray-900 whitespace-nowrap">{r.assetNo || r.toolId}</td>
+                          <td className="px-2 text-gray-700 max-w-[280px] truncate" title={r.label}>{r.label}</td>
+                          <td className="px-2 font-mono text-gray-500 whitespace-nowrap">{r.dtNumber || '—'}</td>
+                          <td className="px-2 text-gray-500 whitespace-nowrap">{shortDate(r.dateOut) || '—'}</td>
+                          <td className="px-2 font-mono text-gray-500 whitespace-nowrap">{(r as any).rtNo || '—'}</td>
+                          <td className="px-2 text-gray-500 whitespace-nowrap">{shortDate(r.dateIn) || <span className="text-amber-600">on rig</span>}</td>
+                          {days.map(d => {
+                            const v = valueOf(ym, r, d)
+                            const ok = inWindow(r, ym, d)
+                            const changed = `${ym}|${cKey(r)}|${d}` in pending
+                            const tone = !ok ? 'bg-gray-100 cursor-not-allowed'
+                              : v === '1' ? 'bg-[#f0faf4] text-[#14532d]' : v === 'S' ? 'bg-[#f0f6ff] text-[#1e3a5f]'
+                              : 'bg-white hover:bg-blue-50'
+                            return (
+                              <td key={d} className="p-0 border-l border-gray-100">
+                                <div data-util={`${ym}-${ri}-${d}`} tabIndex={ok && canEdit ? 0 : -1}
+                                  className={`${cell} ${tone} ${ok && canEdit ? 'cursor-pointer focus:shadow-[inset_0_0_0_2px_#2563eb]' : ''} ${changed ? 'shadow-[inset_0_0_0_2px_#fbbf24]' : ''}`}
+                                  title={ok ? undefined : 'Outside this tool’s DT–RT dates'}
+                                  onClick={() => ok && stage(ym, r, d, v === null ? '1' : v === '1' ? 'S' : null)}
+                                  onContextMenu={e => { e.preventDefault(); if (ok) for (let x = d + 1; x <= n; x++) stage(ym, r, x, v) }}
+                                  onKeyDown={e => ok && onKey(e, ym, r, ri, d)}>{v ?? ''}</div>
+                              </td>
+                            )
+                          })}
+                          <td className="px-2 text-center font-mono font-semibold text-blue-700 border-l border-gray-200">{sb}</td>
+                          <td className="px-2 text-center font-mono font-semibold text-green-700">{ops}</td>
+                        </tr>
+                      )
+                    })}
+                    <tr className="bg-gray-50 border-t border-gray-300">
+                      <td colSpan={7 + n} className="px-3 py-1.5 text-right text-[10.5px] font-semibold uppercase tracking-wide text-gray-500">Month totals</td>
+                      <td className="text-center font-mono font-bold text-blue-700 border-l border-gray-200">{tot.sb}</td>
+                      <td className="text-center font-mono font-bold text-green-700">{tot.ops}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             )}
-          </tbody>
-          {rows.length > 0 && (
-            <tfoot className="sticky bottom-0 z-20">
-              <tr className="bg-gray-50 border-t border-gray-300 font-mono text-[10.5px]">
-                <td className="sticky left-0 z-30 bg-gray-50 px-3 py-1.5 font-sans font-semibold text-gray-600" colSpan={4}>Total per day (operating / standby)</td>
-                {dayTotals.map((t, i) => (
-                  <td key={i} className="text-center border-l border-gray-100 leading-tight py-0.5">
-                    <div className="text-green-700">{t.ops || ''}</div>
-                    <div className="text-blue-700">{t.sb || ''}</div>
-                  </td>
-                ))}
-                <td className="px-2 text-center font-semibold text-green-700 border-l border-gray-200">{totals.ops}</td>
-                <td className="px-2 text-center font-semibold text-blue-700">{totals.sb}</td>
-              </tr>
-            </tfoot>
-          )}
-        </table>
+          </div>
+        )
+      })}
+
+      {/* Job revenue, by month */}
+      {canSeeMoney && (
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+            <span className="text-[13px] font-semibold text-gray-900">Job Revenue Details</span>
+            <span className="text-[11px] text-gray-400">All months combined · from saved days · priced from the contract rates when a day is saved</span>
+            <span className="ml-auto font-mono font-bold text-[13px]">{fmtMoney(grand)}</span>
+          </div>
+          {months.map(ym => {
+            const rows = rowsFor(ym)
+            const sum = rows.reduce((a, r) => a + revenue(ym, r).total, 0)
+            return (
+              <div key={ym} className="px-4 pt-3 pb-2">
+                <div className="text-[10.5px] font-semibold uppercase tracking-wide text-gray-500 mb-1">{monthLabel(ym)}</div>
+                <table className="w-full text-[11.5px] border-collapse">
+                  <thead><tr className="border-b border-gray-200">
+                    <th className={th}>#</th><th className={th}>Serial / Asset</th><th className={th}>Description</th>
+                    <th className={th}>DT#</th><th className={th}>RT#</th>
+                    <th className={`${th} text-right`}>SB Days</th><th className={`${th} text-right`}>Ops Days</th>
+                    <th className={`${th} text-right`}>SB Rate</th><th className={`${th} text-right`}>Ops Rate</th>
+                    <th className={`${th} text-right`}>SB Value</th><th className={`${th} text-right`}>Ops Value</th>
+                    <th className={`${th} text-right`}>Total</th>
+                  </tr></thead>
+                  <tbody>
+                    {rows.map((r, i) => {
+                      const v = revenue(ym, r)
+                      const unpriced = (v.sb + v.ops) > 0 && v.total === 0
+                      return (
+                        <tr key={cKey(r) + i} className="border-b border-gray-100">
+                          <td className="px-2 text-gray-400">{i + 1}</td>
+                          <td className="px-2 font-mono text-blue-700">{r.assetNo || r.toolId}</td>
+                          <td className="px-2 text-gray-700">{r.label}</td>
+                          <td className="px-2 font-mono text-gray-500">{r.dtNumber || '—'}</td>
+                          <td className="px-2 font-mono text-gray-500">{(r as any).rtNo || '—'}</td>
+                          <td className="px-2 text-right font-mono text-blue-700">{v.sb}</td>
+                          <td className="px-2 text-right font-mono text-green-700">{v.ops}</td>
+                          <td className="px-2 text-right font-mono text-gray-500">{v.sbRate ? fmtMoney(v.sbRate) : '—'}</td>
+                          <td className="px-2 text-right font-mono text-gray-500">{v.opsRate ? fmtMoney(v.opsRate) : '—'}</td>
+                          <td className="px-2 text-right font-mono">{fmtMoney(v.sbV)}</td>
+                          <td className="px-2 text-right font-mono">{fmtMoney(v.opsV)}</td>
+                          <td className={`px-2 text-right font-mono font-bold ${unpriced ? 'text-amber-600' : ''}`}
+                              title={unpriced ? 'Days saved with no contract rate' : undefined}>{fmtMoney(v.total)}</td>
+                        </tr>
+                      )
+                    })}
+                    <tr className="bg-gray-50"><td colSpan={11} className="px-2 py-1.5 text-right font-semibold text-gray-600">{monthLabel(ym)} Total</td>
+                      <td className="px-2 text-right font-mono font-bold">{fmtMoney(sum)}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
+          <div className="flex justify-end items-baseline gap-3 px-4 py-3 border-t border-gray-200">
+            <span className="text-[10.5px] uppercase tracking-wide text-gray-500 font-semibold">Grand total</span>
+            <span className="font-mono font-bold text-[18px]">{fmtMoney(grand)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Sticky footer */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 px-6 py-2 flex items-center gap-3 justify-end">
+        {pendingCount > 0 && <span className="text-[11.5px] font-semibold text-amber-700 mr-auto">{pendingCount} unsaved change{pendingCount === 1 ? '' : 's'}</span>}
+        {pendingCount > 0 && <button className="btn-mini" disabled={saving} onClick={() => setPending({})}>Discard</button>}
+        {canEdit && <button className="btn-primary text-xs py-1.5" disabled={saving || !pendingCount} onClick={() => save()}>
+          {saving ? <><Spinner size="sm" /> Saving…</> : <><Save size={13} /> Save All</>}</button>}
+        <button className="btn-mini" onClick={exportCsv}>Export</button>
       </div>
     </div>
   )
