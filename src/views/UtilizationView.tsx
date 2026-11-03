@@ -310,7 +310,7 @@ function AddToolModal({
         label,
         jobId,
         toolId: selected.SystemID,
-        dtNumber: null,
+        dtNumber: (res as any).DTNumber ?? null,
         days: { [day]: { code, logId: (res as any).LogID, rate: logRate, source: (res as any).RateSource ?? null } },
         opsDays:    code === '1' ? 1 : 0,
         standbyDays: code === 'S' ? 1 : 0,

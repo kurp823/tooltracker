@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, safe } = require('../db')
+const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe } = require('../db')
 const R = require('../rates')
 
 /**
@@ -247,7 +247,31 @@ module.exports = safe(async function (context, req) {
       return jsonResponse(context, 400, { error: 'UtilizationCode must be "1" or "S"' })
 
     const tool  = b.ToolID != null ? String(b.ToolID) : null
-    const ctx   = await contextFor(b.JobID, tool, b.DTNumber)
+
+    // A day logged from the grid carries no ticket. Without one the hole
+    // section cannot be found (hole-priced contracts stay unpriced), the
+    // revenue rollup cannot join the log, and the dispatch-cycle grouping
+    // lumps cycles together. Resolve it: the job's most recent delivery
+    // ticket that carries this tool, matched by SystemID or AssetNo.
+    let dtNumber = b.DTNumber || null
+    if (!dtNumber && tool) {
+      const f = await query(
+        `SELECT TOP 1 d.dtNumber
+           FROM tbl_DeliveryTicketLines dl
+           JOIN tbl_DeliveryTickets d ON d.dtNumber = dl.dtNumber
+          WHERE ${jobKey('d.jobNumber')} = @jk
+            AND ( dl.serial = @tool
+               OR dl.serial = (SELECT TOP 1 AssetNo FROM tbl_Inventory WHERE SystemID = @tool) )
+          ORDER BY d.id DESC`,
+        [
+          { name: 'jk',   value: jobKeyOf(b.JobID) },
+          { name: 'tool', value: tool },
+        ]
+      )
+      dtNumber = f.recordset[0]?.dtNumber || null
+    }
+
+    const ctx   = await contextFor(b.JobID, tool, dtNumber)
     const price = await priceDay(load, ctx, b.UtilizationCode)
 
     const r = await query(
@@ -262,7 +286,7 @@ module.exports = safe(async function (context, req) {
        VALUES (@job, @dt, @tool, @date, @code, @rate, @src, GETDATE())`,
       [
         { name: 'job',  value: b.JobID            },
-        { name: 'dt',   value: b.DTNumber || null },
+        { name: 'dt',   value: dtNumber            },
         { name: 'tool', value: tool               },
         { name: 'date', value: b.LogDate          },
         { name: 'code', value: b.UtilizationCode  },
@@ -272,6 +296,7 @@ module.exports = safe(async function (context, req) {
     )
     return jsonResponse(context, 201, {
       LogID: r.recordset[0].LogID,
+      DTNumber: dtNumber,
       RateCharged: price.rate,
       RateSource:  price.source,
       // present when the day could not be priced, so the screen can say why
