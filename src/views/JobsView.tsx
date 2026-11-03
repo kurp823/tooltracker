@@ -129,7 +129,7 @@ export function JobsView() {
 
       {/* Toolbar — one row; the New Job button had a 40px row to itself. */}
       <div className="screen-bar">
-        <div className="relative w-64">
+        <div className="relative w-48">
           <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
@@ -158,12 +158,12 @@ export function JobsView() {
           ))}
         </select>
 
-        <select className="field-input w-auto max-w-[130px]" value={rigFilter} onChange={e => setRig(e.target.value)} title="Rig">
+        <select className="field-input w-auto max-w-[110px]" value={rigFilter} onChange={e => setRig(e.target.value)} title="Rig">
           <option value="All">All rigs ({rigs.length})</option>
           {rigs.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
 
-        <select className="field-input w-auto max-w-[190px]" value={clientFilter} onChange={e => setClient(e.target.value)} title="Client">
+        <select className="field-input w-auto max-w-[150px]" value={clientFilter} onChange={e => setClient(e.target.value)} title="Client">
           <option value="All">All clients ({clients.length})</option>
           {clients.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
