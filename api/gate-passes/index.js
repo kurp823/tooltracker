@@ -251,7 +251,42 @@ module.exports = safe(async function (context, req) {
         { name: 'purpose',    value: b.Purpose       || null },
       ]
     )
-    return jsonResponse(context, 200, { ok: true })
+
+    // Releasing a pass moves the tools. Without this the register said a tool
+    // had left for repair while inventory still showed it Good at Emdad Base,
+    // so it could be picked for a job the same day.
+    //   Outward released -> Status 'Out',        Location = the pass's supplier
+    //   Inward  released -> Status 'Inspection', Location 'Emdad Base'
+    //                       (back from outside: inspected before reuse, the
+    //                        same routing a return ticket gives)
+    let moved = 0
+    if (b.Status === 'Released') {
+      const gp = await query(
+        `SELECT Direction, Supplier FROM tbl_GatePass WHERE GatePassID = @id`,
+        [{ name: 'id', value: id }])
+      const dir = gp.recordset[0]?.Direction
+      if (dir === 'Outward' || dir === 'Inward') {
+        const out = dir === 'Outward'
+        const r = await query(
+          `UPDATE i
+              SET i.Status   = @status,
+                  i.Location = @loc,
+                  i.LastUpdated = GETDATE()
+             FROM tbl_Inventory i
+             JOIN tbl_GatePassLines l
+               ON l.GatePassID = @id
+              AND ( (NULLIF(l.AssetNo,'') IS NOT NULL AND i.AssetNo = l.AssetNo)
+                 OR (NULLIF(l.Serial,'')  IS NOT NULL AND i.OEMSerial = l.Serial) )`,
+          [
+            { name: 'id',     value: id },
+            { name: 'status', value: out ? 'Out' : 'Inspection' },
+            { name: 'loc',    value: out ? (gp.recordset[0].Supplier || 'Supplier') : 'Emdad Base' },
+          ]
+        )
+        moved = r.rowsAffected[0] || 0
+      }
+    }
+    return jsonResponse(context, 200, { ok: true, toolsMoved: moved })
   }
 
   return jsonResponse(context, 405, { error: 'Method not allowed' })
