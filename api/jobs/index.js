@@ -73,14 +73,17 @@ async function blockIfLocked (context, jobId) {
 // ── Job number generator: EMDAD format Job-YYY-NNNNN ─────────────────────────
 async function nextJobID(fiscalYear) {
   const yr = fiscalYear || new Date().getFullYear().toString().slice(-3)
+  // The highest sequence number among well-formed ids, compared as a NUMBER.
+  // It used to take the highest id as TEXT, so one id with a longer year
+  // ("Job-2026-01852") sorted above every "Job-026-…" id; the next number was
+  // then computed from it and collided with an existing job, and every new job
+  // failed with "Failed to create job".
   const result = await query(`
-    SELECT TOP 1 JobID FROM tbl_Jobs
-    ORDER BY JobID DESC
+    SELECT MAX(CAST(SUBSTRING(JobID, 9, 5) AS int)) AS seq
+      FROM tbl_Jobs
+     WHERE JobID LIKE 'Job-[0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9]'
   `)
-  if (!result.recordset.length) return `Job-${yr}-00001`
-  const last = result.recordset[0].JobID // e.g. Job-026-01848
-  const parts = last.split('-')
-  const seq   = parseInt(parts[2] || '0', 10) + 1
+  const seq = (result.recordset[0] && result.recordset[0].seq || 0) + 1
   return `Job-${yr}-${String(seq).padStart(5, '0')}`
 }
 
@@ -247,6 +250,10 @@ module.exports = safe(async function (context, req) {
     const b = req.body || {}
     if (!b.Client || !b.Rig)
       return jsonResponse(context, 400, { error: 'Client and Rig are required' })
+    // The year is a three-digit fiscal code ('026'). Free text here is how a
+    // 'Job-2026-…' id got into the table and broke numbering.
+    if (b.FiscalYear && !/^\d{3}$/.test(String(b.FiscalYear)))
+      return jsonResponse(context, 400, { error: "Fiscal year must be three digits, e.g. 026" })
 
     try {
       const newId = await nextJobID(b.FiscalYear)
@@ -288,7 +295,7 @@ module.exports = safe(async function (context, req) {
       return jsonResponse(context, 201, created.recordset[0])
     } catch (err) {
       context.log.error(err)
-      return jsonResponse(context, 500, { error: 'Failed to create job' })
+      return jsonResponse(context, 500, { error: 'Failed to create job', detail: err && err.message })
     }
   }
 
