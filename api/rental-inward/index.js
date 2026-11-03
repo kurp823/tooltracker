@@ -166,6 +166,12 @@ module.exports = safe(async function (context, req) {
       if (!b.dateIn)     return jsonResponse(context, 400, { error: 'Date in is required' })
       if (!lines.length) return jsonResponse(context, 400, { error: 'Add at least one tool line' })
 
+      // The tool belongs to the supplier, so the number it is known by is the
+      // supplier's own serial. Nothing of ours is typed at receipt.
+      for (const l of lines) l.assetNo = String(l.assetNo || l.oemSerial || '').trim()
+      if (lines.some(l => !l.assetNo))
+        return jsonResponse(context, 400, { error: 'Every line needs the supplier serial' })
+
       // Checked up front so a clash does not leave half a receipt written.
       const assetNos = lines
         .map(l => String(l.assetNo || '').trim())
@@ -290,6 +296,78 @@ module.exports = safe(async function (context, req) {
         ])
 
       return jsonResponse(context, 200, { ok: true })
+    }
+
+    // ── POST price-tool — set the day rate for a hired-in tool by serial ──
+    //
+    // Used from the job's Sub-contract tab. Tools hired in before the hire
+    // register existed have no hire record, so there is nowhere to hold a rate.
+    // The record is made here, on first pricing: supplier and size come from
+    // inventory and it starts on the tool's first logged day, so every day
+    // already marked on any job is costed at once.
+    if (method === 'POST' && id === 'price-tool') {
+      if (!PRICERS.includes(user.Role))
+        return jsonResponse(context, 403, {
+          error: 'Only Admin, Billing, Finance or Cost Control can set a day rate',
+        })
+      const b = req.body || {}
+      const tool = String(b.toolSerial || '').trim()
+      if (!tool) return jsonResponse(context, 400, { error: 'Tool is required' })
+      if (b.dayRate == null || b.dayRate === '' || isNaN(Number(b.dayRate)) || Number(b.dayRate) < 0)
+        return jsonResponse(context, 400, { error: 'A day rate is required' })
+
+      const first = await query(
+        `SELECT MIN(LogDate) AS firstDay FROM tbl_DailyFieldLogs WHERE ToolSerial = @t`,
+        [{ name: 't', type: sql.NVarChar, value: tool }])
+      const firstDay = first.recordset[0] && first.recordset[0].firstDay
+
+      const cur = await query(
+        `SELECT TOP 1 id, dateIn FROM tbl_RentalInward
+          WHERE systemId = @t OR assetNo = @t OR oemSerial = @t
+          ORDER BY CASE WHEN dateOut IS NULL THEN 0 ELSE 1 END, dateIn DESC`,
+        [{ name: 't', type: sql.NVarChar, value: tool }])
+
+      const p = [
+        { name: 't',    type: sql.NVarChar, value: tool },
+        { name: 'rate', type: sql.Decimal(18, 2), value: Number(b.dayRate) },
+        { name: 'cur',  type: sql.NVarChar, value: b.currency || null },
+        { name: 'first', type: sql.Date, value: firstDay ? new Date(firstDay) : null },
+        { name: 'by',   type: sql.NVarChar, value: user.Username || null },
+      ]
+      if (cur.recordset.length) {
+        await query(
+          `UPDATE tbl_RentalInward
+              SET dayRate = @rate, currency = COALESCE(@cur, currency),
+                  dateIn = CASE WHEN @first IS NOT NULL AND @first < dateIn THEN @first ELSE dateIn END,
+                  updatedAt = GETDATE()
+            WHERE id = @id`,
+          [...p, { name: 'id', type: sql.Int, value: cur.recordset[0].id }])
+        return jsonResponse(context, 200, { ok: true, id: cur.recordset[0].id, created: false })
+      }
+
+      const inv = await query(
+        `SELECT TOP 1 SystemID, AssetNo, Size, ShortDesc, OEMSerial,
+                COALESCE(NULLIF(Supplier, ''), NULLIF(Ownership, '')) AS supplier
+           FROM tbl_Inventory WHERE SystemID = @t OR AssetNo = @t`,
+        [{ name: 't', type: sql.NVarChar, value: tool }])
+      const i = inv.recordset[0]
+      if (!i) return jsonResponse(context, 404, { error: 'Tool not found in inventory' })
+
+      const ins = await query(
+        `INSERT INTO tbl_RentalInward
+           (supplierName, assetNo, systemId, shortDesc, size, oemSerial, dateIn,
+            dayRate, currency, status, notes, createdBy)
+         OUTPUT INSERTED.id
+         VALUES (@sup, @asset, @t, @desc, @size, @serial,
+                 COALESCE(@first, CAST(GETDATE() AS date)),
+                 @rate, @cur, 'On Hire', 'Rate set from a job before a hire record existed', @by)`,
+        [...p,
+         { name: 'sup',    type: sql.NVarChar, value: i.supplier || 'Unknown supplier' },
+         { name: 'asset',  type: sql.NVarChar, value: i.AssetNo || i.SystemID },
+         { name: 'desc',   type: sql.NVarChar, value: i.ShortDesc || null },
+         { name: 'size',   type: sql.NVarChar, value: i.Size || null },
+         { name: 'serial', type: sql.NVarChar, value: i.OEMSerial || null }])
+      return jsonResponse(context, 201, { ok: true, id: ins.recordset[0].id, created: true })
     }
 
     // ── GET one ────────────────────────────────────────────────────────────

@@ -219,13 +219,15 @@ module.exports = safe(async function (context, req) {
               i.AssetNo   AS AssetNo,
               i.ShortDesc AS ToolDescription,
               i.IsEmdad   AS IsEmdad,
+              COALESCE(NULLIF(i.Supplier, ''), NULLIF(i.Ownership, '')) AS Supplier,
               ri.id       AS HireID,
-              ri.dayRate  AS HireRate
+              ri.dayRate  AS HireRate,
+              ri.currency AS HireCurrency
          FROM tbl_DailyFieldLogs d
          LEFT JOIN tbl_Inventory i
                 ON i.SystemID = d.ToolSerial
          OUTER APPLY (
-           SELECT TOP 1 r.id, r.dayRate
+           SELECT TOP 1 r.id, r.dayRate, r.currency
              FROM tbl_RentalInward r
             WHERE (r.systemId = d.ToolSerial OR r.assetNo = d.ToolSerial OR r.oemSerial = d.ToolSerial)
               AND d.LogDate >= r.dateIn
@@ -267,6 +269,7 @@ module.exports = safe(async function (context, req) {
           dtNumber: r.DTNumber || null, days: {},
           opsDays: 0, standbyDays: 0, amount: 0,
           unpriced: 0, edited: 0, isSub: r.IsEmdad === 0 || r.IsEmdad === false,
+          supplier: r.Supplier || null, hireRate: null, hireCurrency: null,
         })
       }
       const row = rowMap.get(key)
@@ -278,6 +281,7 @@ module.exports = safe(async function (context, req) {
         cost: (r.IsEmdad === 0 || r.IsEmdad === false) && r.HireRate != null ? Number(r.HireRate) : null,
       }
 
+      if (r.HireRate != null) { row.hireRate = Number(r.HireRate); row.hireCurrency = r.HireCurrency || null }
       if (r.StatusType === '1') row.opsDays++
       else                      row.standbyDays++
 

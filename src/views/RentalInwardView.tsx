@@ -125,8 +125,8 @@ export function RentalInwardView() {
   const [busy, setBusy] = useState(false)
   const [adding, setAdding] = useState(false)
   const [head, setHead] = useState({
-    supplierName: '', rentalRef: '', poNumber: '', jobId: '',
-    dateIn: new Date().toISOString().slice(0, 10), expectedOut: '', notes: '',
+    supplierName: '', rentalRef: '', jobId: '',
+    dateIn: new Date().toISOString().slice(0, 10), notes: '',
   })
   const [lines, setLines] = useState<Line[]>([blankLine()])
 
@@ -135,8 +135,8 @@ export function RentalInwardView() {
 
   function startReceipt() {
     setHead({
-      supplierName: '', rentalRef: '', poNumber: '', jobId: '',
-      dateIn: new Date().toISOString().slice(0, 10), expectedOut: '', notes: '',
+      supplierName: '', rentalRef: '', jobId: '',
+      dateIn: new Date().toISOString().slice(0, 10), notes: '',
     })
     setLines([blankLine()])
     setAdding(true)
@@ -144,10 +144,11 @@ export function RentalInwardView() {
 
   async function saveReceipt() {
     if (!head.supplierName.trim()) { showToast('Supplier is required', 'error'); return }
-    const filled = lines.filter(l => l.category.trim() || l.assetNo.trim() || l.oemSerial.trim())
+    const filled = lines.filter(l => l.category.trim() || l.oemSerial.trim())
     if (!filled.length) { showToast('Add at least one tool line', 'error'); return }
     const missing = filled.find(l => !l.category.trim())
     if (missing) { showToast('Every line needs a category', 'error'); return }
+    if (filled.some(l => !l.oemSerial.trim())) { showToast('Every line needs the supplier serial', 'error'); return }
 
     setBusy(true)
     try {
@@ -157,7 +158,7 @@ export function RentalInwardView() {
           ...head,
           lines: filled.map(l => ({
             category: l.category.trim(), size: l.size.trim(),
-            assetNo: l.assetNo.trim(), oemSerial: l.oemSerial.trim(),
+            oemSerial: l.oemSerial.trim(),
             description: l.description.trim(),
             qty: l.qty === '' ? 1 : Number(l.qty),
             requiresInspection: l.requiresInspection,
@@ -208,7 +209,7 @@ export function RentalInwardView() {
             <ArrowLeft size={12} /> Back to register
           </button>
           <span className="text-[11px] text-gray-500">
-            Stores record what arrived — Billing adds the day rate afterwards
+            Stores record what arrived — Billing adds the day rate and the PO afterwards
           </span>
           <button className="btn-primary ml-auto" disabled={busy} onClick={saveReceipt}>
             Save receipt
@@ -234,19 +235,9 @@ export function RentalInwardView() {
                      onChange={e => setHead(h => ({ ...h, rentalRef: e.target.value }))} />
             </div>
             <div className="flex items-center">
-              <span className="sheet-label">PO number</span>
-              <input className="sheet-field font-mono" value={head.poNumber}
-                     onChange={e => setHead(h => ({ ...h, poNumber: e.target.value }))} />
-            </div>
-            <div className="flex items-center">
               <span className="sheet-label">Date in</span>
               <input type="date" className="sheet-field font-mono" value={head.dateIn}
                      onChange={e => setHead(h => ({ ...h, dateIn: e.target.value }))} />
-            </div>
-            <div className="flex items-center">
-              <span className="sheet-label">Expected back</span>
-              <input type="date" className="sheet-field font-mono" value={head.expectedOut}
-                     onChange={e => setHead(h => ({ ...h, expectedOut: e.target.value }))} />
             </div>
           </div>
         </div>
@@ -259,8 +250,7 @@ export function RentalInwardView() {
                 <th className="sheet-th w-9 !text-center">#</th>
                 <th className="sheet-th min-w-[180px]">Category</th>
                 <th className="sheet-th min-w-[110px]">Size</th>
-                <th className="sheet-th min-w-[130px]">Our asset no</th>
-                <th className="sheet-th min-w-[130px]">Their serial</th>
+                <th className="sheet-th min-w-[160px]">Supplier serial</th>
                 <th className="sheet-th min-w-[220px]">Description</th>
                 <th className="sheet-th w-16 !text-right">Qty</th>
                 <th className="sheet-th w-14 !text-center">Insp</th>
@@ -294,12 +284,8 @@ export function RentalInwardView() {
                                 onChange={v => setLine(l.key, { size: v })} />
                     </td>
                     <td className="sheet-td">
-                      <input className="sheet-input font-mono" value={l.assetNo}
-                             placeholder="what we call it"
-                             onChange={e => setLine(l.key, { assetNo: e.target.value })} />
-                    </td>
-                    <td className="sheet-td">
                       <input className="sheet-input font-mono" value={l.oemSerial}
+                             placeholder="serial on the tool"
                              onChange={e => setLine(l.key, { oemSerial: e.target.value })} />
                     </td>
                     <td className="sheet-td">
@@ -405,10 +391,9 @@ export function RentalInwardView() {
               <thead className="sticky top-0 z-10">
                 <tr>
                   <th className="table-th">Supplier</th>
-                  <th className="table-th">Asset</th>
                   <th className="table-th">Category</th>
                   <th className="table-th">Size</th>
-                  <th className="table-th">Their serial</th>
+                  <th className="table-th">Serial</th>
                   <th className="table-th">Job</th>
                   <th className="table-th">In</th>
                   <th className="table-th !text-right">Days</th>
@@ -421,10 +406,9 @@ export function RentalInwardView() {
                 {visible.map(h => (
                   <tr key={h.id} className="table-tr !cursor-default whitespace-nowrap">
                     <td className="table-td font-medium">{h.supplierName}</td>
-                    <td className="table-td table-ref text-brand-600">{h.assetNo || <span className="table-empty">—</span>}</td>
                     <td className="table-td">{h.shortDesc || <span className="table-empty">—</span>}</td>
                     <td className="table-td text-gray-500">{h.size || <span className="table-empty">—</span>}</td>
-                    <td className="table-td table-ref text-gray-500">{h.oemSerial || <span className="table-empty">—</span>}</td>
+                    <td className="table-td table-ref text-brand-600">{h.oemSerial || h.assetNo || <span className="table-empty">—</span>}</td>
                     <td className="table-td table-ref text-gray-500">{h.jobId || <span className="table-empty">—</span>}</td>
                     <td className="table-td table-ref text-gray-500">{String(h.dateIn).slice(0, 10)}</td>
                     <td className="table-td table-num">{h.daysOnHire}</td>

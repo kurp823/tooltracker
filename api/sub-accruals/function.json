@@ -1,0 +1,13 @@
+{
+  "bindings": [
+    {
+      "authLevel": "anonymous",
+      "type": "httpTrigger",
+      "direction": "in",
+      "name": "req",
+      "route": "sub-accruals/{id?}",
+      "methods": ["get","put"]
+    },
+    { "type": "http", "direction": "out", "name": "res" }
+  ]
+}
