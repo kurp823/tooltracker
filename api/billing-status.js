@@ -14,9 +14,6 @@ const { query } = require('./db')
  * so nothing reads blank.
  */
 
-const SEED = ['Draft', 'In Billing', 'Draft Invoiced', 'SES Submitted',
-              'Draft Invoice Under Approval', 'Final Invoiced', 'On Hold']
-
 let ready = null
 function ensureBillingStatus() {
   if (!ready) {
@@ -27,14 +24,7 @@ function ensureBillingStatus() {
         ALTER TABLE dbo.tbl_Jobs ADD BillingStatusAt datetime NULL;
       IF COL_LENGTH('dbo.tbl_Jobs','BillingStatusBy') IS NULL
         ALTER TABLE dbo.tbl_Jobs ADD BillingStatusBy varchar(100) NULL;`, [])
-      .then(() => query(`
-        DECLARE @v TABLE (Value varchar(60), SortOrder int);
-        INSERT INTO @v VALUES ${SEED.map((s, i) => `('${s}',${i + 1})`).join(',')};
-        INSERT INTO dbo.tbl_Lists (ListName, Value, Label, SortOrder, ActiveFlag, IsSystem, UpdatedAt, UpdatedBy)
-        SELECT 'BillingStatus', v.Value, v.Value, v.SortOrder, 1, 0, GETDATE(), 'system'
-          FROM @v v
-         WHERE NOT EXISTS (SELECT 1 FROM dbo.tbl_Lists l
-                            WHERE l.ListName = 'BillingStatus' AND l.Value = v.Value);`, []))
+      .then(() => require('./list-seeds').ensureListSeeds())
       .catch(e => { ready = null; throw e })
   }
   return ready

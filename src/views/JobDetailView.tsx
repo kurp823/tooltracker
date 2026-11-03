@@ -2235,11 +2235,6 @@ function TechnicalTab({
   )
 }
 
-/** Roles offered for crew. Free text stays possible via the datalist. */
-const CREW_ROLES = [
-  'Supervisor', 'Tool Pusher', 'Fishing Supervisor', 'Operator',
-  'Technician', 'Rigger', 'Workshop Coordinator', 'Engineer',
-] as const
 
 /**
  * Manpower / Crew — was a placeholder. tbl_JobPersonnel and its GET/POST/
@@ -2414,11 +2409,17 @@ function ManpowerTab({ jobId, canEdit }: { jobId: string; canEdit: boolean }) {
           <div className="border border-gray-300 rounded p-2 mb-2 bg-gray-50 grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1.5">
             {([['Name *', 'Name'], ['Badge #', 'BadgeNo'], ['Designation', 'Designation'], ['Rig Pass #', 'RigPassNo'], ['Phone', 'Phone']] as [string, keyof typeof blank][]).map(([l, k]) => (
               <label key={k} className="text-[11px] font-semibold text-gray-600">{l}
-                <input className="field-input mt-0.5" list={k === 'Designation' ? 'dl-crew-role' : undefined}
-                       value={np[k]} onChange={e => setNp(p => ({ ...p, [k]: e.target.value }))} />
+                {k === 'Designation' ? (
+                  <select className="field-input mt-0.5" value={np[k]}
+                          onChange={e => setNp(p => ({ ...p, [k]: e.target.value }))}>
+                    <ListOptions name="CrewDesignation" current={np[k]} blank blankLabel="— select —" />
+                  </select>
+                ) : (
+                  <input className="field-input mt-0.5"
+                         value={np[k]} onChange={e => setNp(p => ({ ...p, [k]: e.target.value }))} />
+                )}
               </label>
             ))}
-            <datalist id="dl-crew-role">{CREW_ROLES.map(r => <option key={r} value={r} />)}</datalist>
             <label className="text-[11px] font-semibold text-gray-600">H2S expiry
               <input type="date" className="field-input mt-0.5" value={np.H2SExpiry} onChange={e => setNp(p => ({ ...p, H2SExpiry: e.target.value }))} />
             </label>
