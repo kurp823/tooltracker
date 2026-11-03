@@ -13,7 +13,7 @@
  * POST   /api/jobs/{id}/personnel  — add person
  * DELETE /api/jobs/{id}/personnel/{pid} — remove person
  */
-const { sql, query, jsonResponse, requireAuth, jobKey, safe } = require('../db')
+const { sql, query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe } = require('../db')
 
 /**
  * A finished job is read-only.
@@ -235,7 +235,40 @@ module.exports = safe(async function (context, req) {
       )
       if (!result.recordset.length)
         return jsonResponse(context, 404, { error: 'Job not found' })
-      return jsonResponse(context, 200, result.recordset[0])
+      const job = result.recordset[0]
+
+      // Lifecycle dates come from what actually happened on the job - the
+      // tickets and invoices - not from typing. Only filled in where the
+      // source exists, so imported history that predates those records keeps
+      // its stored value. Legal invoice number and date stay manual.
+      const jk = [{ name: 'jk', value: jobKeyOf(jobId) }]
+      const auto = {}
+      try {
+        const t = await query(
+          `SELECT (SELECT MIN(deliveryDate) FROM tbl_DeliveryTickets WHERE ${jobKey('jobNumber')} = @jk) AS FirstDt,
+                  (SELECT MAX(receivingDate) FROM tbl_ReceivingTickets WHERE ${jobKey('jobNumber')} = @jk) AS LastRt,
+                  (SELECT CASE WHEN COUNT(*) > 0 AND COUNT(clientSignDate) = COUNT(*) THEN MAX(clientSignDate) END
+                     FROM tbl_ReceivingTickets WHERE ${jobKey('jobNumber')} = @jk) AS DocsSigned`, jk)
+        const r = t.recordset[0] || {}
+        if (r.FirstDt)    auto.FirstDtDate = r.FirstDt
+        if (r.LastRt)     auto.LastRtDate = r.LastRt
+        if (r.DocsSigned) auto.DocsSignedDate = r.DocsSigned
+        const inv = await query(
+          `SELECT TOP 1 invoiceNumber, createdAt, submittedDate
+             FROM tbl_Invoices WHERE ${jobKey('jobNumber')} = @jk
+            ORDER BY createdAt DESC`, jk)
+        const subm = await query(
+          `SELECT MAX(submittedDate) AS S FROM tbl_Invoices WHERE ${jobKey('jobNumber')} = @jk`, jk)
+        if (inv.recordset[0]) {
+          auto.DraftInvoicedDate   = inv.recordset[0].createdAt
+          auto.DraftInvoiceNumber  = inv.recordset[0].invoiceNumber
+        }
+        if (subm.recordset[0] && subm.recordset[0].S) auto.SubmittedToBillingDate = subm.recordset[0].S
+      } catch (e) { context.log.warn('Job lifecycle derivation skipped:', e.message) }
+      Object.assign(job, auto)
+      job.AutoFields = ['FirstDtDate','LastRtDate','DocsSignedDate','SubmittedToBillingDate',
+                        'DraftInvoicedDate','DraftInvoiceNumber','SesSubmittedDate','SesNumber','FinalInvoicedDate']
+      return jsonResponse(context, 200, job)
     } catch (err) {
       context.log.error(err)
       return jsonResponse(context, 500, { error: 'Failed to load job' })
@@ -315,6 +348,11 @@ module.exports = safe(async function (context, req) {
         [{ name: 'id', type: sql.NVarChar, value: jobId }])
       if (!cur.recordset.length) return jsonResponse(context, 404, { error: 'Job not found' })
       const row = cur.recordset[0]
+      // Filled by the system from tickets and invoices: whatever the screen
+      // sends for them is ignored, so a stale copy can never overwrite them.
+      for (const k of ['FirstDtDate','LastRtDate','DocsSignedDate','SubmittedToBillingDate',
+                       'DraftInvoicedDate','DraftInvoiceNumber','SesSubmittedDate','SesNumber','FinalInvoicedDate'])
+        delete b[k]
       for (const k of ['Client','Rig','Well','Contract','PONumber','ClientRef','ERPRef','ServiceType',
                        'HoleSection','Status','InvoicingType','Currency','FiscalYear','MobDate','DemobDate',
                        'Notes','FirstDtDate','LastRtDate','DocsSignedDate','SubmittedToBillingDate',
@@ -323,6 +361,9 @@ module.exports = safe(async function (context, req) {
                        'NetInvoiceAmount','NetSubcontract']) {
         if (!(k in b)) b[k] = row[k]
       }
+      // Entering the legal invoice number is what finalises the invoice.
+      if (String(b.LegalInvoiceNumber || '').trim() && !row.FinalInvoicedDate)
+        b.FinalInvoicedDate = new Date()
       await query(
         `UPDATE tbl_Jobs SET
            Client = @client, Rig = @rig, Well = @well,

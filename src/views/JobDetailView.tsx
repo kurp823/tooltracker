@@ -2165,6 +2165,15 @@ function TechnicalTab({
              onChange={f(field)} disabled={!canEdit} />
     </React.Fragment>
   )
+  // Set by the system from the tickets and invoices: shown, never typed.
+  const auto = (field: keyof Job, label: string, kind: 'date' | 'text') => (
+    <React.Fragment key={String(field)}>
+      <span className="field-label">{label}</span>
+      <input type={kind === 'date' ? 'date' : 'text'} className="field-input bg-gray-50 text-gray-600"
+             value={kind === 'date' ? toDateInput(form[field] as string) : String(form[field] ?? '')}
+             readOnly disabled title="Filled in automatically from the job's tickets and invoices" />
+    </React.Fragment>
+  )
   const money = (field: keyof Job, label: string) => (
     <React.Fragment key={String(field)}>
       <span className="field-label">{label}</span>
@@ -2196,15 +2205,15 @@ function TechnicalTab({
           Job Lifecycle
         </div>
         <div className={grid}>
-          {date('FirstDtDate', 'First DT')}
-          {date('LastRtDate', 'Last RT')}
-          {date('DocsSignedDate', 'Docs Signed')}
-          {date('SubmittedToBillingDate', 'To Billing')}
-          {date('DraftInvoicedDate', 'Draft Invoiced')}
-          {txt('DraftInvoiceNumber', 'Draft Inv No')}
-          {date('SesSubmittedDate', 'SES Submitted')}
-          {txt('SesNumber', 'SES No')}
-          {date('FinalInvoicedDate', 'Final Invoiced')}
+          {auto('FirstDtDate', 'First DT', 'date')}
+          {auto('LastRtDate', 'Last RT', 'date')}
+          {auto('DocsSignedDate', 'Docs Signed', 'date')}
+          {auto('SubmittedToBillingDate', 'To Billing', 'date')}
+          {auto('DraftInvoicedDate', 'Draft Invoiced', 'date')}
+          {auto('DraftInvoiceNumber', 'Draft Inv No', 'text')}
+          {auto('SesSubmittedDate', 'SES Submitted', 'date')}
+          {auto('SesNumber', 'SES No', 'text')}
+          {auto('FinalInvoicedDate', 'Final Invoiced', 'date')}
           {txt('LegalInvoiceNumber', 'Legal Inv No')}
           {date('InvoiceDate', 'Invoice Date')}
         </div>
