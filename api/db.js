@@ -181,7 +181,16 @@ function jobKeyOf(value) {
 function safe(handler) {
   return async function (context, req) {
     try {
-      return await handler(context, req)
+      const out = await handler(context, req)
+      // A handler that finishes without setting a response is answered by the
+      // Functions host as an empty HTTP 200, which the screens read as success
+      // while nothing was saved (seen on POST /inspections and on a repeated
+      // POST /utilization). Make that visible instead.
+      if (!context.res) {
+        context.log.error(`[${context.executionContext && context.executionContext.functionName}] finished without a response (${req.method})`)
+        jsonResponse(context, 500, { error: 'Server error', detail: 'The request finished without a response' })
+      }
+      return out
     } catch (err) {
       context.log.error(`[${context.executionContext && context.executionContext.functionName}] unhandled:`, err)
       if (!context.res || !context.res.status || context.res.status < 400) {
