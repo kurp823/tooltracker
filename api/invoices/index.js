@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, safe } = require('../db')
+const { query, jsonResponse, requireAuth, safe, jobKey, jobKeyOf } = require('../db')
 
 // Real tbl_Invoices columns (confirmed via INFORMATION_SCHEMA):
 //   id, invoiceNumber, invoiceType, clientCode, contract, jobNumber, rig,
@@ -17,6 +17,25 @@ const { query, jsonResponse, requireAuth, safe } = require('../db')
 // same pattern as Delivery/Receiving Tickets. No DueDate/FiscalYear
 // columns — those come back null/derived. SQL aliases output back to the
 // PascalCase names the frontend already expects.)
+
+// Subtotal / VAT / total from the lines. One place, so adding, deleting and
+// generating lines all leave the invoice header consistent (the old code only
+// updated totalAmount and left subtotal and VAT at 0).
+async function recalcTotals(invoiceId) {
+  await query(
+    `UPDATE tbl_Invoices
+        SET subtotal    = x.sub,
+            vatAmount   = ROUND(x.sub * ISNULL(vatPercent,0) / 100.0, 2),
+            totalAmount = x.sub + ROUND(x.sub * ISNULL(vatPercent,0) / 100.0, 2),
+            updatedAt   = GETDATE()
+       FROM tbl_Invoices
+       CROSS APPLY (SELECT COALESCE(SUM(lineTotal),0) AS sub
+                      FROM tbl_InvoiceLines l
+                     WHERE l.invoiceNumber = tbl_Invoices.invoiceNumber) x
+      WHERE tbl_Invoices.id = @id`,
+    [{ name: 'id', value: Number(invoiceId) }]
+  )
+}
 
 module.exports = safe(async function (context, req) {
   const user   = requireAuth(context, req)
@@ -71,13 +90,7 @@ module.exports = safe(async function (context, req) {
         ]
       )
 
-      // Recalculate TotalAmount
-      await query(
-        `UPDATE tbl_Invoices
-            SET totalAmount = (SELECT COALESCE(SUM(lineTotal),0) FROM tbl_InvoiceLines WHERE invoiceNumber = tbl_Invoices.invoiceNumber)
-          WHERE id = @id`,
-        [{ name: 'id', value: Number(id) }]
-      )
+      await recalcTotals(id)
 
       return jsonResponse(context, 201, { LineID: r.recordset[0].id })
     }
@@ -87,14 +100,90 @@ module.exports = safe(async function (context, req) {
         return jsonResponse(context, 403, { error: 'Forbidden' })
       await query('DELETE FROM tbl_InvoiceLines WHERE id = @lid',
         [{ name: 'lid', value: Number(subId) }])
-      await query(
-        `UPDATE tbl_Invoices
-            SET totalAmount = (SELECT COALESCE(SUM(lineTotal),0) FROM tbl_InvoiceLines WHERE invoiceNumber = tbl_Invoices.invoiceNumber)
-          WHERE id = @id`,
-        [{ name: 'id', value: Number(id) }]
-      )
+      await recalcTotals(id)
       return jsonResponse(context, 200, { ok: true })
     }
+  }
+
+  // ── POST /invoices/{id}/generate ─────────────────────────────────────────
+  // Builds the invoice lines from the days actually marked on the utilization
+  // grid for this job inside the invoice period: one line per tool per
+  // delivery ticket, operating and standby days priced at the rate stamped on
+  // each day. Replaces the lines of a Draft invoice. Days with no rate are
+  // counted and reported, never silently billed at zero.
+  if (id && sub === 'generate' && method === 'POST') {
+    if (!['Admin','Billing','Finance'].includes(user.Role))
+      return jsonResponse(context, 403, { error: 'Forbidden' })
+
+    const h = await query(
+      `SELECT invoiceNumber, jobNumber, periodFrom, periodTo, status
+         FROM tbl_Invoices WHERE id = @id`, [{ name: 'id', value: Number(id) }])
+    const inv = h.recordset[0]
+    if (!inv) return jsonResponse(context, 404, { error: 'Not found' })
+    if (String(inv.status || '').toLowerCase() !== 'draft')
+      return jsonResponse(context, 409, { error: 'Lines can only be generated on a Draft invoice' })
+    if (!inv.periodFrom || !inv.periodTo)
+      return jsonResponse(context, 400, { error: 'Set the invoice period (from / to) first' })
+
+    const g = await query(
+      `SELECT d.ToolSerial, d.DTNumber,
+              MAX(i.AssetNo)   AS AssetNo,
+              MAX(i.ShortDesc) AS ShortDesc,
+              SUM(CASE WHEN d.StatusType = '1' THEN 1 ELSE 0 END) AS OpsDays,
+              SUM(CASE WHEN d.StatusType = 'S' THEN 1 ELSE 0 END) AS StandbyDays,
+              SUM(CASE WHEN d.StatusType = '1' THEN ISNULL(d.RateCharged,0) ELSE 0 END) AS OpsAmount,
+              SUM(CASE WHEN d.StatusType = 'S' THEN ISNULL(d.RateCharged,0) ELSE 0 END) AS StandbyAmount,
+              SUM(CASE WHEN d.RateCharged IS NULL THEN 1 ELSE 0 END) AS Unpriced
+         FROM tbl_DailyFieldLogs d
+         LEFT JOIN tbl_Inventory i ON i.SystemID = d.ToolSerial
+        WHERE ${jobKey('d.JobID')} = @jk
+          AND d.LogDate >= @pf AND d.LogDate < DATEADD(day, 1, @pt)
+          AND d.StatusType IN ('1','S')
+        GROUP BY d.ToolSerial, d.DTNumber
+        ORDER BY MAX(i.ShortDesc), MAX(i.AssetNo)`,
+      [
+        { name: 'jk', value: jobKeyOf(inv.jobNumber) },
+        { name: 'pf', value: inv.periodFrom },
+        { name: 'pt', value: inv.periodTo },
+      ]
+    )
+    if (!g.recordset.length)
+      return jsonResponse(context, 404, { error: 'No utilization days are marked for this job in the invoice period' })
+
+    await query('DELETE FROM tbl_InvoiceLines WHERE invoiceNumber = @n',
+      [{ name: 'n', value: inv.invoiceNumber }])
+
+    let unpriced = 0
+    let n = 0
+    for (const r of g.recordset) {
+      n++
+      const ops = Number(r.OpsDays), sb = Number(r.StandbyDays)
+      const opsAmt = Number(r.OpsAmount), sbAmt = Number(r.StandbyAmount)
+      unpriced += Number(r.Unpriced)
+      await query(
+        `INSERT INTO tbl_InvoiceLines
+           (invoiceNumber, jobNumber, lineItemRef, serial, toolDescription,
+            opsDays, standbyDays, opsRate, standbyRate, opsAmount, standbyAmount, lineTotal, remarks)
+         VALUES (@n, @job, @ref, @serial, @desc, @od, @sd, @orate, @srate, @oamt, @samt, @tot, @rem)`,
+        [
+          { name: 'n',     value: inv.invoiceNumber },
+          { name: 'job',   value: inv.jobNumber },
+          { name: 'ref',   value: String(n) },
+          { name: 'serial',value: r.AssetNo || r.ToolSerial },
+          { name: 'desc',  value: r.ShortDesc || null },
+          { name: 'od',    value: ops },
+          { name: 'sd',    value: sb },
+          { name: 'orate', value: ops ? Math.round(opsAmt / ops * 100) / 100 : null },
+          { name: 'srate', value: sb  ? Math.round(sbAmt  / sb  * 100) / 100 : null },
+          { name: 'oamt',  value: opsAmt },
+          { name: 'samt',  value: sbAmt },
+          { name: 'tot',   value: opsAmt + sbAmt },
+          { name: 'rem',   value: [r.DTNumber, Number(r.Unpriced) ? `${r.Unpriced} day(s) have no rate` : null].filter(Boolean).join(' · ') || null },
+        ]
+      )
+    }
+    await recalcTotals(id)
+    return jsonResponse(context, 200, { lines: n, unpricedDays: unpriced })
   }
 
   // ── GET list ─────────────────────────────────────────────────────────────
