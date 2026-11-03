@@ -219,7 +219,11 @@ module.exports = safe(async function (context, req) {
               i.AssetNo   AS AssetNo,
               i.ShortDesc AS ToolDescription,
               i.IsEmdad   AS IsEmdad,
-              COALESCE(NULLIF(i.Supplier, ''), NULLIF(i.Ownership, '')) AS Supplier,
+              CASE WHEN NULLIF(LTRIM(RTRIM(i.Ownership)), '') IS NOT NULL AND UPPER(LTRIM(RTRIM(i.Ownership))) NOT IN ('RENTED','EMDAD')
+                           THEN LTRIM(RTRIM(i.Ownership))
+                           WHEN NULLIF(LTRIM(RTRIM(i.Supplier)), '') IS NOT NULL AND UPPER(LTRIM(RTRIM(i.Supplier))) <> 'EMDAD'
+                           THEN LTRIM(RTRIM(i.Supplier))
+                           ELSE 'Unknown supplier' END AS Supplier,
               ri.id       AS HireID,
               ri.dayRate  AS HireRate,
               ri.currency AS HireCurrency

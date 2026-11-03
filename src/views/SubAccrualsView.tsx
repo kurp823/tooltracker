@@ -61,11 +61,15 @@ export function SubAccrualsView() {
   const { data, isLoading, error, refetch } = useFetch<Row[]>('/sub-accruals')
   const [stage, setStage] = useState<string>('All')
   const [supplier, setSupplier] = useState('All')
+  const [year, setYear] = useState('All')
   const [search, setSearch] = useState('')
   const [edit, setEdit] = useState<Row | null>(null)
 
   const rows = data || []
   const suppliers = useMemo(() => Array.from(new Set(rows.map(r => r.supplierName))).sort(), [rows])
+
+  const yearOf = (r: Row) => { const y = String(r.lastDay || '').slice(0, 4); return y && y !== '1900' ? y : 'Undated' }
+  const years = useMemo(() => Array.from(new Set(rows.map(yearOf))).sort().reverse(), [rows])
 
   const counts = useMemo(() => {
     const c: Record<string, { n: number; value: Record<string, number> }> = {}
@@ -89,8 +93,9 @@ export function SubAccrualsView() {
     return rows.filter(r =>
       (stage === 'All' || r.stage === stage) &&
       (supplier === 'All' || r.supplierName === supplier) &&
+      (year === 'All' || yearOf(r) === year) &&
       (!q || [r.supplierName, r.jobId, r.client, r.poNumber, r.invoiceNo, r.rig].some(x => String(x ?? '').toLowerCase().includes(q))))
-  }, [rows, stage, supplier, search])
+  }, [rows, stage, supplier, year, search])
 
   const { scrollRef, visible, page, pageCount, setPage, from, to, total } = usePagedRows(filtered)
 
@@ -144,6 +149,10 @@ export function SubAccrualsView() {
         <select className="field-input w-auto" value={supplier} onChange={e => setSupplier(e.target.value)}>
           <option value="All">All suppliers</option>
           {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select className="field-input w-auto" value={year} onChange={e => setYear(e.target.value)} title="Year the tools last worked">
+          <option value="All">All years</option>
+          {years.map(y => <option key={y} value={y}>Last worked {y}</option>)}
         </select>
         <button className="btn-mini" onClick={refetch} title="Refresh"><RefreshCw size={12} /></button>
         <span className="text-[12px] text-slate-600 ml-1"><strong className="text-slate-900">{filtered.length.toLocaleString()}</strong> supplier/job lines</span>

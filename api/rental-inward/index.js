@@ -347,7 +347,11 @@ module.exports = safe(async function (context, req) {
 
       const inv = await query(
         `SELECT TOP 1 SystemID, AssetNo, Size, ShortDesc, OEMSerial,
-                COALESCE(NULLIF(Supplier, ''), NULLIF(Ownership, '')) AS supplier
+                CASE WHEN NULLIF(LTRIM(RTRIM(tbl_Inventory.Ownership)), '') IS NOT NULL AND UPPER(LTRIM(RTRIM(tbl_Inventory.Ownership))) NOT IN ('RENTED','EMDAD')
+                           THEN LTRIM(RTRIM(tbl_Inventory.Ownership))
+                           WHEN NULLIF(LTRIM(RTRIM(tbl_Inventory.Supplier)), '') IS NOT NULL AND UPPER(LTRIM(RTRIM(tbl_Inventory.Supplier))) <> 'EMDAD'
+                           THEN LTRIM(RTRIM(tbl_Inventory.Supplier))
+                           ELSE 'Unknown supplier' END AS supplier
            FROM tbl_Inventory WHERE SystemID = @t OR AssetNo = @t`,
         [{ name: 't', type: sql.NVarChar, value: tool }])
       const i = inv.recordset[0]
