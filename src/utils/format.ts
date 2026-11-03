@@ -74,6 +74,19 @@ export function statusBadgeClass(status: string): string {
   return 'bg-gray-100 text-gray-600'
 }
 
+/** Colour for a billing status, so the pipeline reads at a glance:
+ *  amber = waiting on us, blue = waiting on the client, green = done. */
+export function billingStatusClass(status: string | null | undefined): string {
+  const s = (status || '').toLowerCase()
+  if (!s) return 'text-gray-400'
+  if (s.includes('final'))    return 'status-completed'
+  if (s.includes('approval')) return 'status-open'
+  if (s.includes('ses'))      return 'status-open'
+  if (s.includes('hold'))     return 'status-cancelled'
+  if (s.includes('draft') || s.includes('billing')) return 'status-draft'
+  return 'bg-gray-100 text-gray-600'
+}
+
 export function toDateInput(val: string | null | undefined): string {
   if (!val) return ''
   try {

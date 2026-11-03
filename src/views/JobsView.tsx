@@ -3,7 +3,7 @@ import { usePagedRows, Pager } from '../components/usePagedRows'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Search, Filter, RefreshCw } from 'lucide-react'
 import { useFetch } from '../hooks/useFetch'
-import { formatDate, statusBadgeClass } from '../utils/format'
+import { formatDate, statusBadgeClass, billingStatusClass } from '../utils/format'
 import { PageLoader } from '../components/Spinner'
 import { useAuth } from '../contexts/AuthContext'
 import type { Job, JobStatus } from '../types'
@@ -134,13 +134,14 @@ export function JobsView() {
               <th className="table-th">End</th>
               <th className="table-th !text-right">Job Value</th>
               <th className="table-th">Invoice No</th>
+              <th className="table-th">Billing</th>
               <th className="table-th pin-r">Status</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={12} className="table-td text-center text-gray-400 py-10">
+                <td colSpan={13} className="table-td text-center text-gray-400 py-10">
                   {search || statusFilter !== 'All' ? 'No jobs match your filters' : 'No jobs found'}
                 </td>
               </tr>
@@ -170,6 +171,11 @@ export function JobsView() {
                       : null}</V>
                   </td>
                   <td className="table-td text-gray-500 font-mono"><V>{job.LegalInvoiceNumber}</V></td>
+                  <td className="table-td">
+                    {job.BillingStatus
+                      ? <span className={`badge ${billingStatusClass(job.BillingStatus)}`}>{job.BillingStatus}</span>
+                      : <span className="table-empty">—</span>}
+                  </td>
                   <td className="table-td pin-r">
                     <span className={`badge ${statusBadgeClass(job.Status)}`}>
                       {job.Status}
