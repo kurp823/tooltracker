@@ -783,6 +783,39 @@ const MIGRATIONS = [
       IF COL_LENGTH('dbo.tbl_RentalInward', 'receiptRef') IS NULL
         ALTER TABLE dbo.tbl_RentalInward ADD [receiptRef] nvarchar(40) NULL;`,
   },
+
+  /*
+   * Gate Pass redesign — add Direction, Purpose, Status, and LinkedGatePassID
+   * to tbl_GatePass, plus OriginalSupplier on tbl_GatePassLines.
+   *
+   * Direction: 'Outward' or 'Inward'
+   * Purpose:   'Repair' / 'Return to Supplier' / 'Other'
+   * Status:    'Draft' / 'Released' / 'Closed'
+   * LinkedGatePassID: for Inward GPs, the outward GP they're receiving from
+   * OriginalSupplier: the supplier the tool was registered under in inventory
+   */
+  {
+    name: 'seed:gate-pass-columns',
+    sql: `
+      IF COL_LENGTH('dbo.tbl_GatePass', 'Direction') IS NULL
+        ALTER TABLE dbo.tbl_GatePass ADD [Direction] varchar(10) NULL;
+
+      IF COL_LENGTH('dbo.tbl_GatePass', 'Purpose') IS NULL
+        ALTER TABLE dbo.tbl_GatePass ADD [Purpose] varchar(30) NULL;
+
+      IF COL_LENGTH('dbo.tbl_GatePass', 'Status') IS NULL
+        ALTER TABLE dbo.tbl_GatePass ADD [Status] varchar(20) NULL;
+
+      IF COL_LENGTH('dbo.tbl_GatePass', 'LinkedGatePassID') IS NULL
+        ALTER TABLE dbo.tbl_GatePass ADD [LinkedGatePassID] varchar(20) NULL;
+
+      IF COL_LENGTH('dbo.tbl_GatePassLines', 'OriginalSupplier') IS NULL
+        ALTER TABLE dbo.tbl_GatePassLines ADD [OriginalSupplier] varchar(100) NULL;
+
+      -- Default existing rows to Outward / Draft
+      UPDATE dbo.tbl_GatePass SET Direction = 'Outward' WHERE Direction IS NULL;
+      UPDATE dbo.tbl_GatePass SET Status    = 'Draft'   WHERE Status    IS NULL;`,
+  },
 ]
 
 module.exports = async function (context, req) {
