@@ -1,5 +1,6 @@
 'use strict'
 const { query, jsonResponse, requireAuth, safe } = require('../db')
+const { ensureListSeeds } = require('../list-seeds')
 
 /**
  * Dropdown values, held in the database so a user can add one without a
@@ -57,6 +58,7 @@ module.exports = safe(async function (context, req) {
 
   // ── GET ──────────────────────────────────────────────────────────────────
   if (method === 'GET') {
+    await ensureListSeeds()
     // `id` here is a list NAME, not a number - /api/lists/JobStatus
     const r = await query(
       `SELECT ListID, ListName, Value, Label, SortOrder, ActiveFlag,

@@ -164,9 +164,7 @@ function CreateInvoiceModal({
               <label className="label">Currency</label>
               <select className="input w-full" value={form.Currency}
                       onChange={e => set('Currency', e.target.value)}>
-                <option value="USD">USD</option>
-                <option value="AED">AED</option>
-                <option value="EUR">EUR</option>
+                <ListOptions name="Currency" current={form.Currency} />
               </select>
             </div>
             <div>
@@ -427,9 +425,7 @@ function InvoiceDetailPanel({
         {canEdit ? (
           <select className="field-input" value={form.Currency}
                   onChange={e => set('Currency', e.target.value)}>
-            <option value="USD">USD</option>
-            <option value="AED">AED</option>
-            <option value="EUR">EUR</option>
+            <ListOptions name="Currency" current={form.Currency} />
           </select>
         ) : (
           <div className="field-value">{inv.Currency || 'USD'}</div>
