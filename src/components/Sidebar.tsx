@@ -189,15 +189,6 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
 
   return (
     <aside className={`${collapsed ? 'w-0 border-r-0' : 'w-[236px] border-r'} shrink-0 overflow-hidden transition-[width] duration-150 bg-navy-900 flex flex-col border-navy-950`}>
-      {/* Brand — one compact row; the strap lines cost 100px and said nothing. */}
-      <div className="px-3 h-[46px] border-b border-navy-800 flex items-center gap-2.5">
-        <div className="w-7 h-7 rounded bg-white flex items-center justify-center shrink-0">
-          <Package size={16} className="text-brand-700" />
-        </div>
-        <div className="min-w-0"><div className="text-white font-bold text-[13px] leading-tight truncate">EMDAD LLC</div><div className="text-[9.5px] uppercase tracking-[0.12em] text-accent-500 leading-tight">Operations Platform</div></div>
-        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0" title="Operations Platform" />
-      </div>
-
       {/* Modules */}
       <nav className="flex-1 min-h-0 overflow-y-auto px-2 py-2 dark-scroll">
         {MODULES.map(m => <Module key={m.module} mod={m} />)}
