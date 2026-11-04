@@ -301,7 +301,7 @@ function InvoiceDetailPanel({
   })
   const [dirty,  setDirty]  = useState(false)
   const [showTax, setShowTax] = useState(false)
-  const isOnshore = /onshore/i.test(inv.Client || '')
+  const isOnshore = /adnoc|onshore/i.test(inv.Client || '')
   const [saving, setSaving] = useState(false)
 
   const set = (k: string, v: string) => { setForm(f => ({ ...f, [k]: v })); setDirty(true) }
