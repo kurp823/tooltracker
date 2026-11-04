@@ -53,6 +53,18 @@ module.exports = safe(async function (context, req) {
   }
 
   // ── one row per job ──────────────────────────────────────────────────────
+  // Jobs worked before the rate engine have days but no money on the utilization grid. For those the
+  // monthly report's own figures stand in: job value (revenue) and closing cost accrual (sub-contract)
+  // from the latest month the job appears in. The row says which source it used.
+  const hasAct = (await query(`SELECT OBJECT_ID('dbo.tbl_ActualJobs') AS o`, [])).recordset[0].o != null
+  const actCte = hasAct
+    ? `act AS (SELECT k, jobId, client, rig, period, jobValue, closingCost FROM (
+         SELECT ${jobKey('jobNumber')} AS k, jobNumber AS jobId, client, rig, period, jobValue, closingCost,
+                ROW_NUMBER() OVER (PARTITION BY ${jobKey('jobNumber')} ORDER BY period DESC) AS rn
+           FROM tbl_ActualJobs) z WHERE rn = 1)`
+    : `act AS (SELECT CAST(NULL AS nvarchar(60)) AS k, CAST(NULL AS nvarchar(60)) AS jobId, CAST(NULL AS nvarchar(120)) AS client,
+                      CAST(NULL AS nvarchar(60)) AS rig, CAST(NULL AS char(7)) AS period, CAST(NULL AS decimal(18,2)) AS jobValue,
+                      CAST(NULL AS decimal(18,2)) AS closingCost WHERE 1 = 0)`
   const r = await query(
     `WITH rev AS (
        SELECT ${jobKey('JobID')} AS k, MAX(JobID) AS jobId,
@@ -78,6 +90,7 @@ module.exports = safe(async function (context, req) {
              LEFT JOIN tbl_SubContractLines l ON l.jobId = t.jobId AND l.toolSerial = t.tool
              ${sheetApply('t.supplier', 't.category', 't.size', 't.contract')}
          ) x GROUP BY ${jobKey('x.jobId')}),
+     ${actCte},
      mnt AS (
        SELECT ${jobKey('jobNumber')} AS k, SUM(ISNULL(cost,0)) AS cost
          FROM tbl_MaintenanceJobs WHERE NULLIF(LTRIM(RTRIM(jobNumber)),'') IS NOT NULL GROUP BY ${jobKey('jobNumber')}),
