@@ -47,6 +47,32 @@ module.exports = safe(async function (context, req) {
   const subId  = context.bindingData.subId
   const method = req.method.toUpperCase()
 
+  // ── /invoices/profile ── company details printed on the tax invoice ─────
+  // Key/value rows in tbl_AppSettings (created on first use). Anyone signed in
+  // can read them; only Admin can change them.
+  if (id === 'profile') {
+    await query(`IF OBJECT_ID('tbl_AppSettings') IS NULL
+                   CREATE TABLE tbl_AppSettings (settingKey NVARCHAR(100) PRIMARY KEY, settingValue NVARCHAR(1000) NULL, updatedAt DATETIME NULL, updatedBy NVARCHAR(100) NULL)`, [])
+    if (method === 'GET') {
+      const r = await query(`SELECT settingKey, settingValue FROM tbl_AppSettings WHERE settingKey LIKE 'invoice.%'`, [])
+      const out = {}
+      for (const x of r.recordset) out[x.settingKey.replace('invoice.', '')] = x.settingValue
+      return jsonResponse(context, 200, out)
+    }
+    if (method === 'PUT') {
+      if (user.Role !== 'Admin') return jsonResponse(context, 403, { error: 'Admin only' })
+      const allowed = ['companyName','companyAddress','trn','bankName','bankBranch','accountName','accountNo','iban','swift','paymentTerms','icvPercent','vatPercent','aedRate','preparedBy','authorisedBy']
+      for (const k of allowed) {
+        if (req.body[k] === undefined) continue
+        await query(`MERGE tbl_AppSettings AS t USING (SELECT @k AS k) s ON t.settingKey = s.k
+                     WHEN MATCHED THEN UPDATE SET settingValue=@v, updatedAt=GETDATE(), updatedBy=@u
+                     WHEN NOT MATCHED THEN INSERT (settingKey, settingValue, updatedAt, updatedBy) VALUES (@k,@v,GETDATE(),@u);`,
+          [{ name: 'k', value: 'invoice.' + k }, { name: 'v', value: String(req.body[k] ?? '') }, { name: 'u', value: user.Username }])
+      }
+      return jsonResponse(context, 200, { ok: true })
+    }
+  }
+
   // ── /invoices/{id}/lines ─────────────────────────────────────────────────
   // `id` here is the invoice's numeric id — lines are keyed by invoiceNumber.
   if (id && sub === 'lines') {
@@ -56,7 +82,10 @@ module.exports = safe(async function (context, req) {
                 l.serial AS SerialNumber, NULL AS AssetNo, l.toolDescription AS ToolDescription,
                 (ISNULL(l.standbyDays,0) + ISNULL(l.opsDays,0)) AS Quantity,
                 COALESCE(l.opsRate, l.standbyRate) AS UnitRate,
-                l.lineTotal AS LineAmount, l.remarks AS Notes
+                l.lineTotal AS LineAmount, l.remarks AS Notes,
+                ISNULL(l.opsDays,0) AS OpsDays, ISNULL(l.standbyDays,0) AS StandbyDays,
+                l.opsRate AS OpsRate, l.standbyRate AS StandbyRate,
+                ISNULL(l.opsAmount,0) AS OpsAmount, ISNULL(l.standbyAmount,0) AS StandbyAmount
            FROM tbl_InvoiceLines l
           WHERE l.invoiceNumber = (SELECT invoiceNumber FROM tbl_Invoices WHERE id = @id)
           ORDER BY l.id`,
@@ -300,6 +329,7 @@ module.exports = safe(async function (context, req) {
               i.vatAmount AS VatAmount, i.totalAmount AS TotalAmount, i.status AS Status,
               YEAR(i.invoiceDate) AS FiscalYear, i.notes AS Notes,
               i.createdAt AS CreatedDate, i.createdBy AS CreatedBy,
+              i.legalInvoiceNumber AS LegalInvoiceNumber, i.legalInvoiceDate AS LegalInvoiceDate,
               c.clientName AS Client
          FROM tbl_Invoices i
          LEFT JOIN tbl_Clients c ON i.clientCode = c.clientCode
