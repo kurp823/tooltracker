@@ -149,6 +149,157 @@ async function glRange(fromP, toP, rate) {
   return { rev, cost, warnCurrencies: [...warn], unpricedTools: unpriced }
 }
 
+// ── FY matrix (months across) and cell drill-down ──────────────────────────
+async function rateAed() {
+  const rs = await query(`SELECT settingValue FROM tbl_AppSettings WHERE settingKey='invoice.aedRate'`, [])
+  return Number(rs.recordset[0]?.settingValue) || 3.6725
+}
+const aedOf = (rate, cur, v) => {
+  const c = String(cur || 'USD').toUpperCase()
+  return c === 'AED' ? Number(v) : c === 'USD' ? Number(v) * rate : null
+}
+let budReady = null
+function ensureBudget() {
+  if (!budReady) budReady = query(`IF OBJECT_ID('dbo.tbl_MonthlyBudget') IS NULL
+      CREATE TABLE dbo.tbl_MonthlyBudget (period char(7) NOT NULL PRIMARY KEY, amountAed decimal(18,2) NOT NULL,
+        updatedBy nvarchar(100) NULL, updatedAt datetime NULL)`, []).catch(e => { budReady = null; throw e })
+  return budReady
+}
+
+// One row per hired-in tool, job and month: that month's share of the tool's cost.
+async function subMonthRows(fromD, toD, ymFrom, ymTo) {
+  const r = await query(
+    `SELECT m.ym, x.jobId, x.tool, x.supplier, x.stype, x.days, m.md AS mdays,
+            ${amountSql('x.days')} AS amount, COALESCE(l.currency, sh.sheetCurrency, x.jcur, 'USD') AS cur
+       FROM (
+         SELECT d.JobID AS jobId, d.ToolSerial AS tool, COUNT(*) AS days,
+                ${ownerSql('i')} AS supplier, i.ShortDesc AS category, i.Size AS size, j.Contract AS contract,
+                MAX(j.ServiceType) AS stype, MAX(j.Currency) AS jcur
+           FROM tbl_DailyFieldLogs d
+           JOIN tbl_Inventory i ON i.SystemID = d.ToolSerial AND i.IsEmdad = 0
+            AND NOT (UPPER(COALESCE(i.Ownership, '')) = 'EMDAD' AND UPPER(COALESCE(i.Supplier, '')) IN ('EMDAD', ''))
+           LEFT JOIN tbl_Jobs j ON j.JobID = d.JobID
+          WHERE d.StatusType IN ('1','S')
+          GROUP BY d.JobID, d.ToolSerial, i.Ownership, i.Supplier, i.ShortDesc, i.Size, j.Contract
+       ) x
+       JOIN (
+         SELECT d.JobID AS jobId, d.ToolSerial AS tool, CONVERT(char(7), d.LogDate, 126) AS ym, COUNT(*) AS md
+           FROM tbl_DailyFieldLogs d
+          WHERE d.StatusType IN ('1','S') AND d.LogDate >= @fromD AND d.LogDate < @toD
+          GROUP BY d.JobID, d.ToolSerial, CONVERT(char(7), d.LogDate, 126)
+       ) m ON m.jobId = x.jobId AND m.tool = x.tool
+       LEFT JOIN tbl_SubContractLines l ON l.jobId = x.jobId AND l.toolSerial = x.tool
+       ${sheetApply('x.supplier', 'x.category', 'x.size', 'x.contract')}`,
+    [{ name: 'fromD', type: sql.Date, value: new Date(fromD) }, { name: 'toD', type: sql.Date, value: new Date(toD) }])
+  return r.recordset
+}
+
+async function glYear(year) {
+  const rate = await rateAed()
+  const fromD = `${year}-01-01`, toD = `${Number(year) + 1}-01-01`
+  const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`)
+  const idx = ym => months.indexOf(ym)
+  const revenue = Array(12).fill(0), lines = {}, warn = new Set()
+  let unpriced = 0
+  const put = (gl, ym, cur, v) => {
+    const i = idx(ym); if (i < 0) return
+    const a = aedOf(rate, cur, v); if (a == null) { warn.add(cur); return }
+    lines[gl] = lines[gl] || Array(12).fill(0); lines[gl][i] += a
+  }
+  const P = [{ name: 'fromD', type: sql.Date, value: new Date(fromD) }, { name: 'toD', type: sql.Date, value: new Date(toD) }]
+
+  const rv = await query(
+    `SELECT CONVERT(char(7), d.LogDate, 126) AS ym, COALESCE(NULLIF(LTRIM(RTRIM(j.Currency)),''),'USD') AS cur, SUM(ISNULL(d.RateCharged,0)) AS amt
+       FROM tbl_DailyFieldLogs d LEFT JOIN tbl_Jobs j ON j.JobID = d.JobID
+      WHERE d.StatusType IN ('1','S') AND d.LogDate >= @fromD AND d.LogDate < @toD
+      GROUP BY CONVERT(char(7), d.LogDate, 126), COALESCE(NULLIF(LTRIM(RTRIM(j.Currency)),''),'USD')`, P)
+  for (const r of rv.recordset) { const a = aedOf(rate, r.cur, r.amt); if (a == null) warn.add(r.cur); else if (idx(r.ym) >= 0) revenue[idx(r.ym)] += a }
+
+  for (const r of await subMonthRows(fromD, toD)) {
+    if (r.amount == null) { unpriced++; continue }
+    put(SUB_GL, r.ym, r.cur, Number(r.amount) * Number(r.mdays) / Number(r.days))
+  }
+  const mt = await query(
+    `SELECT CONVERT(char(7), COALESCE(m.completedDate, m.dateIn), 126) AS ym,
+            COALESCE(NULLIF(LTRIM(RTRIM(j.Currency)),''),'USD') AS cur, SUM(ISNULL(m.cost,0)) AS amt
+       FROM tbl_MaintenanceJobs m LEFT JOIN tbl_Jobs j ON ${jobKey('j.JobID')} = ${jobKey('m.jobNumber')}
+      WHERE NULLIF(LTRIM(RTRIM(m.jobNumber)),'') IS NOT NULL
+        AND COALESCE(m.completedDate, m.dateIn) >= @fromD AND COALESCE(m.completedDate, m.dateIn) < @toD
+      GROUP BY CONVERT(char(7), COALESCE(m.completedDate, m.dateIn), 126), COALESCE(NULLIF(LTRIM(RTRIM(j.Currency)),''),'USD')`, P)
+  for (const r of mt.recordset) put(MNT_GL, r.ym, r.cur, r.amt)
+  const ex = await query(
+    `SELECT e.period AS ym, e.category AS gl, COALESCE(NULLIF(LTRIM(RTRIM(e.currency)),''),'AED') AS cur, SUM(ISNULL(e.amount,0)) AS amt
+       FROM tbl_MonthlyExpenses e WHERE e.period BETWEEN @a AND @b GROUP BY e.period, e.category,
+            COALESCE(NULLIF(LTRIM(RTRIM(e.currency)),''),'AED')`,
+    [{ name: 'a', type: sql.Char(7), value: months[0] }, { name: 'b', type: sql.Char(7), value: months[11] }])
+  for (const r of ex.recordset) put(r.gl, r.ym, r.cur, r.amt)
+
+  await ensureBudget()
+  const bd = await query(`SELECT period, amountAed FROM tbl_MonthlyBudget WHERE period BETWEEN @a AND @b`,
+    [{ name: 'a', type: sql.Char(7), value: months[0] }, { name: 'b', type: sql.Char(7), value: months[11] }])
+  const budget = Array(12).fill(null)
+  bd.recordset.forEach(r => { if (idx(r.period) >= 0) budget[idx(r.period)] = Number(r.amountAed) })
+
+  const order = await query(`SELECT Value FROM tbl_Lists WHERE ListName='ExpenseCategory' AND ActiveFlag=1 ORDER BY SortOrder, Value`, [])
+  const names = order.recordset.map(r => r.Value)
+  Object.keys(lines).forEach(k => { if (!names.includes(k)) names.push(k) })
+  const outLines = names.map(gl => ({ gl, values: lines[gl] || Array(12).fill(0),
+    source: gl === SUB_GL ? 'Sub-Rental Hub' : gl === MNT_GL ? 'Maintenance orders' : 'Expense grid' }))
+    .filter(l => l.values.some(v => v) || GL_LINES.includes(l.gl))
+  return { year: Number(year), months, rate, revenue, budget, lines: outLines,
+           warnCurrencies: [...warn], unpricedTools: unpriced }
+}
+
+// What sits behind one cell: gl '__REVENUE__' or a GL line, for one month.
+async function glDetail(period, gl) {
+  const rate = await rateAed()
+  const [y, m] = period.split('-').map(Number)
+  const fromD = `${period}-01`, toD = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
+  const P = [{ name: 'fromD', type: sql.Date, value: new Date(fromD) }, { name: 'toD', type: sql.Date, value: new Date(toD) }]
+  const rows = []
+  const push = (o) => { const a = aedOf(rate, o.currency, o.amount); rows.push({ ...o, amountAed: a == null ? null : Math.round(a * 100) / 100 }) }
+
+  if (gl === '__REVENUE__') {
+    const r = await query(
+      `SELECT d.JobID AS ref, MAX(j.Client) AS party, MAX(j.Rig) AS asset, COUNT(*) AS qty,
+              COALESCE(NULLIF(LTRIM(RTRIM(MAX(j.Currency))),''),'USD') AS currency, SUM(ISNULL(d.RateCharged,0)) AS amount
+         FROM tbl_DailyFieldLogs d LEFT JOIN tbl_Jobs j ON j.JobID = d.JobID
+        WHERE d.StatusType IN ('1','S') AND d.LogDate >= @fromD AND d.LogDate < @toD
+        GROUP BY d.JobID HAVING SUM(ISNULL(d.RateCharged,0)) <> 0 ORDER BY SUM(ISNULL(d.RateCharged,0)) DESC`, P)
+    r.recordset.forEach(x => push({ kind: 'Job utilization', ref: x.ref, date: null, party: x.party,
+      description: `${x.qty} day(s) marked on the utilization grid`, asset: x.asset, qty: `${x.qty} days`, currency: x.currency, amount: x.amount }))
+    return { period, gl, rows }
+  }
+  if (gl === SUB_GL) {
+    for (const x of await subMonthRows(fromD, toD)) {
+      push({ kind: 'Sub-contract hire', ref: x.jobId, date: null, party: x.supplier,
+        description: x.amount == null ? 'NO RATE SET – not costed' : `Hire share for ${x.mdays} of ${x.days} day(s)`,
+        asset: x.tool, qty: `${x.mdays} days`, currency: x.cur,
+        amount: x.amount == null ? 0 : Number(x.amount) * Number(x.mdays) / Number(x.days) })
+    }
+  }
+  if (gl === MNT_GL) {
+    const r = await query(
+      `SELECT m.jobCardNumber AS ref, COALESCE(m.completedDate, m.dateIn) AS dt, m.supplierName AS party,
+              CONCAT(m.jobType, ' – ', m.description) AS descr, m.serial AS asset, m.jobNumber AS job,
+              COALESCE(NULLIF(LTRIM(RTRIM(j.Currency)),''),'USD') AS cur, ISNULL(m.cost,0) AS amt
+         FROM tbl_MaintenanceJobs m LEFT JOIN tbl_Jobs j ON ${jobKey('j.JobID')} = ${jobKey('m.jobNumber')}
+        WHERE NULLIF(LTRIM(RTRIM(m.jobNumber)),'') IS NOT NULL
+          AND COALESCE(m.completedDate, m.dateIn) >= @fromD AND COALESCE(m.completedDate, m.dateIn) < @toD
+        ORDER BY m.cost DESC`, P)
+    r.recordset.forEach(x => push({ kind: 'Maintenance order', ref: x.ref, date: x.dt, party: x.party, description: x.descr,
+      asset: [x.asset, x.job].filter(Boolean).join(' · '), qty: '', currency: x.cur, amount: x.amt }))
+  }
+  const ex = await query(
+    `SELECT e.id, e.invoiceRef, e.supplierName, e.jobId, e.notes, e.amount, e.productLine,
+            COALESCE(NULLIF(LTRIM(RTRIM(e.currency)),''),'AED') AS cur
+       FROM tbl_MonthlyExpenses e WHERE e.period = @p AND e.category = @c ORDER BY e.amount DESC`,
+    [{ name: 'p', type: sql.Char(7), value: period }, { name: 'c', type: sql.NVarChar, value: gl }])
+  ex.recordset.forEach(x => push({ kind: 'Expense entry', ref: x.invoiceRef || `EXP-${x.id}`, date: null, party: x.supplierName,
+    description: x.notes || '', asset: x.jobId || x.productLine || 'Overhead', qty: '', currency: x.cur, amount: x.amount }))
+  return { period, gl, rows }
+}
+
 const EDITORS = ['Admin', 'Finance', 'Billing']
 const VIEWERS = ['Admin', 'Finance', 'Billing', 'Operations', 'CostController']
 
@@ -165,6 +316,32 @@ module.exports = safe(async function (context, req) {
   const qs     = req.query || {}
 
   try {
+
+
+    // ── FY matrix, drill-down and budget ───────────────────────────────────
+    if (method === 'GET' && id === 'gl-year') {
+      await ensureLines(); await ensureGl()
+      const y = /^\d{4}$/.test(qs.year || '') ? qs.year : String(new Date().getFullYear())
+      return jsonResponse(context, 200, await glYear(y))
+    }
+    if (method === 'GET' && id === 'gl-detail') {
+      await ensureLines(); await ensureGl()
+      if (!/^\d{4}-\d{2}$/.test(qs.period || '') || !qs.gl) return jsonResponse(context, 400, { error: 'period and gl required' })
+      return jsonResponse(context, 200, await glDetail(qs.period, qs.gl))
+    }
+    if (method === 'PUT' && id === 'budget') {
+      if (!EDITORS.includes(user.Role)) return jsonResponse(context, 403, { error: 'Insufficient permissions' })
+      await ensureBudget()
+      const b = req.body || {}
+      if (!/^\d{4}-\d{2}$/.test(b.period || '') || !Number.isFinite(Number(b.amount)))
+        return jsonResponse(context, 400, { error: 'period (YYYY-MM) and amount required' })
+      await query(`MERGE tbl_MonthlyBudget AS t USING (SELECT @p AS p) s ON t.period = s.p
+                   WHEN MATCHED THEN UPDATE SET amountAed=@a, updatedBy=@u, updatedAt=GETDATE()
+                   WHEN NOT MATCHED THEN INSERT (period, amountAed, updatedBy, updatedAt) VALUES (@p,@a,@u,GETDATE());`,
+        [{ name: 'p', type: sql.Char(7), value: b.period }, { name: 'a', type: sql.Decimal(18, 2), value: Number(b.amount) },
+         { name: 'u', type: sql.NVarChar, value: user.Username || null }])
+      return jsonResponse(context, 200, { ok: true })
+    }
 
     // ── GET the GL-layout P&L: month and year-to-date ──────────────────────
     if (method === 'GET' && id === 'gl-pl') {
