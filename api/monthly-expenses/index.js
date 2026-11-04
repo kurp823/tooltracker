@@ -314,7 +314,7 @@ async function glYear(year) {
   for (const r of rv.recordset) { const a = aedOf(rate, r.cur, r.amt); if (a == null) warn.add(r.cur); else if (idx(r.ym) >= 0 && !isAct(r.ym)) revenue[idx(r.ym)] += a }
 
   for (const r of await subMonthRows(fromD, toD)) {
-    if (r.amount == null) { unpriced++; continue }
+    if (r.amount == null) { if (!isAct(r.ym)) unpriced++; continue }
     put(SUB_GL, r.ym, r.cur, Number(r.amount) * Number(r.mdays) / Number(r.days))
   }
   const mt = await query(

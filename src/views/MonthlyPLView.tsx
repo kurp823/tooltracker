@@ -99,7 +99,7 @@ export function MonthlyPLView() {
   const net = data.revenue.map((r, i) => r - cost[i])
   const sum = (a: number[]) => a.reduce((s, v) => s + v, 0)
   const budSum = sum(data.budget.map(b => b || 0))
-  const ytdIdx = data.months.map((m, i) => (m <= cur ? i : -1)).filter(i => i >= 0)
+  const ytdIdx = data.months.map((m, i) => (m <= cur && (data.closed[i] || data.revenue[i] !== 0 || cost[i] !== 0) ? i : -1)).filter(i => i >= 0)
   const ytd = (a: number[]) => ytdIdx.reduce((s, i) => s + a[i], 0)
   const ytdBud = ytdIdx.reduce((s, i) => s + (data.budget[i] || 0), 0)
   const revY = ytd(data.revenue), costY = ytd(cost)
@@ -156,7 +156,7 @@ export function MonthlyPLView() {
           <div className="text-[18px] font-bold">MONTHLY REVENUE & COST REPORT — FY{year}</div>
           <div className="text-[12px] text-slate-300">EMDAD Services · Well Intervention · USD at {data.rate} AED</div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2 flex-wrap">
           <select className="field-input !text-black w-24" value={year} onChange={e => setYear(Number(e.target.value))}>
             {[thisYear() - 1, thisYear(), thisYear() + 1].map(y => <option key={y}>{y}</option>)}</select>
           <div className="flex rounded overflow-hidden border border-slate-500 text-[12px]">
