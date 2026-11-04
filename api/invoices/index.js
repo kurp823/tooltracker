@@ -330,9 +330,10 @@ module.exports = safe(async function (context, req) {
               YEAR(i.invoiceDate) AS FiscalYear, i.notes AS Notes,
               i.createdAt AS CreatedDate, i.createdBy AS CreatedBy,
               i.legalInvoiceNumber AS LegalInvoiceNumber, i.legalInvoiceDate AS LegalInvoiceDate,
-              c.clientName AS Client
+              COALESCE(c.clientName, NULLIF(i.clientCode,''), j.Client) AS Client
          FROM tbl_Invoices i
          LEFT JOIN tbl_Clients c ON i.clientCode = c.clientCode
+         LEFT JOIN tbl_Jobs j ON j.JobID = i.jobNumber
         WHERE i.id = @id`,
       [{ name: 'id', value: Number(id) }]
     )
