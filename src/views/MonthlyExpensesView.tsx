@@ -65,7 +65,7 @@ export function MonthlyExpensesView() {
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState({
     category: '', jobId: '', supplierName: '', invoiceRef: '',
-    amount: '', currency: 'USD', notes: '',
+    amount: '', currency: 'USD', notes: '', productLine: '',
   })
 
   async function add() {
@@ -183,7 +183,7 @@ export function MonthlyExpensesView() {
             </div>
 
             {canEdit && (
-              <div className="grid grid-cols-2 md:grid-cols-7 gap-2 items-end">
+              <div className="grid grid-cols-2 md:grid-cols-8 gap-2 items-end">
                 <div className="md:col-span-2">
                   <label className="label">Category</label>
                   <select className="input mt-1" value={form.category}
@@ -196,6 +196,14 @@ export function MonthlyExpensesView() {
                   <label className="label">Job</label>
                   <input className="input mt-1" placeholder="blank = overhead" value={form.jobId}
                          onChange={e => setForm(f => ({ ...f, jobId: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">Product line</label>
+                  <select className="input mt-1" value={form.productLine}
+                          onChange={e => setForm(f => ({ ...f, productLine: e.target.value }))}>
+                    <option value="">Auto (from job)</option>
+                    <option>Fishing</option><option>Whipstock</option><option>Rentals</option>
+                  </select>
                 </div>
                 <div>
                   <label className="label">Supplier</label>
