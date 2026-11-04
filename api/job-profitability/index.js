@@ -53,18 +53,6 @@ module.exports = safe(async function (context, req) {
   }
 
   // ── one row per job ──────────────────────────────────────────────────────
-  // Jobs worked before the rate engine have days but no money on the utilization grid. For those the
-  // monthly report's own figures stand in: job value (revenue) and closing cost accrual (sub-contract)
-  // from the latest month the job appears in. The row says which source it used.
-  const hasAct = (await query(`SELECT OBJECT_ID('dbo.tbl_ActualJobs') AS o`, [])).recordset[0].o != null
-  const actCte = hasAct
-    ? `act AS (SELECT k, jobId, client, rig, period, jobValue, closingCost FROM (
-         SELECT ${jobKey('jobNumber')} AS k, jobNumber AS jobId, client, rig, period, jobValue, closingCost,
-                ROW_NUMBER() OVER (PARTITION BY ${jobKey('jobNumber')} ORDER BY period DESC) AS rn
-           FROM tbl_ActualJobs) z WHERE rn = 1)`
-    : `act AS (SELECT CAST(NULL AS nvarchar(60)) AS k, CAST(NULL AS nvarchar(60)) AS jobId, CAST(NULL AS nvarchar(120)) AS client,
-                      CAST(NULL AS nvarchar(60)) AS rig, CAST(NULL AS char(7)) AS period, CAST(NULL AS decimal(18,2)) AS jobValue,
-                      CAST(NULL AS decimal(18,2)) AS closingCost WHERE 1 = 0)`
   const r = await query(
     `WITH rev AS (
        SELECT ${jobKey('JobID')} AS k, MAX(JobID) AS jobId,
@@ -90,29 +78,46 @@ module.exports = safe(async function (context, req) {
              LEFT JOIN tbl_SubContractLines l ON l.jobId = t.jobId AND l.toolSerial = t.tool
              ${sheetApply('t.supplier', 't.category', 't.size', 't.contract')}
          ) x GROUP BY ${jobKey('x.jobId')}),
-     ${actCte},
      mnt AS (
        SELECT ${jobKey('jobNumber')} AS k, SUM(ISNULL(cost,0)) AS cost
          FROM tbl_MaintenanceJobs WHERE NULLIF(LTRIM(RTRIM(jobNumber)),'') IS NOT NULL GROUP BY ${jobKey('jobNumber')}),
      exp AS (
        SELECT ${jobKey('jobId')} AS k, SUM(ISNULL(amount,0)) AS cost
          FROM tbl_MonthlyExpenses WHERE NULLIF(LTRIM(RTRIM(jobId)),'') IS NOT NULL GROUP BY ${jobKey('jobId')})
-     , keys AS (SELECT k, jobId FROM rev UNION SELECT k, jobId FROM act WHERE k NOT IN (SELECT k FROM rev))
-     SELECT keys.jobId AS jobId, COALESCE(j.Client, act.client) AS client, COALESCE(j.Rig, act.rig) AS rig, j.Well AS well, j.Status AS status,
+     SELECT rev.jobId AS jobId, j.Client AS client, j.Rig AS rig, j.Well AS well, j.Status AS status,
             COALESCE(NULLIF(LTRIM(RTRIM(j.Currency)),''),'USD') AS currency,
-            ISNULL(rev.opsDays,0) AS opsDays, ISNULL(rev.standbyDays,0) AS standbyDays,
-            CASE WHEN ISNULL(rev.revenue,0) > 0 THEN rev.revenue ELSE ISNULL(act.jobValue,0) END AS revenue,
-            CASE WHEN ISNULL(rev.revenue,0) > 0 THEN 'App' WHEN act.jobValue IS NOT NULL THEN 'Report ' + act.period ELSE 'None' END AS revenueSource,
-            CASE WHEN ISNULL(sub.cost,0) > 0 THEN sub.cost ELSE ISNULL(act.closingCost,0) END AS subCost,
-            CASE WHEN ISNULL(sub.cost,0) > 0 OR act.closingCost IS NOT NULL THEN 0 ELSE ISNULL(sub.unpriced,0) END AS unpricedTools,
+            rev.opsDays, rev.standbyDays, rev.revenue,
+            ISNULL(sub.cost,0) AS subCost, ISNULL(sub.unpriced,0) AS unpricedTools,
             ISNULL(mnt.cost,0) AS maintCost, ISNULL(exp.cost,0) AS otherCost
-       FROM keys
-       LEFT JOIN rev ON rev.k = keys.k
-       LEFT JOIN act ON act.k = keys.k
-       LEFT JOIN tbl_Jobs j ON ${jobKey('j.JobID')} = keys.k
-       LEFT JOIN sub ON sub.k = keys.k
-       LEFT JOIN mnt ON mnt.k = keys.k
-       LEFT JOIN exp ON exp.k = keys.k
-      ORDER BY 9 DESC`, [])
-  return jsonResponse(context, 200, r.recordset)
+       FROM rev
+       LEFT JOIN tbl_Jobs j ON ${jobKey('j.JobID')} = rev.k
+       LEFT JOIN sub ON sub.k = rev.k
+       LEFT JOIN mnt ON mnt.k = rev.k
+       LEFT JOIN exp ON exp.k = rev.k
+      ORDER BY rev.revenue DESC`, [])
+  // Jobs worked before the rate engine have days but no money on the utilization grid. For those the
+  // monthly report's own figures stand in: job value (revenue) and closing cost accrual (sub-contract)
+  // from the latest month the job appears in. Merged here, not in SQL, to keep the main query fast.
+  const rows = r.recordset.map(x => ({ ...x, revenueSource: Number(x.revenue) > 0 ? 'App' : 'None' }))
+  const hasAct = (await query(`SELECT OBJECT_ID('dbo.tbl_ActualJobs') AS o`, [])).recordset[0].o != null
+  if (hasAct) {
+    const a = await query(
+      `SELECT a.jobNumber, a.client, a.rig, a.period, a.jobValue, a.closingCost
+         FROM tbl_ActualJobs a
+        WHERE a.period = (SELECT MAX(b.period) FROM tbl_ActualJobs b WHERE b.jobNumber = a.jobNumber)`, [])
+    const byKey = new Map(rows.map(x => [jobKeyOf(x.jobId), x]))
+    for (const x of a.recordset) {
+      const k = jobKeyOf(x.jobNumber)
+      let row = byKey.get(k)
+      if (!row) {
+        row = { jobId: x.jobNumber, client: x.client, rig: x.rig, well: null, status: null, currency: 'USD',
+                opsDays: 0, standbyDays: 0, revenue: 0, subCost: 0, unpricedTools: 0, maintCost: 0, otherCost: 0, revenueSource: 'None' }
+        rows.push(row); byKey.set(k, row)
+      }
+      if (!(Number(row.revenue) > 0) && x.jobValue != null) { row.revenue = Number(x.jobValue); row.revenueSource = 'Report ' + x.period }
+      if (!(Number(row.subCost) > 0) && x.closingCost != null) { row.subCost = Number(x.closingCost); row.unpricedTools = 0 }
+    }
+  }
+  rows.sort((p, q) => Number(q.revenue) - Number(p.revenue))
+  return jsonResponse(context, 200, rows)
 })
