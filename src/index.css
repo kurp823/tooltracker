@@ -298,3 +298,14 @@ thead th.col-edge:hover { box-shadow: inset -3px 0 0 rgba(245, 158, 11, .7); }
 .status-draft     { @apply text-orange-700; }
 .status-completed { @apply text-emerald-700; }
 .status-cancelled { @apply text-red-700; }
+
+/* ── Tax invoice printing: only the invoice sheet reaches the printer ── */
+@media print {
+  body * { visibility: hidden !important; }
+  .invoice-print, .invoice-print * { visibility: visible !important; }
+  .invoice-print { position: absolute; left: 0; top: 0; width: 210mm !important; }
+  .no-print { display: none !important; }
+  .inv-page { break-after: page; }
+  @page { size: A4; margin: 0; }
+}
+.invoice-print input.no-print-border { outline: none; border: 0; }

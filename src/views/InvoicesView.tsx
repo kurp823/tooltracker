@@ -9,6 +9,7 @@ import { formatDate, formatCurrency, billingStatusClass } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
 import { ListOptions } from '../components/ListOptions'
 import { usePagedRows, Pager } from '../components/usePagedRows'
+import { AdnocTaxInvoice } from '../components/AdnocTaxInvoice'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -299,6 +300,8 @@ function InvoiceDetailPanel({
     Notes:       '',
   })
   const [dirty,  setDirty]  = useState(false)
+  const [showTax, setShowTax] = useState(false)
+  const isOnshore = /onshore/i.test(inv.Client || '')
   const [saving, setSaving] = useState(false)
 
   const set = (k: string, v: string) => { setForm(f => ({ ...f, [k]: v })); setDirty(true) }
@@ -388,7 +391,14 @@ function InvoiceDetailPanel({
         {isMonthly && (
           <span className="text-[10px] text-brand-300 ml-1">MONTHLY</span>
         )}
+        {isMonthly && isOnshore && (
+          <button className="btn-mini !py-px ml-2" onClick={() => setShowTax(true)}
+                  title="ADNOC Onshore final tax invoice (print / PDF)">
+            <FileText size={11} /> Tax Invoice
+          </button>
+        )}
       </div>
+      {showTax && <AdnocTaxInvoice inv={inv} onClose={() => setShowTax(false)} />}
 
       {/* Header fields */}
       <div className="field-row bg-white border-x border-b border-gray-300 px-2 py-1.5 shrink-0
