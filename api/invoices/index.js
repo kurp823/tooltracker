@@ -85,7 +85,7 @@ module.exports = safe(async function (context, req) {
                 l.lineTotal AS LineAmount, l.remarks AS Notes,
                 ISNULL(l.opsDays,0) AS OpsDays, ISNULL(l.standbyDays,0) AS StandbyDays,
                 l.opsRate AS OpsRate, l.standbyRate AS StandbyRate,
-                ISNULL(l.opsAmount,0) AS OpsAmount, ISNULL(l.standbyAmount,0) AS StandbyAmount
+                COALESCE(l.opsAmount, ISNULL(l.lineTotal,0) - ISNULL(l.standbyAmount,0)) AS OpsAmount, ISNULL(l.standbyAmount,0) AS StandbyAmount
            FROM tbl_InvoiceLines l
           WHERE l.invoiceNumber = (SELECT invoiceNumber FROM tbl_Invoices WHERE id = @id)
           ORDER BY l.id`,
@@ -101,12 +101,12 @@ module.exports = safe(async function (context, req) {
       const b = req.body
       const r = await query(
         `INSERT INTO tbl_InvoiceLines
-           (invoiceNumber, jobNumber, lineItemRef, serial, toolDescription, opsDays, opsRate, lineTotal, remarks)
+           (invoiceNumber, jobNumber, lineItemRef, serial, toolDescription, opsDays, opsRate, lineTotal, opsAmount, remarks)
          OUTPUT INSERTED.id
          VALUES (
            (SELECT invoiceNumber FROM tbl_Invoices WHERE id = @id),
            (SELECT jobNumber FROM tbl_Invoices WHERE id = @id),
-           @ref, @serial, @desc, @qty, @rate, @amount, @notes
+           @ref, @serial, @desc, @qty, @rate, @amount, @amount, @notes
          )`,
         [
           { name: 'id',     value: Number(id)            },
