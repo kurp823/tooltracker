@@ -101,10 +101,12 @@ module.exports = safe(async function (context, req) {
   const rows = r.recordset.map(x => ({ ...x, revenueSource: Number(x.revenue) > 0 ? 'App' : 'None' }))
   const hasAct = (await query(`SELECT OBJECT_ID('dbo.tbl_ActualJobs') AS o`, [])).recordset[0].o != null
   if (hasAct) {
+    // Lifetime figures exactly as the monthly report counts them: revenue = sum of (new accrual + invoice diff),
+    // sub-contract cost = sum of cost accrued. Their monthly sums equal the report's Revenue and Lease Rental-Equipment lines.
     const a = await query(
-      `SELECT a.jobNumber, a.client, a.rig, a.period, a.jobValue, a.closingCost
-         FROM tbl_ActualJobs a
-        WHERE a.period = (SELECT MAX(b.period) FROM tbl_ActualJobs b WHERE b.jobNumber = a.jobNumber)`, [])
+      `SELECT jobNumber, MAX(client) AS client, MAX(rig) AS rig, MAX(period) AS period,
+              SUM(ISNULL(newAccrual,0) + ISNULL(diffAmt,0)) AS jobValue, SUM(ISNULL(costAccrued,0)) AS closingCost
+         FROM tbl_ActualJobs GROUP BY jobNumber`, [])
     const byKey = new Map(rows.map(x => [jobKeyOf(x.jobId), x]))
     for (const x of a.recordset) {
       const k = jobKeyOf(x.jobNumber)
@@ -114,7 +116,7 @@ module.exports = safe(async function (context, req) {
                 opsDays: 0, standbyDays: 0, revenue: 0, subCost: 0, unpricedTools: 0, maintCost: 0, otherCost: 0, revenueSource: 'None' }
         rows.push(row); byKey.set(k, row)
       }
-      if (!(Number(row.revenue) > 0) && x.jobValue != null) { row.revenue = Number(x.jobValue); row.revenueSource = 'Report ' + x.period }
+      if (!(Number(row.revenue) > 0) && x.jobValue != null) { row.revenue = Number(x.jobValue); row.revenueSource = 'Report to ' + x.period }
       if (!(Number(row.subCost) > 0) && x.closingCost != null) { row.subCost = Number(x.closingCost); row.unpricedTools = 0 }
     }
   }
