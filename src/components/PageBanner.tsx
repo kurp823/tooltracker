@@ -116,6 +116,10 @@ const PAGES: Record<string, Page> = {
     title: 'Sub-Contractor Rate Sheets', badge: 'Billing & Cost Control',
     sub: 'What each supplier charges us, by category and size — hired-in tools on a job take their cost from here.',
   },
+  '/job-profitability': {
+    title: 'Revenue vs Cost by Job', badge: 'Cost Control',
+    sub: 'Utilization revenue against sub-contract, maintenance & redress and other job-linked costs.',
+  },
   '/sub-accruals': {
     title: 'Sub-Contract POs & Accruals', badge: 'Billing & Cost Control',
     sub: 'POs still to issue to sub-contractors, and supplier invoices still to arrive.',

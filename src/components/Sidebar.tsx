@@ -100,6 +100,7 @@ const MODULES: NavModule[] = [
       // Which POs are still to issue to a sub-contractor, and which supplier
       // invoices are still to arrive against what has been accrued.
       { label: 'Sub-Contract POs & Accruals',    to: '/sub-accruals',      icon: <ClipboardList size={ICON} /> },
+      { label: 'Revenue vs Cost by Job',         to: '/job-profitability', icon: <Coins size={ICON} /> },
       { label: 'Monthly Expense Grid & P&L',     to: '/monthly-expenses',  icon: <FileSpreadsheet size={ICON} /> },
     ],
   },
