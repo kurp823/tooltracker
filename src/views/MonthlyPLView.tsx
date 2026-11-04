@@ -21,6 +21,8 @@ interface Year {
   revenue: number[]; budget: (number | null)[]
   lines: { gl: string; values: number[]; source: string }[]
   warnCurrencies: string[]; unpricedTools: number
+  closed: boolean[]; exclFromReportProfit: string[]
+  ledger: ({ opening: number; removed: number; added: number; closing: number; newAccrual: number; diff: number; costAccrual: number; netProfit: number } | null)[]
 }
 interface DRow { kind: string; ref: string | null; date: string | null; party: string | null; description: string | null
   asset: string | null; qty: string; currency: string; amount: number; amountAed: number | null }
@@ -86,7 +88,7 @@ export function MonthlyPLView() {
   const { showToast } = useToast()
   const canEdit = hasRole('Admin', 'Finance', 'Billing')
   const [year, setYear] = useState(thisYear())
-  const [mode, setMode] = useState<'pl' | 'cost'>('pl')
+  const [mode, setMode] = useState<'pl' | 'accrual' | 'cost'>('pl')
   const [pick, setPick] = useState<{ period: string; gl: string; label: string } | null>(null)
   const { data, isLoading, error, refetch } = useFetch<Year>(`/monthly-expenses/gl-year?year=${year}`)
   if (isLoading) return <PageLoader />
@@ -101,6 +103,13 @@ export function MonthlyPLView() {
   const ytd = (a: number[]) => ytdIdx.reduce((s, i) => s + a[i], 0)
   const ytdBud = ytdIdx.reduce((s, i) => s + (data.budget[i] || 0), 0)
   const revY = ytd(data.revenue), costY = ytd(cost)
+  const excl = data.lines.filter(l => data.exclFromReportProfit.includes(l.gl))
+  const exclM = data.months.map((_, i) => excl.reduce((a, l) => a + l.values[i], 0))
+  const repCost = cost.map((c, i) => c - exclM[i])            // cost as the monthly report counts it
+  const repNet = data.revenue.map((r, i) => r - repCost[i])
+  const lastClosed = data.closed.lastIndexOf(true)
+  const L = data.ledger
+  const opening = (i: number) => L[i] ? L[i]!.opening : (i > 0 && L[i - 1] ? L[i - 1]!.closing : null)
 
   const setBudget = async (period: string, old: number | null) => {
     const v = window.prompt(`Budget for ${period} (AED)`, old == null ? '' : String(old))
@@ -136,7 +145,7 @@ export function MonthlyPLView() {
     </div>)
 
   const head = (
-    <tr>{['METRIC / LINE', ...MON.map((m, i) => `${m}'${String(year).slice(2)}`), 'YTD TOTAL'].map((h, i) => (
+    <tr>{['METRIC / LINE', ...MON.map((m, i) => `${m}'${String(year).slice(2)}${data.closed[i] ? ' ✓' : ''}`), 'YTD TOTAL'].map((h, i) => (
       <th key={i} className={`px-3 py-2 text-[11px] font-bold tracking-wide ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>))}</tr>)
 
   return (
@@ -151,7 +160,7 @@ export function MonthlyPLView() {
           <select className="field-input !text-black w-24" value={year} onChange={e => setYear(Number(e.target.value))}>
             {[thisYear() - 1, thisYear(), thisYear() + 1].map(y => <option key={y}>{y}</option>)}</select>
           <div className="flex rounded overflow-hidden border border-slate-500 text-[12px]">
-            {([['pl', 'P&L Performance'], ['cost', 'Itemized Cost Ledger']] as const).map(([k, l]) => (
+            {([['pl', 'P&L Performance'], ['accrual', 'Accrual Ledger'], ['cost', 'Itemized Cost Ledger']] as const).map(([k, l]) => (
               <button key={k} onClick={() => setMode(k)} className={`px-3 py-1.5 ${mode === k ? 'bg-blue-600' : ''}`}>{l}</button>))}
           </div>
           <button className="btn-mini" onClick={refetch}><RefreshCw size={12} /></button>
@@ -182,22 +191,50 @@ export function MonthlyPLView() {
                   <td key={i} className="px-3 py-1.5 text-right font-mono border-b border-slate-100">
                     {canEdit ? <button className="hover:bg-amber-50 rounded px-1" onClick={() => setBudget(data.months[i], b)}>{b == null ? '＋' : n0(b)}</button> : (b == null ? '—' : n0(b))}</td>))}
                 <td className="px-3 py-1.5 text-right font-mono font-bold bg-amber-50 border-b">{n0(ytdBud)}</td></tr>
+              <tr><td className="px-3 py-1.5 border-b">New accruals this month<div className="text-[10px] text-slate-500">net new work not yet invoiced</div></td>
+                {data.months.map((_, i) => <td key={i} className="px-3 py-1.5 text-right font-mono border-b border-slate-100">{L[i] ? n0(L[i]!.newAccrual) : '—'}</td>)}
+                <td className="px-3 py-1.5 text-right font-mono font-bold bg-amber-50 border-b">{n0(L.reduce((a, x) => a + (x ? x.newAccrual : 0), 0))}</td></tr>
+              <tr><td className="px-3 py-1.5 border-b">Revenue diff: accrued vs legal invoiced</td>
+                {data.months.map((_, i) => <td key={i} className="px-3 py-1.5 text-right font-mono border-b border-slate-100">{L[i] ? n0(L[i]!.diff) : '—'}</td>)}
+                <td className="px-3 py-1.5 text-right font-mono font-bold bg-amber-50 border-b">{n0(L.reduce((a, x) => a + (x ? x.diff : 0), 0))}</td></tr>
               <tr className="bg-blue-50"><td className="px-3 py-1.5 font-bold text-blue-900 border-b">Revenue earned (AED)<div className="text-[10px] font-normal text-slate-500">days marked × rate</div></td>
                 {data.revenue.map((v, i) => <Cell key={i} v={v} i={i} gl="__REVENUE__" label="Revenue" bold />)}
                 <td className="px-3 py-1.5 text-right font-mono font-bold bg-blue-100 border-b">{n0(revY)}</td></tr>
-              <tr className="bg-red-50"><td className="px-3 py-1.5 font-bold text-red-900 border-b">Total cost (AED)<div className="text-[10px] font-normal text-slate-500">all GL lines</div></td>
+              <tr className="bg-red-50"><td className="px-3 py-1.5 font-bold text-red-900 border-b">Total cost (AED)<div className="text-[10px] font-normal text-slate-500">all GL lines incl. salary &amp; prior-year</div></td>
                 {cost.map((v, i) => <td key={i} className={`px-3 py-1.5 text-right font-mono font-bold border-b ${data.months[i] > cur ? 'text-slate-300' : ''}`}>{n0(v)}</td>)}
                 <td className="px-3 py-1.5 text-right font-mono font-bold bg-red-100 border-b">{n0(costY)}</td></tr>
               <tr className="bg-emerald-50"><td className="px-3 py-1.5 font-bold text-emerald-900 border-b">Net profit (AED)</td>
                 {net.map((v, i) => <td key={i} className={`px-3 py-1.5 text-right font-mono border-b ${v < 0 ? 'text-red-700' : 'text-emerald-700'} ${data.months[i] > cur ? 'opacity-30' : ''}`}>{sgn(v)}</td>)}
                 <td className="px-3 py-1.5 text-right font-mono font-bold bg-emerald-100 border-b">{sgn(revY - costY)}</td></tr>
+              <tr className="bg-emerald-50/60"><td className="px-3 py-1.5 font-semibold text-emerald-900 border-b">Net profit — report basis<div className="text-[10px] font-normal text-slate-500">excludes {data.exclFromReportProfit.join(' and ')}</div></td>
+                {repNet.map((v, i) => <td key={i} className={`px-3 py-1.5 text-right font-mono border-b ${v < 0 ? 'text-red-700' : 'text-emerald-700'} ${data.months[i] > cur ? 'opacity-30' : ''}`}>{data.revenue[i] || cost[i] ? sgn(v) : '—'}</td>)}
+                <td className="px-3 py-1.5 text-right font-mono font-bold bg-emerald-100 border-b">{sgn(ytdIdx.reduce((a, i) => a + repNet[i], 0))}</td></tr>
               <tr><td className="px-3 py-1.5 font-bold">Net profit %</td>
                 {net.map((v, i) => <td key={i} className={`px-3 py-1.5 text-right font-mono ${v < 0 ? 'text-red-700' : 'text-emerald-700'} ${data.months[i] > cur ? 'opacity-30' : ''}`}>{data.revenue[i] ? `${Math.round(v / data.revenue[i] * 100)}%` : '—'}</td>)}
                 <td className="px-3 py-1.5 text-right font-mono font-bold">{revY ? `${Math.round((revY - costY) / revY * 100)}%` : '—'}</td></tr>
-              <tr className="bg-slate-50"><td className="px-3 py-1.5 font-semibold">Budget achieved / balance</td>
-                {data.budget.map((b, i) => <td key={i} className="px-3 py-1.5 text-right font-mono text-[11px]">{b ? `${Math.round(data.revenue[i] / b * 100)}%` : '—'}</td>)}
+              <tr className="bg-slate-50"><td className="px-3 py-1.5 font-semibold">Variance vs budget <span className="font-normal text-[10px] text-slate-500">+ over / (under)</span></td>
+                {data.budget.map((b, i) => <td key={i} className={`px-3 py-1.5 text-right font-mono ${b && data.revenue[i] - b < 0 ? 'text-red-700' : 'text-emerald-700'}`}>{b && data.revenue[i] ? sgn(data.revenue[i] - b) : '—'}</td>)}
+                <td className="px-3 py-1.5 text-right font-mono font-bold">{sgn(revY - ytdBud)}</td></tr>
+              <tr className="bg-slate-50"><td className="px-3 py-1.5 font-semibold">% target achieved</td>
+                {data.budget.map((b, i) => <td key={i} className="px-3 py-1.5 text-right font-mono text-[11px]">{b && data.revenue[i] ? `${Math.round(data.revenue[i] / b * 100)}%` : '—'}</td>)}
                 <td className="px-3 py-1.5 text-right font-mono font-bold">{ytdBud ? `${Math.round(revY / ytdBud * 100)}%` : '—'}</td></tr>
             </tbody></table></div>
+        </div>
+      ) : mode === 'accrual' ? (
+        <div className="rounded-xl overflow-hidden border border-blue-300 bg-white">
+          <div className="bg-blue-700 text-white px-4 py-2 font-bold text-[13px]">ACCRUAL LEDGER (AED) <span className="ml-2 text-[11px] opacity-80">opening − invoiced + new = closing · each year's closing is next January's opening</span></div>
+          <div className="overflow-x-auto"><table className="w-full border-collapse text-[12px]">
+            <thead className="bg-blue-100 text-blue-900">{head}</thead>
+            <tbody>
+              {([['Opening accrual balance', (i: number) => opening(i)],
+                 ['Less: invoiced from accrual (removal)', (i: number) => L[i] ? L[i]!.removed : null],
+                 ['Add: current month accrual', (i: number) => L[i] ? L[i]!.added : null],
+                 ['Closing accrual balance', (i: number) => L[i] ? L[i]!.closing : null]] as [string, (i: number) => number | null][]).map(([lab, f], k) => (
+                <tr key={lab} className={k === 3 ? 'bg-blue-50 font-bold' : ''}><td className="px-3 py-1.5 border-b">{lab}</td>
+                  {data.months.map((_, i) => { const v = f(i); return <td key={i} className="px-3 py-1.5 text-right font-mono border-b border-slate-100">{v == null ? '—' : n0(v)}</td> })}
+                  <td className="px-3 py-1.5 border-b" /></tr>))}
+            </tbody></table></div>
+          <p className="px-4 py-2 text-[11px] text-slate-500">Closed months show the figures reported in the monthly report. {lastClosed >= 0 && lastClosed < 11 ? `${data.months[lastClosed + 1]} opens at AED ${n0(L[lastClosed]!.closing)} (closing of ${data.months[lastClosed]}).` : ''}</p>
         </div>
       ) : (
         <div className="rounded-xl overflow-hidden border border-slate-300 bg-white">
