@@ -40,6 +40,7 @@ import { ConsumablesView }         from './views/ConsumablesView'
 import { RentalInwardView }        from './views/RentalInwardView'
 import { PendingRentalCostsView }  from './views/PendingRentalCostsView'
 import { SubAccrualsView }         from './views/SubAccrualsView'
+import { JobProfitabilityView }    from './views/JobProfitabilityView'
 import { SubRatesView }            from './views/SubRatesView'
 import { MonthlyExpensesView }     from './views/MonthlyExpensesView'
 import { MaintenanceDashboardView } from './views/MaintenanceDashboardView'
@@ -128,6 +129,7 @@ export default function App() {
               <Route path="billing-dashboard" element={<BillingDashboardView />} />
               <Route path="invoices" element={<InvoicesView />} />
               <Route path="sub-accruals" element={<SubAccrualsView />} />
+              <Route path="job-profitability" element={<JobProfitabilityView />} />
               <Route path="sub-rates" element={<SubRatesView />} />
               <Route
                 path="pending-rental-costs"
