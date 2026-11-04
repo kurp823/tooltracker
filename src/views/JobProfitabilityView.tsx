@@ -11,10 +11,11 @@ import { Tile, Notice } from '../components/Kpi'
  * Revenue = value of the days marked on the utilization grid.
  * Cost    = sub-contract hire + maintenance/redress + job-linked expenses (bonus, third-party repairs ...).
  * A hired-in tool with no rate yet is flagged, never costed at zero. No currency conversion.
+ * Jobs worked before the rate engine take revenue (job value) and sub-contract cost from the monthly report's latest month for that job - marked R.
  */
 interface Row {
   jobId: string; client: string | null; rig: string | null; well: string | null; status: string | null
-  currency: string; opsDays: number; standbyDays: number; revenue: number
+  currency: string; revenueSource?: string; opsDays: number; standbyDays: number; revenue: number
   subCost: number; unpricedTools: number; maintCost: number; otherCost: number
 }
 interface Detail {
@@ -147,7 +148,7 @@ export function JobProfitabilityView() {
                   <td className="table-td font-mono">{r.jobId}</td><td className="table-td">{r.client || '—'}</td>
                   <td className="table-td">{r.rig || '—'}</td><td className="table-td">{r.status || '—'}</td>
                   <td className="table-td">{r.currency}</td>
-                  <td className="table-td text-right tabular-nums">{num(r.revenue)}</td>
+                  <td className="table-td text-right tabular-nums" title={`Source: ${r.revenueSource || 'App'}`}>{num(r.revenue)}{r.revenueSource?.startsWith('Report') && <span className="text-slate-400 text-[10px]"> R</span>}</td>
                   <td className="table-td text-right tabular-nums">{num(r.subCost)}{r.unpricedTools > 0 && <span className="text-red-600" title="Tools without a rate"> ⚠{r.unpricedTools}</span>}</td>
                   <td className="table-td text-right tabular-nums">{num(r.maintCost)}</td>
                   <td className="table-td text-right tabular-nums">{num(r.otherCost)}</td>
