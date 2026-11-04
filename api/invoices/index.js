@@ -473,5 +473,17 @@ module.exports = safe(async function (context, req) {
     return jsonResponse(context, 200, { ok: true })
   }
 
+  // ── DELETE: TEST invoices only (Admin) ───────────────────────────────────
+  if (id && !sub && method === 'DELETE') {
+    if (user.Role !== 'Admin') return jsonResponse(context, 403, { error: 'Forbidden' })
+    const r = await query(`SELECT invoiceNumber, notes FROM tbl_Invoices WHERE id = @id`, [{ name: 'id', value: Number(id) }])
+    if (!r.recordset.length) return jsonResponse(context, 404, { error: 'Not found' })
+    if (!/TEST/i.test(r.recordset[0].notes || ''))
+      return jsonResponse(context, 403, { error: 'Only TEST invoices (notes contain TEST) can be deleted' })
+    await query(`DELETE FROM tbl_InvoiceLines WHERE invoiceNumber = @n`, [{ name: 'n', value: r.recordset[0].invoiceNumber }])
+    await query(`DELETE FROM tbl_Invoices WHERE id = @id`, [{ name: 'id', value: Number(id) }])
+    return jsonResponse(context, 200, { deleted: r.recordset[0].invoiceNumber })
+  }
+
   return jsonResponse(context, 405, { error: 'Method not allowed' })
 })
