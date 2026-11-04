@@ -30,15 +30,25 @@ const { jobKey } = require('../db')
 // ExpenseCategory list (added if missing, never re-added once an Admin removes
 // or renames one is NOT guaranteed - only absent names are inserted).
 const GL_LINES = [
-  'Cost of Materials', 'Cost of Materials - From EEI', 'Cost of Service', 'Direct - Accommodation',
-  'Repair And Maintenance', 'Lease Rental-LPV', 'Lease Rental-HV', 'Lease Rental-Equipment',
-  'HSE Expenses', 'Bank Guarantee Charges', 'Freight & Courier Exp', 'Machining/Calibration',
-  'Inspection/Testing', 'Dep P&M', 'Training & Professional Development',
-  'Office/Warehouse/Accommodation Space Rental', 'Vehicle Rep & Maint', 'Vehicle Petrol',
-  'Vehicle Insurance & Registration', 'Vehicle Rental AUH-GHQ', 'Office Exp',
-  'Intellectual Property Rights', 'Communication Allowance', 'Dep Intellectual Property Rights',
-  'Asset Clearance',
+  'Cost of Materials', 'Cost of Materials - From EEI', 'Cost of Service', 'Direct - Salary and allowances',
+  'Direct - OverTime', 'Direct - Accommodation', 'Direct - Visa and Medical', 'Direct - Leave Salary',
+  'Direct - Air Tickets', 'Direct - Gratuity', 'Direct - Medical Insurance', 'Direct - Life Insurance',
+  'Rig Bonus', 'Repair And Maintenance', 'Insurance-Contracts', 'Lease Rental-LPV', 'Lease Rental-HV',
+  'Lease Rental-Equipment', 'HSE Expenses', 'Bank Guarantee Charges', 'Freight & Courier Exp', 'Security Pass',
+  'Machining/Calibration', 'Inspection/Testing', 'Dep P&M', 'Staff Welfare', 'Staff Pension',
+  'Training & Professional Development', 'Office/Warehouse/Accommodation Space Rental', 'Licence Exp',
+  'Communication Expenses', 'Vehicle Rep & Maint', 'Vehicle Petrol', 'Vehicle Insurance & Registration',
+  'Vehicle Rental AUH-GHQ', 'Office Exp', 'Intellectual Property Rights', 'Communication Allowance',
+  'Dep Vehicles', 'Dep Comp & Printers', 'Dep Intellectual Property Rights', 'Bank Charges',
+  'Asset Clearance', "Cost of FY'25",
 ]
+// The workbook's own spellings -> the list above
+const GL_ALIAS = {
+  'Lease Rental-Eqiupment': 'Lease Rental-Equipment', 'HSE Expances': 'HSE Expenses',
+  'Bank gurantee charges': 'Bank Guarantee Charges', 'Office/Wareshouse/Accomodation Space Rental': 'Office/Warehouse/Accommodation Space Rental',
+  'Asset clearnace': 'Asset Clearance', 'Cost of Materials - From EEI Jan to Oct': 'Cost of Materials - From EEI',
+}
+const glName = n => { const t = String(n).trim(); return GL_ALIAS[t] || t }
 const SUB_GL = 'Lease Rental-Equipment'   // fed by sub-contract hire cost on jobs
 const MNT_GL = 'Repair And Maintenance'   // fed by maintenance & redress cost on jobs
 const LINES = ['Fishing', 'Whipstock', 'Rentals']
@@ -194,15 +204,103 @@ async function subMonthRows(fromD, toD, ymFrom, ymTo) {
   return r.recordset
 }
 
+// ── Closed months: actuals imported from the monthly report workbook ───────
+// Months present in tbl_ActualMonth are fixed history (the figures the business
+// reported). The report reads them as they are and does not recompute them from
+// live data. A month with no row here is calculated from the app, same logic.
+const EXCL_FROM_REPORT_PROFIT = ['Direct - Salary and allowances', "Cost of FY'25"]
+let actReady = null
+function ensureActuals() {
+  if (!actReady) actReady = query(`
+    IF OBJECT_ID('dbo.tbl_ActualMonth') IS NULL
+      CREATE TABLE dbo.tbl_ActualMonth (
+        period char(7) NOT NULL PRIMARY KEY,
+        revenue decimal(18,2) NULL, newAccrual decimal(18,2) NULL, diffAmt decimal(18,2) NULL,
+        opening decimal(18,2) NULL, removed decimal(18,2) NULL, monthAccrual decimal(18,2) NULL, closing decimal(18,2) NULL,
+        costAccrual decimal(18,2) NULL, netProfit decimal(18,2) NULL,
+        source nvarchar(80) NULL, importedBy nvarchar(100) NULL, importedAt datetime NULL);
+    IF OBJECT_ID('dbo.tbl_ActualGl') IS NULL
+      CREATE TABLE dbo.tbl_ActualGl (
+        period char(7) NOT NULL, gl nvarchar(100) NOT NULL,
+        fishing decimal(18,2) NULL, whipstock decimal(18,2) NULL, rentals decimal(18,2) NULL, total decimal(18,2) NOT NULL,
+        detail nvarchar(max) NULL, CONSTRAINT PK_tbl_ActualGl PRIMARY KEY (period, gl));
+    IF OBJECT_ID('dbo.tbl_ActualJobs') IS NULL
+      BEGIN
+        CREATE TABLE dbo.tbl_ActualJobs (
+          id int IDENTITY(1,1) PRIMARY KEY, period char(7) NOT NULL, jobNumber nvarchar(40) NOT NULL,
+          contract nvarchar(80) NULL, client nvarchar(120) NULL,
+          prevAccrual decimal(18,2) NULL, jobValue decimal(18,2) NULL, invoiceNo nvarchar(60) NULL, invoiceValue decimal(18,2) NULL,
+          icv decimal(18,2) NULL, invoiceDate date NULL, removal decimal(18,2) NULL, diffAmt decimal(18,2) NULL, newAccrual decimal(18,2) NULL,
+          prevCost decimal(18,2) NULL, costAccrued decimal(18,2) NULL, closingCost decimal(18,2) NULL,
+          productLine nvarchar(30) NULL, descr nvarchar(300) NULL, rig nvarchar(60) NULL, well nvarchar(60) NULL, notes nvarchar(300) NULL);
+        CREATE INDEX IX_ActualJobs_period ON dbo.tbl_ActualJobs(period, jobNumber);
+      END`, []).catch(e => { actReady = null; throw e })
+  return actReady
+}
+
+async function importActuals(b, user) {
+  await ensureActuals(); await ensureBudget()
+  const periods = Object.keys(b.summary || {})
+  for (const ym of periods) {
+    const sm = b.summary[ym]
+    await query(`DELETE FROM tbl_ActualJobs WHERE period=@p; DELETE FROM tbl_ActualGl WHERE period=@p; DELETE FROM tbl_ActualMonth WHERE period=@p;`,
+      [{ name: 'p', type: sql.Char(7), value: ym }])
+    await query(`INSERT INTO tbl_ActualMonth (period, revenue, newAccrual, diffAmt, opening, removed, monthAccrual, closing, costAccrual, netProfit, source, importedBy, importedAt)
+                 VALUES (@p,@rev,@na,@df,@op,@rm,@ma,@cl,@ca,@np,'Monthly Report FY2026 (Excel)',@u,GETDATE())`,
+      [{ name: 'p', type: sql.Char(7), value: ym }, ...Object.entries({ rev: sm.revenue, na: sm.newAccrual, df: sm.diff, op: sm.opening, rm: sm.removed,
+        ma: sm.monthAccrual, cl: sm.closing, ca: sm.costAccrual, np: sm.netProfit }).map(([k, v]) => ({ name: k, type: sql.Decimal(18, 2), value: v == null ? null : Number(v) })),
+       { name: 'u', type: sql.NVarChar, value: user.Username || null }])
+    // GL lines: Summary totals; product split and itemised detail from the month sheet when it agrees
+    const rows = []
+    for (const [glRaw, tot] of Object.entries(b.gl[ym] || {})) {
+      const gl = glName(glRaw)
+      const pl = (b.pl[ym] || {})[glRaw] || (b.pl[ym] || {})[glRaw.trim() + ' ']
+      const agrees = pl && Math.abs((pl.total || 0) - tot) < 1
+      rows.push({ gl, total: tot, fishing: agrees ? pl.fishing : null, whipstock: agrees ? pl.whipstock : null,
+                  rentals: agrees ? pl.rentals : null, detail: agrees ? pl.detail : [] })
+    }
+    if (rows.length)
+      await query(`INSERT INTO tbl_ActualGl (period, gl, fishing, whipstock, rentals, total, detail)
+                   SELECT @p, gl, fishing, whipstock, rentals, total, detail FROM OPENJSON(@j) WITH (
+                     gl nvarchar(100) '$.gl', fishing decimal(18,2) '$.fishing', whipstock decimal(18,2) '$.whipstock',
+                     rentals decimal(18,2) '$.rentals', total decimal(18,2) '$.total', detail nvarchar(max) '$.detail' AS JSON)`,
+        [{ name: 'p', type: sql.Char(7), value: ym }, { name: 'j', type: sql.NVarChar(sql.MAX), value: JSON.stringify(rows) }])
+    const jobs = (b.jobs || {})[ym] || []
+    if (jobs.length)
+      await query(`INSERT INTO tbl_ActualJobs (period, jobNumber, contract, client, prevAccrual, jobValue, invoiceNo, invoiceValue, icv, invoiceDate,
+                     removal, diffAmt, newAccrual, prevCost, costAccrued, closingCost, productLine, descr, rig, well, notes)
+                   SELECT @p, job, contract, client, prev, value, invNo, invValue, icv, invDate, removal, diff, newAccrual, prevCost, costAccrued, closingCost, line, descr, rig, well, notes
+                     FROM OPENJSON(@j) WITH (job nvarchar(40) '$.job', contract nvarchar(80) '$.contract', client nvarchar(120) '$.client',
+                       prev decimal(18,2) '$.prev', value decimal(18,2) '$.value', invNo nvarchar(60) '$.invNo', invValue decimal(18,2) '$.invValue',
+                       icv decimal(18,2) '$.icv', invDate date '$.invDate', removal decimal(18,2) '$.removal', diff decimal(18,2) '$.diff',
+                       newAccrual decimal(18,2) '$.newAccrual', prevCost decimal(18,2) '$.prevCost', costAccrued decimal(18,2) '$.costAccrued',
+                       closingCost decimal(18,2) '$.closingCost', line nvarchar(30) '$.line', descr nvarchar(300) '$.desc',
+                       rig nvarchar(60) '$.rig', well nvarchar(60) '$.well', notes nvarchar(300) '$.notes')`,
+        [{ name: 'p', type: sql.Char(7), value: ym }, { name: 'j', type: sql.NVarChar(sql.MAX), value: JSON.stringify(jobs) }])
+  }
+  for (const [ym, v] of Object.entries(b.budget || {})) if (v != null)
+    await query(`MERGE tbl_MonthlyBudget AS t USING (SELECT @p AS p) s ON t.period = s.p
+                 WHEN MATCHED THEN UPDATE SET amountAed=@a, updatedBy=@u, updatedAt=GETDATE()
+                 WHEN NOT MATCHED THEN INSERT (period, amountAed, updatedBy, updatedAt) VALUES (@p,@a,@u,GETDATE());`,
+      [{ name: 'p', type: sql.Char(7), value: ym }, { name: 'a', type: sql.Decimal(18, 2), value: Number(v) }, { name: 'u', type: sql.NVarChar, value: user.Username || null }])
+  return { periods }
+}
+
 async function glYear(year) {
   const rate = await rateAed()
   const fromD = `${year}-01-01`, toD = `${Number(year) + 1}-01-01`
   const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`)
   const idx = ym => months.indexOf(ym)
+  await ensureActuals()
+  const am = await query(`SELECT * FROM tbl_ActualMonth WHERE period BETWEEN @a AND @b`,
+    [{ name: 'a', type: sql.Char(7), value: months[0] }, { name: 'b', type: sql.Char(7), value: months[11] }])
+  const actual = Array(12).fill(null)
+  am.recordset.forEach(r => { if (idx(r.period) >= 0) actual[idx(r.period)] = r })
+  const isAct = ym => idx(ym) >= 0 && actual[idx(ym)] != null
   const revenue = Array(12).fill(0), lines = {}, warn = new Set()
   let unpriced = 0
   const put = (gl, ym, cur, v) => {
-    const i = idx(ym); if (i < 0) return
+    const i = idx(ym); if (i < 0 || isAct(ym)) return
     const a = aedOf(rate, cur, v); if (a == null) { warn.add(cur); return }
     lines[gl] = lines[gl] || Array(12).fill(0); lines[gl][i] += a
   }
@@ -213,7 +311,7 @@ async function glYear(year) {
        FROM tbl_DailyFieldLogs d LEFT JOIN tbl_Jobs j ON j.JobID = d.JobID
       WHERE d.StatusType IN ('1','S') AND d.LogDate >= @fromD AND d.LogDate < @toD
       GROUP BY CONVERT(char(7), d.LogDate, 126), COALESCE(NULLIF(LTRIM(RTRIM(j.Currency)),''),'USD')`, P)
-  for (const r of rv.recordset) { const a = aedOf(rate, r.cur, r.amt); if (a == null) warn.add(r.cur); else if (idx(r.ym) >= 0) revenue[idx(r.ym)] += a }
+  for (const r of rv.recordset) { const a = aedOf(rate, r.cur, r.amt); if (a == null) warn.add(r.cur); else if (idx(r.ym) >= 0 && !isAct(r.ym)) revenue[idx(r.ym)] += a }
 
   for (const r of await subMonthRows(fromD, toD)) {
     if (r.amount == null) { unpriced++; continue }
@@ -234,6 +332,14 @@ async function glYear(year) {
     [{ name: 'a', type: sql.Char(7), value: months[0] }, { name: 'b', type: sql.Char(7), value: months[11] }])
   for (const r of ex.recordset) put(r.gl, r.ym, r.cur, r.amt)
 
+  // closed months: the reported figures
+  const ag = await query(`SELECT period, gl, total FROM tbl_ActualGl WHERE period BETWEEN @a AND @b`,
+    [{ name: 'a', type: sql.Char(7), value: months[0] }, { name: 'b', type: sql.Char(7), value: months[11] }])
+  ag.recordset.forEach(r => { lines[r.gl] = lines[r.gl] || Array(12).fill(0); lines[r.gl][idx(r.period)] += Number(r.total) })
+  actual.forEach((a, i) => { if (a) revenue[i] = Number(a.revenue) })
+  const closed = actual.map(a => !!a)
+  const ledger = actual.map(a => a && ({ opening: Number(a.opening), removed: Number(a.removed), added: Number(a.monthAccrual), closing: Number(a.closing),
+      newAccrual: Number(a.newAccrual), diff: Number(a.diffAmt), costAccrual: Number(a.costAccrual), netProfit: Number(a.netProfit) }))
   await ensureBudget()
   const bd = await query(`SELECT period, amountAed FROM tbl_MonthlyBudget WHERE period BETWEEN @a AND @b`,
     [{ name: 'a', type: sql.Char(7), value: months[0] }, { name: 'b', type: sql.Char(7), value: months[11] }])
@@ -246,7 +352,7 @@ async function glYear(year) {
   const outLines = names.map(gl => ({ gl, values: lines[gl] || Array(12).fill(0),
     source: gl === SUB_GL ? 'Sub-Rental Hub' : gl === MNT_GL ? 'Maintenance orders' : 'Expense grid' }))
     .filter(l => l.values.some(v => v) || GL_LINES.includes(l.gl))
-  return { year: Number(year), months, rate, revenue, budget, lines: outLines,
+  return { year: Number(year), months, rate, revenue, budget, lines: outLines, closed, ledger, exclFromReportProfit: EXCL_FROM_REPORT_PROFIT,
            warnCurrencies: [...warn], unpricedTools: unpriced }
 }
 
@@ -258,6 +364,37 @@ async function glDetail(period, gl) {
   const P = [{ name: 'fromD', type: sql.Date, value: new Date(fromD) }, { name: 'toD', type: sql.Date, value: new Date(toD) }]
   const rows = []
   const push = (o) => { const a = aedOf(rate, o.currency, o.amount); rows.push({ ...o, amountAed: a == null ? null : Math.round(a * 100) / 100 }) }
+
+  await ensureActuals()
+  const closedM = await query(`SELECT 1 AS x FROM tbl_ActualMonth WHERE period=@p`, [{ name: 'p', type: sql.Char(7), value: period }])
+  if (closedM.recordset.length) {
+    const SRC = 'Monthly Report FY2026'
+    if (gl === '__REVENUE__') {
+      const j = await query(`SELECT jobNumber, client, rig, productLine, descr, invoiceNo, newAccrual, diffAmt FROM tbl_ActualJobs
+                              WHERE period=@p AND (ISNULL(newAccrual,0) <> 0 OR ISNULL(diffAmt,0) <> 0) ORDER BY ISNULL(newAccrual,0)+ISNULL(diffAmt,0) DESC`,
+        [{ name: 'p', type: sql.Char(7), value: period }])
+      j.recordset.forEach(x => push({ kind: x.invoiceNo ? 'Invoiced job (diff + new)' : 'New accrual', ref: x.jobNumber, date: null, party: x.client,
+        description: [x.productLine, x.descr, x.invoiceNo ? 'Inv ' + x.invoiceNo : ''].filter(Boolean).join(' · '),
+        asset: x.rig, qty: '', currency: 'USD', amount: Number(x.newAccrual || 0) + Number(x.diffAmt || 0) }))
+      return { period, gl, rows, source: SRC }
+    }
+    const g = await query(`SELECT total, fishing, whipstock, rentals, detail FROM tbl_ActualGl WHERE period=@p AND gl=@g`,
+      [{ name: 'p', type: sql.Char(7), value: period }, { name: 'g', type: sql.NVarChar, value: gl }])
+    const r0 = g.recordset[0]
+    if (r0) {
+      let det = []; try { det = JSON.parse(r0.detail || '[]') } catch (e) {}
+      det.filter(d => !d.note).forEach(d => push({ kind: 'Reported cost line', ref: null, date: null, party: null, description: d.desc,
+        asset: [d.fishing ? 'Fishing' : '', d.whipstock ? 'Whipstock' : '', d.rentals ? 'Rentals' : ''].filter(Boolean).join(' / '),
+        qty: '', currency: 'AED', amount: Number(d.fishing || 0) + Number(d.whipstock || 0) + Number(d.rentals || 0) }))
+      const shown = rows.reduce((s, x) => s + (x.amountAed || 0), 0)
+      if (Math.abs(Number(r0.total) - shown) > 0.5)
+        push({ kind: 'Reported total', ref: null, date: null, party: null,
+          description: det.length ? 'Balance of the reported figure (not itemised in the monthly report)' : 'As reported in the monthly report (not itemised)',
+          asset: [r0.fishing ? 'F ' + Math.round(r0.fishing) : '', r0.whipstock ? 'W ' + Math.round(r0.whipstock) : '', r0.rentals ? 'R ' + Math.round(r0.rentals) : ''].filter(Boolean).join(' · '),
+          qty: '', currency: 'AED', amount: Number(r0.total) - shown })
+    }
+    return { period, gl, rows, source: SRC }
+  }
 
   if (gl === '__REVENUE__') {
     const r = await query(
@@ -328,6 +465,11 @@ module.exports = safe(async function (context, req) {
       await ensureLines(); await ensureGl()
       if (!/^\d{4}-\d{2}$/.test(qs.period || '') || !qs.gl) return jsonResponse(context, 400, { error: 'period and gl required' })
       return jsonResponse(context, 200, await glDetail(qs.period, qs.gl))
+    }
+    if (method === 'POST' && id === 'import-actuals') {
+      if (user.Role !== 'Admin') return jsonResponse(context, 403, { error: 'Admin only' })
+      const r = await importActuals(req.body || {}, user)
+      return jsonResponse(context, 200, { ok: true, ...r })
     }
     if (method === 'PUT' && id === 'budget') {
       if (!EDITORS.includes(user.Role)) return jsonResponse(context, 403, { error: 'Insufficient permissions' })
