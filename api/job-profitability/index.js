@@ -97,16 +97,22 @@ module.exports = safe(async function (context, req) {
      exp AS (
        SELECT ${jobKey('jobId')} AS k, SUM(ISNULL(amount,0)) AS cost
          FROM tbl_MonthlyExpenses WHERE NULLIF(LTRIM(RTRIM(jobId)),'') IS NOT NULL GROUP BY ${jobKey('jobId')})
-     SELECT rev.jobId AS jobId, j.Client AS client, j.Rig AS rig, j.Well AS well, j.Status AS status,
+     , keys AS (SELECT k, jobId FROM rev UNION SELECT k, jobId FROM act WHERE k NOT IN (SELECT k FROM rev))
+     SELECT keys.jobId AS jobId, COALESCE(j.Client, act.client) AS client, COALESCE(j.Rig, act.rig) AS rig, j.Well AS well, j.Status AS status,
             COALESCE(NULLIF(LTRIM(RTRIM(j.Currency)),''),'USD') AS currency,
-            rev.opsDays, rev.standbyDays, rev.revenue,
-            ISNULL(sub.cost,0) AS subCost, ISNULL(sub.unpriced,0) AS unpricedTools,
+            ISNULL(rev.opsDays,0) AS opsDays, ISNULL(rev.standbyDays,0) AS standbyDays,
+            CASE WHEN ISNULL(rev.revenue,0) > 0 THEN rev.revenue ELSE ISNULL(act.jobValue,0) END AS revenue,
+            CASE WHEN ISNULL(rev.revenue,0) > 0 THEN 'App' WHEN act.jobValue IS NOT NULL THEN 'Report ' + act.period ELSE 'None' END AS revenueSource,
+            CASE WHEN ISNULL(sub.cost,0) > 0 THEN sub.cost ELSE ISNULL(act.closingCost,0) END AS subCost,
+            CASE WHEN ISNULL(sub.cost,0) > 0 OR act.closingCost IS NOT NULL THEN 0 ELSE ISNULL(sub.unpriced,0) END AS unpricedTools,
             ISNULL(mnt.cost,0) AS maintCost, ISNULL(exp.cost,0) AS otherCost
-       FROM rev
-       LEFT JOIN tbl_Jobs j ON ${jobKey('j.JobID')} = rev.k
-       LEFT JOIN sub ON sub.k = rev.k
-       LEFT JOIN mnt ON mnt.k = rev.k
-       LEFT JOIN exp ON exp.k = rev.k
-      ORDER BY rev.revenue DESC`, [])
+       FROM keys
+       LEFT JOIN rev ON rev.k = keys.k
+       LEFT JOIN act ON act.k = keys.k
+       LEFT JOIN tbl_Jobs j ON ${jobKey('j.JobID')} = keys.k
+       LEFT JOIN sub ON sub.k = keys.k
+       LEFT JOIN mnt ON mnt.k = keys.k
+       LEFT JOIN exp ON exp.k = keys.k
+      ORDER BY 9 DESC`, [])
   return jsonResponse(context, 200, r.recordset)
 })
