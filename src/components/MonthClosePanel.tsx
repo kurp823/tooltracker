@@ -12,6 +12,7 @@ interface JobRow {
   prevAccrual: number; jobValue: number; invoiceNo: string | null; invoiceValue: number | null; invoiceDate: string | null
   removal: number; diffAmt: number; newAccrual: number; closing: number
   prevCost: number; costAccrued: number; closingCost: number; unpricedDays: number
+  carried?: boolean; legacy?: boolean; notes?: string | null
 }
 interface Preview {
   month: { period: string; prev: string; rate: number; revenue: number; newAccrual: number; diffAmt: number; opening: number; removed: number
@@ -57,6 +58,19 @@ export function MonthClosePanel({ onChanged }: { onChanged: () => void }) {
       showToast(`${mon(r.period)} closed — ${r.jobs} job(s)`, 'success')
       setPreview(null); setPeriod(''); refetch(); onChanged()
     } catch (e: any) { showToast(e.message || 'Close failed', 'error') }
+    finally { setBusy(false) }
+  }
+  // Opening accrual for a job the app never priced: typed from the workbook.
+  const setOpening = async (j: JobRow) => {
+    if (!preview) return
+    const v = window.prompt(`Opening accrual for ${j.jobNumber} (AED) at the start of ${mon(preview.month.period)} — from the workbook. Leave blank to remove.`,
+      j.carried ? String(j.prevAccrual) : '')
+    if (v === null) return
+    setBusy(true)
+    try {
+      await api.put('/monthly-expenses/accrual-opening', { jobNumber: j.jobNumber, prevAccrual: v.trim() === '' ? '' : Number(v) })
+      setPreview(await api.get<Preview>(`/monthly-expenses/close-preview?period=${preview.month.period}`))
+    } catch (e: any) { showToast(e.message || 'Could not save', 'error') }
     finally { setBusy(false) }
   }
   const doReopen = async () => {
@@ -119,7 +133,7 @@ export function MonthClosePanel({ onChanged }: { onChanged: () => void }) {
 
               <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-px bg-slate-200 border border-slate-200 rounded text-[12px]">
                 {([
-                  ['Opening accrual', preview.month.opening], ['Less removals (invoiced)', preview.month.removed],
+                  ['Opening accrual (ledger)', preview.month.opening], ['Less removals (invoiced)', preview.month.removed],
                   ['Add new accruals', preview.month.monthAccrual], ['Closing accrual', preview.month.closing],
                   ['Invoice differences', preview.month.diffAmt], ['Revenue', preview.month.revenue],
                   ['Cost (GL)', preview.month.totalCost], ['Net profit', preview.month.netProfit],
@@ -149,7 +163,14 @@ export function MonthClosePanel({ onChanged }: { onChanged: () => void }) {
                           <td className="px-2 py-1 font-mono">{j.jobNumber}{j.unpricedDays ? <span className="ml-1 text-amber-700" title={`${j.unpricedDays} unpriced day(s)`}>!</span> : null}</td>
                           <td className="px-2 py-1 max-w-[180px] truncate">{j.client || '—'}</td>
                           <td className="px-2 py-1">{j.productLine || '—'}</td>
-                          <td className="px-2 py-1 text-right font-mono">{n2(j.prevAccrual)}</td>
+                          <td className="px-2 py-1 text-right font-mono">
+                            {j.carried
+                              ? n2(j.prevAccrual)
+                              : <button className={`underline decoration-dotted ${j.legacy ? 'text-amber-700' : 'text-gray-400'}`}
+                                        title="No carried accrual — click to set the opening accrual from the workbook" onClick={() => setOpening(j)}>
+                                  {j.legacy ? 'set…' : '0.00'}
+                                </button>}
+                          </td>
                           <td className="px-2 py-1 text-right font-mono">{n2(j.jobValue)}</td>
                           <td className="px-2 py-1 font-mono">{j.invoiceNo || ''}</td>
                           <td className="px-2 py-1 text-right font-mono">{j.invoiceValue == null ? '' : n2(j.invoiceValue)}</td>
