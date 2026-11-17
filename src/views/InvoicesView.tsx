@@ -10,6 +10,7 @@ import { PageLoader, Spinner } from '../components/Spinner'
 import { ListOptions } from '../components/ListOptions'
 import { usePagedRows, Pager } from '../components/usePagedRows'
 import { AdnocTaxInvoice } from '../components/AdnocTaxInvoice'
+import { JobPicker } from '../components/JobPicker'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -83,15 +84,13 @@ function CreateInvoiceModal({
   // set when the job is created, so it is not asked again here.
   const [kind, setKind] = useState<'Monthly' | 'Job'>('Job')
 
-  const { data: jobs } = useFetch<{ JobID: string; Rig: string; Well: string; Client: string; InvoicingType?: string | null }[]>(
-    '/jobs?slim=1'
-  )
-
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
-  const pickJob = (id: string) => {
+  const pickJob = (id: string, j?: { InvoicingType?: string | null; Currency?: string | null; PONumber?: string | null }) => {
     set('JobID', id)
-    const j = (jobs || []).find(x => x.JobID === id)
-    if (j) setKind(/month/i.test(j.InvoicingType || '') ? 'Monthly' : 'Job')
+    if (j) {
+      setKind(/month/i.test(j.InvoicingType || '') ? 'Monthly' : 'Job')
+      if (j.Currency) set('Currency', j.Currency)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -138,15 +137,7 @@ function CreateInvoiceModal({
           {/* Job */}
           <div>
             <label className="label">Job *</label>
-            <select className="input w-full" value={form.JobID}
-                    onChange={e => pickJob(e.target.value)} required>
-              <option value="">— Select job —</option>
-              {(jobs || []).map(j => (
-                <option key={j.JobID} value={j.JobID}>
-                  {j.JobID} — {j.Rig} / {j.Well}
-                </option>
-              ))}
-            </select>
+            <JobPicker value={form.JobID} onChange={pickJob} scope="all" inputClassName="input w-full pr-9" autoFocus />
           </div>
 
           {/* Kind — read from the job */}

@@ -8,6 +8,7 @@ import { api } from '../utils/api'
 import { normalizeJobId } from '../utils/format'
 import { Spinner, PageLoader } from '../components/Spinner'
 import { ToolMultiPicker, type PickItem } from '../components/ToolMultiPicker'
+import { JobPicker } from '../components/JobPicker'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Cell { code: '1' | 'S'; logId: number; rate: number | null; source: string | null }
@@ -410,7 +411,6 @@ export function UtilizationView() {
   const path = `/utilization?year=${year}&month=${month}`
 
   const { data, isLoading, error, refetch } = useRealtimeFetch<{ rows: UtilRow[] }>(path)
-  const { data: activeJobs } = useFetch<{ JobID: string; Rig: string | null; Well: string | null }[]>('/jobs?status=Active')
 
   // Sync from API data — skip if any cell is mid-flight to avoid stomping optimistic state
   useEffect(() => {
@@ -534,12 +534,8 @@ export function UtilizationView() {
         </div>
 
         {/* Job filter: the active jobs, picked rather than typed */}
-        <select className="input w-72" value={jobId} onChange={e => setJobId(e.target.value)}>
-          <option value="">All jobs this month</option>
-          {(activeJobs || []).map(j => (
-            <option key={j.JobID} value={j.JobID}>{j.JobID} — {j.Rig || '—'} / {j.Well || '—'}</option>
-          ))}
-        </select>
+        <JobPicker value={jobId} onChange={setJobId} allLabel="All jobs this month" className="w-80"
+                   inputClassName="input w-full pr-9" placeholder="All jobs this month — type to pick one" />
 
         <button onClick={refetch} className="btn-ghost" title="Refresh">
           <RefreshCw size={15} />
