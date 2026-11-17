@@ -118,6 +118,43 @@ async function priceDay (load, ctx, statusType) {
   return { rate: day, source: 'Contract', reason: hit.matchedOn }
 }
 
+/**
+ * A day logged from the grid carries no ticket. Without one the hole
+ * section cannot be found (hole-priced contracts stay unpriced), the
+ * revenue rollup cannot join the log, and the dispatch-cycle grouping
+ * lumps cycles together. Resolve it: the job's most recent delivery
+ * ticket that carries this tool, matched by SystemID or AssetNo; failing
+ * that, the ticket a rolled-over tool travelled on (tbl_JobTools).
+ */
+async function resolveDt (jobId, tool, given) {
+  let dtNumber = given || null
+  if (dtNumber || !tool) return dtNumber
+  const f = await query(
+    `SELECT TOP 1 d.dtNumber
+       FROM tbl_DeliveryTicketLines dl
+       JOIN tbl_DeliveryTickets d ON d.dtNumber = dl.dtNumber
+      WHERE ${jobKey('d.jobNumber')} = @jk
+        AND ( dl.serial = @tool
+           OR dl.serial = (SELECT TOP 1 AssetNo FROM tbl_Inventory WHERE SystemID = @tool) )
+      ORDER BY d.id DESC`,
+    [{ name: 'jk', value: jobKeyOf(jobId) }, { name: 'tool', value: tool }]
+  )
+  dtNumber = f.recordset[0]?.dtNumber || null
+  if (!dtNumber) {
+    const jt = await query(
+      `SELECT TOP 1 SourceDTNumber
+         FROM tbl_JobTools
+        WHERE ${jobKey('JobID')} = @jk
+          AND (SystemID = @tool OR AssetNo = (SELECT TOP 1 AssetNo FROM tbl_Inventory WHERE SystemID = @tool))
+          AND SourceDTNumber IS NOT NULL
+        ORDER BY JobToolID DESC`,
+      [{ name: 'jk', value: jobKeyOf(jobId) }, { name: 'tool', value: tool }]
+    )
+    dtNumber = jt.recordset[0]?.SourceDTNumber || null
+  }
+  return dtNumber
+}
+
 module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
@@ -308,6 +345,73 @@ module.exports = safe(async function (context, req) {
     })
   }
 
+  // ── POST /utilization/bulk — mark a run of days for one tool ─────────────
+  // Body: { JobID, ToolID, DTNumber?, FromDate, ToDate, UtilizationCode }
+  // Marking a month one click at a time was 31 requests per tool (bug 31).
+  // Days that already carry a log are left alone; the rest are inserted in
+  // one statement, priced once (the rate depends on job, tool and ticket,
+  // not on the day).
+  if (id === 'bulk' && method === 'POST') {
+    if (!['Admin','Operations'].includes(user.Role))
+      return jsonResponse(context, 403, { error: 'Forbidden' })
+    const b = req.body || {}
+    if (!b.JobID || !b.ToolID || !b.FromDate || !b.ToDate || !b.UtilizationCode)
+      return jsonResponse(context, 400, { error: 'JobID, ToolID, FromDate, ToDate, UtilizationCode required' })
+    if (!['1','S'].includes(b.UtilizationCode))
+      return jsonResponse(context, 400, { error: 'UtilizationCode must be "1" or "S"' })
+    const from = String(b.FromDate).slice(0, 10), to = String(b.ToDate).slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to)
+      return jsonResponse(context, 400, { error: 'FromDate and ToDate must be yyyy-mm-dd, From not after To' })
+    const span = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1
+    if (span > 366) return jsonResponse(context, 400, { error: 'At most one year of days in one call' })
+
+    const tool     = String(b.ToolID)
+    const dtNumber = await resolveDt(b.JobID, tool, b.DTNumber)
+    const ctx      = await contextFor(b.JobID, tool, dtNumber)
+    const price    = await priceDay(load, ctx, b.UtilizationCode)
+
+    const r = await query(
+      `WITH days AS (
+         SELECT CAST(@from AS date) AS d
+         UNION ALL
+         SELECT DATEADD(day, 1, d) FROM days WHERE d < CAST(@to AS date)
+       )
+       INSERT INTO tbl_DailyFieldLogs
+         (JobID, DTNumber, ToolSerial, LogDate, StatusType, RateCharged, RateSource, CreatedDate)
+       OUTPUT INSERTED.LogID, INSERTED.LogDate
+       SELECT @job, @dt, @tool, days.d, @code, @rate, @src, GETDATE()
+         FROM days
+        WHERE NOT EXISTS (
+          SELECT 1 FROM tbl_DailyFieldLogs x
+           WHERE ${jobKey('x.JobID')} = @jk
+             AND x.ToolSerial = @tool
+             AND CAST(x.LogDate AS date) = days.d
+             AND (x.DTNumber = @dt OR x.DTNumber IS NULL OR @dt IS NULL)
+        )
+       OPTION (MAXRECURSION 400)`,
+      [
+        { name: 'from', value: from },
+        { name: 'to',   value: to },
+        { name: 'job',  value: b.JobID },
+        { name: 'jk',   value: jobKeyOf(b.JobID) },
+        { name: 'dt',   value: dtNumber },
+        { name: 'tool', value: tool },
+        { name: 'code', value: b.UtilizationCode },
+        { name: 'rate', value: price.rate },
+        { name: 'src',  value: price.source },
+      ]
+    )
+    return jsonResponse(context, 201, {
+      inserted: r.recordset.length,
+      skipped:  span - r.recordset.length,
+      logs:     r.recordset.map(x => ({ LogID: x.LogID, LogDate: x.LogDate })),
+      DTNumber: dtNumber,
+      RateCharged: price.rate,
+      RateSource:  price.source,
+      reason: price.rate == null ? price.reason : undefined,
+    })
+  }
+
   // ── POST create log entry ────────────────────────────────────────────────
   if (!id && method === 'POST') {
     if (!['Admin','Operations'].includes(user.Role))
@@ -320,48 +424,7 @@ module.exports = safe(async function (context, req) {
       return jsonResponse(context, 400, { error: 'UtilizationCode must be "1" or "S"' })
 
     const tool  = b.ToolID != null ? String(b.ToolID) : null
-
-    // A day logged from the grid carries no ticket. Without one the hole
-    // section cannot be found (hole-priced contracts stay unpriced), the
-    // revenue rollup cannot join the log, and the dispatch-cycle grouping
-    // lumps cycles together. Resolve it: the job's most recent delivery
-    // ticket that carries this tool, matched by SystemID or AssetNo.
-    let dtNumber = b.DTNumber || null
-    if (!dtNumber && tool) {
-      const f = await query(
-        `SELECT TOP 1 d.dtNumber
-           FROM tbl_DeliveryTicketLines dl
-           JOIN tbl_DeliveryTickets d ON d.dtNumber = dl.dtNumber
-          WHERE ${jobKey('d.jobNumber')} = @jk
-            AND ( dl.serial = @tool
-               OR dl.serial = (SELECT TOP 1 AssetNo FROM tbl_Inventory WHERE SystemID = @tool) )
-          ORDER BY d.id DESC`,
-        [
-          { name: 'jk',   value: jobKeyOf(b.JobID) },
-          { name: 'tool', value: tool },
-        ]
-      )
-      dtNumber = f.recordset[0]?.dtNumber || null
-
-      // A tool rolled over from last month's job has no ticket on THIS job;
-      // the ticket it went out on travels with it in tbl_JobTools. Without
-      // this fallback every rolled-over day is unpriced ("hole-section-required").
-      if (!dtNumber) {
-        const jt = await query(
-          `SELECT TOP 1 SourceDTNumber
-             FROM tbl_JobTools
-            WHERE ${jobKey('JobID')} = @jk
-              AND (SystemID = @tool OR AssetNo = (SELECT TOP 1 AssetNo FROM tbl_Inventory WHERE SystemID = @tool))
-              AND SourceDTNumber IS NOT NULL
-            ORDER BY JobToolID DESC`,
-          [
-            { name: 'jk',   value: jobKeyOf(b.JobID) },
-            { name: 'tool', value: tool },
-          ]
-        )
-        dtNumber = jt.recordset[0]?.SourceDTNumber || null
-      }
-    }
+    const dtNumber = await resolveDt(b.JobID, tool, b.DTNumber)
 
     const ctx   = await contextFor(b.JobID, tool, dtNumber)
     const price = await priceDay(load, ctx, b.UtilizationCode)
