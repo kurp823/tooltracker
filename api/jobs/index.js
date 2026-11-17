@@ -141,7 +141,7 @@ module.exports = safe(async function (context, req) {
   if (method === 'GET' && !jobId) {
     // ?search= and ?limit= let a type-ahead picker query the 3,824 jobs
     // without pulling the whole table into the browser on every keystroke.
-    const { search, limit, facets } = req.query || {}
+    const { search, limit, facets, status, slim } = req.query || {}
 
     // ?facets=1 — the distinct values actually in use, for the job header's
     // Client / Rig / Well / Contract / Service Type pickers. Those were
@@ -179,17 +179,46 @@ module.exports = safe(async function (context, req) {
     }
 
     const params = []
-    let where = ''
+    const conds = []
     if (search) {
-      where = `WHERE JobID LIKE @q OR Client LIKE @q OR Rig LIKE @q OR Well LIKE @q OR Contract LIKE @q`
+      conds.push(`(JobID LIKE @q OR Client LIKE @q OR Rig LIKE @q OR Well LIKE @q OR Contract LIKE @q)`)
       params.push({ name: 'q', type: sql.NVarChar, value: `%${search}%` })
     }
+    // ?status= was sent by the job pickers (Delivery / Receiving / Inspection)
+    // but never read, so each one downloaded all 3,872 jobs with the billing
+    // status worked out for every row. 'Active' means the same as the
+    // dashboard's active-jobs count (not finished or cancelled); any other value
+    // is an exact match on the job's Status.
+    const statusQ = String(status || '').trim()
+    if (statusQ) {
+      if (statusQ.toLowerCase() === 'active') {
+        conds.push(`Status NOT IN ('Completed','JobCompleted','Cancelled','Closed')`)
+      } else {
+        conds.push(`Status = @status`)
+        params.push({ name: 'status', type: sql.NVarChar, value: statusQ })
+      }
+    }
+    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
+    // Pickers only need a handful of columns. A filtered or ?slim=1 request
+    // skips the billing-status calculation and the lock columns.
+    const isSlim = !!statusQ || ['1', 'true', 'yes'].includes(String(slim).toLowerCase())
     let top = parseInt(limit, 10)
     if (!Number.isFinite(top) || top <= 0) top = 0
     const topClause = top > 0 ? `TOP (@top)` : ''
     if (top > 0) params.push({ name: 'top', type: sql.Int, value: Math.min(top, 5000) })
 
     try {
+      if (isSlim) {
+        const slimResult = await query(`
+          SELECT ${topClause}
+                 JobID, Client, Rig, Well, Contract, ServiceType, HoleSection,
+                 Status, InvoicingType, Currency, FiscalYear
+          FROM   tbl_Jobs
+          ${where}
+          ORDER  BY TRY_CAST(SUBSTRING(JobID, 5, 3) AS INT) DESC, JobID DESC
+        `, params)
+        return jsonResponse(context, 200, slimResult.recordset)
+      }
       await ensureBillingStatus()
       const result = await query(`
         SELECT ${topClause}

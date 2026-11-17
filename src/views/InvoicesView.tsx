@@ -77,7 +77,7 @@ function CreateInvoiceModal({
   })
 
   const { data: jobs } = useFetch<{ JobID: string; Rig: string; Well: string; Client: string }[]>(
-    '/jobs?status=Active'
+    '/jobs?slim=1'
   )
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
