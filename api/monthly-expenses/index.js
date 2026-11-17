@@ -24,6 +24,7 @@ const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
 
 // ── GL layout (Sub-division wise P&L) ──────────────────────────────────────
 const { ensureLines, ownerSql, sheetApply, amountSql } = require('../sub-lines')
+const MC = require('../month-close')
 const { jobKey } = require('../db')
 
 // Master P&L lines as they appear on the monthly report. Seeded into the
@@ -465,6 +466,59 @@ module.exports = safe(async function (context, req) {
       await ensureLines(); await ensureGl()
       if (!/^\d{4}-\d{2}$/.test(qs.period || '') || !qs.gl) return jsonResponse(context, 400, { error: 'period and gl required' })
       return jsonResponse(context, 200, await glDetail(qs.period, qs.gl))
+    }
+    // ── Month-end close ────────────────────────────────────────────────────
+    // status: what is closed and what comes next; preview: the month worked
+    // out without saving; close-month: save it; reopen-month: delete the
+    // latest closed month (Admin). See month-close.js for the method.
+    if (method === 'GET' && id === 'close-status') {
+      await ensureActuals()
+      return jsonResponse(context, 200, await MC.status())
+    }
+    if (method === 'GET' && id === 'close-preview') {
+      if (!EDITORS.includes(user.Role)) return jsonResponse(context, 403, { error: 'Insufficient permissions' })
+      await ensureLines(); await ensureGl(); await ensureActuals()
+      const period = qs.period
+      if (!/^\d{4}-\d{2}$/.test(period || '')) return jsonResponse(context, 400, { error: 'period (YYYY-MM) required' })
+      const st = await MC.status()
+      const notes = []
+      if (period > st.current) return jsonResponse(context, 400, { error: `${period} has not started` })
+      if (period === st.current) notes.push('This month has not ended yet — closing it now fixes the figures as they stand today')
+      const prev = MC.prevPeriod(period)
+      if (st.closed.length && !st.closed.some(c => c.period === prev) && period > st.closed[0].period)
+        return jsonResponse(context, 409, { error: `Close ${prev} first — months are closed in order` })
+      if (st.closed.some(c => c.period === period)) notes.push(`${period} is already closed; closing again replaces its figures`)
+      const data = await MC.computeMonth(period, { glRange, subMonthRows, rateAed })
+      return jsonResponse(context, 200, { ...data, notes })
+    }
+    if (method === 'POST' && id === 'close-month') {
+      if (!EDITORS.includes(user.Role)) return jsonResponse(context, 403, { error: 'Insufficient permissions' })
+      await ensureLines(); await ensureGl(); await ensureActuals()
+      const period = (req.body || {}).period
+      if (!/^\d{4}-\d{2}$/.test(period || '')) return jsonResponse(context, 400, { error: 'period (YYYY-MM) required' })
+      const st = await MC.status()
+      if (period > st.current) return jsonResponse(context, 400, { error: `${period} has not started` })
+      const prev = MC.prevPeriod(period)
+      if (st.closed.length && !st.closed.some(c => c.period === prev) && period > st.closed[0].period)
+        return jsonResponse(context, 409, { error: `Close ${prev} first — months are closed in order` })
+      const already = st.closed.find(c => c.period === period)
+      if (already && already.source !== MC.SOURCE && user.Role !== 'Admin')
+        return jsonResponse(context, 409, { error: `${period} holds the reported figures imported from the workbook; only Admin can replace them` })
+      if (st.closed.some(c => c.period > period))
+        return jsonResponse(context, 409, { error: `A later month is closed; reopen it before closing ${period} again` })
+      const data = await MC.computeMonth(period, { glRange, subMonthRows, rateAed })
+      await MC.saveClose(period, data, user)
+      return jsonResponse(context, 200, { ok: true, period, month: data.month, jobs: data.jobs.length, warnings: data.warnings })
+    }
+    if (method === 'POST' && id === 'reopen-month') {
+      if (user.Role !== 'Admin') return jsonResponse(context, 403, { error: 'Admin only' })
+      await ensureActuals()
+      const period = (req.body || {}).period
+      const st = await MC.status()
+      if (!period || period !== st.last) return jsonResponse(context, 409, { error: `Only the latest closed month (${st.last || 'none'}) can be reopened` })
+      await query(`DELETE FROM tbl_ActualJobs WHERE period=@p; DELETE FROM tbl_ActualGl WHERE period=@p; DELETE FROM tbl_ActualMonth WHERE period=@p;`,
+        [{ name: 'p', type: sql.Char(7), value: period }])
+      return jsonResponse(context, 200, { ok: true, reopened: period })
     }
     if (method === 'POST' && id === 'import-actuals') {
       if (user.Role !== 'Admin') return jsonResponse(context, 403, { error: 'Admin only' })

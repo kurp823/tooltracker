@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Download, RefreshCw, Search, X } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import { MonthClosePanel } from '../components/MonthClosePanel'
 import { useFetch } from '../hooks/useFetch'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
@@ -165,6 +166,9 @@ export function MonthlyPLView() {
           </div>
           <button className="btn-mini" onClick={refetch}><RefreshCw size={12} /></button>
           <button className="btn-accent" onClick={exportXlsx}><Download size={12} /> Excel</button>
+        </div>
+        <div className="w-full border-t border-slate-600/60 pt-2 -mt-1">
+          <MonthClosePanel onChanged={refetch} />
         </div>
       </div>
 
