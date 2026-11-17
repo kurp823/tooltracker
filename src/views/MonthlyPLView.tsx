@@ -112,10 +112,15 @@ export function MonthlyPLView() {
   const L = data.ledger
   const opening = (i: number) => L[i] ? L[i]!.opening : (i > 0 && L[i - 1] ? L[i - 1]!.closing : null)
 
-  const setBudget = async (period: string, old: number | null) => {
-    const v = window.prompt(`Budget for ${period} (AED)`, old == null ? '' : String(old))
-    if (v == null || v.trim() === '') return
-    try { await api.put('/monthly-expenses/budget', { period, amount: Number(v) }); refetch() }
+  // Budget is typed in the cell itself; Enter saves, Escape cancels.
+  const [budEdit, setBudEdit] = useState<{ period: string; value: string } | null>(null)
+  const setBudget = (period: string, old: number | null) => setBudEdit({ period, value: old == null ? '' : String(old) })
+  const saveBudget = async () => {
+    if (!budEdit) return
+    const v = budEdit.value.trim()
+    setBudEdit(null)
+    if (v === '') return
+    try { await api.put('/monthly-expenses/budget', { period: budEdit.period, amount: Number(v) }); refetch() }
     catch (e: any) { showToast(e.message || 'Could not save budget', 'error') }
   }
 
@@ -193,7 +198,11 @@ export function MonthlyPLView() {
               <tr><td className="px-3 py-1.5 font-semibold border-b">Budget (AED)</td>
                 {data.budget.map((b, i) => (
                   <td key={i} className="px-3 py-1.5 text-right font-mono border-b border-slate-100">
-                    {canEdit ? <button className="hover:bg-amber-50 rounded px-1" onClick={() => setBudget(data.months[i], b)}>{b == null ? '＋' : n0(b)}</button> : (b == null ? '—' : n0(b))}</td>))}
+                    {budEdit && budEdit.period === data.months[i]
+                      ? <input autoFocus type="number" className="field-input !h-6 !py-0 w-28 text-right !text-black" value={budEdit.value}
+                               onChange={e => setBudEdit(x => x && ({ ...x, value: e.target.value }))}
+                               onBlur={saveBudget} onKeyDown={e => { if (e.key === 'Enter') saveBudget(); if (e.key === 'Escape') setBudEdit(null) }} />
+                      : canEdit ? <button className="hover:bg-amber-50 rounded px-1" title="Click to set the budget" onClick={() => setBudget(data.months[i], b)}>{b == null ? '＋' : n0(b)}</button> : (b == null ? '—' : n0(b))}</td>))}
                 <td className="px-3 py-1.5 text-right font-mono font-bold bg-amber-50 border-b">{n0(ytdBud)}</td></tr>
               <tr><td className="px-3 py-1.5 border-b">New accruals this month<div className="text-[10px] text-slate-500">net new work not yet invoiced</div></td>
                 {data.months.map((_, i) => <td key={i} className="px-3 py-1.5 text-right font-mono border-b border-slate-100">{L[i] ? n0(L[i]!.newAccrual) : '—'}</td>)}

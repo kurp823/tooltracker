@@ -61,14 +61,16 @@ export function MonthClosePanel({ onChanged }: { onChanged: () => void }) {
     finally { setBusy(false) }
   }
   // Opening accrual for a job the app never priced: typed from the workbook.
-  const setOpening = async (j: JobRow) => {
-    if (!preview) return
-    const v = window.prompt(`Opening accrual for ${j.jobNumber} (AED) at the start of ${mon(preview.month.period)} — from the workbook. Leave blank to remove.`,
-      j.carried ? String(j.prevAccrual) : '')
-    if (v === null) return
+  const [openEdit, setOpenEdit] = useState<{ job: string; value: string } | null>(null)
+  const setOpening = (j: JobRow) => setOpenEdit({ job: j.jobNumber, value: j.carried ? String(j.prevAccrual) : '' })
+  const saveOpening = async () => {
+    if (!preview || !openEdit) return
+    const v = openEdit.value.trim()
+    const job = openEdit.job
+    setOpenEdit(null)
     setBusy(true)
     try {
-      await api.put('/monthly-expenses/accrual-opening', { jobNumber: j.jobNumber, prevAccrual: v.trim() === '' ? '' : Number(v) })
+      await api.put('/monthly-expenses/accrual-opening', { jobNumber: job, prevAccrual: v === '' ? '' : Number(v) })
       setPreview(await api.get<Preview>(`/monthly-expenses/close-preview?period=${preview.month.period}`))
     } catch (e: any) { showToast(e.message || 'Could not save', 'error') }
     finally { setBusy(false) }
@@ -164,8 +166,12 @@ export function MonthClosePanel({ onChanged }: { onChanged: () => void }) {
                           <td className="px-2 py-1 max-w-[180px] truncate">{j.client || '—'}</td>
                           <td className="px-2 py-1">{j.productLine || '—'}</td>
                           <td className="px-2 py-1 text-right font-mono">
-                            {j.carried
-                              ? n2(j.prevAccrual)
+                            {openEdit && openEdit.job === j.jobNumber
+                              ? <input autoFocus type="number" className="field-input !h-6 !py-0 w-28 text-right" value={openEdit.value} placeholder="AED"
+                                       onChange={e => setOpenEdit(x => x && ({ ...x, value: e.target.value }))}
+                                       onBlur={saveOpening} onKeyDown={e => { if (e.key === 'Enter') saveOpening(); if (e.key === 'Escape') setOpenEdit(null) }} />
+                              : j.carried
+                              ? <button className="hover:underline decoration-dotted" title="Click to set the opening accrual by hand" onClick={() => setOpening(j)}>{n2(j.prevAccrual)}</button>
                               : <button className={`underline decoration-dotted ${j.legacy ? 'text-amber-700' : 'text-gray-400'}`}
                                         title="No carried accrual — click to set the opening accrual from the workbook" onClick={() => setOpening(j)}>
                                   {j.legacy ? 'set…' : '0.00'}

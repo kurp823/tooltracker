@@ -363,27 +363,40 @@ function InvoiceDetailPanel({
     }
   }
 
-  const handleAddLine = async () => {
-    if (!isMonthly) return
-    const desc = window.prompt('Tool description')
-    if (!desc) return
-    const rateStr = window.prompt('Day rate (USD)')
-    const rate    = rateStr ? parseFloat(rateStr) : null
-    const daysStr = window.prompt('Ops days')
-    const days    = daysStr ? parseFloat(daysStr) : 1
+  // A manual line (something the utilization grid does not carry - a redress
+  // charge, a run charge): typed into a row at the top of the lines table.
+  const [newLine, setNewLine] = useState<{ desc: string; days: string; rate: string } | null>(null)
+  const [addingLine, setAddingLine] = useState(false)
+  const handleAddLine = () => { if (isMonthly) setNewLine({ desc: '', days: '1', rate: '' }) }
+  const saveNewLine = async () => {
+    if (!newLine || !newLine.desc.trim()) { toastErr('Describe the line'); return }
+    const days = Number(newLine.days) || 1, rate = newLine.rate === '' ? null : Number(newLine.rate)
+    if (rate != null && !Number.isFinite(rate)) { toastErr('Rate must be a number'); return }
+    setAddingLine(true)
     try {
       await api.post(`/invoices/${inv.InvoiceID}/lines`, {
-        ToolDescription: desc,
-        Quantity: days,
-        UnitRate: rate,
-        LineAmount: rate && days ? rate * days : null,
+        ToolDescription: newLine.desc.trim(), Quantity: days, UnitRate: rate, LineAmount: rate != null ? rate * days : null,
       })
-      refetchLines()
-      success('Line added')
+      refetchLines(); onRefresh(); setNewLine(null); success('Line added')
     } catch (err: any) {
       toastErr(err.message || 'Failed to add line')
-    }
+    } finally { setAddingLine(false) }
   }
+  const newLineRow = newLine && (
+    <tr className="bg-amber-50/60">
+      <td className="table-td text-gray-400">+</td>
+      <td className="table-td text-gray-400">manual</td>
+      <td className="table-td"><input autoFocus className="field-input !h-6 !py-0 w-full" placeholder="Description (e.g. redress charge)" value={newLine.desc}
+            onChange={e => setNewLine(n => n && ({ ...n, desc: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') saveNewLine(); if (e.key === 'Escape') setNewLine(null) }} /></td>
+      <td className="table-td"><input type="number" className="field-input !h-6 !py-0 w-16 text-right" value={newLine.days} onChange={e => setNewLine(n => n && ({ ...n, days: e.target.value }))} /></td>
+      <td className="table-td"><input type="number" step="0.01" className="field-input !h-6 !py-0 w-24 text-right" placeholder="rate" value={newLine.rate} onChange={e => setNewLine(n => n && ({ ...n, rate: e.target.value }))} /></td>
+      <td className="table-td text-right font-mono">{newLine.rate !== '' ? formatCurrency((Number(newLine.rate) || 0) * (Number(newLine.days) || 1)) : '—'}</td>
+      <td className="table-td" colSpan={2}>
+        <button className="btn-mini !py-px" onClick={saveNewLine} disabled={addingLine}>{addingLine ? <Spinner size="sm" /> : <Save size={11} />} Add</button>
+        <button className="btn-mini !py-px ml-1" onClick={() => setNewLine(null)}><X size={11} /></button>
+      </td>
+    </tr>
+  )
 
   const handleGenerate = async () => {
     if (!isMonthly) return
@@ -601,7 +614,7 @@ function InvoiceDetailPanel({
             )}
             <BillingMilestones jobId={inv.JobID || ''} />
           </div>
-        ) : !lines || lines.length === 0 ? (
+        ) : (!lines || lines.length === 0) && !newLine ? (
           <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
             <FileText size={28} className="mb-1.5 opacity-30" />
             <p className="text-xs">No lines on this invoice yet</p>
@@ -628,7 +641,8 @@ function InvoiceDetailPanel({
                 </tr>
               </thead>
               <tbody>
-                {lines.map((l, i) => (
+                {newLineRow}
+                {(lines || []).map((l, i) => (
                   <tr key={l.LineID} className="border-b border-gray-100 hover:bg-brand-50/40">
                     <td className="table-td text-gray-400">{i + 1}</td>
                     <td className="table-td font-mono text-gray-500">{l.SerialNumber || '—'}</td>
