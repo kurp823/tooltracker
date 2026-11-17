@@ -106,6 +106,7 @@ function NewContractModal({ open, onClose, onCreated }: { open: boolean; onClose
 
 export function ContractsView() {
   const { hasRole } = useAuth()
+  const { showToast } = useToast()
   const { data: contracts, isLoading, error, refetch } = useFetch<Contract[]>('/contracts')
   const [filter, setFilter] = useState<Filter>('All')
   const [client, setClient] = useState('All')
@@ -113,7 +114,10 @@ export function ContractsView() {
   const [open, setOpen] = useState<string | null>(null)
   const [showNew, setShowNew] = useState(false)
 
-  const rows = contracts ?? []
+  // A contract with neither a ref nor a client is an empty placeholder (one
+  // test row exists); it is shown to Admin only, flagged, so it can be removed.
+  const allRows = contracts ?? []
+  const rows = allRows.filter(c => (c.ContractNumber || '').trim() || (c.ClientName || '').trim() || hasRole('Admin'))
 
   const clients = useMemo(
     () => ['All', ...Array.from(new Set(rows.map(c => c.ClientName).filter(Boolean) as string[])).sort()],
@@ -260,12 +264,26 @@ export function ContractsView() {
                   </td>
                 </tr>
               ) : filtered.map(c => (
-                <tr key={c.ContractID} className="border-b border-gray-100 hover:bg-brand-50/50 cursor-pointer"
+                <tr key={c.ContractID} className="border-b border-gray-100 hover:bg-brand-50/50 cursor-pointer whitespace-nowrap"
                     onClick={() => setOpen(c.ContractID)} title="Open the contract file and its rate schedule">
-                  <td className="table-td font-mono font-medium text-brand-700">{c.ContractNumber || c.ContractID}</td>
-                  <td className="table-td font-medium">{c.ClientName || '—'}</td>
-                  <td className="table-td font-mono text-[11px]">{c.PONumber || '—'}</td>
-                  <td className="table-td max-w-sm truncate" title={c.Description || ''}>{c.Description || '—'}</td>
+                  <td className="table-td font-mono font-medium text-brand-700 whitespace-nowrap">
+                    {c.ContractNumber || c.ContractID}
+                    {!(c.ContractNumber || '').trim() && !(c.ClientName || '').trim() && (
+                      <>
+                        <span className="ml-2 badge bg-amber-100 text-amber-800" title="No ref and no client — a placeholder row">empty</span>
+                        <button className="ml-2 text-gray-400 hover:text-red-500" title="Remove this placeholder (no jobs can be on it)"
+                                onClick={async e => {
+                                  e.stopPropagation()
+                                  if (!window.confirm(`Remove placeholder contract ${c.ContractID}?`)) return
+                                  try { await api.delete(`/contracts/${encodeURIComponent(c.ContractID)}`); showToast('Removed', 'success'); refetch() }
+                                  catch (err: any) { showToast(err.message || 'Could not remove', 'error') }
+                                }}><X size={12} /></button>
+                      </>
+                    )}
+                  </td>
+                  <td className="table-td font-medium whitespace-nowrap max-w-[220px] truncate" title={c.ClientName || ''}>{c.ClientName || '—'}</td>
+                  <td className="table-td font-mono text-[11px] whitespace-nowrap">{c.PONumber || '—'}</td>
+                  <td className="table-td max-w-[340px] truncate whitespace-nowrap" title={c.Description || ''}>{c.Description || '—'}</td>
                   <td className="table-td text-center">{c.Currency || '—'}</td>
                   <td className="table-td whitespace-nowrap text-[11px]">
                     {c.StartDate || c.EndDate
@@ -292,8 +310,7 @@ export function ContractsView() {
           </table>
         </div>
         <div className="shrink-0 border-t border-gray-200 px-3 py-1.5 flex items-center justify-between text-[11px] text-gray-500">
-          <span>Showing {filtered.length} of {rows.length} master contracts</span>
-          <span>Standby Default: 50% Ops Rate</span>
+          <span>Showing {filtered.length} of {rows.length} master contracts · click a contract to open its file and rate schedule</span>
         </div>
       </div>
     </div>
