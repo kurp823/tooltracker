@@ -80,19 +80,26 @@ async function computeMonth(period, deps) {
   const openings = new Map(ov.recordset.map(r => [jobKeyOf(r.jobNumber), r]))
 
   // 2. One pass over the field logs: value to date, value in P, unpriced days, per job.
+  // Aggregate the logs by their raw JobID first, then normalise the few
+  // hundred distinct ids and join the job header on the normalised key -
+  // never the five-REPLACE normalisation per log row, which took 25 s.
   const val = await query(
-    `SELECT d.JobID AS jobId, MAX(j.JobID) AS canonical, MAX(j.Client) AS client, MAX(j.Contract) AS contract,
-            MAX(j.Rig) AS rig, MAX(j.Well) AS well, MAX(j.ServiceType) AS svc,
-            COALESCE(NULLIF(LTRIM(RTRIM(MAX(j.Currency))),''),'USD') AS cur,
-            SUM(ISNULL(d.RateCharged,0)) AS total,
-            SUM(CASE WHEN d.LogDate >= @start THEN ISNULL(d.RateCharged,0) ELSE 0 END) AS inMonth,
-            SUM(CASE WHEN d.RateCharged IS NULL THEN 1 ELSE 0 END) AS unpriced,
-            SUM(CASE WHEN d.LogDate >= @start AND d.RateCharged IS NULL THEN 1 ELSE 0 END) AS unpricedInMonth,
-            MIN(d.LogDate) AS firstDay
-       FROM tbl_DailyFieldLogs d
-       LEFT JOIN tbl_Jobs j ON ${jobKey('j.JobID')} = ${jobKey('d.JobID')}
-      WHERE d.StatusType IN ('1','S') AND d.LogDate < @end
-      GROUP BY d.JobID`, P)
+    `WITH agg AS (
+       SELECT d.JobID AS jobId,
+              SUM(ISNULL(d.RateCharged,0)) AS total,
+              SUM(CASE WHEN d.LogDate >= @start THEN ISNULL(d.RateCharged,0) ELSE 0 END) AS inMonth,
+              SUM(CASE WHEN d.RateCharged IS NULL THEN 1 ELSE 0 END) AS unpriced,
+              SUM(CASE WHEN d.LogDate >= @start AND d.RateCharged IS NULL THEN 1 ELSE 0 END) AS unpricedInMonth,
+              MIN(d.LogDate) AS firstDay
+         FROM tbl_DailyFieldLogs d
+        WHERE d.StatusType IN ('1','S') AND d.LogDate < @end
+        GROUP BY d.JobID),
+     jk AS (SELECT JobID, Client, Contract, Rig, Well, ServiceType, Currency, ${jobKey('JobID')} AS k FROM tbl_Jobs)
+     SELECT a.jobId, j.JobID AS canonical, j.Client AS client, j.Contract AS contract, j.Rig AS rig, j.Well AS well,
+            j.ServiceType AS svc, COALESCE(NULLIF(LTRIM(RTRIM(j.Currency)),''),'USD') AS cur,
+            a.total, a.inMonth, a.unpriced, a.unpricedInMonth, a.firstDay
+       FROM agg a
+       LEFT JOIN jk j ON j.k = ${jobKey('a.jobId')}`, P)
   const byJob = new Map()
   const mk = (k, x) => ({ key: k, jobId: x.JobID || x.canonical || x.jobId || x.jobNumber, client: x.Client ?? x.client ?? null,
                           contract: x.Contract ?? x.contract ?? null, rig: x.Rig ?? x.rig ?? null, well: x.Well ?? x.well ?? null,
