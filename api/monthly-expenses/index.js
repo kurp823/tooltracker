@@ -511,6 +511,31 @@ module.exports = safe(async function (context, req) {
       await audit(user, 'month', period, 'close', data.month)
       return jsonResponse(context, 200, { ok: true, period, month: data.month, jobs: data.jobs.length, warnings: data.warnings })
     }
+    // Opening accrual for a job the app never priced (accrued in the workbook
+    // months). Used by the close when the job has no carried row.
+    if (method === 'PUT' && id === 'accrual-opening') {
+      if (!EDITORS.includes(user.Role)) return jsonResponse(context, 403, { error: 'Insufficient permissions' })
+      const b = req.body || {}
+      const job = String(b.jobNumber || '').trim()
+      if (!job) return jsonResponse(context, 400, { error: 'jobNumber required' })
+      const amt = b.prevAccrual === '' || b.prevAccrual == null ? null : Number(b.prevAccrual)
+      await query(`IF OBJECT_ID('dbo.tbl_AccrualOpening','U') IS NULL
+                     CREATE TABLE dbo.tbl_AccrualOpening (jobNumber nvarchar(40) NOT NULL PRIMARY KEY, prevAccrual decimal(18,2) NOT NULL,
+                       prevCost decimal(18,2) NULL, note nvarchar(300) NULL, updatedBy nvarchar(100) NULL, updatedAt datetime NULL)`, [])
+      if (amt == null) {
+        await query(`DELETE FROM tbl_AccrualOpening WHERE jobNumber = @j`, [{ name: 'j', type: sql.NVarChar, value: job }])
+      } else {
+        if (!Number.isFinite(amt)) return jsonResponse(context, 400, { error: 'prevAccrual must be a number (AED)' })
+        await query(`MERGE tbl_AccrualOpening AS t USING (SELECT @j AS j) s ON t.jobNumber = s.j
+                     WHEN MATCHED THEN UPDATE SET prevAccrual=@a, prevCost=@c, note=@n, updatedBy=@u, updatedAt=GETDATE()
+                     WHEN NOT MATCHED THEN INSERT (jobNumber, prevAccrual, prevCost, note, updatedBy, updatedAt) VALUES (@j,@a,@c,@n,@u,GETDATE());`,
+          [{ name: 'j', type: sql.NVarChar, value: job }, { name: 'a', type: sql.Decimal(18, 2), value: amt },
+           { name: 'c', type: sql.Decimal(18, 2), value: b.prevCost === '' || b.prevCost == null ? null : Number(b.prevCost) },
+           { name: 'n', type: sql.NVarChar, value: b.note || null }, { name: 'u', type: sql.NVarChar, value: user.Username }])
+      }
+      await audit(user, 'job', job, 'opening-accrual', { prevAccrual: amt, prevCost: b.prevCost ?? null })
+      return jsonResponse(context, 200, { ok: true })
+    }
     if (method === 'POST' && id === 'reopen-month') {
       if (user.Role !== 'Admin') return jsonResponse(context, 403, { error: 'Admin only' })
       await ensureActuals()
