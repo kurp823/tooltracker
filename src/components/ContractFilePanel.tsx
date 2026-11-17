@@ -7,6 +7,7 @@ import { api } from '../utils/api'
 import { Spinner } from './Spinner'
 import { ListOptions } from './ListOptions'
 import { formatDate } from '../utils/format'
+import { HistoryPanel } from './HistoryPanel'
 
 interface ContractFull {
   ContractID: string; ContractNumber: string | null; ClientName: string | null; PONumber: string | null
@@ -60,6 +61,7 @@ export function ContractFilePanel({ contractId, onClose, onChanged }: { contract
   const [draft, setDraft] = useState<RateDraft | null>(null)
   const [paste, setPaste] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showHist, setShowHist] = useState(false)
 
   React.useEffect(() => {
     if (c && !head) setHead({
@@ -166,10 +168,12 @@ export function ContractFilePanel({ contractId, onClose, onChanged }: { contract
 
   return (
     <div className="screen">
+      {showHist && <HistoryPanel entity="contract" id={String(c.ContractNumber)} title={`Contract ${c.ContractNumber}`} onClose={() => setShowHist(false)} />}
       <div className="flex items-center gap-2 px-2 h-[30px] bg-navy-head text-white shrink-0 rounded-t">
         <button onClick={() => { if (dirty && !window.confirm('Unsaved changes — leave?')) return; onClose() }} className="hover:text-accent-400" title="Back to register"><X size={15} /></button>
         <span className="text-[13px] font-bold tracking-wide">CONTRACT</span>
         <span className="ml-auto font-mono font-bold text-accent-400 text-[14px]">{c.ContractNumber}</span>
+        <button className="btn-mini !py-px ml-2" onClick={() => setShowHist(true)} title="Who changed this contract or its rates">History</button>
         <span className="text-[11px] text-slate-300 ml-3">{c.rateCount} active rate{c.rateCount === 1 ? '' : 's'} · {c.jobCount} job{c.jobCount === 1 ? '' : 's'} ({c.openJobs} open)
           {c.scopes.length > 1 ? ` · scopes ${c.scopes.join(', ')}` : ''}</span>
       </div>

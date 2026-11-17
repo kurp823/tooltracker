@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe } = require('../db')
+const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe , audit, blockIfClosed } = require('../db')
 const R = require('../rates')
 
 /**
@@ -364,6 +364,8 @@ module.exports = safe(async function (context, req) {
     if (!b.JobID) return jsonResponse(context, 400, { error: 'JobID required' })
     const ym = String(b.YearMonth || '').trim()
     if (ym && !/^\d{4}-\d{2}$/.test(ym)) return jsonResponse(context, 400, { error: 'YearMonth must be yyyy-mm' })
+    if (ym && await blockIfClosed(context, user, ym + '-01', 'utilization', b.JobID, 'reprice')) return
+    await audit(user, 'utilization', b.JobID, 'reprice', { YearMonth: ym || 'all' })
 
     const rows = await query(
       `SELECT l.LogID, l.JobID, l.ToolSerial, l.DTNumber, l.StatusType, l.LogDate,
@@ -431,6 +433,7 @@ module.exports = safe(async function (context, req) {
       return jsonResponse(context, 400, { error: 'FromDate and ToDate must be yyyy-mm-dd, From not after To' })
     const span = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1
     if (span > 366) return jsonResponse(context, 400, { error: 'At most one year of days in one call' })
+    if (await blockIfClosed(context, user, from, 'utilization', `${b.JobID}/${b.ToolID}`, 'mark days')) return
 
     const tool     = String(b.ToolID)
     const dtNumber = await resolveDt(b.JobID, tool, b.DTNumber)
@@ -489,6 +492,7 @@ module.exports = safe(async function (context, req) {
       return jsonResponse(context, 400, { error: 'JobID, LogDate, UtilizationCode required' })
     if (!['1','S'].includes(b.UtilizationCode))
       return jsonResponse(context, 400, { error: 'UtilizationCode must be "1" or "S"' })
+    if (await blockIfClosed(context, user, b.LogDate, 'utilization', `${b.JobID}/${b.ToolID}`, 'mark day')) return
 
     const tool  = b.ToolID != null ? String(b.ToolID) : null
     const dtNumber = await resolveDt(b.JobID, tool, b.DTNumber)
@@ -530,6 +534,11 @@ module.exports = safe(async function (context, req) {
   // ── PUT ──────────────────────────────────────────────────────────────────
   if (id && method === 'PUT') {
     const b = req.body || {}
+    {
+      const d = await query(`SELECT LogDate FROM tbl_DailyFieldLogs WHERE LogID = @id`, [{ name: 'id', value: Number(id) }])
+      if (!d.recordset.length) return jsonResponse(context, 404, { error: 'Not found' })
+      if (await blockIfClosed(context, user, d.recordset[0].LogDate, 'utilization', String(id), 'edit day')) return
+    }
 
     // ── billing override: set the rate by hand and lock it ────────────────
     if (b.RateCharged !== undefined || b.ResetRate) {
@@ -544,6 +553,8 @@ module.exports = safe(async function (context, req) {
       )
       const log = cur.recordset[0]
       if (!log) return jsonResponse(context, 404, { error: 'Not found' })
+      await audit(user, 'utilization', String(id), b.ResetRate ? 'rate-reset' : 'rate-override',
+        { job: log.JobID, tool: log.ToolSerial, dt: log.DTNumber, old: log.RateCharged, new: b.ResetRate ? null : b.RateCharged, note: b.RateNote || null })
 
       // ResetRate drops the override and re-resolves from the contract.
       if (b.ResetRate) {
@@ -643,6 +654,10 @@ module.exports = safe(async function (context, req) {
   if (id && method === 'DELETE') {
     if (!['Admin','Operations'].includes(user.Role))
       return jsonResponse(context, 403, { error: 'Forbidden' })
+    const d = await query(`SELECT LogDate, JobID, ToolSerial, StatusType, RateCharged FROM tbl_DailyFieldLogs WHERE LogID = @id`, [{ name: 'id', value: Number(id) }])
+    if (!d.recordset.length) return jsonResponse(context, 404, { error: 'Not found' })
+    if (await blockIfClosed(context, user, d.recordset[0].LogDate, 'utilization', String(id), 'delete day')) return
+    await audit(user, 'utilization', String(id), 'delete-day', d.recordset[0])
 
     await query('DELETE FROM tbl_DailyFieldLogs WHERE LogID = @id',
       [{ name: 'id', value: Number(id) }])

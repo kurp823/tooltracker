@@ -278,9 +278,80 @@ function listControls(qs, cols) {
   return { top, topSql: top > 0 ? `TOP (${top})` : '', term, searchSql, params }
 }
 
+/**
+ * Audit log. Who changed what, when, with the old and new values, so a
+ * billing query ("who changed this rate / this date") has an answer.
+ * Best-effort: a failure to log never fails the change itself.
+ *   audit(user, 'invoice', 'INV-2026-00001', 'legal-number', { old, new })
+ */
+let auditReady = null
+function ensureAudit() {
+  if (!auditReady) auditReady = query(`
+    IF OBJECT_ID('dbo.tbl_AuditLog', 'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.tbl_AuditLog (
+        id        bigint IDENTITY(1,1) NOT NULL CONSTRAINT PK_tbl_AuditLog PRIMARY KEY,
+        at        datetime      NOT NULL CONSTRAINT DF_Audit_At DEFAULT (GETDATE()),
+        who       nvarchar(100) NULL,
+        role      nvarchar(40)  NULL,
+        entity    nvarchar(40)  NOT NULL,
+        entityId  nvarchar(80)  NOT NULL,
+        action    nvarchar(60)  NOT NULL,
+        detail    nvarchar(max) NULL);
+      CREATE INDEX IX_AuditLog_entity ON dbo.tbl_AuditLog(entity, entityId, at DESC);
+      CREATE INDEX IX_AuditLog_at ON dbo.tbl_AuditLog(at DESC);
+    END`, []).catch(e => { auditReady = null; throw e })
+  return auditReady
+}
+async function audit(user, entity, entityId, action, detail) {
+  try {
+    await ensureAudit()
+    await query(
+      `INSERT INTO tbl_AuditLog (who, role, entity, entityId, action, detail) VALUES (@who, @role, @e, @id, @a, @d)`,
+      [{ name: 'who', type: sql.NVarChar, value: (user && (user.Username || user.FullName)) || null },
+       { name: 'role', type: sql.NVarChar, value: (user && user.Role) || null },
+       { name: 'e', type: sql.NVarChar, value: String(entity) }, { name: 'id', type: sql.NVarChar, value: String(entityId) },
+       { name: 'a', type: sql.NVarChar, value: String(action) },
+       { name: 'd', type: sql.NVarChar(sql.MAX), value: detail == null ? null : (typeof detail === 'string' ? detail : JSON.stringify(detail)) }])
+  } catch (err) {
+    console.error('audit failed:', err && err.message)
+  }
+}
+
+/**
+ * Period lock. Once a month is closed on the Monthly P&L (a row in
+ * tbl_ActualMonth), the days, rates and expenses inside it are the reported
+ * figures and must not move. Returns null when the date is in an open month,
+ * else the closed period it falls in. Admin may override; the caller logs it.
+ */
+async function closedPeriodOf(dateLike) {
+  if (!dateLike) return null
+  const p = String(dateLike instanceof Date ? dateLike.toISOString() : dateLike).slice(0, 7)
+  if (!/^\d{4}-\d{2}$/.test(p)) return null
+  try {
+    const r = await query(`SELECT TOP 1 period FROM tbl_ActualMonth WHERE period = @p`, [{ name: 'p', type: sql.Char(7), value: p }])
+    return r.recordset.length ? p : null
+  } catch { return null }   // table absent on a fresh database
+}
+/**
+ * Refuse a change inside a closed month unless the user is Admin. Returns
+ * true (and writes the 409) when the caller must stop. An Admin override is
+ * logged.
+ */
+async function blockIfClosed(context, user, dateLike, entity, entityId, action) {
+  const p = await closedPeriodOf(dateLike)
+  if (!p) return false
+  if (user && user.Role === 'Admin') {
+    await audit(user, entity, entityId, `${action} (override: ${p} is closed)`, null)
+    return false
+  }
+  jsonResponse(context, 409, { error: `${p} is closed on the Monthly P&L — its days, rates and costs are the reported figures. Ask Admin to reopen the month or to make the change.` })
+  return true
+}
+
 /** True when the route carried an id segment ("0" included). */
 function hasId(id) {
   return id !== undefined && id !== null && String(id).trim() !== ''
 }
 
-module.exports = { sql, getPool, query, jsonResponse, verifyToken, requireAuth, jobKey, jobKeyOf, safe, withLock, nextNumber, hasId, listControls }
+module.exports = { sql, getPool, query, jsonResponse, verifyToken, requireAuth, jobKey, jobKeyOf, safe, withLock, nextNumber, hasId, listControls, audit, closedPeriodOf, blockIfClosed }

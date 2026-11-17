@@ -430,6 +430,7 @@ export interface DashboardStats {
   activeRigs?: number
   totalActiveJobs: number
   totalJobs: number
+  jobsNoContract?: number
   activeJobs: number
   openJobs: number
   completedThisMonth: number

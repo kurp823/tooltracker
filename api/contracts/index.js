@@ -19,7 +19,7 @@
  * contract by ContractCode text, not a numeric ContractID. SQL aliases
  * output back to the PascalCase names the frontend already expects.)
  */
-const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
+const { sql, query, jsonResponse, requireAuth, safe , audit } = require('../db')
 
 module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
@@ -214,6 +214,7 @@ module.exports = safe(async function (context, req) {
         { name: 'pbgexpSent',type: sql.Bit,     value: b.PBGExpiryDate !== undefined ? 1 : 0 },
         { name: 'pbgexp',   type: sql.Date,     value: dt(b.PBGExpiryDate) },
       ])
+    await audit(user, 'contract', String(c.ContractRef || c.ContractID), 'update-header', b)
     return jsonResponse(context, 200, { success: true })
   }
 
@@ -266,6 +267,7 @@ module.exports = safe(async function (context, req) {
     const { error, v } = cleanRate(req.body || {}, c)
     if (error) return jsonResponse(context, 400, { error })
     const r = await query(INSERT_RATE, rateParams(v, c))
+    await audit(user, 'contract', String(c.ContractRef), 'add-rate', { RateID: r.recordset[0].RateID, ...v })
     return jsonResponse(context, 201, { success: true, RateID: r.recordset[0].RateID })
   }
 
@@ -290,6 +292,7 @@ module.exports = safe(async function (context, req) {
       await query(INSERT_RATE, rateParams(v, c))
       added++
     }
+    if (added) await audit(user, 'contract', String(c.ContractRef), 'paste-rates', { added, rejected: rejected.length })
     return jsonResponse(context, 200, { added, rejected })
   }
 
@@ -303,8 +306,10 @@ module.exports = safe(async function (context, req) {
       const r = await query(`UPDATE tbl_ContractRates SET ActiveFlag = @a WHERE RateID = @rid`,
         [{ name: 'a', type: sql.Bit, value: b.ActiveFlag ? 1 : 0 }, { name: 'rid', type: sql.Int, value: Number(subId) }])
       if (!r.rowsAffected[0]) return jsonResponse(context, 404, { error: 'Rate not found' })
+      await audit(user, 'contract', String(c.ContractRef), b.ActiveFlag ? 'reactivate-rate' : 'deactivate-rate', { RateID: Number(subId) })
       return jsonResponse(context, 200, { success: true })
     }
+    const before = await query(`SELECT * FROM tbl_ContractRates WHERE RateID = @rid`, [{ name: 'rid', type: sql.Int, value: Number(subId) }])
     const { error, v } = cleanRate(b, c)
     if (error) return jsonResponse(context, 400, { error })
     const r = await query(
@@ -313,6 +318,7 @@ module.exports = safe(async function (context, req) {
         WHERE RateID = @rid`,
       [...rateParams(v, c), { name: 'rid', type: sql.Int, value: Number(subId) }])
     if (!r.rowsAffected[0]) return jsonResponse(context, 404, { error: 'Rate not found' })
+    await audit(user, 'contract', String(c.ContractRef), 'edit-rate', { RateID: Number(subId), old: before.recordset[0] || null, new: v })
     return jsonResponse(context, 200, { success: true })
   }
 

@@ -1,5 +1,5 @@
 'use strict'
-const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
+const { sql, query, jsonResponse, requireAuth, safe , audit, blockIfClosed } = require('../db')
 
 /**
  * Monthly expenses, and the P&L they complete.
@@ -508,6 +508,7 @@ module.exports = safe(async function (context, req) {
         return jsonResponse(context, 409, { error: `A later month is closed; reopen it before closing ${period} again` })
       const data = await MC.computeMonth(period, { glRange, subMonthRows, rateAed })
       await MC.saveClose(period, data, user)
+      await audit(user, 'month', period, 'close', data.month)
       return jsonResponse(context, 200, { ok: true, period, month: data.month, jobs: data.jobs.length, warnings: data.warnings })
     }
     if (method === 'POST' && id === 'reopen-month') {
@@ -518,6 +519,7 @@ module.exports = safe(async function (context, req) {
       if (!period || period !== st.last) return jsonResponse(context, 409, { error: `Only the latest closed month (${st.last || 'none'}) can be reopened` })
       await query(`DELETE FROM tbl_ActualJobs WHERE period=@p; DELETE FROM tbl_ActualGl WHERE period=@p; DELETE FROM tbl_ActualMonth WHERE period=@p;`,
         [{ name: 'p', type: sql.Char(7), value: period }])
+      await audit(user, 'month', period, 'reopen', null)
       return jsonResponse(context, 200, { ok: true, reopened: period })
     }
     if (method === 'POST' && id === 'import-actuals') {
@@ -652,6 +654,7 @@ module.exports = safe(async function (context, req) {
       // pad or truncate anything else and the month would quietly be wrong.
       if (!/^\d{4}-\d{2}$/.test(period))
         return jsonResponse(context, 400, { error: 'Period must be YYYY-MM' })
+      if (await blockIfClosed(context, user, period + '-01', 'expense', 'new', 'add expense')) return
       if (!String(b.category || '').trim())
         return jsonResponse(context, 400, { error: 'Category is required' })
       const amount = Number(b.amount)
@@ -686,6 +689,13 @@ module.exports = safe(async function (context, req) {
         return jsonResponse(context, 403, { error: 'Insufficient permissions' })
 
       const b = req.body || {}
+      {
+        const cur = await query(`SELECT period, category, amount, jobId FROM tbl_MonthlyExpenses WHERE id = @id`, [{ name: 'id', type: sql.Int, value: Number(id) }])
+        if (!cur.recordset.length) return jsonResponse(context, 404, { error: 'Not found' })
+        if (await blockIfClosed(context, user, cur.recordset[0].period + '-01', 'expense', String(id), 'edit expense')) return
+        if (b.period && await blockIfClosed(context, user, String(b.period) + '-01', 'expense', String(id), 'move expense')) return
+        await audit(user, 'expense', String(id), 'update', { old: cur.recordset[0], new: { period: b.period, category: b.category, amount: b.amount, jobId: b.jobId } })
+      }
       const amount = Number(b.amount)
       if (!Number.isFinite(amount))
         return jsonResponse(context, 400, { error: 'Amount must be a number' })
@@ -714,6 +724,12 @@ module.exports = safe(async function (context, req) {
 
     // ── DELETE ─────────────────────────────────────────────────────────────
     if (method === 'DELETE' && id) {
+      {
+        const cur = await query(`SELECT period, category, amount, jobId FROM tbl_MonthlyExpenses WHERE id = @id`, [{ name: 'id', type: sql.Int, value: Number(id) }])
+        if (!cur.recordset.length) return jsonResponse(context, 404, { error: 'Not found' })
+        if (await blockIfClosed(context, user, cur.recordset[0].period + '-01', 'expense', String(id), 'delete expense')) return
+        await audit(user, 'expense', String(id), 'delete', cur.recordset[0])
+      }
       if (!EDITORS.includes(user.Role))
         return jsonResponse(context, 403, { error: 'Insufficient permissions' })
       await query(`DELETE FROM tbl_MonthlyExpenses WHERE id = @id`,

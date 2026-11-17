@@ -127,6 +127,7 @@ const MODULES: NavModule[] = [
     items: [
       { label: 'System Database Inspector', to: '/db-inspector', icon: <Database size={ICON} /> },
       { label: 'Users',                     to: '/users',        icon: <Users size={ICON} /> },
+      { label: 'Audit Log',                 to: '/audit-log',    icon: <History size={ICON} /> },
       { label: 'Data Import',               to: '/data-import',  icon: <Upload size={ICON} /> },
       { label: 'Global Configurations',     to: '/settings',     icon: <Settings size={ICON} /> },
     ],

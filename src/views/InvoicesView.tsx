@@ -11,6 +11,7 @@ import { ListOptions } from '../components/ListOptions'
 import { usePagedRows, Pager } from '../components/usePagedRows'
 import { AdnocTaxInvoice } from '../components/AdnocTaxInvoice'
 import { JobPicker } from '../components/JobPicker'
+import { HistoryPanel } from '../components/HistoryPanel'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -335,6 +336,7 @@ function InvoiceDetailPanel({
   })
   const [dirty,  setDirty]  = useState(false)
   const [showTax, setShowTax] = useState(false)
+  const [showHist, setShowHist] = useState(false)
   const isOnshore = /adnoc|onshore/i.test(inv.Client || '')
   const [saving, setSaving] = useState(false)
 
@@ -465,6 +467,7 @@ function InvoiceDetailPanel({
             LEGAL {inv.LegalInvoiceNumber}
           </span>
         )}
+        <button className="btn-mini !py-px ml-2" onClick={() => setShowHist(true)} title="Who changed this and when">History</button>
         {isMonthly && isOnshore && (
           <button className="btn-mini !py-px ml-2" onClick={() => setShowTax(true)}
                   title="ADNOC Onshore final tax invoice (print / PDF)">
@@ -473,6 +476,7 @@ function InvoiceDetailPanel({
         )}
       </div>
       {showTax && <AdnocTaxInvoice inv={inv} onClose={() => setShowTax(false)} />}
+      {showHist && <HistoryPanel entity={isMonthly ? 'invoice' : 'job'} id={isMonthly ? String(inv.InvoiceID) : String(inv.JobID)} title={inv.InvoiceNumber || inv.JobID || ''} onClose={() => setShowHist(false)} />}
 
       {/* Header fields */}
       <div className="field-row bg-white border-x border-b border-gray-300 px-2 py-1.5 shrink-0
