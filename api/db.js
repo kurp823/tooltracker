@@ -200,4 +200,67 @@ function safe(handler) {
   }
 }
 
-module.exports = { sql, getPool, query, jsonResponse, verifyToken, requireAuth, jobKey, jobKeyOf, safe }
+/**
+ * Run fn inside one transaction that holds an exclusive application lock
+ * for `resource`. Two requests asking for the same lock run one after the
+ * other, so a number worked out as "last + 1" and the insert that uses it
+ * cannot be interleaved with another user's. fn receives tq(text, params),
+ * which runs a query on the transaction, and its return value is passed back
+ * after commit. Any error rolls back and is rethrown.
+ */
+async function withLock(resource, fn, timeoutMs = 15000) {
+  const pool = await getPool()
+  const tx   = new sql.Transaction(pool)
+  await tx.begin()
+  const tq = async (text, params = []) => {
+    const rq = new sql.Request(tx)
+    for (const { name, type, value } of params) {
+      if (type === undefined) rq.input(name, value)
+      else rq.input(name, type, value)
+    }
+    return rq.query(text)
+  }
+  try {
+    const lock = await tq(
+      `DECLARE @r int;
+       EXEC @r = sp_getapplock @Resource = @res, @LockMode = 'Exclusive',
+                               @LockOwner = 'Transaction', @LockTimeout = @t;
+       SELECT @r AS r`,
+      [{ name: 'res', type: sql.NVarChar, value: String(resource) },
+       { name: 't',   type: sql.Int,      value: timeoutMs }]
+    )
+    if (!lock.recordset.length || lock.recordset[0].r < 0)
+      throw new Error(`Another user is saving at the same moment - please try again (${resource})`)
+    const out = await fn(tq)
+    await tx.commit()
+    return out
+  } catch (err) {
+    try { await tx.rollback() } catch { /* already rolled back */ }
+    throw err
+  }
+}
+
+/**
+ * Next document number inside a withLock transaction.
+ *   nextNumber(tq, 'tbl_Invoices', 'invoiceNumber', 'INV-2026-', 5)
+ * reads the highest numeric tail under the prefix and returns prefix + tail+1,
+ * zero-padded. Must be called with the tq from withLock so the read and the
+ * insert that follows share the lock.
+ */
+async function nextNumber(tq, table, column, prefix, width = 5) {
+  const r = await tq(
+    `SELECT COALESCE(MAX(TRY_CAST(SUBSTRING(${column}, @plen + 1, 20) AS int)), 0) + 1 AS seq
+       FROM ${table}
+      WHERE LEFT(${column}, @plen) = @prefix`,
+    [{ name: 'plen',   type: sql.Int,      value: prefix.length },
+     { name: 'prefix', type: sql.NVarChar, value: prefix }]
+  )
+  return `${prefix}${String(r.recordset[0].seq).padStart(width, '0')}`
+}
+
+/** True when the route carried an id segment ("0" included). */
+function hasId(id) {
+  return id !== undefined && id !== null && String(id).trim() !== ''
+}
+
+module.exports = { sql, getPool, query, jsonResponse, verifyToken, requireAuth, jobKey, jobKeyOf, safe, withLock, nextNumber, hasId }

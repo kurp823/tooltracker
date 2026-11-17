@@ -40,7 +40,23 @@ async function request<T = unknown>(
   // 204 No Content
   if (res.status === 204) return undefined as unknown as T
 
-  return res.json()
+  // An empty 2xx body is never a real answer from this API: every handler
+  // replies with JSON. It has been seen on failed saves that the host answered
+  // with an empty 200 (go-live bug 22), which the screens then showed as
+  // success while nothing was written. Treat it as a failure so the user
+  // checks before retrying.
+  const text = await res.text()
+  if (!text.trim()) {
+    const method = String(options.method || 'GET').toUpperCase()
+    throw new Error(method === 'GET'
+      ? 'The server returned an empty response - refresh and try again'
+      : 'The server returned no confirmation - the save may not have been applied. Refresh and check before saving again')
+  }
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    throw new Error('The server returned an unreadable response')
+  }
 }
 
 // api() can be called directly:  api('/path', { method, body })

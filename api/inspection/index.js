@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, safe } = require('../db')
+const { query, jsonResponse, requireAuth, safe, hasId } = require('../db')
 
 // NOTE: the table this code originally assumed, `tbl_Inspections`, does
 // not exist. There are two real candidates — `tbl_Inspection` (tied to a
@@ -21,7 +21,7 @@ module.exports = safe(async function (context, req) {
   const user   = requireAuth(context, req)
   if (!user) return
 
-  const id     = context.bindingData.id
+  const id     = hasId(context.bindingData.id) ? String(context.bindingData.id) : null
   const method = req.method.toUpperCase()
 
   // ── GET list ─────────────────────────────────────────────────────────────
@@ -94,8 +94,8 @@ module.exports = safe(async function (context, req) {
     if (!['Admin','Operations','QAQC'].includes(user.Role))
       return jsonResponse(context, 403, { error: 'Forbidden' })
 
-    const b = req.body
-    await query(
+    const b = req.body || {}
+    const upd = await query(
       `UPDATE tbl_InspectionRecords
           SET inspectionDate = COALESCE(@date, inspectionDate),
               inspector      = COALESCE(@inspector, inspector),
@@ -113,6 +113,7 @@ module.exports = safe(async function (context, req) {
         { name: 'notes',     value: b.Notes || null       },
       ]
     )
+    if (!upd.rowsAffected[0]) return jsonResponse(context, 404, { error: `Inspection ${id} not found` })
 
     // The inspection decides where the tool goes next. Without this a tool
     // sent to the bay by a return ticket stayed 'Inspection' forever (435 rows

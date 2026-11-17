@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, safe } = require('../db')
+const { query, jsonResponse, requireAuth, safe , withLock, nextNumber, hasId } = require('../db')
 
 // Real tbl_MaintenanceJobs columns (confirmed via INFORMATION_SCHEMA):
 //   id, jobCardNumber, serial, asset, jobNumber, jobType, priority,
@@ -16,7 +16,7 @@ module.exports = safe(async function (context, req) {
   const user   = requireAuth(context, req)
   if (!user) return
 
-  const id     = context.bindingData.id
+  const id     = hasId(context.bindingData.id) ? String(context.bindingData.id) : null
   const method = req.method.toUpperCase()
 
   // ── GET list ─────────────────────────────────────────────────────────────
@@ -60,21 +60,18 @@ module.exports = safe(async function (context, req) {
     if (!['Admin','Operations','QAQC'].includes(user.Role))
       return jsonResponse(context, 403, { error: 'Forbidden' })
 
-    const b = req.body
+    const b = req.body || {}
+    // A card with no tool and no work described is not a card. Two blank
+    // MJ-2026-0000x rows came from an empty POST (bug 27).
+    if (!String(b.AssetNo || '').trim() && !String(b.SerialNumber || '').trim())
+      return jsonResponse(context, 400, { error: 'Pick the tool (asset number or serial)' })
+    if (!String(b.MaintenanceType || '').trim() && !String(b.Description || '').trim())
+      return jsonResponse(context, 400, { error: 'Give the maintenance type or describe the work' })
     const yr = new Date().getFullYear()
-    const lastRow = await query(
-      `SELECT TOP 1 jobCardNumber FROM tbl_MaintenanceJobs
-        WHERE jobCardNumber LIKE 'MJ-${yr}-%'
-        ORDER BY jobCardNumber DESC`, []
-    )
-    let seq = 1
-    if (lastRow.recordset.length) {
-      const parts = lastRow.recordset[0].jobCardNumber.split('-')
-      seq = parseInt(parts[parts.length - 1], 10) + 1
-    }
-    const MaintenanceJobNumber = `MJ-${yr}-${String(seq).padStart(5, '0')}`
-
-    const r = await query(
+    // Number and insert under one lock (bug 25).
+    const { newId, MaintenanceJobNumber } = await withLock('maintenance-number', async (tq) => {
+    const MaintenanceJobNumber = await nextNumber(tq, 'tbl_MaintenanceJobs', 'jobCardNumber', `MJ-${yr}-`, 5)
+    const r = await tq(
       `INSERT INTO tbl_MaintenanceJobs
          (jobCardNumber, serial, asset, jobType, priority, description, dateIn,
           status, completedBy, notes, createdBy, createdAt)
@@ -93,7 +90,9 @@ module.exports = safe(async function (context, req) {
         { name: 'by',        value: user.Username            },
       ]
     )
-    return jsonResponse(context, 201, { MaintenanceJobID: r.recordset[0].id, MaintenanceJobNumber })
+    return { newId: r.recordset[0].id, MaintenanceJobNumber }
+    })
+    return jsonResponse(context, 201, { MaintenanceJobID: newId, MaintenanceJobNumber })
   }
 
   // ── PUT update ───────────────────────────────────────────────────────────
@@ -101,12 +100,17 @@ module.exports = safe(async function (context, req) {
     if (!['Admin','Operations','QAQC'].includes(user.Role))
       return jsonResponse(context, 403, { error: 'Forbidden' })
 
-    const b = req.body
-    await query(
+    const b = req.body || {}
+    // Unsent fields keep their value (same rule as jobs, bug 26b).
+    const upd = await query(
       `UPDATE tbl_MaintenanceJobs
-          SET priority = @priority, status = @status, dateIn = @scheduled,
-              completedDate = @completed, completedBy = @tech, notes = @notes,
-              updatedAt = GETDATE()
+          SET priority      = COALESCE(@priority,  priority),
+              status        = COALESCE(@status,    status),
+              dateIn        = COALESCE(@scheduled, dateIn),
+              completedDate = COALESCE(@completed, completedDate),
+              completedBy   = COALESCE(@tech,      completedBy),
+              notes         = COALESCE(@notes,     notes),
+              updatedAt     = GETDATE()
         WHERE id = @id`,
       [
         { name: 'id',        value: Number(id)           },
@@ -118,6 +122,7 @@ module.exports = safe(async function (context, req) {
         { name: 'notes',     value: b.Notes || null       },
       ]
     )
+    if (!upd.rowsAffected[0]) return jsonResponse(context, 404, { error: `Maintenance card ${id} not found` })
     return jsonResponse(context, 200, { ok: true })
   }
 
