@@ -54,14 +54,22 @@ module.exports = safe(async function (context, req) {
 
   // ── one row per job ──────────────────────────────────────────────────────
   const r = await query(
-    `WITH rev AS (
-       SELECT ${jobKey('JobID')} AS k, MAX(JobID) AS jobId,
-              SUM(ISNULL(RateCharged,0)) AS revenue,
-              SUM(CASE WHEN StatusType='1' THEN 1 ELSE 0 END) AS opsDays,
-              SUM(CASE WHEN StatusType='S' THEN 1 ELSE 0 END) AS standbyDays
-         FROM tbl_DailyFieldLogs WHERE StatusType IN ('1','S') GROUP BY ${jobKey('JobID')}),
+    `WITH keys AS (
+       -- The job-number normalisation (five nested REPLACEs) is worked out
+       -- once per distinct job id here, not once per field-log row below:
+       -- that alone was most of this query's 4-5 s.
+       SELECT JobID, ${jobKey('JobID')} AS k
+         FROM (SELECT DISTINCT JobID FROM tbl_DailyFieldLogs WHERE StatusType IN ('1','S')) q),
+     rev AS (
+       SELECT ks.k, MAX(d.JobID) AS jobId,
+              SUM(ISNULL(d.RateCharged,0)) AS revenue,
+              SUM(CASE WHEN d.StatusType='1' THEN 1 ELSE 0 END) AS opsDays,
+              SUM(CASE WHEN d.StatusType='S' THEN 1 ELSE 0 END) AS standbyDays
+         FROM tbl_DailyFieldLogs d
+         JOIN keys ks ON ks.JobID = d.JobID
+        WHERE d.StatusType IN ('1','S') GROUP BY ks.k),
      sub AS (
-       SELECT ${jobKey('x.jobId')} AS k, SUM(ISNULL(x.amount,0)) AS cost,
+       SELECT kx.k, SUM(ISNULL(x.amount,0)) AS cost,
               SUM(CASE WHEN x.amount IS NULL THEN 1 ELSE 0 END) AS unpriced
          FROM (
            SELECT t.jobId, ${amountSql('t.days')} AS amount
@@ -77,7 +85,7 @@ module.exports = safe(async function (context, req) {
              ) t
              LEFT JOIN tbl_SubContractLines l ON l.jobId = t.jobId AND l.toolSerial = t.tool
              ${sheetApply('t.supplier', 't.category', 't.size', 't.contract')}
-         ) x GROUP BY ${jobKey('x.jobId')}),
+         ) x JOIN keys kx ON kx.JobID = x.jobId GROUP BY kx.k),
      mnt AS (
        SELECT ${jobKey('jobNumber')} AS k, SUM(ISNULL(cost,0)) AS cost
          FROM tbl_MaintenanceJobs WHERE NULLIF(LTRIM(RTRIM(jobNumber)),'') IS NOT NULL GROUP BY ${jobKey('jobNumber')}),
