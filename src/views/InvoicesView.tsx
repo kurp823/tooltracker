@@ -30,6 +30,9 @@ interface Invoice {
   PeriodFrom: string | null
   PeriodTo: string | null
   Source: 'monthly' | 'job'  // 'monthly' = tbl_Invoices row; 'job' = derived from tbl_Jobs
+  InvoiceType?: 'Monthly' | 'Job' | 'Legacy' | string | null
+  LegalInvoiceNumber?: string | null
+  LegalInvoiceDate?: string | null
 }
 
 interface InvoiceLine {
@@ -286,10 +289,18 @@ function InvoiceDetailPanel({
   // Only monthly-source invoices (tbl_Invoices rows) can be edited here.
   // Job-derived rows are read-only — their data comes from tbl_Jobs columns
   // and any edits would need to go through the Job Detail screen.
+  // isMonthly = an app invoice (a tbl_Invoices row), Monthly or Job type.
+  // A legacy row is derived from the job's own milestone fields.
   const isMonthly = inv.Source === 'monthly'
-  const canEdit = isMonthly && hasRole('Admin', 'Billing', 'Finance')
+  const isJobType = isMonthly && String(inv.InvoiceType || '').toLowerCase() === 'job'
+  const hasLegal  = !!String(inv.LegalInvoiceNumber || '').trim()
+  // Once a legal number is on an app invoice its figures are final.
+  const canEdit = isMonthly && !hasLegal && hasRole('Admin', 'Billing', 'Finance')
   // Status is the billing team's to set, on any invoice row - monthly or per-job.
   const canSetStatus = hasRole('Admin', 'Billing', 'Finance')
+  const [legal, setLegal] = useState({ no: inv.LegalInvoiceNumber ?? '', date: day(inv.LegalInvoiceDate) })
+  const [savingLegal, setSavingLegal] = useState(false)
+  const [generating, setGenerating] = useState(false)
 
   const [form, setForm] = useState({
     InvoiceDate: day(inv.InvoiceDate),
@@ -375,6 +386,41 @@ function InvoiceDetailPanel({
 
   const linesTotal = (lines || []).reduce((s, l) => s + (l.LineAmount ?? 0), 0)
 
+  // Legacy row without a legal number: the job is billed from the app from
+  // here on (decision 2). One invoice for the whole job.
+  const handleGenerateJobInvoice = async () => {
+    if (!inv.JobID) return
+    if (!window.confirm(`Generate the invoice for ${inv.JobID} from its utilization? Every marked day on the job is priced from the contract.`)) return
+    setGenerating(true)
+    try {
+      const res: any = await api.post('/invoices/from-job', { JobID: inv.JobID })
+      success(`${res.InvoiceNumber} created — ${res.lines} line(s)` +
+        (res.unpricedDays ? `, ${res.unpricedDays} day(s) have no rate` : '') +
+        (res.warning ? ` (${res.warning})` : ''))
+      onRefresh()
+      onClose()
+    } catch (err: any) {
+      toastErr(err.message || 'Could not generate the invoice')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const handleSaveLegal = async () => {
+    if (!legal.no.trim()) { toastErr('Enter the legal invoice number'); return }
+    if (!window.confirm(`Record legal invoice ${legal.no.trim()} on ${inv.InvoiceNumber}? The invoice and the job's final figures are then fixed.`)) return
+    setSavingLegal(true)
+    try {
+      await api.put(`/invoices/${inv.InvoiceID}`, { LegalInvoiceNumber: legal.no.trim(), LegalInvoiceDate: legal.date || null })
+      success(`Legal invoice ${legal.no.trim()} recorded`)
+      onRefresh()
+    } catch (err: any) {
+      toastErr(err.message || 'Could not save the legal number')
+    } finally {
+      setSavingLegal(false)
+    }
+  }
+
   return (
     <div className="screen">
       {/* Title */}
@@ -389,7 +435,12 @@ function InvoiceDetailPanel({
           </span>
         )}
         {isMonthly && (
-          <span className="text-[10px] text-brand-300 ml-1">MONTHLY</span>
+          <span className="text-[10px] text-brand-300 ml-1">{isJobType ? 'JOB' : 'MONTHLY'}</span>
+        )}
+        {hasLegal && (
+          <span className="text-[10px] text-emerald-300 ml-1" title="Legal invoice recorded — figures are final">
+            LEGAL {inv.LegalInvoiceNumber}
+          </span>
         )}
         {isMonthly && isOnshore && (
           <button className="btn-mini !py-px ml-2" onClick={() => setShowTax(true)}
@@ -444,6 +495,31 @@ function InvoiceDetailPanel({
         <span className="field-label">Billing status</span>
         <BillingStatusSelect value={inv.Status} id={inv.InvoiceID} disabled={!canSetStatus}
                              onSaved={onRefresh} />
+
+        {isMonthly && (
+          <>
+            <span className="field-label">Legal invoice no</span>
+            {hasLegal || !canSetStatus ? (
+              <div className="field-value font-mono">{inv.LegalInvoiceNumber || '—'}</div>
+            ) : (
+              <input className="field-input font-mono" value={legal.no} placeholder="from the ERP"
+                     onChange={e => setLegal(l => ({ ...l, no: e.target.value }))} />
+            )}
+            <span className="field-label">Legal invoice date</span>
+            {hasLegal || !canSetStatus ? (
+              <div className="field-value">{formatDate(inv.LegalInvoiceDate) || '—'}</div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <input type="date" className="field-input" value={legal.date}
+                       onChange={e => setLegal(l => ({ ...l, date: e.target.value }))} />
+                <button className="btn-mini shrink-0" onClick={handleSaveLegal} disabled={savingLegal || !legal.no.trim()}
+                        title="Record the legal invoice number; the invoice and job figures become final">
+                  {savingLegal ? <Spinner size="sm" /> : <Save size={11} />} Record
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Lines table */}
@@ -472,10 +548,25 @@ function InvoiceDetailPanel({
 
         {!isMonthly ? (
           <div className="flex-1 min-h-0 overflow-auto p-4 space-y-3">
-            <p className="text-[12px] text-slate-500">
-              Billed from the job. Set the billing status above as the invoice moves; the dates
-              fill in when you choose SES Submitted or Final Invoiced.
-            </p>
+            {hasLegal ? (
+              <p className="text-[12px] text-slate-500">
+                Finally invoiced under legal invoice <b>{inv.LegalInvoiceNumber}</b>. These figures are final and are
+                not regenerated.
+              </p>
+            ) : (
+              <div className="flex items-start gap-3 rounded border border-amber-200 bg-amber-50 px-3 py-2">
+                <p className="text-[12px] text-amber-900 flex-1">
+                  No legal invoice yet. Generate this job's invoice from the app: every day marked on the
+                  utilization grid, priced from the contract, one invoice for the whole job. The job's
+                  draft milestone fills from it; record the legal number on the invoice when the ERP issues it.
+                </p>
+                {canSetStatus && (
+                  <button className="btn-primary shrink-0" onClick={handleGenerateJobInvoice} disabled={generating}>
+                    {generating ? <Spinner size="sm" /> : <RefreshCw size={12} />} Generate job invoice
+                  </button>
+                )}
+              </div>
+            )}
             <BillingMilestones jobId={inv.JobID || ''} />
           </div>
         ) : !lines || lines.length === 0 ? (
@@ -709,7 +800,14 @@ export function InvoicesView() {
                   <td className="table-td pin-l font-medium text-brand-600">
                     {inv.InvoiceNumber || '—'}
                     {inv.Source === 'monthly' && (
-                      <span className="ml-1.5 text-[10px] text-slate-400 font-normal">monthly</span>
+                      <span className="ml-1.5 text-[10px] text-slate-400 font-normal">
+                        {String(inv.InvoiceType || '').toLowerCase() === 'job' ? 'job' : 'monthly'}
+                      </span>
+                    )}
+                    {inv.LegalInvoiceNumber && inv.Source === 'monthly' && (
+                      <span className="ml-1 text-[10px] text-emerald-600 font-normal" title="Legal invoice recorded">
+                        {inv.LegalInvoiceNumber}
+                      </span>
                     )}
                   </td>
                   <td className="table-td font-mono text-slate-700">{inv.JobID || '—'}</td>

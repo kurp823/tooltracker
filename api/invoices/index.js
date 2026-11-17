@@ -38,6 +38,86 @@ async function recalcTotals(invoiceId) {
   )
 }
 
+
+/**
+ * Replace an invoice's lines with lines built from the utilization grid.
+ * Monthly: days inside periodFrom..periodTo. Job: every day of the job, and
+ * the period is set to the first and last day marked so the invoice says
+ * what it covers. Returns { lines, unpricedDays } or { error, code }.
+ */
+async function generateLines(inv) {
+  const isJob = String(inv.invoiceType || '').toLowerCase() === 'job'
+  if (!isJob && (!inv.periodFrom || !inv.periodTo))
+    return { error: 'Set the invoice period (from / to) first', code: 400 }
+
+  const g = await query(
+    `SELECT d.ToolSerial, d.DTNumber,
+            MAX(i.AssetNo)   AS AssetNo,
+            MAX(i.ShortDesc) AS ShortDesc,
+            MIN(d.LogDate)   AS FirstDay,
+            MAX(d.LogDate)   AS LastDay,
+            SUM(CASE WHEN d.StatusType = '1' THEN 1 ELSE 0 END) AS OpsDays,
+            SUM(CASE WHEN d.StatusType = 'S' THEN 1 ELSE 0 END) AS StandbyDays,
+            SUM(CASE WHEN d.StatusType = '1' THEN ISNULL(d.RateCharged,0) ELSE 0 END) AS OpsAmount,
+            SUM(CASE WHEN d.StatusType = 'S' THEN ISNULL(d.RateCharged,0) ELSE 0 END) AS StandbyAmount,
+            SUM(CASE WHEN d.RateCharged IS NULL THEN 1 ELSE 0 END) AS Unpriced
+       FROM tbl_DailyFieldLogs d
+       LEFT JOIN tbl_Inventory i ON i.SystemID = d.ToolSerial
+      WHERE ${jobKey('d.JobID')} = @jk
+        ${isJob ? '' : 'AND d.LogDate >= @pf AND d.LogDate < DATEADD(day, 1, @pt)'}
+        AND d.StatusType IN ('1','S')
+      GROUP BY d.ToolSerial, d.DTNumber
+      ORDER BY MAX(i.ShortDesc), MAX(i.AssetNo)`,
+    [
+      { name: 'jk', value: jobKeyOf(inv.jobNumber) },
+      ...(isJob ? [] : [{ name: 'pf', value: inv.periodFrom }, { name: 'pt', value: inv.periodTo }]),
+    ]
+  )
+  if (!g.recordset.length)
+    return { error: isJob ? 'No utilization days are marked for this job yet'
+                          : 'No utilization days are marked for this job in the invoice period', code: 404 }
+
+  await query('DELETE FROM tbl_InvoiceLines WHERE invoiceNumber = @n',
+    [{ name: 'n', value: inv.invoiceNumber }])
+
+  let unpriced = 0, n = 0, first = null, last = null
+  for (const r of g.recordset) {
+    n++
+    const ops = Number(r.OpsDays), sb = Number(r.StandbyDays)
+    const opsAmt = Number(r.OpsAmount), sbAmt = Number(r.StandbyAmount)
+    unpriced += Number(r.Unpriced)
+    if (!first || r.FirstDay < first) first = r.FirstDay
+    if (!last  || r.LastDay  > last)  last  = r.LastDay
+    await query(
+      `INSERT INTO tbl_InvoiceLines
+         (invoiceNumber, jobNumber, lineItemRef, serial, toolDescription,
+          opsDays, standbyDays, opsRate, standbyRate, opsAmount, standbyAmount, lineTotal, remarks)
+       VALUES (@n, @job, @ref, @serial, @desc, @od, @sd, @orate, @srate, @oamt, @samt, @tot, @rem)`,
+      [
+        { name: 'n',     value: inv.invoiceNumber },
+        { name: 'job',   value: inv.jobNumber },
+        { name: 'ref',   value: String(n) },
+        { name: 'serial',value: r.AssetNo || r.ToolSerial },
+        { name: 'desc',  value: r.ShortDesc || null },
+        { name: 'od',    value: ops },
+        { name: 'sd',    value: sb },
+        { name: 'orate', value: ops ? Math.round(opsAmt / ops * 100) / 100 : null },
+        { name: 'srate', value: sb  ? Math.round(sbAmt  / sb  * 100) / 100 : null },
+        { name: 'oamt',  value: opsAmt },
+        { name: 'samt',  value: sbAmt },
+        { name: 'tot',   value: opsAmt + sbAmt },
+        { name: 'rem',   value: [r.DTNumber, Number(r.Unpriced) ? `${r.Unpriced} day(s) have no rate` : null].filter(Boolean).join(' · ') || null },
+      ]
+    )
+  }
+  if (isJob && first && last) {
+    await query(`UPDATE tbl_Invoices SET periodFrom = @pf, periodTo = @pt WHERE id = @id`,
+      [{ name: 'pf', value: first }, { name: 'pt', value: last }, { name: 'id', value: Number(inv.id) }])
+  }
+  await recalcTotals(inv.id)
+  return { lines: n, unpricedDays: unpriced }
+}
+
 module.exports = safe(async function (context, req) {
   const user   = requireAuth(context, req)
   if (!user) return
@@ -137,83 +217,95 @@ module.exports = safe(async function (context, req) {
 
   // ── POST /invoices/{id}/generate ─────────────────────────────────────────
   // Builds the invoice lines from the days actually marked on the utilization
-  // grid for this job inside the invoice period: one line per tool per
-  // delivery ticket, operating and standby days priced at the rate stamped on
-  // each day. Replaces the lines of a Draft invoice. Days with no rate are
-  // counted and reported, never silently billed at zero.
+  // grid for this job: one line per tool per delivery ticket, operating and
+  // standby days priced at the rate stamped on each day. A Monthly invoice
+  // takes the days inside its period; a Job invoice takes every day of the
+  // job. Replaces the lines of a Draft invoice. Days with no rate are counted
+  // and reported, never silently billed at zero.
   if (id && sub === 'generate' && method === 'POST') {
     if (!['Admin','Billing','Finance'].includes(user.Role))
       return jsonResponse(context, 403, { error: 'Forbidden' })
 
     const h = await query(
-      `SELECT invoiceNumber, jobNumber, periodFrom, periodTo, status
+      `SELECT id, invoiceNumber, invoiceType, jobNumber, periodFrom, periodTo, status
          FROM tbl_Invoices WHERE id = @id`, [{ name: 'id', value: Number(id) }])
     const inv = h.recordset[0]
     if (!inv) return jsonResponse(context, 404, { error: 'Not found' })
     if (String(inv.status || '').toLowerCase() !== 'draft')
       return jsonResponse(context, 409, { error: 'Lines can only be generated on a Draft invoice' })
-    if (!inv.periodFrom || !inv.periodTo)
-      return jsonResponse(context, 400, { error: 'Set the invoice period (from / to) first' })
+    const out = await generateLines(inv)
+    if (out.error) return jsonResponse(context, out.code || 400, { error: out.error })
+    return jsonResponse(context, 200, { lines: out.lines, unpricedDays: out.unpricedDays })
+  }
 
-    const g = await query(
-      `SELECT d.ToolSerial, d.DTNumber,
-              MAX(i.AssetNo)   AS AssetNo,
-              MAX(i.ShortDesc) AS ShortDesc,
-              SUM(CASE WHEN d.StatusType = '1' THEN 1 ELSE 0 END) AS OpsDays,
-              SUM(CASE WHEN d.StatusType = 'S' THEN 1 ELSE 0 END) AS StandbyDays,
-              SUM(CASE WHEN d.StatusType = '1' THEN ISNULL(d.RateCharged,0) ELSE 0 END) AS OpsAmount,
-              SUM(CASE WHEN d.StatusType = 'S' THEN ISNULL(d.RateCharged,0) ELSE 0 END) AS StandbyAmount,
-              SUM(CASE WHEN d.RateCharged IS NULL THEN 1 ELSE 0 END) AS Unpriced
-         FROM tbl_DailyFieldLogs d
-         LEFT JOIN tbl_Inventory i ON i.SystemID = d.ToolSerial
-        WHERE ${jobKey('d.JobID')} = @jk
-          AND d.LogDate >= @pf AND d.LogDate < DATEADD(day, 1, @pt)
-          AND d.StatusType IN ('1','S')
-        GROUP BY d.ToolSerial, d.DTNumber
-        ORDER BY MAX(i.ShortDesc), MAX(i.AssetNo)`,
-      [
-        { name: 'jk', value: jobKeyOf(inv.jobNumber) },
-        { name: 'pf', value: inv.periodFrom },
-        { name: 'pt', value: inv.periodTo },
-      ]
-    )
-    if (!g.recordset.length)
-      return jsonResponse(context, 404, { error: 'No utilization days are marked for this job in the invoice period' })
+  // ── POST /invoices/from-job — the per-job invoice ───────────────────────
+  // Decision 2 (17 Nov 2026): a job billed once is invoiced from the app the
+  // same way a monthly job is — every marked day, priced from the contract,
+  // with VAT — one invoice for the whole job. A job that already carries a
+  // legal invoice number was billed before this existed and is frozen: it is
+  // never generated for. One Job invoice per job.
+  if (id === 'from-job' && method === 'POST') {
+    if (!['Admin','Billing','Finance'].includes(user.Role))
+      return jsonResponse(context, 403, { error: 'Forbidden' })
+    const b = req.body || {}
+    if (!b.JobID) return jsonResponse(context, 400, { error: 'JobID required' })
 
-    await query('DELETE FROM tbl_InvoiceLines WHERE invoiceNumber = @n',
-      [{ name: 'n', value: inv.invoiceNumber }])
+    const jr = await query(
+      `SELECT JobID, Client, Contract, Rig, Well, PONumber, Currency, LegalInvoiceNumber, InvoicingType
+         FROM tbl_Jobs WHERE ${jobKey('JobID')} = @jk`, [{ name: 'jk', value: jobKeyOf(b.JobID) }])
+    if (jr.recordset.length !== 1) return jsonResponse(context, 404, { error: 'Job not found' })
+    const job = jr.recordset[0]
+    if (String(job.LegalInvoiceNumber || '').trim())
+      return jsonResponse(context, 409, { error: `${job.JobID} already has legal invoice ${job.LegalInvoiceNumber.trim()} — its figures are final` })
 
-    let unpriced = 0
-    let n = 0
-    for (const r of g.recordset) {
-      n++
-      const ops = Number(r.OpsDays), sb = Number(r.StandbyDays)
-      const opsAmt = Number(r.OpsAmount), sbAmt = Number(r.StandbyAmount)
-      unpriced += Number(r.Unpriced)
-      await query(
-        `INSERT INTO tbl_InvoiceLines
-           (invoiceNumber, jobNumber, lineItemRef, serial, toolDescription,
-            opsDays, standbyDays, opsRate, standbyRate, opsAmount, standbyAmount, lineTotal, remarks)
-         VALUES (@n, @job, @ref, @serial, @desc, @od, @sd, @orate, @srate, @oamt, @samt, @tot, @rem)`,
+    const ex = await query(
+      `SELECT TOP 1 id, invoiceNumber FROM tbl_Invoices
+        WHERE ${jobKey('jobNumber')} = @jk AND invoiceType = 'Job' ORDER BY id DESC`,
+      [{ name: 'jk', value: jobKeyOf(job.JobID) }])
+    if (ex.recordset.length)
+      return jsonResponse(context, 409, { error: `${ex.recordset[0].invoiceNumber} already exists for ${job.JobID}`,
+                                          InvoiceID: ex.recordset[0].id, InvoiceNumber: ex.recordset[0].invoiceNumber })
+
+    const yr = new Date().getFullYear()
+    const { newId, InvoiceNumber } = await withLock('invoice-number', async (tq) => {
+      const InvoiceNumber = await nextNumber(tq, 'tbl_Invoices', 'invoiceNumber', `INV-${yr}-`, 5)
+      const r = await tq(
+        `INSERT INTO tbl_Invoices
+           (invoiceNumber, invoiceType, jobNumber, clientCode, contract, rig, well,
+            poNumber, invoiceDate, currency, subtotal, vatAmount, totalAmount, status, notes, createdBy, createdAt)
+         OUTPUT INSERTED.id
+         VALUES (@num, 'Job', @job, @client, @contract, @rig, @well, @po, @date, @cur, 0, 0, 0, 'Draft', @notes, @by, GETDATE())`,
         [
-          { name: 'n',     value: inv.invoiceNumber },
-          { name: 'job',   value: inv.jobNumber },
-          { name: 'ref',   value: String(n) },
-          { name: 'serial',value: r.AssetNo || r.ToolSerial },
-          { name: 'desc',  value: r.ShortDesc || null },
-          { name: 'od',    value: ops },
-          { name: 'sd',    value: sb },
-          { name: 'orate', value: ops ? Math.round(opsAmt / ops * 100) / 100 : null },
-          { name: 'srate', value: sb  ? Math.round(sbAmt  / sb  * 100) / 100 : null },
-          { name: 'oamt',  value: opsAmt },
-          { name: 'samt',  value: sbAmt },
-          { name: 'tot',   value: opsAmt + sbAmt },
-          { name: 'rem',   value: [r.DTNumber, Number(r.Unpriced) ? `${r.Unpriced} day(s) have no rate` : null].filter(Boolean).join(' · ') || null },
-        ]
-      )
-    }
-    await recalcTotals(id)
-    return jsonResponse(context, 200, { lines: n, unpricedDays: unpriced })
+          { name: 'num',      value: InvoiceNumber },
+          { name: 'job',      value: job.JobID },
+          { name: 'client',   value: job.Client || '' },
+          { name: 'contract', value: job.Contract || null },
+          { name: 'rig',      value: job.Rig || null },
+          { name: 'well',     value: job.Well || null },
+          { name: 'po',       value: b.PONumber || job.PONumber || null },
+          { name: 'date',     value: b.InvoiceDate || new Date().toISOString().split('T')[0] },
+          { name: 'cur',      value: b.Currency || job.Currency || 'USD' },
+          { name: 'notes',    value: b.Notes || null },
+          { name: 'by',       value: user.Username },
+        ])
+      return { newId: r.recordset[0].id, InvoiceNumber }
+    })
+
+    const gen = await generateLines({ id: newId, invoiceNumber: InvoiceNumber, invoiceType: 'Job', jobNumber: job.JobID })
+    // Draft milestone on the job comes from this invoice.
+    await query(
+      `UPDATE tbl_Jobs
+          SET DraftInvoiceNumber = @n,
+              DraftInvoicedDate  = COALESCE(DraftInvoicedDate, GETDATE()),
+              UpdatedAt = GETDATE()
+        WHERE JobID = @j`, [{ name: 'n', value: InvoiceNumber }, { name: 'j', value: job.JobID }])
+    await setBillingStatus(job.JobID, 'Draft Invoiced', user.Username)
+
+    return jsonResponse(context, 201, {
+      InvoiceID: newId, InvoiceNumber,
+      lines: gen.lines || 0, unpricedDays: gen.unpricedDays || 0,
+      warning: gen.error || undefined,
+    })
   }
 
   // ── GET list ─────────────────────────────────────────────────────────────
@@ -263,7 +355,10 @@ module.exports = safe(async function (context, req) {
           i.poNumber            AS PONumber,
           i.periodFrom          AS PeriodFrom,
           i.periodTo            AS PeriodTo,
-          'monthly'             AS Source
+          'monthly'             AS Source,
+          COALESCE(NULLIF(i.invoiceType,''),'Monthly') AS InvoiceType,
+          i.legalInvoiceNumber  AS LegalInvoiceNumber,
+          i.legalInvoiceDate    AS LegalInvoiceDate
        FROM tbl_Invoices i
        LEFT JOIN tbl_Clients c ON i.clientCode = c.clientCode
        ${jobQ ? 'WHERE i.jobNumber = @jobQ' : ''}
@@ -304,9 +399,13 @@ module.exports = safe(async function (context, req) {
           j.PONumber AS PONumber,
           NULL AS PeriodFrom,
           NULL AS PeriodTo,
-          'job' AS Source
+          'job' AS Source,
+          'Legacy' AS InvoiceType,
+          j.LegalInvoiceNumber AS LegalInvoiceNumber,
+          j.FinalInvoicedDate  AS LegalInvoiceDate
         FROM tbl_Jobs j
-       WHERE (
+       WHERE NOT EXISTS (SELECT 1 FROM tbl_Invoices x WHERE x.invoiceType = 'Job' AND x.jobNumber = j.JobID)
+         AND (
            j.InvoiceAmount > 0
           OR j.InvoiceDate             IS NOT NULL
           OR j.SubmittedToBillingDate  IS NOT NULL
@@ -328,6 +427,7 @@ module.exports = safe(async function (context, req) {
   if (id && !sub && method === 'GET') {
     const result = await query(
       `SELECT i.id AS InvoiceID, i.invoiceNumber AS InvoiceNumber, i.jobNumber AS JobID,
+              COALESCE(NULLIF(i.invoiceType,''),'Monthly') AS InvoiceType,
               i.invoiceDate AS InvoiceDate, NULL AS DueDate,
               i.currency AS Currency, i.subtotal AS Subtotal, i.vatPercent AS VatPercent,
               i.vatAmount AS VatAmount, i.totalAmount AS TotalAmount, i.status AS Status,
@@ -441,6 +541,7 @@ module.exports = safe(async function (context, req) {
       return jsonResponse(context, 200, { ok: true })
     }
 
+    const legalNo = b.LegalInvoiceNumber === undefined ? null : String(b.LegalInvoiceNumber || '').trim()
     const upd = await query(
       `UPDATE tbl_Invoices
           SET invoiceDate  = COALESCE(@date,     invoiceDate),
@@ -450,6 +551,12 @@ module.exports = safe(async function (context, req) {
               periodFrom   = COALESCE(@pf,       periodFrom),
               periodTo     = COALESCE(@pt,       periodTo),
               notes        = COALESCE(@notes,    notes),
+              legalInvoiceNumber = CASE WHEN @legal IS NULL THEN legalInvoiceNumber ELSE NULLIF(@legal,'') END,
+              legalInvoiceDate   = CASE WHEN @legal IS NULL THEN legalInvoiceDate
+                                        WHEN NULLIF(@legal,'') IS NULL THEN NULL
+                                        ELSE COALESCE(@legaldate, legalInvoiceDate, CAST(GETDATE() AS date)) END,
+              legalEnteredBy     = CASE WHEN NULLIF(@legal,'') IS NULL THEN legalEnteredBy ELSE @by END,
+              legalEnteredAt     = CASE WHEN NULLIF(@legal,'') IS NULL THEN legalEnteredAt ELSE GETDATE() END,
               updatedAt    = GETDATE()
         WHERE id = @id`,
       [
@@ -461,9 +568,35 @@ module.exports = safe(async function (context, req) {
         { name: 'pf',       value: b.PeriodFrom || null  },
         { name: 'pt',       value: b.PeriodTo   || null  },
         { name: 'notes',    value: b.Notes      || null  },
+        { name: 'legal',    value: legalNo },
+        { name: 'legaldate',value: b.LegalInvoiceDate || null },
+        { name: 'by',       value: user.Username },
       ]
     )
     if (!upd.rowsAffected[0]) return jsonResponse(context, 404, { error: `Invoice ${id} not found` })
+
+    // A legal number on a Job invoice is the job's final invoice: the job's
+    // milestone fields take their figures from the invoice from here on.
+    if (legalNo) {
+      const cur = await query(
+        `SELECT invoiceType, jobNumber, totalAmount, subtotal, legalInvoiceDate FROM tbl_Invoices WHERE id = @id`,
+        [{ name: 'id', value: Number(id) }])
+      const x = cur.recordset[0]
+      if (x && String(x.invoiceType || '').toLowerCase() === 'job' && x.jobNumber) {
+        await query(
+          `UPDATE tbl_Jobs
+              SET LegalInvoiceNumber = @n,
+                  FinalInvoicedDate  = COALESCE(@d, FinalInvoicedDate, GETDATE()),
+                  InvoiceDate        = COALESCE(@d, InvoiceDate, GETDATE()),
+                  InvoiceAmount      = @amt,
+                  NetInvoiceAmount   = @net,
+                  UpdatedAt = GETDATE()
+            WHERE JobID = @j`,
+          [{ name: 'n', value: legalNo }, { name: 'd', value: x.legalInvoiceDate || null },
+           { name: 'amt', value: x.totalAmount }, { name: 'net', value: x.subtotal }, { name: 'j', value: x.jobNumber }])
+        await setBillingStatus(x.jobNumber, 'Final Invoiced', user.Username)
+      }
+    }
     // The job carries the latest billing status, which Drilling Jobs shows.
     if (b.Status) {
       const j = await query(`SELECT jobNumber FROM tbl_Invoices WHERE id = @id`, [{ name: 'id', value: Number(id) }])
