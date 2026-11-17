@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Search, Download, RefreshCw, ChevronRight, ChevronDown } from 'lucide-react'
+import { Search, Download, RefreshCw, X } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useFetch } from '../hooks/useFetch'
 import { PageLoader } from '../components/Spinner'
@@ -27,15 +27,39 @@ const num = (n: number | null | undefined) =>
   n == null ? '—' : Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const costOf = (r: Row) => r.subCost + r.maintCost + r.otherCost
 
-function DetailPanel({ jobId }: { jobId: string }) {
+/** The cost lines behind one job, in a window over the register so the table stays put. */
+function DetailModal({ row, onClose }: { row: Row; onClose: () => void }) {
+  const jobId = row.jobId
   const { data, isLoading } = useFetch<Detail>(`/job-profitability/${encodeURIComponent(jobId)}`)
-  if (isLoading || !data) return <div className="p-3 text-[12px] text-slate-500">Loading cost lines…</div>
+  const m = row.revenue - costOf(row)
   const T = ({ title, children }: { title: string; children: ReactNode }) => (
-    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-      <div className="px-3 py-1 bg-slate-100 text-[11px] font-semibold uppercase text-slate-600">{title}</div>{children}
+    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col min-h-0">
+      <div className="px-3 py-1 bg-slate-100 text-[11px] font-semibold uppercase text-slate-600 shrink-0">{title}</div>
+      <div className="overflow-auto">{children}</div>
     </div>)
   return (
-    <div className="grid md:grid-cols-3 gap-3 p-3 bg-slate-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-6xl mx-4 flex flex-col max-h-[88vh]">
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-200">
+          <div>
+            <div className="font-semibold text-slate-900 font-mono">{jobId}</div>
+            <div className="text-[12px] text-slate-500">{[row.client, row.rig, row.status].filter(Boolean).join(' · ')}</div>
+          </div>
+          <div className="ml-auto grid grid-cols-5 gap-4 text-right text-[12px]">
+            {([['Revenue', row.revenue, ''], ['Sub-contract', row.subCost, ''], ['Maint. & redress', row.maintCost, ''], ['Other', row.otherCost, ''],
+               ['Margin', m, m < 0 ? 'text-red-700' : 'text-emerald-700']] as [string, number, string][]).map(([l, v, c]) => (
+              <div key={l}><div className="text-[10px] uppercase text-slate-500">{l}</div><div className={`font-mono font-semibold ${c}`}>{num(v)} <span className="text-[10px] text-slate-400">{row.currency}</span></div></div>))}
+          </div>
+          <button className="text-slate-400 hover:text-slate-600 ml-2" onClick={onClose}><X size={18} /></button>
+        </div>
+        {row.unpricedTools > 0 && (
+          <div className="px-5 py-1.5 text-[12px] bg-amber-50 text-amber-800 border-b border-amber-200">
+            {row.unpricedTools} hired-in tool{row.unpricedTools === 1 ? '' : 's'} on this job have no rate — their cost is left out. Add the supplier's rate on Sub-Contractor Rate Sheets.
+          </div>
+        )}
+        {isLoading || !data ? <div className="p-6 text-[12px] text-slate-500">Loading cost lines…</div> : (
+    <div className="grid md:grid-cols-3 gap-3 p-4 bg-slate-50 flex-1 min-h-0 overflow-auto rounded-b-xl">
       <T title={`Sub-contract hire (${data.subcontract.length})`}>
         <table className="w-full text-[12px]"><tbody>
           {data.subcontract.map((s, i) => (
@@ -68,6 +92,9 @@ function DetailPanel({ jobId }: { jobId: string }) {
         </tbody></table>
       </T>
     </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -77,11 +104,22 @@ export function JobProfitabilityView() {
   const [cur, setCur] = useState('All')
   const [loss, setLoss] = useState(false)
   const [open, setOpen] = useState<string | null>(null)
+  // Newest job first by default (year segment, then number - the Jobs register's
+  // order); any money column sorts on click.
+  type SortKey = 'job' | 'revenue' | 'subCost' | 'maintCost' | 'otherCost' | 'margin' | 'pct'
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'job', dir: -1 })
+  const jobOrd = (id: string) => { const m = /^[A-Za-z]+-(\d+)-(\d+)/.exec(id || ''); return m ? Number(m[1]) * 1e6 + Number(m[2]) : -1 }
+  const valOf = (r: Row, k: SortKey) => k === 'job' ? jobOrd(r.jobId) : k === 'margin' ? r.revenue - costOf(r)
+    : k === 'pct' ? (r.revenue ? (r.revenue - costOf(r)) / r.revenue : -Infinity) : (r as any)[k]
+  const clickSort = (key: SortKey) => setSort(s => s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: key === 'job' ? -1 : -1 })
+  const arrow = (key: SortKey) => sort.key === key ? (sort.dir === -1 ? ' ▼' : ' ▲') : ''
 
   const rows = useMemo(() => (data || []).filter(r =>
     (cur === 'All' || r.currency === cur) &&
     (!loss || costOf(r) > r.revenue) &&
-    (!q || `${r.jobId} ${r.client} ${r.rig} ${r.well}`.toLowerCase().includes(q.toLowerCase()))), [data, q, cur, loss])
+    (!q || `${r.jobId} ${r.client} ${r.rig} ${r.well}`.toLowerCase().includes(q.toLowerCase())))
+    .sort((a, b) => { const x = valOf(a, sort.key), y = valOf(b, sort.key); return x === y ? String(b.jobId).localeCompare(String(a.jobId)) : (x < y ? -sort.dir : sort.dir) }),
+    [data, q, cur, loss, sort])
   const currencies = useMemo(() => [...new Set((data || []).map(r => r.currency))], [data])
 
   // totals only when a single currency is in view
@@ -131,21 +169,26 @@ export function JobProfitabilityView() {
         <button className="btn-mini ml-auto" onClick={refetch}><RefreshCw size={12} /></button>
         <button className="btn-mini" onClick={exportXlsx}><Download size={12} /> Excel</button>
       </div>
+      {open && rows.find(r => r.jobId === open) && (
+        <DetailModal row={rows.find(r => r.jobId === open)!} onClose={() => setOpen(null)} />
+      )}
       <div className="flex-1 min-h-0 overflow-auto bg-white border border-slate-200 rounded-lg">
         <table className="w-full border-collapse text-[12px]">
           <thead className="sticky top-0 z-10"><tr>
-            <th className="table-th w-6"></th><th className="table-th">Job</th><th className="table-th">Client</th>
+            <th className="table-th cursor-pointer select-none" onClick={() => clickSort('job')}>Job{arrow('job')}</th><th className="table-th">Client</th>
             <th className="table-th">Rig</th><th className="table-th">Status</th><th className="table-th">Cur</th>
-            <th className="table-th !text-right">Revenue</th><th className="table-th !text-right">Sub-contract</th>
-            <th className="table-th !text-right">Maint. & redress</th><th className="table-th !text-right">Other</th>
-            <th className="table-th !text-right">Margin</th><th className="table-th !text-right">%</th></tr></thead>
+            <th className="table-th !text-right cursor-pointer select-none" onClick={() => clickSort('revenue')}>Revenue{arrow('revenue')}</th>
+            <th className="table-th !text-right cursor-pointer select-none" onClick={() => clickSort('subCost')}>Sub-contract{arrow('subCost')}</th>
+            <th className="table-th !text-right cursor-pointer select-none" onClick={() => clickSort('maintCost')}>Maint. & redress{arrow('maintCost')}</th>
+            <th className="table-th !text-right cursor-pointer select-none" onClick={() => clickSort('otherCost')}>Other{arrow('otherCost')}</th>
+            <th className="table-th !text-right cursor-pointer select-none" onClick={() => clickSort('margin')}>Margin{arrow('margin')}</th>
+            <th className="table-th !text-right cursor-pointer select-none" onClick={() => clickSort('pct')}>%{arrow('pct')}</th></tr></thead>
           <tbody>
             {rows.map(r => {
-              const m = r.revenue - costOf(r), isOpen = open === r.jobId
+              const m = r.revenue - costOf(r)
               return (<Fragment key={r.jobId}>
-                <tr className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => setOpen(isOpen ? null : r.jobId)}>
-                  <td className="table-td">{isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</td>
-                  <td className="table-td font-mono">{r.jobId}</td><td className="table-td">{r.client || '—'}</td>
+                <tr className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => setOpen(r.jobId)} title="Open the cost lines">
+                  <td className="table-td font-mono font-medium text-brand-700">{r.jobId}</td><td className="table-td">{r.client || '—'}</td>
                   <td className="table-td">{r.rig || '—'}</td><td className="table-td">{r.status || '—'}</td>
                   <td className="table-td">{r.currency}</td>
                   <td className="table-td text-right tabular-nums" title={`Source: ${r.revenueSource || 'App'}`}>{num(r.revenue)}{r.revenueSource?.startsWith('Report') && <span className="text-slate-400 text-[10px]"> R</span>}</td>
@@ -155,7 +198,6 @@ export function JobProfitabilityView() {
                   <td className={`table-td text-right tabular-nums font-medium ${m < 0 ? 'text-red-700' : 'text-emerald-700'}`}>{num(m)}</td>
                   <td className="table-td text-right tabular-nums">{r.revenue ? (m / r.revenue * 100).toFixed(1) : '—'}</td>
                 </tr>
-                {isOpen && <tr><td colSpan={12} className="p-0"><DetailPanel jobId={r.jobId} /></td></tr>}
               </Fragment>)
             })}
           </tbody>
