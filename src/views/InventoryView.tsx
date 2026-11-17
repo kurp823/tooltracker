@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react'
 import { Search, RefreshCw, Package } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useRowWindow } from '../components/useRowWindow'
-import { useRealtimeFetch } from '../hooks/useRealtimeFetch'
+import { useRegister } from '../hooks/useRegister'
+import { useFetch } from '../hooks/useFetch'
 import { useAuth } from '../contexts/AuthContext'
 import { PageLoader } from '../components/Spinner'
 import type { InventoryItem } from '../types'
@@ -12,33 +13,22 @@ export function InventoryView() {
   const [search, setSearch] = useState('')
   const [owner,  setOwner]  = useState<'all' | 'own' | 'sub'>('all')
 
-  const { data: items, isLoading, error, refetch } = useRealtimeFetch<InventoryItem[]>('/inventory', 30000)
+  // Search and ownership go to the server; the default view is the first
+  // 1,000 of the catalogue (A→Z by tool type). The full 8,775-row list took
+  // 7 s of server time on every visit and every poll.
+  const { rows: items, isLoading, error, refetch, capped, setShowAll, cap } =
+    useRegister<InventoryItem>('/inventory', { search, cap: 1000, extra: { owner: owner === 'all' ? undefined : owner } })
+  const { data: counts } = useFetch<{ total: number; own: number; sub: number }>('/inventory/counts')
 
-  const filtered = useMemo(() => {
-    if (!items) return []
-    return items.filter(i => {
-      if (owner === 'own' && !i.IsEmdad) return false
-      if (owner === 'sub' &&  i.IsEmdad) return false
-      if (search) {
-        const q = search.toLowerCase()
-        return (
-          (i.SystemID || '').toLowerCase().includes(q) ||
-          (i.Serial || '').toLowerCase().includes(q) ||
-          (i.AssetNo  || '').toLowerCase().includes(q) ||
-          (i.ShortDesc|| '').toLowerCase().includes(q)
-        )
-      }
-      return true
-    })
-  }, [items, owner, search])
+  const filtered = useMemo(() => items, [items])
 
   // 5,094 rows laid out before first paint was most of this screen's delay.
   const { scrollRef, onScroll, visible, hasMore, shown, total } = useRowWindow(filtered)
 
   if (isLoading) return <PageLoader />
 
-  const ownCount = items?.filter(i =>  i.IsEmdad).length ?? 0
-  const subCount = items?.filter(i => !i.IsEmdad).length ?? 0
+  const ownCount = counts?.own ?? 0
+  const subCount = counts?.sub ?? 0
 
   return (
     <div className="screen gap-1.5">
@@ -67,7 +57,10 @@ export function InventoryView() {
         </button>
 
         <span className="text-[11px] text-gray-500">
-          {hasMore ? `${shown} of ${total} shown` : `${total} items`} · {ownCount} EMDAD · {subCount} sub-contracted
+          {capped
+            ? <>first {cap} of {counts?.total ?? '…'} shown · type to search or <button className="text-brand-600 hover:underline" onClick={() => setShowAll(true)}>show all</button></>
+            : hasMore ? `${shown} of ${total} shown` : `${total} items`}
+          {' '}· {ownCount} EMDAD · {subCount} sub-contracted
         </span>
 
         {hasRole('Admin', 'Operations') && (

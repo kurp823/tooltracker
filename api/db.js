@@ -258,9 +258,29 @@ async function nextNumber(tq, table, column, prefix, width = 5) {
   return `${prefix}${String(r.recordset[0].seq).padStart(width, '0')}`
 }
 
+/**
+ * Register list controls shared by the big lists (bug 33): ?top= caps the
+ * rows (0 or absent = all), ?search= is a LIKE term. Returns the pieces the
+ * handler splices into its query. `cols` are the columns the search covers.
+ */
+function listControls(qs, cols) {
+  const q = qs || {}
+  let top = parseInt(q.top, 10)
+  if (!Number.isFinite(top) || top <= 0) top = 0
+  top = Math.min(top, 20000)
+  const term = String(q.search || '').trim()
+  const params = []
+  let searchSql = ''
+  if (term && cols && cols.length) {
+    searchSql = '(' + cols.map(c => `${c} LIKE @__q`).join(' OR ') + ')'
+    params.push({ name: '__q', type: sql.NVarChar, value: `%${term}%` })
+  }
+  return { top, topSql: top > 0 ? `TOP (${top})` : '', term, searchSql, params }
+}
+
 /** True when the route carried an id segment ("0" included). */
 function hasId(id) {
   return id !== undefined && id !== null && String(id).trim() !== ''
 }
 
-module.exports = { sql, getPool, query, jsonResponse, verifyToken, requireAuth, jobKey, jobKeyOf, safe, withLock, nextNumber, hasId }
+module.exports = { sql, getPool, query, jsonResponse, verifyToken, requireAuth, jobKey, jobKeyOf, safe, withLock, nextNumber, hasId, listControls }

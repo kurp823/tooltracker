@@ -3,7 +3,7 @@ import {
   Plus, Search, RefreshCw, X, ChevronRight,
   Trash2, Package, Save, FileInput,
 } from 'lucide-react'
-import { useRealtimeFetch } from '../hooks/useRealtimeFetch'
+import { useRegister } from '../hooks/useRegister'
 import { useFetch }         from '../hooks/useFetch'
 import { useAuth }          from '../contexts/AuthContext'
 import { useRowWindow }  from '../components/useRowWindow'
@@ -607,22 +607,11 @@ export function ReceivingTicketsView() {
   const [selected,   setSelected]   = useState<RT | null>(null)
   const [showCreate, setShowCreate] = useState(false)
 
-  const { data: tickets, isLoading, error, refetch } =
-    useRealtimeFetch<RT[]>('/receiving-tickets', 30000)
+  // Search and status go to the server; the default view is the newest 500.
+  const { rows: tickets, isLoading, error, refetch, capped, showAll, setShowAll, cap } =
+    useRegister<RT>('/receiving-tickets', { search, status })
 
-  const filtered = useMemo(() => {
-    if (!tickets) return []
-    return tickets.filter(t => {
-      if (status !== 'All' && t.Status !== status) return false
-      if (!search) return true
-      const q = search.toLowerCase()
-      return (
-        (t.RTNumber || '').toLowerCase().includes(q) ||
-        (t.JobID    || '').toLowerCase().includes(q) ||
-        (t.Client   || '').toLowerCase().includes(q)
-      )
-    })
-  }, [tickets, status, search])
+  const filtered = useMemo(() => tickets, [tickets])
 
   // Render the register in slices; all 3,700+ rows in the DOM at once was
   // most of the delay before first paint on these screens.
@@ -663,7 +652,9 @@ export function ReceivingTicketsView() {
             </select>
             <button onClick={refetch} className="btn-mini" title="Refresh"><RefreshCw size={12} /></button>
             <span className="text-[11px] text-gray-500">
-              {hasMore ? `${shown} of ${total} shown` : `${total} ticket${total === 1 ? '' : 's'}`}
+              {capped
+                ? <>newest {cap} shown · <button className="text-brand-600 hover:underline" onClick={() => setShowAll(true)}>show all</button></>
+                : hasMore ? `${shown} of ${total} shown` : `${total} ticket${total === 1 ? '' : 's'}`}
             </span>
             {hasRole('Admin', 'Operations') && (
               <button className="btn-accent ml-auto" onClick={() => setShowCreate(true)}>
