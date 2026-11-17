@@ -78,20 +78,35 @@ function CreateInvoiceModal({
     Currency:    'USD',
     Notes:       '',
   })
+  // Monthly: one invoice per billing period. Job: one invoice for the whole
+  // job, every marked day (decision 2). The job's own InvoicingType picks the
+  // default once a job is chosen.
+  const [kind, setKind] = useState<'Monthly' | 'Job'>('Job')
 
-  const { data: jobs } = useFetch<{ JobID: string; Rig: string; Well: string; Client: string }[]>(
+  const { data: jobs } = useFetch<{ JobID: string; Rig: string; Well: string; Client: string; InvoicingType?: string | null }[]>(
     '/jobs?slim=1'
   )
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
+  const pickJob = (id: string) => {
+    set('JobID', id)
+    const j = (jobs || []).find(x => x.JobID === id)
+    if (j) setKind(/month/i.test(j.InvoicingType || '') ? 'Monthly' : 'Job')
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.JobID) { toastErr('Job is required'); return }
     setSaving(true)
     try {
-      const res = await api.post<{ InvoiceID: string; InvoiceNumber: string }>('/invoices', form)
-      success(`Created ${res.InvoiceNumber}`)
+      const res = kind === 'Job'
+        ? await api.post<{ InvoiceID: string; InvoiceNumber: string; lines: number; unpricedDays: number; warning?: string }>(
+            '/invoices/from-job', { JobID: form.JobID, InvoiceDate: form.InvoiceDate, PONumber: form.PONumber, Currency: form.Currency, Notes: form.Notes })
+        : await api.post<{ InvoiceID: string; InvoiceNumber: string }>('/invoices', form)
+      const r: any = res
+      success(`Created ${res.InvoiceNumber}` + (kind === 'Job'
+        ? ` — ${r.lines} line(s)` + (r.unpricedDays ? `, ${r.unpricedDays} day(s) have no rate` : '') + (r.warning ? ` (${r.warning})` : '')
+        : ''))
       onCreated(res)
       setForm({
         JobID: '', PeriodFrom: '', PeriodTo: '',
@@ -114,7 +129,7 @@ function CreateInvoiceModal({
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h3 className="font-semibold text-gray-900 flex items-center gap-2">
             <FileText size={16} className="text-brand-600" />
-            New Monthly Invoice
+            New Invoice
           </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
         </div>
@@ -124,7 +139,7 @@ function CreateInvoiceModal({
           <div>
             <label className="label">Job *</label>
             <select className="input w-full" value={form.JobID}
-                    onChange={e => set('JobID', e.target.value)} required>
+                    onChange={e => pickJob(e.target.value)} required>
               <option value="">— Select job —</option>
               {(jobs || []).map(j => (
                 <option key={j.JobID} value={j.JobID}>
@@ -134,19 +149,39 @@ function CreateInvoiceModal({
             </select>
           </div>
 
-          {/* Billing period */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Period From *</label>
-              <input type="date" className="input w-full" value={form.PeriodFrom}
-                     onChange={e => set('PeriodFrom', e.target.value)} required />
-            </div>
-            <div>
-              <label className="label">Period To *</label>
-              <input type="date" className="input w-full" value={form.PeriodTo}
-                     onChange={e => set('PeriodTo', e.target.value)} required />
-            </div>
+          {/* Kind */}
+          <div className="flex items-center gap-4 text-sm">
+            <label className="flex items-center gap-1.5">
+              <input type="radio" name="inv-kind" checked={kind === 'Job'} onChange={() => setKind('Job')} />
+              Job invoice <span className="text-xs text-gray-500">— whole job, all marked days</span>
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input type="radio" name="inv-kind" checked={kind === 'Monthly'} onChange={() => setKind('Monthly')} />
+              Monthly <span className="text-xs text-gray-500">— one billing period</span>
+            </label>
           </div>
+
+          {/* Billing period (monthly only) */}
+          {kind === 'Monthly' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Period From *</label>
+                <input type="date" className="input w-full" value={form.PeriodFrom}
+                       onChange={e => set('PeriodFrom', e.target.value)} required />
+              </div>
+              <div>
+                <label className="label">Period To *</label>
+                <input type="date" className="input w-full" value={form.PeriodTo}
+                       onChange={e => set('PeriodTo', e.target.value)} required />
+              </div>
+            </div>
+          )}
+          {kind === 'Job' && (
+            <p className="text-xs text-gray-500">
+              Lines are built from every day marked on the job's utilization grid, priced from the contract.
+              A job that already has a legal invoice number, or already has a job invoice, is refused.
+            </p>
+          )}
 
           {/* Invoice date and PO */}
           <div className="grid grid-cols-2 gap-3">
