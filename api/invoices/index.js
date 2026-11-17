@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, safe, jobKey, jobKeyOf } = require('../db')
+const { query, jsonResponse, requireAuth, safe, jobKey, jobKeyOf , withLock, nextNumber } = require('../db')
 const { ensureBillingStatus, setBillingStatus } = require('../billing-status')
 
 // Real tbl_Invoices columns (confirmed via INFORMATION_SCHEMA):
@@ -357,17 +357,6 @@ module.exports = safe(async function (context, req) {
     )
     const job    = jobRow.recordset[0] || {}
     const yr     = new Date().getFullYear()
-    const lastRow = await query(
-      `SELECT TOP 1 invoiceNumber FROM tbl_Invoices
-        WHERE invoiceNumber LIKE 'INV-${yr}-%'
-        ORDER BY invoiceNumber DESC`, []
-    )
-    let seq = 1
-    if (lastRow.recordset.length) {
-      const parts = lastRow.recordset[0].invoiceNumber.split('-')
-      seq = parseInt(parts[parts.length - 1], 10) + 1
-    }
-    const InvoiceNumber = `INV-${yr}-${String(seq).padStart(5, '0')}`
 
     // Block duplicate period: one invoice per job per billing period.
     // An empty periodFrom means a one-off invoice, not subject to this check.
@@ -390,7 +379,11 @@ module.exports = safe(async function (context, req) {
       }
     }
 
-    const r = await query(
+    // Number and insert under one lock, so two people saving in the same
+    // second cannot both be given INV-yyyy-nnnnn (bug 25).
+    const { newId, InvoiceNumber } = await withLock('invoice-number', async (tq) => {
+      const InvoiceNumber = await nextNumber(tq, 'tbl_Invoices', 'invoiceNumber', `INV-${yr}-`, 5)
+      const r = await tq(
       `INSERT INTO tbl_Invoices
          (invoiceNumber, invoiceType, jobNumber, clientCode, contract, rig, well,
           poNumber, invoiceDate, periodFrom, periodTo,
@@ -423,8 +416,10 @@ module.exports = safe(async function (context, req) {
         { name: 'notes',    value: b.Notes || null                },
         { name: 'by',       value: user.Username                  },
       ]
-    )
-    return jsonResponse(context, 201, { InvoiceID: r.recordset[0].id, InvoiceNumber })
+      )
+      return { newId: r.recordset[0].id, InvoiceNumber }
+    })
+    return jsonResponse(context, 201, { InvoiceID: newId, InvoiceNumber })
   }
 
   // ── PUT update ───────────────────────────────────────────────────────────
@@ -442,7 +437,7 @@ module.exports = safe(async function (context, req) {
       return jsonResponse(context, 200, { ok: true })
     }
 
-    await query(
+    const upd = await query(
       `UPDATE tbl_Invoices
           SET invoiceDate  = COALESCE(@date,     invoiceDate),
               status       = COALESCE(@status,   status),
@@ -464,6 +459,7 @@ module.exports = safe(async function (context, req) {
         { name: 'notes',    value: b.Notes      || null  },
       ]
     )
+    if (!upd.rowsAffected[0]) return jsonResponse(context, 404, { error: `Invoice ${id} not found` })
     // The job carries the latest billing status, which Drilling Jobs shows.
     if (b.Status) {
       const j = await query(`SELECT jobNumber FROM tbl_Invoices WHERE id = @id`, [{ name: 'id', value: Number(id) }])

@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, safe } = require('../db')
+const { query, jsonResponse, requireAuth, safe , withLock, nextNumber } = require('../db')
 
 // tbl_GatePass columns (after migration seed:gate-pass-columns):
 //   GatePassID (varchar PK), GPNumber, Supplier, GPDate,
@@ -194,19 +194,10 @@ module.exports = safe(async function (context, req) {
     const linkedGP  = b.LinkedGatePassID || null
 
     const yr = new Date().getFullYear()
-    const lastRow = await query(
-      `SELECT TOP 1 GPNumber FROM tbl_GatePass
-        WHERE GPNumber LIKE 'GP-${yr}-%'
-        ORDER BY GPNumber DESC`, []
-    )
-    let seq = 1
-    if (lastRow.recordset.length) {
-      const parts = lastRow.recordset[0].GPNumber.split('-')
-      seq = parseInt(parts[parts.length - 1], 10) + 1
-    }
-    const GPNumber = `GP-${yr}-${String(seq).padStart(5, '0')}`
-
-    await query(
+    // Number and insert under one lock (bug 25).
+    const GPNumber = await withLock('gatepass-number', async (tq) => {
+    const GPNumber = await nextNumber(tq, 'tbl_GatePass', 'GPNumber', `GP-${yr}-`, 5)
+    await tq(
       `INSERT INTO tbl_GatePass
          (GatePassID, GPNumber, Supplier, GPDate, PreparedBy, AuthorizedBy, Notes,
           Direction, Purpose, Status, LinkedGatePassID)
@@ -226,6 +217,8 @@ module.exports = safe(async function (context, req) {
         { name: 'linkedGP',   value: linkedGP },
       ]
     )
+    return GPNumber
+    })
     return jsonResponse(context, 201, { GatePassID: GPNumber, GatePassNumber: GPNumber })
   }
 

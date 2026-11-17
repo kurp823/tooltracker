@@ -1,5 +1,5 @@
 'use strict'
-const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
+const { sql, query, jsonResponse, requireAuth, safe , withLock, nextNumber } = require('../db')
 const { refreshStatus } = require('../po-status')
 
 /**
@@ -32,14 +32,6 @@ const { refreshStatus } = require('../po-status')
 
 const EDITORS = ['Admin', 'Operations']
 
-async function nextGrnNumber () {
-  const r = await query(
-    `SELECT COALESCE(MAX(CAST(SUBSTRING(grnNumber, 5, 5) AS int)), 0) + 1 AS seq
-       FROM tbl_GoodsReceipts
-      WHERE grnNumber LIKE 'GRN-[0-9][0-9][0-9][0-9][0-9]'`, []
-  )
-  return `GRN-${String(r.recordset[0].seq).padStart(5, '0')}`
-}
 
 async function headerById (id) {
   const r = await query(`SELECT * FROM tbl_GoodsReceipts WHERE id = @id`,
@@ -168,8 +160,10 @@ module.exports = safe(async function (context, req) {
       }
       if (problems.length) return jsonResponse(context, 400, { error: problems.join('; '), problems })
 
-      const grnNumber = await nextGrnNumber()
-      const r = await query(
+      // Number and insert under one lock (bug 25).
+      const { grnNumber, grnId } = await withLock('grn-number', async (tq) => {
+      const grnNumber = await nextNumber(tq, 'tbl_GoodsReceipts', 'grnNumber', 'GRN-', 5)
+      const r = await tq(
         `INSERT INTO tbl_GoodsReceipts
            (grnNumber, poNumber, receiptDate, deliveryNote, receivedBy, status, notes, createdBy)
          OUTPUT INSERTED.id
@@ -184,6 +178,8 @@ module.exports = safe(async function (context, req) {
           { name: 'by',    type: sql.NVarChar, value: user.Username || null },
         ]
       )
+      return { grnNumber, grnId: r.recordset[0].id }
+      })
 
       for (const { p, line, qty, dest } of prepared) {
         await query(
@@ -208,7 +204,7 @@ module.exports = safe(async function (context, req) {
       }
 
       await refreshStatus(poNumber)
-      return jsonResponse(context, 201, { id: r.recordset[0].id, grnNumber, lines: prepared.length })
+      return jsonResponse(context, 201, { id: grnId, grnNumber, lines: prepared.length })
     }
 
     // ── POST post — create the items ───────────────────────────────────────
