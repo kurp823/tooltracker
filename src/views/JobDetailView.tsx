@@ -2760,19 +2760,37 @@ export function JobDetailView() {
 
   const { data: job, isLoading, refetch } = useFetch<Job>(isNew ? null : `/jobs/${id}`)
 
-  async function unlockJob() {
-    // A reason is required by the API and stored against the job, so a
-    // change to a finished job can always be explained later.
-    const reason = window.prompt('Why does this completed job need correcting?')
-    if (!reason || !reason.trim()) return
+  // A reason is required by the API and stored against the job, so a
+  // change to a finished job can always be explained later.
+  const [unlockReason, setUnlockReason] = useState<string | null>(null)
+  function unlockJob() { setUnlockReason('') }
+  async function confirmUnlock() {
+    const reason = (unlockReason || '').trim()
+    if (!reason) { showToast('Give the reason for correcting this job', 'error'); return }
     try {
-      await api(`/jobs/${id}/unlock`, { method: 'POST', body: JSON.stringify({ Reason: reason.trim() }) })
+      await api(`/jobs/${id}/unlock`, { method: 'POST', body: JSON.stringify({ Reason: reason }) })
       showToast('Job unlocked', 'success')
+      setUnlockReason(null)
       refetch()
     } catch (e: any) {
       showToast(e.message || 'Could not unlock the job', 'error')
     }
   }
+  const unlockModal = unlockReason !== null && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={() => setUnlockReason(null)} />
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-5 space-y-3">
+        <div className="font-semibold text-gray-900">Unlock {id} to correct it</div>
+        <p className="text-xs text-gray-500">This job is completed. The reason is kept on the job and in the audit log.</p>
+        <textarea autoFocus className="input w-full" rows={3} placeholder="Why does this completed job need correcting?"
+                  value={unlockReason} onChange={e => setUnlockReason(e.target.value)} />
+        <div className="flex justify-end gap-2">
+          <button className="btn-ghost" onClick={() => setUnlockReason(null)}>Cancel</button>
+          <button className="btn-primary" onClick={confirmUnlock} disabled={!unlockReason.trim()}>Unlock</button>
+        </div>
+      </div>
+    </div>
+  )
 
   async function relockJob() {
     try {
@@ -2827,6 +2845,7 @@ export function JobDetailView() {
 
   return (
     <div className="flex flex-col h-full">
+      {unlockModal}
       {/* Workspace top bar (dark, like reference app) */}
       <div className="bg-gray-900 text-white px-3 py-1.5 flex items-center gap-3 rounded-t shrink-0">
         <button
