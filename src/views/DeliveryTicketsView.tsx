@@ -13,6 +13,7 @@ import { formatDate, statusBadgeClass } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
 import { ListOptions } from '../components/ListOptions'
 import { ToolMultiPicker, searchInventory, type PickItem } from '../components/ToolMultiPicker'
+import { JobPicker } from '../components/JobPicker'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -91,8 +92,6 @@ function CreateDTModal({
   })
   const [saving, setSaving] = useState(false)
 
-  const { data: jobs } = useFetch<{ JobID: string; Rig: string; Well: string }[]>('/jobs?status=Active')
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.JobID) { toastErr('Job is required'); return }
@@ -126,19 +125,8 @@ function CreateDTModal({
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div>
             <label className="label">Job *</label>
-            <select
-              className="input w-full"
-              value={form.JobID}
-              onChange={e => setForm(f => ({ ...f, JobID: e.target.value }))}
-              required
-            >
-              <option value="">— Select job —</option>
-              {(jobs || []).map(j => (
-                <option key={j.JobID} value={j.JobID}>
-                  {j.JobID} — {j.Rig} / {j.Well}
-                </option>
-              ))}
-            </select>
+            <JobPicker value={form.JobID} onChange={id => setForm(f => ({ ...f, JobID: id }))}
+                       inputClassName="input w-full pr-9" autoFocus />
           </div>
 
           <div>

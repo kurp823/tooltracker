@@ -30,6 +30,8 @@ interface Props {
    * values; the default is the ordinary bordered field.
    */
   inputClassName?: string
+  /** Rows rendered at once; the rest wait for a narrower term. Keeps a 4,000-job list snappy. */
+  maxRows?: number
 }
 
 /**
@@ -54,6 +56,7 @@ export function ComboBox({
   disabled,
   className = '',
   inputClassName = 'field-input pr-9',
+  maxRows = 300,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [term, setTerm] = useState('')
@@ -180,7 +183,7 @@ export function ComboBox({
           {filtered.length === 0 ? (
             <div className="px-2 py-2 text-gray-400">No match</div>
           ) : (
-            filtered.map((o, i) => (
+            filtered.slice(0, maxRows).map((o, i) => (
               <div
                 key={o.value}
                 data-row={i + offset}
@@ -196,6 +199,11 @@ export function ComboBox({
                 )}
               </div>
             ))
+          )}
+          {filtered.length > maxRows && (
+            <div className="px-2 py-1 text-[11px] text-gray-400 border-t border-gray-100">
+              {filtered.length - maxRows} more — keep typing to narrow
+            </div>
           )}
         </div>
       )}

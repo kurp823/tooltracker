@@ -10,6 +10,7 @@ import { api }              from '../utils/api'
 import { formatDate, statusBadgeClass } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
 import { ListOptions } from '../components/ListOptions'
+import { JobPicker } from '../components/JobPicker'
 
 interface Inspection {
   InspectionID: number
@@ -43,7 +44,6 @@ function CreateInspectionModal({ open, onClose, onCreated }: {
   })
   const [saving, setSaving] = useState(false)
 
-  const { data: jobs } = useFetch<{ JobID: string; Rig: string; Well: string }[]>('/jobs?status=Active')
 
   const f = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
 
@@ -78,12 +78,8 @@ function CreateInspectionModal({ open, onClose, onCreated }: {
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div>
             <label className="label">Job</label>
-            <select className="input w-full" value={form.JobID} onChange={e => f('JobID', e.target.value)}>
-              <option value="">— No job linked —</option>
-              {(jobs || []).map(j => (
-                <option key={j.JobID} value={j.JobID}>{j.JobID} — {j.Rig} / {j.Well}</option>
-              ))}
-            </select>
+            <JobPicker value={form.JobID} onChange={id => f('JobID', id)} allLabel="— No job linked —"
+                       inputClassName="input w-full pr-9" />
           </div>
 
           <div className="border-t border-gray-100 pt-4">
