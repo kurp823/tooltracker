@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe } = require('../db')
+const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe , withLock, nextNumber } = require('../db')
 
 // Real tbl_ReceivingTickets columns (confirmed via INFORMATION_SCHEMA):
 //   id, rtNumber, jobNumber, linkedDtNumber, clientCode, receivingDate,
@@ -484,15 +484,10 @@ module.exports = safe(async function (context, req) {
     // Continue the single historic RT-NNNNN series. Only plain 5-digit numbers
     // count towards the next sequence; placeholder and TEST rows are left as
     // they are and excluded here so they can never shift the numbering.
-    const lastRow = await query(
-      `SELECT MAX(TRY_CAST(SUBSTRING(rtNumber, 4, 10) AS INT)) AS maxSeq
-         FROM tbl_ReceivingTickets
-        WHERE rtNumber LIKE 'RT-[0-9][0-9][0-9][0-9][0-9]'`, []
-    )
-    const seq = Number(lastRow.recordset[0]?.maxSeq || 0) + 1
-    const RTNumber = `RT-${String(seq).padStart(5, '0')}`
-
-    const r = await query(
+    // Number and insert under one lock (bug 25).
+    const { newId, RTNumber } = await withLock('rt-number', async (tq) => {
+    const RTNumber = await nextNumber(tq, 'tbl_ReceivingTickets', 'rtNumber', 'RT-', 5)
+    const r = await tq(
       // Customer / rig / well carried over from the job, as the old screen
       // pre-filled them. Status starts blank: 'Draft' appears nowhere in the
       // 3,451 real tickets (only 'Processed' and 'Closed' do).
@@ -507,13 +502,17 @@ module.exports = safe(async function (context, req) {
       [
         { name: 'num',    value: RTNumber },
         { name: 'job',    value: b.JobID  },
-        { name: 'linkdt', value: b.LinkedDT || null },
+        // The create form sent LinkedDTNumber while this read LinkedDT, so a
+        // ticket number typed at creation was dropped. Accept both.
+        { name: 'linkdt', value: b.LinkedDT || b.LinkedDTNumber || null },
         { name: 'date',   value: b.RTDate || new Date().toISOString().split('T')[0] },
         { name: 'notes',  value: b.Notes || null },
         { name: 'by',     value: user.Username },
       ]
     )
-    return jsonResponse(context, 201, { RTID: r.recordset[0].id, RTNumber })
+    return { newId: r.recordset[0].id, RTNumber }
+    })
+    return jsonResponse(context, 201, { RTID: newId, RTNumber })
   }
 
   // ── PUT update ───────────────────────────────────────────────────────────

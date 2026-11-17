@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe } = require('../db')
+const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe , withLock, nextNumber } = require('../db')
 const { loadContractRates, listHoleSections } = require('../rates')
 
 // Real tbl_DeliveryTickets columns (confirmed via INFORMATION_SCHEMA):
@@ -127,6 +127,53 @@ module.exports = safe(async function (context, req) {
         [{ name: 'id', value: Number(id) }]
       )
       return jsonResponse(context, 200, result.recordset)
+    }
+
+    // POST /delivery-tickets/{id}/lines/bulk  { tools: [{SystemID, ToolDescription, Quantity, Notes}] }
+    // One statement for the whole basket. Adding 16 tools one request at a
+    // time took over 10 s on the live app (bug 30).
+    if (method === 'POST' && subId === 'bulk') {
+      if (!['Admin','Operations'].includes(user.Role))
+        return jsonResponse(context, 403, { error: 'Forbidden' })
+      const tools = Array.isArray((req.body || {}).tools) ? req.body.tools : []
+      const clean = tools
+        .map(t => ({ serial: String(t.SystemID || t.Serial || '').trim(), desc: t.ToolDescription || null,
+                     qty: Number(t.Quantity) > 0 ? Number(t.Quantity) : 1, notes: t.Notes || null }))
+        .filter(t => t.serial)
+      if (!clean.length) return jsonResponse(context, 400, { error: 'No tools selected' })
+      if (clean.length > 300) return jsonResponse(context, 400, { error: 'Too many tools in one call (max 300)' })
+
+      const params = [{ name: 'id', value: Number(id) }]
+      const rows = clean.map((t, i) => {
+        params.push({ name: `s${i}`, value: t.serial }, { name: `d${i}`, value: t.desc },
+                    { name: `q${i}`, value: t.qty },    { name: `n${i}`, value: t.notes })
+        return `SELECT ${i} AS ord, @s${i} AS serial, @d${i} AS descr, @q${i} AS qty, @n${i} AS notes`
+      }).join(' UNION ALL ')
+
+      const r = await query(
+        `DECLARE @dt NVARCHAR(50) = (SELECT dtNumber FROM tbl_DeliveryTickets WHERE id = @id);
+         DECLARE @next INT = COALESCE((SELECT MAX(itemNo) FROM tbl_DeliveryTicketLines WITH (UPDLOCK, HOLDLOCK) WHERE dtNumber = @dt), 0);
+         INSERT INTO tbl_DeliveryTicketLines (dtNumber, itemNo, serial, toolDescription, qty, remarks)
+         OUTPUT INSERTED.id
+         SELECT @dt, @next + ROW_NUMBER() OVER (ORDER BY src.ord), src.serial, src.descr, src.qty, src.notes
+           FROM (${rows}) src
+          WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTicketLines x WHERE x.dtNumber = @dt AND x.serial = src.serial)`,
+        params
+      )
+
+      // Same inventory mirror as the single-line add, in one statement.
+      const rig = await rigOfTicket(Number(id))
+      const inList = clean.map((_, i) => `@s${i}`).join(', ')
+      try {
+        await query(
+          `UPDATE tbl_Inventory
+              SET Status = 'On Rig', Location = COALESCE(@loc, Location), LastUpdated = GETDATE()
+            WHERE SystemID IN (${inList}) OR AssetNo IN (${inList})`,
+          [{ name: 'loc', value: rig || null }, ...clean.map((t, i) => ({ name: `s${i}`, value: t.serial }))]
+        )
+      } catch { /* best-effort, never fail the ticket over the mirror */ }
+
+      return jsonResponse(context, 201, { added: r.recordset.length, skipped: clean.length - r.recordset.length })
     }
 
     if (method === 'POST') {
@@ -311,15 +358,11 @@ module.exports = safe(async function (context, req) {
     // DT-03436). Only plain 5-digit numbers count towards the next sequence —
     // the 305 DT-DUMMY-* placeholders and the TEST rows are left untouched and
     // are deliberately excluded here so they can never shift the numbering.
-    const lastRow = await query(
-      `SELECT MAX(TRY_CAST(SUBSTRING(dtNumber, 4, 10) AS INT)) AS maxSeq
-         FROM tbl_DeliveryTickets
-        WHERE dtNumber LIKE 'DT-[0-9][0-9][0-9][0-9][0-9]'`, []
-    )
-    const seq = Number(lastRow.recordset[0]?.maxSeq || 0) + 1
-    const DTNumber = `DT-${String(seq).padStart(5, '0')}`
-
-    const r = await query(
+    // Number and insert under one lock, so two dispatchers cannot both be
+    // handed the same DT number (bug 25).
+    const { newId, DTNumber } = await withLock('dt-number', async (tq) => {
+    const DTNumber = await nextNumber(tq, 'tbl_DeliveryTickets', 'dtNumber', 'DT-', 5)
+    const r = await tq(
       // Customer / rig / well / taskorder are carried over from the job, the
       // way the old ticket screen pre-fills them — they are properties of the
       // job, not things to retype per ticket.
@@ -346,7 +389,9 @@ module.exports = safe(async function (context, req) {
         { name: 'by',    value: user.Username },
       ]
     )
-    return jsonResponse(context, 201, { DTID: r.recordset[0].id, DTNumber })
+    return { newId: r.recordset[0].id, DTNumber }
+    })
+    return jsonResponse(context, 201, { DTID: newId, DTNumber })
   }
 
   // ── PUT /delivery-tickets/:id (update) ──────────────────────────────────
