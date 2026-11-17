@@ -124,6 +124,10 @@ const PAGES: Record<string, Page> = {
     title: 'Monthly P&L (GL)', badge: 'Cost Control',
     sub: 'Revenue and GL-line costs by Fishing, Whipstock and Rentals — month and year to date.',
   },
+  '/supplier-invoices': {
+    title: 'Supplier Invoices', badge: 'Billing & Cost Control',
+    sub: 'Every supplier invoice the app holds, with its status from received to paid.',
+  },
   '/sub-accruals': {
     title: 'Sub-Contract POs & Accruals', badge: 'Billing & Cost Control',
     sub: 'POs still to issue to sub-contractors, and supplier invoices still to arrive.',
