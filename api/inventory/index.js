@@ -59,13 +59,14 @@ module.exports = safe(async function (context, req) {
 
   // ── GET list ───────────────────────────────────────────────────────────────
   if (method === 'GET' && !id) {
-    const { search, owner, status, location, limit } = req.query || {}
+    const { search, owner, status, location, limit, top: topQ } = req.query || {}
     try {
       const where = ['1=1']
       const params = []
       // ?limit= caps a picker search; the pickers only show the first page
       // anyway and the full 3 MB list is never what a search box wants.
-      let top = parseInt(limit, 10)
+      // ?top= (the registers) and ?limit= (the pickers) mean the same thing.
+      let top = parseInt(limit != null ? limit : topQ, 10)
       if (!Number.isFinite(top) || top <= 0) top = 0
       const topClause = top > 0 ? `TOP (${Math.min(top, 5000)})` : ''
 
