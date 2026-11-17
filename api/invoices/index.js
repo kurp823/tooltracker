@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, safe, jobKey, jobKeyOf , withLock, nextNumber } = require('../db')
+const { query, jsonResponse, requireAuth, safe, jobKey, jobKeyOf , withLock, nextNumber , listControls } = require('../db')
 const { ensureBillingStatus, setBillingStatus } = require('../billing-status')
 
 // Real tbl_Invoices columns (confirmed via INFORMATION_SCHEMA):
@@ -222,8 +222,13 @@ module.exports = safe(async function (context, req) {
     const jobQ = String((req.query || {}).job || '').trim()
     const jobFilter = jobQ ? `AND j.JobID = @jobQ` : ''
     const jobParam  = jobQ ? [{ name: 'jobQ', value: jobQ }] : []
+    // ?top= / ?search= over the combined register (bug 33: 1.5 MB per load).
+    const lc = listControls(req.query, ['u.InvoiceNumber', 'u.JobID', 'u.Client', 'u.Rig', 'u.Well', 'u.Contract', 'u.PONumber'])
+    const outer = `SELECT ${lc.topSql} u.* FROM (`
+    const outerEnd = `) u ${lc.searchSql ? 'WHERE ' + lc.searchSql : ''} ORDER BY u.InvoiceDate DESC, u.InvoiceID DESC`
 
     const result = await query(
+      outer +
       // Two billing worlds live side-by-side.
       //
       // LEGACY (per-job billing): The original app stored invoice milestones
@@ -313,9 +318,8 @@ module.exports = safe(async function (context, req) {
           OR NULLIF(j.LegalInvoiceNumber, '') IS NOT NULL
        )
        ${jobQ ? 'AND j.JobID = @jobQ' : ''}
-
-       ORDER BY InvoiceDate DESC, InvoiceID DESC`,
-      jobParam
+      ` + outerEnd,
+      [...jobParam, ...lc.params]
     )
     return jsonResponse(context, 200, result.recordset)
   }

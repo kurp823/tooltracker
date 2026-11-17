@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe , withLock, nextNumber } = require('../db')
+const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe , withLock, nextNumber , listControls } = require('../db')
 const { loadContractRates, listHoleSections } = require('../rates')
 
 // Real tbl_DeliveryTickets columns (confirmed via INFORMATION_SCHEMA):
@@ -275,14 +275,22 @@ module.exports = safe(async function (context, req) {
   // ── /delivery-tickets (list) ─────────────────────────────────────────────
   if (!id && method === 'GET') {
     const jobQ = String((req.query || {}).job || '').trim()
-    const listParams = []
-    let jobFilter = ''
+    const statusQ = String((req.query || {}).status || '').trim()
+    const lc = listControls(req.query, ['d.dtNumber', 'd.jobNumber', 'd.rig', 'd.well', 'd.poNumber', 'c.clientName', 'd.clientCode'])
+    const listParams = [...lc.params]
+    const conds = []
     if (jobQ) {
-      jobFilter = `WHERE ${jobKey('d.jobNumber')} = @jobkey`
+      conds.push(`${jobKey('d.jobNumber')} = @jobkey`)
       listParams.push({ name: 'jobkey', value: jobKeyOf(jobQ) })
     }
+    if (statusQ && statusQ !== 'All') {
+      conds.push(`d.status = @statusQ`)
+      listParams.push({ name: 'statusQ', value: statusQ })
+    }
+    if (lc.searchSql) conds.push(lc.searchSql)
+    const jobFilter = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
     const result = await query(
-      `SELECT d.id AS DTID, d.dtNumber AS DTNumber, d.jobNumber AS JobID,
+      `SELECT ${lc.topSql} d.id AS DTID, d.dtNumber AS DTNumber, d.jobNumber AS JobID,
               d.deliveryDate AS DTDate, d.status AS Status,
               d.rig AS Rig, d.well AS Well, d.poNumber AS PONumber,
               d.createdAt AS CreatedDate, d.createdBy AS CreatedBy,

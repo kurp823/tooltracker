@@ -62,6 +62,10 @@ export function PurchaseOrdersView() {
   const { data: list, isLoading, error, refetch } =
     useFetch<PO[]>(`/purchase-orders${search ? `?search=${encodeURIComponent(search)}` : ''}`)
   const { data: summary, refetch: refetchSummary } = useFetch<Summary>('/purchase-orders/summary')
+  // Registered suppliers, offered as the supplier is typed. A PO copied from
+  // Epicor may name a supplier not yet registered, so the field is not locked
+  // to the list — but a registered name is one click away and spelt once.
+  const { data: suppliers } = useFetch<{ SupplierID: number; SupplierName: string; IsActive: boolean | number | null }[]>('/suppliers')
 
   const [openPO, setOpenPO] = useState<PO | null>(null)
   const [busy, setBusy]     = useState(false)
@@ -217,6 +221,10 @@ export function PurchaseOrdersView() {
 
   return (
     <div className="space-y-5">
+      <datalist id="po-suppliers">
+        {(suppliers || []).filter(x => x.IsActive !== false && x.IsActive !== 0)
+          .map(x => <option key={x.SupplierID} value={x.SupplierName} />)}
+      </datalist>
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">PO &amp; Goods Inward</h2>
@@ -268,7 +276,8 @@ export function PurchaseOrdersView() {
             </div>
             <div>
               <label className="label">Supplier</label>
-              <input className="input mt-1" value={head.supplierName}
+              <input className="input mt-1" value={head.supplierName} list="po-suppliers"
+                     placeholder="pick a registered supplier or type"
                      onChange={e => setHead(h => ({ ...h, supplierName: e.target.value }))} />
             </div>
             <div>
@@ -359,13 +368,42 @@ export function PurchaseOrdersView() {
           {/* ── PO tab ───────────────────────────────────────────────── */}
           {tab === 'po' && (
             <div className="p-4 space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              {(() => {
+                const linesTotal = (openPO.lines || []).reduce((a, l) => a + (Number(l.lineAmount) || 0), 0)
+                const poVal = openPO.poValue == null ? null : Number(openPO.poValue)
+                const hasLines = (openPO.lines || []).length > 0
+                const differs = poVal != null && hasLines && Math.abs(poVal - linesTotal) > 0.005
+                return (
+                  <div className={`flex items-center gap-3 text-xs rounded px-3 py-2 border ${
+                    differs ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
+                    <span>Lines total <b>{money(linesTotal)}</b></span>
+                    <span>PO value <b>{money(poVal)}</b></span>
+                    {differs && <span className="font-medium">— differ by {money(Math.abs(poVal! - linesTotal))} {openPO.currency || ''}. Check the pasted lines against Epicor.</span>}
+                    {!differs && hasLines && poVal != null && <span className="text-emerald-700">— match</span>}
+                    {poVal == null && hasLines && <span>— no PO value entered</span>}
+                  </div>
+                )
+              })()}
+              <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
                 <div>
                   <label className="label">Status</label>
                   <select className="input mt-1" value={openPO.status} disabled={!canEdit}
                           onChange={e => saveHeader({ status: e.target.value })}>
                     <ListOptions name="POStatus" current={openPO.status} />
                   </select>
+                </div>
+                <div>
+                  <label className="label">Supplier</label>
+                  <input className="input mt-1" defaultValue={openPO.supplierName || ''} disabled={!canEdit}
+                         list="po-suppliers"
+                         onBlur={e => e.target.value !== (openPO.supplierName || '') &&
+                                      saveHeader({ supplierName: e.target.value || null })} />
+                </div>
+                <div>
+                  <label className="label">PO value</label>
+                  <input type="number" className="input mt-1" disabled={!canEdit}
+                         defaultValue={openPO.poValue ?? ''}
+                         onBlur={e => saveHeader({ poValue: e.target.value === '' ? null : Number(e.target.value) })} />
                 </div>
                 <div>
                   <label className="label">Supplier invoice no</label>

@@ -45,6 +45,18 @@ module.exports = safe(async function (context, req) {
   const method = req.method.toUpperCase()
   const id     = context.bindingData.id
 
+  // ── GET counts (own / sub-contracted / total) ──────────────────────────────
+  // The register shows these figures; they used to be counted in the browser
+  // from the full 3 MB list, which is why the list could never be capped.
+  if (method === 'GET' && id === 'counts') {
+    const r = await query(
+      `SELECT COUNT(*) AS total,
+              SUM(CASE WHEN IsEmdad = 1 THEN 1 ELSE 0 END) AS own,
+              SUM(CASE WHEN IsEmdad = 1 THEN 0 ELSE 1 END) AS sub
+         FROM tbl_Inventory`, [])
+    return jsonResponse(context, 200, r.recordset[0])
+  }
+
   // ── GET list ───────────────────────────────────────────────────────────────
   if (method === 'GET' && !id) {
     const { search, owner, status, location, limit } = req.query || {}
