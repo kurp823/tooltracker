@@ -1,11 +1,12 @@
 import React, { useState } from 'react'
-import { Plus, Search, RefreshCw, Tag, Ruler } from 'lucide-react'
+import { Plus, Search, RefreshCw, Tag, Ruler, Link2, Trash2 } from 'lucide-react'
 import { useRealtimeFetch } from '../hooks/useRealtimeFetch'
 import { useAuth } from '../contexts/AuthContext'
 import { Modal } from '../components/Modal'
 import { useToast } from '../components/Toast'
 import { api } from '../utils/api'
 import { PageLoader } from '../components/Spinner'
+import { useFetch } from '../hooks/useFetch'
 
 interface Category {
   CategoryID: number
@@ -42,7 +43,7 @@ const blankSize = (): Partial<Size> => ({
 
 export function CategoriesSizesView() {
   const { hasRole } = useAuth()
-  const [tab, setTab] = useState<'categories' | 'sizes'>('categories')
+  const [tab, setTab] = useState<'categories' | 'sizes' | 'map'>('categories')
 
   return (
     <div className="space-y-4">
@@ -63,9 +64,19 @@ export function CategoriesSizesView() {
         >
           <Ruler size={14} className="inline mr-1.5 -mt-0.5" /> Sizes
         </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            tab === 'map' ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setTab('map')}
+        >
+          <Link2 size={14} className="inline mr-1.5 -mt-0.5" /> Contract mapping
+        </button>
       </div>
 
-      {tab === 'categories' ? <CategoriesTab canEdit={hasRole('Admin')} /> : <SizesTab canEdit={hasRole('Admin')} />}
+      {tab === 'categories' ? <CategoriesTab canEdit={hasRole('Admin')} />
+        : tab === 'sizes' ? <SizesTab canEdit={hasRole('Admin')} />
+        : <MappingTab canEdit={hasRole('Admin')} />}
     </div>
   )
 }
@@ -342,5 +353,186 @@ function SizesTab({ canEdit }: { canEdit: boolean }) {
         </div>
       </Modal>
     </div>
+  )
+}
+
+// ─── Contract mapping ─────────────────────────────────────────────────────────
+// Inventory names that differ from the contract's (HYD DRILLING JAR -> DRILLING
+// JAR). The rate resolver uses these pairs when a tool's own category has no
+// rate on the contract. Nothing is renamed; the pairs live in tbl_CategoryMap.
+
+interface MapRow {
+  InventoryCategory: string; ContractCategory: string; Notes: string | null
+  UpdatedBy: string | null; UpdatedAt: string | null; Tools: number; ContractHasRates: number
+}
+interface MapData {
+  mappings: MapRow[]
+  unmatched: { InventoryCategory: string; Tools: number }[]
+  contractCategories: { Category: string; Contracts: number }[]
+}
+
+function MappingTab({ canEdit }: { canEdit: boolean }) {
+  const { showToast } = useToast()
+  const { data, isLoading, refetch } = useFetch<MapData>('/categories/map')
+  const [inv, setInv] = useState('')
+  const [to, setTo]   = useState('')
+  const [q, setQ]     = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const save = async (invName: string, toName: string) => {
+    if (!invName.trim() || !toName.trim()) { showToast('Pick both names', 'error'); return }
+    setSaving(true)
+    try {
+      await api.post('/categories/map', { InventoryCategory: invName.trim(), ContractCategory: toName.trim() })
+      showToast(`${invName.trim()} → ${toName.trim()} saved`, 'success')
+      setInv(''); setTo(''); refetch()
+    } catch (e: any) { showToast(e.message || 'Could not save the mapping', 'error') }
+    finally { setSaving(false) }
+  }
+  const remove = async (invName: string) => {
+    if (!window.confirm(`Remove the mapping for ${invName}? Tools in it will price under their own name again.`)) return
+    try {
+      await api.delete(`/categories/map?inventoryCategory=${encodeURIComponent(invName)}`)
+      refetch()
+    } catch (e: any) { showToast(e.message || 'Could not remove the mapping', 'error') }
+  }
+
+  if (isLoading) return <PageLoader />
+  const d = data || { mappings: [], unmatched: [], contractCategories: [] }
+  const term = q.trim().toLowerCase()
+  const unmatched = d.unmatched.filter(u => !term || u.InventoryCategory.toLowerCase().includes(term))
+
+  return (
+    <div className="space-y-4">
+      <datalist id="contract-cats">
+        {d.contractCategories.map(c => <option key={c.Category} value={c.Category}>{`${c.Contracts} contract${c.Contracts === 1 ? '' : 's'}`}</option>)}
+      </datalist>
+
+      <div className="card p-4 space-y-2">
+        <h3 className="font-medium text-gray-900 text-sm">Current mappings ({d.mappings.length})</h3>
+        <p className="text-xs text-gray-500">
+          A tool prices under its own category when the contract has it; otherwise under the mapped one.
+          A mapping never overrides a direct match.
+        </p>
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Inventory category</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Priced as</th>
+              <th className="text-right px-3 py-2 font-medium text-gray-600">Tools</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Rates found</th>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">By</th>
+              <th className="w-10"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.mappings.map(m => (
+              <tr key={m.InventoryCategory} className="border-t border-gray-100">
+                <td className="px-3 py-1.5 font-medium text-gray-800">{m.InventoryCategory}</td>
+                <td className="px-3 py-1.5 text-gray-700">{m.ContractCategory}</td>
+                <td className="px-3 py-1.5 text-right text-gray-600">{m.Tools}</td>
+                <td className="px-3 py-1.5 text-xs">
+                  {m.ContractHasRates ? <span className="text-emerald-700">yes</span>
+                                      : <span className="text-amber-700">no contract has rates under this name</span>}
+                </td>
+                <td className="px-3 py-1.5 text-xs text-gray-500">{m.UpdatedBy || '—'}</td>
+                <td className="px-3 py-1.5">
+                  {canEdit && (
+                    <button className="btn-ghost p-1" title="Remove mapping" onClick={() => remove(m.InventoryCategory)}>
+                      <Trash2 size={13} className="text-red-500" />
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {d.mappings.length === 0 && (
+              <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-gray-400">No mappings yet</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {canEdit && (
+        <div className="card p-4 space-y-3">
+          <h3 className="font-medium text-gray-900 text-sm">Add a mapping</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="label">Inventory category</label>
+              <input className="input mt-1" value={inv} onChange={e => setInv(e.target.value)}
+                     placeholder="as spelt in inventory" list="unmatched-cats" />
+              <datalist id="unmatched-cats">
+                {d.unmatched.map(u => <option key={u.InventoryCategory} value={u.InventoryCategory}>{`${u.Tools} tools`}</option>)}
+              </datalist>
+            </div>
+            <div>
+              <label className="label">Priced as (contract category)</label>
+              <input className="input mt-1" value={to} onChange={e => setTo(e.target.value)}
+                     placeholder="as spelt on the contract" list="contract-cats" />
+            </div>
+            <div className="flex items-end">
+              <button className="btn-primary" disabled={saving} onClick={() => save(inv, to)}>
+                <Plus size={14} /> Save mapping
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="card p-4 space-y-2">
+        <div className="flex items-center gap-3">
+          <h3 className="font-medium text-gray-900 text-sm">Inventory categories no contract prices ({d.unmatched.length})</h3>
+          <div className="relative ml-auto w-64">
+            <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input className="field-input !pl-7" placeholder="Filter…" value={q} onChange={e => setQ(e.target.value)} />
+          </div>
+          <button onClick={refetch} className="btn-mini" title="Refresh"><RefreshCw size={12} /></button>
+        </div>
+        <p className="text-xs text-gray-500">
+          Many are components (grapples, mill controls, stop rings) that are never priced on their own.
+          Map the ones that are a contract item under another name.
+        </p>
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="text-left px-3 py-2 font-medium text-gray-600">Inventory category</th>
+              <th className="text-right px-3 py-2 font-medium text-gray-600">Tools</th>
+              {canEdit && <th className="text-left px-3 py-2 font-medium text-gray-600 w-80">Price as</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {unmatched.slice(0, 300).map(u => (
+              <UnmatchedRow key={u.InventoryCategory} row={u} canEdit={canEdit} saving={saving} onSave={save} />
+            ))}
+            {unmatched.length === 0 && (
+              <tr><td colSpan={3} className="px-3 py-6 text-center text-sm text-gray-400">Nothing unmatched</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function UnmatchedRow({ row, canEdit, saving, onSave }: {
+  row: { InventoryCategory: string; Tools: number }; canEdit: boolean; saving: boolean
+  onSave: (inv: string, to: string) => Promise<void>
+}) {
+  const [to, setTo] = useState('')
+  return (
+    <tr className="border-t border-gray-100">
+      <td className="px-3 py-1.5 text-gray-800">{row.InventoryCategory}</td>
+      <td className="px-3 py-1.5 text-right text-gray-600">{row.Tools}</td>
+      {canEdit && (
+        <td className="px-3 py-1.5">
+          <div className="flex items-center gap-1.5">
+            <input className="field-input flex-1" value={to} onChange={e => setTo(e.target.value)}
+                   placeholder="contract category" list="contract-cats" />
+            <button className="btn-mini" disabled={saving || !to.trim()} onClick={() => onSave(row.InventoryCategory, to)}>
+              <Link2 size={11} /> Map
+            </button>
+          </div>
+        </td>
+      )}
+    </tr>
   )
 }

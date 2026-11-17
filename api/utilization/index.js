@@ -83,11 +83,15 @@ async function contextFor (jobId, toolSerial, dtNumber) {
 /** Rates for a contract, fetched at most once per request. */
 function rateLoader () {
   const cache = new Map()
-  return async (contractCode) => {
+  let mapP = null
+  const load = async (contractCode) => {
     const key = R.norm(contractCode)
     if (!cache.has(key)) cache.set(key, await R.loadContractRates(contractCode))
     return cache.get(key)
   }
+  // Inventory -> contract category pairs (tbl_CategoryMap), read once per request.
+  load.map = () => { if (!mapP) mapP = R.loadCategoryMap().catch(() => new Map()); return mapP }
+  return load
 }
 
 /**
@@ -109,7 +113,7 @@ async function priceDay (load, ctx, statusType) {
       : { rate: null, source: null, reason: 'contract-has-no-rates' }
   }
 
-  const hit = R.pickRate(rates, ctx)
+  const hit = R.pickRate(rates, ctx, await load.map())
   if (!hit.rate)       return { rate: null, source: null, reason: hit.matchedOn }
 
   const day = R.dayRate(hit.rate, statusType)
@@ -222,7 +226,8 @@ module.exports = safe(async function (context, req) {
     if (!ctx) return jsonResponse(context, 404, { error: 'Job not found' })
 
     const rates = ctx.contract ? await load(ctx.contract) : []
-    const hit   = rates.length ? R.pickRate(rates, ctx)
+    const cmap  = await load.map()
+    const hit   = rates.length ? R.pickRate(rates, ctx, cmap)
                                : { rate: null, matchedOn: 'contract-has-no-rates' }
 
     return jsonResponse(context, 200, {
@@ -233,7 +238,8 @@ module.exports = safe(async function (context, req) {
       matchedOn:    hit.matchedOn,
       // every rate this contract holds for the category, so billing picks
       // rather than reading figures off a PDF
-      options:      rates.length ? R.listRateOptions(rates, ctx.category) : [],
+      options:      rates.length ? R.listRateOptions(rates, ctx.category, cmap) : [],
+      mappedTo:     hit.mappedTo || null,
       // hole sections the contract prices by, empty when it does not
       holeSections: rates.length ? R.listHoleSections(rates) : [],
       // the contract's redress figure, shown beside the blank box as a
@@ -342,6 +348,67 @@ module.exports = safe(async function (context, req) {
         unpriced: rows.reduce((s, r) => s + r.unpriced, 0),
         edited:   rows.reduce((s, r) => s + r.edited, 0),
       },
+    })
+  }
+
+  // ── POST /utilization/reprice — price the days that have no rate ─────────
+  // Body: { JobID, YearMonth? }
+  // Days marked before a contract's rates were loaded (or before a category
+  // mapping existed) carry no rate. This resolves them again now. It never
+  // touches a day that already has a rate, a hand-edited rate, or a day
+  // inside a period an issued invoice already covers.
+  if (id === 'reprice' && method === 'POST') {
+    if (!EDITORS.includes(user.Role))
+      return jsonResponse(context, 403, { error: 'Forbidden' })
+    const b = req.body || {}
+    if (!b.JobID) return jsonResponse(context, 400, { error: 'JobID required' })
+    const ym = String(b.YearMonth || '').trim()
+    if (ym && !/^\d{4}-\d{2}$/.test(ym)) return jsonResponse(context, 400, { error: 'YearMonth must be yyyy-mm' })
+
+    const rows = await query(
+      `SELECT l.LogID, l.JobID, l.ToolSerial, l.DTNumber, l.StatusType, l.LogDate,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM tbl_Invoices v
+                 WHERE ${jobKey('v.jobNumber')} = @jk
+                   AND v.status <> 'Draft'
+                   AND v.periodFrom IS NOT NULL
+                   AND CAST(l.LogDate AS date) BETWEEN v.periodFrom AND COALESCE(v.periodTo, v.periodFrom)
+              ) THEN 1 ELSE 0 END AS Invoiced
+         FROM tbl_DailyFieldLogs l
+        WHERE ${jobKey('l.JobID')} = @jk
+          AND l.RateCharged IS NULL
+          AND (l.RateSource IS NULL OR l.RateSource <> 'Edited')
+          ${ym ? "AND FORMAT(l.LogDate, 'yyyy-MM') = @ym" : ''}`,
+      [{ name: 'jk', value: jobKeyOf(b.JobID) }, ...(ym ? [{ name: 'ym', value: ym }] : [])]
+    )
+    const all = rows.recordset
+    const open = all.filter(r => !r.Invoiced)
+    const groups = new Map()
+    for (const r of open) {
+      const k = `${r.ToolSerial}|${r.DTNumber || ''}|${r.StatusType}`
+      if (!groups.has(k)) groups.set(k, { tool: r.ToolSerial, dt: r.DTNumber, code: r.StatusType, ids: [] })
+      groups.get(k).ids.push(r.LogID)
+    }
+    let priced = 0
+    const still = []
+    for (const g of groups.values()) {
+      const dt    = await resolveDt(b.JobID, g.tool, g.dt)
+      const ctx   = await contextFor(b.JobID, g.tool, dt)
+      const price = await priceDay(load, ctx, g.code)
+      if (price.rate == null) { still.push({ tool: g.tool, dt, code: g.code, days: g.ids.length, reason: price.reason }); continue }
+      const params = [{ name: 'rate', value: price.rate }, { name: 'src', value: price.source }, { name: 'dt', value: dt }]
+      const names = g.ids.map((id, i) => { params.push({ name: `i${i}`, value: id }); return `@i${i}` })
+      const u = await query(
+        `UPDATE tbl_DailyFieldLogs
+            SET RateCharged = @rate, RateSource = @src, DTNumber = COALESCE(DTNumber, @dt)
+          WHERE LogID IN (${names.join(',')}) AND RateCharged IS NULL`, params)
+      priced += u.rowsAffected[0] || 0
+    }
+    return jsonResponse(context, 200, {
+      considered: all.length,
+      skippedInvoiced: all.length - open.length,
+      priced,
+      stillUnpriced: still,
     })
   }
 
