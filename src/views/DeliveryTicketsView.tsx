@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   Plus, Search, RefreshCw, X, ChevronRight,
   Trash2, Package, Save, FileText,
@@ -12,6 +12,7 @@ import { api }              from '../utils/api'
 import { formatDate, statusBadgeClass } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
 import { ListOptions } from '../components/ListOptions'
+import { ToolMultiPicker, searchInventory, type PickItem } from '../components/ToolMultiPicker'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -61,17 +62,6 @@ interface DTLine {
   DateIn: string | null
 }
 
-interface InventoryItem {
-  SystemID: string
-  Serial: string | null    // inventory API field name
-  AssetNo: string | null
-  ShortDesc: string | null
-  SizeName: string | null
-  CategoryName: string | null
-  IsEmdad: boolean
-  Condition: string | null
-}
-
 /**
  * The real statuses, counted across all 3,700 tickets in tbl_DeliveryTickets:
  * Closed 2,116, Signed 1,569, blank 15. 'Draft'/'Submitted'/'Approved'/
@@ -80,102 +70,6 @@ interface InventoryItem {
  * genuinely what the data shows for a ticket not yet signed.
  */
 const STATUS_LABEL = (s: string) => (s ? s : 'Not set')
-
-// ─── Tool Picker Modal ────────────────────────────────────────────────────────
-
-function ToolPickerModal({
-  open,
-  onClose,
-  onSelect,
-}: {
-  open: boolean
-  onClose: () => void
-  onSelect: (item: InventoryItem) => void
-}) {
-  const [search, setSearch] = useState('')
-  const [results, setResults] = useState<InventoryItem[]>([])
-  const [loading, setLoading] = useState(false)
-
-  const handleSearch = useCallback(async (q: string) => {
-    setSearch(q)
-    if (q.length < 2) { setResults([]); return }
-    setLoading(true)
-    try {
-      const data = await api.get<InventoryItem[]>(`/inventory?search=${encodeURIComponent(q)}`)
-      setResults(Array.isArray(data) ? data.slice(0, 20) : [])
-    } catch {
-      setResults([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  if (!open) return null
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[80vh]">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <div className="flex items-center gap-2 text-gray-900 font-semibold">
-            <Package size={16} className="text-brand-600" />
-            Select Tool
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="px-4 py-3 border-b border-gray-100">
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              autoFocus
-              className="input pl-9 w-full"
-              placeholder="Search serial, asset no, description…"
-              value={search}
-              onChange={e => handleSearch(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {loading && (
-            <div className="flex justify-center py-8"><Spinner /></div>
-          )}
-          {!loading && search.length >= 2 && results.length === 0 && (
-            <p className="text-center text-gray-400 text-sm py-8">No tools found</p>
-          )}
-          {!loading && search.length < 2 && (
-            <p className="text-center text-gray-400 text-sm py-8">Type at least 2 characters to search</p>
-          )}
-          {results.map(item => (
-            <button
-              key={item.SystemID}
-              className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0"
-              onClick={() => { onSelect(item); onClose(); setSearch(''); setResults([]) }}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-medium text-sm text-gray-900">
-                    {item.Serial || item.AssetNo || '—'}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">{item.ShortDesc}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  {item.SizeName && (
-                    <span className="text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">{item.SizeName}</span>
-                  )}
-                  <p className="text-xs text-gray-400 mt-0.5">{item.CategoryName}</p>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ─── Create DT Modal ─────────────────────────────────────────────────────────
 
@@ -326,7 +220,7 @@ function DTDetailPanel({
     setLoaded(true)
   }, [full, loaded])
 
-  const { data: lines, refetch: refetchLines } =
+  const { data: lines, isLoading: linesLoading, refetch: refetchLines } =
     useFetch<DTLine[]>(`/delivery-tickets/${dt.DTID}/lines`)
 
   // Hole sections are contract-specific: present on ADNOC-style contracts that
@@ -375,19 +269,21 @@ function DTDetailPanel({
     onClose()
   }
 
-  // Add a tool line
-  const handleAddTool = async (item: InventoryItem) => {
+  // Add the ticked tools in one call. One request per tool made a 16-tool
+  // ticket take over 10 s (bug 30).
+  const handleAddTools = async (items: PickItem[]) => {
     try {
-      await api.post(`/delivery-tickets/${dt.DTID}/lines`, {
-        SystemID: item.SystemID,
-        ToolDescription: item.ShortDesc,
-        SizeName: item.SizeName,
-        Quantity: 1,
-      })
+      const res = await api.post<{ added: number; skipped: number }>(
+        `/delivery-tickets/${dt.DTID}/lines/bulk`,
+        { tools: items.map(i => ({ SystemID: i.key, ToolDescription: i.secondary, Quantity: 1 })) }
+      )
       refetchLines()
-      success('Tool added')
+      onRefresh()
+      success(`${res.added} tool${res.added === 1 ? '' : 's'} added` +
+              (res.skipped ? ` (${res.skipped} already on this ticket)` : ''))
+      setShowToolPicker(false)
     } catch (err: any) {
-      toastErr(err.message || 'Failed to add tool')
+      toastErr(err.message || 'Failed to add tools')
     }
   }
 
@@ -404,10 +300,12 @@ function DTDetailPanel({
 
   return (
     <>
-      <ToolPickerModal
+      <ToolMultiPicker
         open={showToolPicker}
+        title={`Add tools to ${d.DTNumber}`}
         onClose={() => setShowToolPicker(false)}
-        onSelect={handleAddTool}
+        onConfirm={handleAddTools}
+        search={searchInventory}
       />
 
       {/*
@@ -500,7 +398,7 @@ function DTDetailPanel({
         <div className="flex-1 min-h-0 flex flex-col bg-white border-x border-gray-300">
           <div className="flex items-center gap-2 px-2 h-[26px] bg-gray-100 border-b border-gray-300 shrink-0">
             <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
-              Tools ({lines?.length ?? 0})
+              Tools ({linesLoading ? '…' : (lines?.length ?? 0)})
             </span>
             {canEdit && (
               <button className="btn-mini ml-auto !py-px" onClick={() => setShowToolPicker(true)}>
@@ -509,7 +407,9 @@ function DTDetailPanel({
             )}
           </div>
 
-          {(!lines || lines.length === 0) ? (
+          {linesLoading ? (
+            <div className="flex-1 flex items-center justify-center"><Spinner /></div>
+          ) : (!lines || lines.length === 0) ? (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
               <Package size={28} className="mb-1.5 opacity-30" />
               <p className="text-xs">No tools on this ticket yet</p>

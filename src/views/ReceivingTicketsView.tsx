@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   Plus, Search, RefreshCw, X, ChevronRight,
   Trash2, Package, Save, FileInput,
@@ -12,6 +12,7 @@ import { api }              from '../utils/api'
 import { formatDate, statusBadgeClass } from '../utils/format'
 import { PageLoader, Spinner } from '../components/Spinner'
 import { ListOptions } from '../components/ListOptions'
+import { ToolMultiPicker, searchInventory, type PickItem } from '../components/ToolMultiPicker'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -57,29 +58,12 @@ interface RTLine {
   Supplier: string | null
 }
 
-interface InventoryItem {
-  SystemID: string
-  Serial: string | null
-  AssetNo: string | null
-  ShortDesc: string | null
-  SizeName: string | null
-  CategoryName: string | null
-}
-
 /**
  * Real statuses across all 3,451 rows of tbl_ReceivingTickets: Closed 2,061,
  * Processed 1,384, blank 6. 'Draft'/'Received'/'Verified'/'Locked' were
  * invented and match no ticket, so filtering by them returned nothing.
  */
 const STATUS_LABEL = (s: string) => (s ? s : 'Not set')
-
-/**
- * The line-level values below are the ones the app offers. The imported
- * history uses other spellings ('not used' lower-case, 'NOT USED' stored in
- * condition, 'Available Inventory' in routedTo), so whatever is already on a
- * line is unioned into its dropdown — otherwise opening an old ticket would
- * silently rewrite a value the user never touched.
- */
 
 /** Options plus the value actually stored on this row, so nothing is lost. */
 function withCurrent(options: readonly string[], current: string | null | undefined): string[] {
@@ -88,98 +72,13 @@ function withCurrent(options: readonly string[], current: string | null | undefi
   return [v, ...options]
 }
 
-// ─── Tool Picker Modal ────────────────────────────────────────────────────────
+/** A delivery ticket as the DT register lists it — enough for a Linked DT dropdown. */
+interface DTRef { DTID: number; DTNumber: string; DTDate: string | null; LineCount: number; Rig: string | null }
 
-function ToolPickerModal({
-  open,
-  onClose,
-  onSelect,
-}: {
-  open: boolean
-  onClose: () => void
-  onSelect: (item: InventoryItem) => void
-}) {
-  const [search, setSearch] = useState('')
-  const [results, setResults] = useState<InventoryItem[]>([])
-  const [loading, setLoading] = useState(false)
-
-  const handleSearch = useCallback(async (q: string) => {
-    setSearch(q)
-    if (q.length < 2) { setResults([]); return }
-    setLoading(true)
-    try {
-      const data = await api.get<InventoryItem[]>(`/inventory?search=${encodeURIComponent(q)}`)
-      setResults(Array.isArray(data) ? data.slice(0, 20) : [])
-    } catch {
-      setResults([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  if (!open) return null
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[80vh]">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <div className="flex items-center gap-2 text-gray-900 font-semibold">
-            <Package size={16} className="text-brand-600" />
-            Select Tool
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="px-4 py-3 border-b border-gray-100">
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              autoFocus
-              className="input pl-9 w-full"
-              placeholder="Search serial, asset no, description…"
-              value={search}
-              onChange={e => handleSearch(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {loading && <div className="flex justify-center py-8"><Spinner /></div>}
-          {!loading && search.length >= 2 && results.length === 0 && (
-            <p className="text-center text-gray-400 text-sm py-8">No tools found</p>
-          )}
-          {!loading && search.length < 2 && (
-            <p className="text-center text-gray-400 text-sm py-8">Type at least 2 characters to search</p>
-          )}
-          {results.map(item => (
-            <button
-              key={item.SystemID}
-              className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0"
-              onClick={() => { onSelect(item); onClose(); setSearch(''); setResults([]) }}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-medium text-sm text-gray-900">
-                    {item.Serial || item.AssetNo || '—'}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">{item.ShortDesc}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  {item.SizeName && (
-                    <span className="text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">{item.SizeName}</span>
-                  )}
-                  <p className="text-xs text-gray-400 mt-0.5">{item.CategoryName}</p>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
+/** The backload pool: tools dispatched on this job and not yet on any return ticket. */
+interface PendingReturn {
+  TicketNo: string; DateOut: string | null; ItemNo: number; Serial: string
+  AssetNo: string | null; Description: string | null; Size: string | null; Qty: number
 }
 
 // ─── Create RT Modal ──────────────────────────────────────────────────────────
@@ -203,13 +102,16 @@ function CreateRTModal({
   const [saving, setSaving] = useState(false)
 
   const { data: jobs } = useFetch<{ JobID: string; Rig: string; Well: string }[]>('/jobs?status=Active')
+  // The job's own delivery tickets, so the linked DT is picked, not typed.
+  const { data: jobDTs } = useFetch<DTRef[]>(form.JobID ? `/delivery-tickets?job=${encodeURIComponent(form.JobID)}` : null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.JobID) { toastErr('Job is required'); return }
     setSaving(true)
     try {
-      const res = await api.post<{ RTID: number; RTNumber: string }>('/receiving-tickets', form)
+      const res = await api.post<{ RTID: number; RTNumber: string }>('/receiving-tickets',
+        { JobID: form.JobID, RTDate: form.RTDate, LinkedDT: form.LinkedDTNumber, Notes: form.Notes })
       success(`Created ${res.RTNumber}`)
       onCreated()
       setForm({ JobID: '', RTDate: new Date().toISOString().split('T')[0], LinkedDTNumber: '', Notes: '' })
@@ -259,9 +161,16 @@ function CreateRTModal({
                 onChange={e => setForm(f => ({ ...f, RTDate: e.target.value }))} />
             </div>
             <div>
-              <label className="label">Linked DT #</label>
-              <input className="input w-full" placeholder="DT-2026-…" value={form.LinkedDTNumber}
-                onChange={e => setForm(f => ({ ...f, LinkedDTNumber: e.target.value }))} />
+              <label className="label">Linked DT</label>
+              <select className="input w-full" value={form.LinkedDTNumber} disabled={!form.JobID}
+                onChange={e => setForm(f => ({ ...f, LinkedDTNumber: e.target.value }))}>
+                <option value="">{form.JobID ? '— none / several —' : '— pick the job first —'}</option>
+                {(jobDTs || []).map(d => (
+                  <option key={d.DTID} value={d.DTNumber}>
+                    {d.DTNumber} · {formatDate(d.DTDate) || '—'} · {d.LineCount} line{d.LineCount === 1 ? '' : 's'}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -327,8 +236,45 @@ function RTDetailPanel({
     setLoaded(true)
   }, [full, loaded])
 
-  const { data: lines, refetch: refetchLines } =
+  const { data: lines, isLoading: linesLoading, refetch: refetchLines } =
     useFetch<RTLine[]>(`/receiving-tickets/${rt.RTID}/lines`)
+
+  // Delivery tickets on this job: the Linked DT dropdown and the pool filter.
+  const { data: jobDTs } = useFetch<DTRef[]>(`/delivery-tickets?job=${encodeURIComponent(rt.JobID)}`)
+  const linkedOptions = useMemo(() => {
+    const nums = (jobDTs || []).map(d => d.DTNumber)
+    return withCurrent(nums, form.LinkedDT)
+  }, [jobDTs, form.LinkedDT])
+
+  // The backload pool — loaded when the picker opens, so the register stays light.
+  const [pool, setPool] = useState<PendingReturn[] | null>(null)
+  const [poolLoading, setPoolLoading] = useState(false)
+  const [poolAllTickets, setPoolAllTickets] = useState(false)
+  const [showInvSearch, setShowInvSearch] = useState(false)
+  const openPicker = async () => {
+    setShowToolPicker(true)
+    setPoolLoading(true)
+    try {
+      const rows = await api.get<PendingReturn[]>(`/receiving-tickets/${rt.RTID}/pending`)
+      setPool(Array.isArray(rows) ? rows : [])
+    } catch (err: any) {
+      toastErr(err.message || 'Could not load the tools out on this job')
+      setPool([])
+    } finally {
+      setPoolLoading(false)
+    }
+  }
+  const linkedDT = (form.LinkedDT ?? '').trim()
+  const poolItems: PickItem[] = useMemo(() => {
+    const rows = (pool || []).filter(p => poolAllTickets || !linkedDT || p.TicketNo === linkedDT)
+    return rows.map(p => ({
+      key: p.Serial,
+      primary: p.AssetNo || p.Serial,
+      secondary: p.Description,
+      tag: [p.TicketNo, formatDate(p.DateOut)].filter(Boolean).join(' · '),
+      note: p.Size,
+    }))
+  }, [pool, poolAllTickets, linkedDT])
 
   const canEdit = hasRole('Admin', 'Operations')
 
@@ -368,20 +314,52 @@ function RTDetailPanel({
     onClose()
   }
 
-  const handleAddTool = async (item: InventoryItem) => {
+  // Receive the ticked tools from the pool in one call (the API's /receive).
+  const handleReceive = async (items: PickItem[]) => {
     try {
-      await api.post(`/receiving-tickets/${rt.RTID}/lines`, {
-        SystemID: item.SystemID,
-        ToolDescription: item.ShortDesc,
-        SizeName: item.SizeName,
-        Quantity: 1,
-        Condition: 'Good',
-        UsedStatus: 'Used',
+      const res = await api.post<{ received: number }>(`/receiving-tickets/${rt.RTID}/receive`, {
+        serials: items.map(i => i.key),
+        dtNumber: linkedDT || undefined,
       })
       refetchLines()
-      success('Tool added')
+      onRefresh()
+      success(`${res.received} tool${res.received === 1 ? '' : 's'} received`)
+      setShowToolPicker(false)
     } catch (err: any) {
-      toastErr(err.message || 'Failed to add tool')
+      toastErr(err.message || 'Failed to receive tools')
+    }
+  }
+
+  // A tool that is not in the pool (came back without a delivery ticket, or
+  // a third-party item): the old inventory search, one line per tool.
+  const handleAddFromInventory = async (items: PickItem[]) => {
+    let added = 0
+    for (const item of items) {
+      try {
+        await api.post(`/receiving-tickets/${rt.RTID}/lines`, {
+          SystemID: item.key,
+          ToolDescription: item.secondary,
+          Quantity: 1,
+          Condition: 'Good',
+          UsedStatus: 'Used',
+        })
+        added++
+      } catch (err: any) {
+        toastErr(`${item.primary}: ${err.message || 'failed'}`)
+      }
+    }
+    if (added) { refetchLines(); onRefresh(); success(`${added} tool${added === 1 ? '' : 's'} added`) }
+    setShowInvSearch(false)
+  }
+
+  // USED / NOT USED / LIH per line. Condition, routing and the tool's
+  // inventory status follow from it on the server.
+  const handleUsage = async (line: RTLine, used: string) => {
+    try {
+      await api.put(`/receiving-tickets/${rt.RTID}/lines/${line.LineID}`, { UsedStatus: used })
+      refetchLines()
+    } catch (err: any) {
+      toastErr(err.message || 'Failed to update usage')
     }
   }
 
@@ -397,10 +375,38 @@ function RTDetailPanel({
 
   return (
     <>
-      <ToolPickerModal
-        open={showToolPicker}
+      <ToolMultiPicker
+        open={showToolPicker && !showInvSearch}
+        title={`Receive tools onto ${r.RTNumber}`}
         onClose={() => setShowToolPicker(false)}
-        onSelect={handleAddTool}
+        onConfirm={handleReceive}
+        items={poolItems}
+        loading={poolLoading}
+        emptyText={linkedDT && !poolAllTickets
+          ? `Nothing from ${linkedDT} is still out. Tick "all tickets on this job" or search inventory.`
+          : 'Nothing is out on this job. Use "search inventory" for a tool without a delivery ticket.'}
+        confirmLabel={n => `Receive ${n || ''} tool${n === 1 ? '' : 's'}`}
+      >
+        <div className="flex items-center gap-3 text-xs text-gray-600">
+          {linkedDT && (
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={poolAllTickets} onChange={e => setPoolAllTickets(e.target.checked)} />
+              All tickets on this job (not only {linkedDT})
+            </label>
+          )}
+          <span className="text-gray-400">{pool ? `${poolItems.length} out` : ''}</span>
+          <button type="button" className="ml-auto text-brand-600 hover:underline"
+                  onClick={() => setShowInvSearch(true)}>
+            Not listed? Search inventory…
+          </button>
+        </div>
+      </ToolMultiPicker>
+      <ToolMultiPicker
+        open={showInvSearch}
+        title={`Add tools to ${r.RTNumber} from inventory`}
+        onClose={() => setShowInvSearch(false)}
+        onConfirm={handleAddFromInventory}
+        search={searchInventory}
       />
 
       {/* Full-width ticket, same dense shape as the old Rental Ticket screen. */}
@@ -427,8 +433,11 @@ function RTDetailPanel({
           <div className="field-value font-mono">{r.JobID}</div>
 
           <span className="field-label">Linked DT</span>
-          <input className="field-input font-mono" value={form.LinkedDT ?? ''} disabled={!canEdit}
-                 onChange={e => set('LinkedDT', e.target.value)} />
+          <select className="field-input font-mono" value={form.LinkedDT ?? ''} disabled={!canEdit}
+                  onChange={e => set('LinkedDT', e.target.value)}>
+            <option value="">—</option>
+            {linkedOptions.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
 
           <span className="field-label">Date Received</span>
           <input type="date" className="field-input" value={form.RTDate ?? ''} disabled={!canEdit}
@@ -473,23 +482,25 @@ function RTDetailPanel({
         <div className="flex-1 min-h-0 flex flex-col bg-white border-x border-gray-300">
           <div className="flex items-center gap-2 px-2 h-[26px] bg-gray-100 border-b border-gray-300 shrink-0">
             <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
-              Returned tools ({lines?.length ?? 0})
+              Returned tools ({linesLoading ? '…' : (lines?.length ?? 0)})
             </span>
             {canEdit && (
-              <button className="btn-mini ml-auto !py-px" onClick={() => setShowToolPicker(true)}>
-                <Plus size={11} /> Add Tool
+              <button className="btn-mini ml-auto !py-px" onClick={openPicker}>
+                <Plus size={11} /> Receive Tools
               </button>
             )}
           </div>
 
-          {(!lines || lines.length === 0) ? (
+          {linesLoading ? (
+            <div className="flex-1 flex items-center justify-center"><Spinner /></div>
+          ) : (!lines || lines.length === 0) ? (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
               <Package size={28} className="mb-1.5 opacity-30" />
               <p className="text-xs">No tools on this ticket yet</p>
               {canEdit && (
                 <button className="mt-2 text-brand-600 text-xs hover:text-brand-700"
-                        onClick={() => setShowToolPicker(true)}>
-                  + Add the first tool
+                        onClick={openPicker}>
+                  + Receive the first tool
                 </button>
               )}
             </div>
@@ -523,7 +534,18 @@ function RTDetailPanel({
                       <td className="table-td text-right">{line.Quantity}</td>
                       <td className="table-td text-gray-500">{line.CategoryName || '—'}</td>
                       <td className="table-td text-gray-500">{line.Supplier || '—'}</td>
-                      <td className="table-td text-gray-500">{line.UsedStatus || '—'}</td>
+                      <td className="table-td text-gray-500">
+                        {canEdit ? (
+                          <select className="field-input !h-5 !py-0 w-auto"
+                                  value={(line.UsedStatus || '').toUpperCase()}
+                                  onChange={e => handleUsage(line, e.target.value)}>
+                            <option value="">—</option>
+                            <option value="USED">Used</option>
+                            <option value="NOT USED">Not used</option>
+                            <option value="LIH">Lost in hole</option>
+                          </select>
+                        ) : (line.UsedStatus || '—')}
+                      </td>
                       <td className="table-td text-gray-500">{line.Condition || '—'}</td>
                       <td className="table-td text-gray-500">{line.RoutedTo || '—'}</td>
                       <td className="table-td text-gray-500 max-w-[160px] truncate"

@@ -7,6 +7,7 @@ import { useToast } from '../components/Toast'
 import { api } from '../utils/api'
 import { normalizeJobId } from '../utils/format'
 import { Spinner, PageLoader } from '../components/Spinner'
+import { ToolMultiPicker, type PickItem } from '../components/ToolMultiPicker'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Cell { code: '1' | 'S'; logId: number; rate: number | null; source: string | null }
@@ -268,150 +269,116 @@ function RateEditModal({
 }
 
 // ─── Add Tool Modal ───────────────────────────────────────────────────────────
-interface InventoryItem { SystemID: string; Serial: string; AssetNo: string; ShortDesc: string }
+interface Movement {
+  Serial: string | null; PartNo: string | null; Description: string | null
+  TicketNo: string | null; DateOut: string | null; DateIn: string | null; Size: string | null
+}
 
+/**
+ * Mark a run of days for one or more of the job's tools in one go. The old
+ * modal searched the whole inventory (not the job's tools), marked a single
+ * day and defaulted that day to today's date (bug 31). Tools come from the
+ * job's dispatch history; days go to POST /utilization/bulk per tool.
+ */
 function AddToolModal({
   jobId, year, month, onAdded, onClose,
 }: {
   jobId: string; year: number; month: number
-  onAdded: (row: UtilRow, firstLogId: number, firstDay: number) => void
+  onAdded: () => void
   onClose: () => void
 }) {
   const { success, error: toastErr } = useToast()
-  const { data: invData } = useFetch<InventoryItem[]>('/inventory')
-  const [search, setSearch]     = useState('')
-  const [selected, setSelected] = useState<InventoryItem | null>(null)
-  const [day, setDay]           = useState(new Date().getDate())
-  const [code, setCode]         = useState<'1' | 'S'>('1')
-  const [saving, setSaving]     = useState(false)
-
+  const { data: moves, isLoading } = useFetch<Movement[]>(`/tool-history?job=${encodeURIComponent(jobId)}&limit=2000`)
   const daysInMonth = new Date(year, month, 0).getDate()
+  const today = new Date()
+  const isThisMonth = today.getFullYear() === year && today.getMonth() + 1 === month
+  const [from, setFrom] = useState(1)
+  const [to, setTo]     = useState(isThisMonth ? today.getDate() : daysInMonth)
+  const [code, setCode] = useState<'1' | 'S'>('1')
 
-  const filtered = (invData || []).filter(i => {
-    const q = search.toLowerCase()
-    return !q || [i.Serial, i.AssetNo, i.ShortDesc].some(v => v?.toLowerCase().includes(q))
-  }).slice(0, 20)
-
-  async function handleAdd() {
-    if (!selected) return
-    setSaving(true)
-    try {
-      const logDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-      const res = await api.post<{ LogID: number }>('/utilization', {
-        JobID: jobId,
-        ToolID: selected.SystemID,
-        LogDate: logDate,
-        UtilizationCode: code,
+  const items: PickItem[] = React.useMemo(() => {
+    const seen = new Set<string>()
+    const out: PickItem[] = []
+    for (const m of moves || []) {
+      const serial = m.Serial || m.PartNo
+      if (!serial) continue
+      const key = `${m.TicketNo ?? ''}|${serial}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({
+        key,
+        primary: m.PartNo || serial,
+        secondary: m.Description,
+        tag: [m.TicketNo, m.DateOut ? m.DateOut.slice(0, 10) : null].filter(Boolean).join(' · '),
+        note: m.Size,
       })
-      const label = [selected.Serial || selected.AssetNo, selected.ShortDesc]
-        .filter(Boolean).join(' – ') || selected.AssetNo || 'Unknown Tool'
-      const logRate: number | null = (res as any).RateCharged ?? null
-      const newRow: UtilRow = {
-        label,
-        jobId,
-        toolId: selected.SystemID,
-        dtNumber: (res as any).DTNumber ?? null,
-        days: { [day]: { code, logId: (res as any).LogID, rate: logRate, source: (res as any).RateSource ?? null } },
-        opsDays:    code === '1' ? 1 : 0,
-        standbyDays: code === 'S' ? 1 : 0,
-        amount:     logRate ?? 0,
-        unpriced:   logRate == null ? 1 : 0,
-        edited:     0,
-      }
-      onAdded(newRow, res.LogID, day)
-      success('Tool added to grid')
-      onClose()
-    } catch {
-      toastErr('Failed to add tool')
-    } finally {
-      setSaving(false)
     }
+    return out
+  }, [moves])
+
+  const dateOf = (d: number) => `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+
+  const handleConfirm = async (picked: PickItem[]) => {
+    if (from > to) { toastErr('From day must not be after To day'); return }
+    let inserted = 0, skipped = 0, unpriced = 0, failed = 0
+    for (const it of picked) {
+      const [dt, serial] = it.key.split('|')
+      try {
+        const res = await api.post<{ inserted: number; skipped: number; RateCharged: number | null }>('/utilization/bulk', {
+          JobID: jobId, ToolID: serial, DTNumber: dt || undefined,
+          FromDate: dateOf(from), ToDate: dateOf(to), UtilizationCode: code,
+        })
+        inserted += res.inserted; skipped += res.skipped
+        if (res.RateCharged == null && res.inserted) unpriced++
+      } catch (err: any) {
+        failed++
+        toastErr(`${it.primary}: ${err.message || 'failed'}`)
+      }
+    }
+    if (inserted) {
+      success(`${inserted} day${inserted === 1 ? '' : 's'} marked on ${picked.length - failed} tool${picked.length - failed === 1 ? '' : 's'}` +
+              (skipped ? ` · ${skipped} already marked` : '') +
+              (unpriced ? ` · ${unpriced} tool${unpriced === 1 ? '' : 's'} unpriced` : ''))
+    } else if (!failed) {
+      toastErr('Nothing to add — those days are already marked')
+    }
+    onAdded()
+    onClose()
   }
 
+  const dayOpts = Array.from({ length: daysInMonth }, (_, i) => i + 1)
+
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b">
-          <h2 className="font-semibold text-gray-800">Add Tool to Grid</h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded"><X size={18} /></button>
-        </div>
-
-        <div className="p-5 space-y-4">
-          {/* Search inventory */}
-          <div>
-            <label className="label">Search Inventory</label>
-            <div className="relative">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                className="input pl-8"
-                placeholder="Serial, asset no, description…"
-                value={search}
-                onChange={e => { setSearch(e.target.value); setSelected(null) }}
-                autoFocus
-              />
-            </div>
-
-            {search && !selected && (
-              <div className="mt-1 border rounded-lg shadow-sm max-h-44 overflow-y-auto">
-                {filtered.length === 0 ? (
-                  <div className="px-3 py-4 text-sm text-gray-400 text-center">No results</div>
-                ) : filtered.map(item => (
-                  <button
-                    key={item.SystemID}
-                    className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b last:border-0 text-sm"
-                    onClick={() => { setSelected(item); setSearch(item.Serial || item.AssetNo || item.ShortDesc || '') }}
-                  >
-                    <div className="font-medium text-gray-800">{item.Serial || item.AssetNo}</div>
-                    <div className="text-gray-500 text-xs">{item.ShortDesc}</div>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {selected && (
-              <div className="mt-1 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm">
-                <div className="font-medium text-green-800">{selected.Serial || selected.AssetNo}</div>
-                <div className="text-green-600 text-xs">{selected.ShortDesc} — {selected.AssetNo}</div>
-              </div>
-            )}
-          </div>
-
-          {/* Day + code */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Starting Day</label>
-              <select
-                className="input"
-                value={day}
-                onChange={e => setDay(Number(e.target.value))}
-              >
-                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => (
-                  <option key={d} value={d}>Day {d}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label">Initial Code</label>
-              <select className="input" value={code} onChange={e => setCode(e.target.value as '1' | 'S')}>
-                <option value="1">1 – Operations</option>
-                <option value="S">S – Standby</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 px-5 py-4 border-t bg-gray-50 rounded-b-xl">
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button
-            className="btn-primary"
-            onClick={handleAdd}
-            disabled={!selected || !jobId || saving}
-          >
-            {saving ? <><Spinner size="sm" /> Adding…</> : 'Add to Grid'}
-          </button>
-        </div>
+    <ToolMultiPicker
+      open
+      title={`Mark days on ${jobId}`}
+      onClose={onClose}
+      onConfirm={handleConfirm}
+      items={items}
+      loading={isLoading}
+      emptyText="No tools have been dispatched on this job yet — raise a delivery ticket first"
+      confirmLabel={n => `Mark ${to - from + 1} day${to - from === 0 ? '' : 's'} on ${n || ''} tool${n === 1 ? '' : 's'}`}
+    >
+      <div className="flex items-center gap-3 text-xs">
+        <label className="flex items-center gap-1.5">From day
+          <select className="input !py-0.5 w-auto" value={from} onChange={e => setFrom(Number(e.target.value))}>
+            {dayOpts.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5">To day
+          <select className="input !py-0.5 w-auto" value={to} onChange={e => setTo(Number(e.target.value))}>
+            {dayOpts.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5">Code
+          <select className="input !py-0.5 w-auto" value={code} onChange={e => setCode(e.target.value as '1' | 'S')}>
+            <option value="1">1 – Operations</option>
+            <option value="S">S – Standby</option>
+          </select>
+        </label>
+        <span className="text-gray-400 ml-auto">Days already marked are left as they are</span>
       </div>
-    </div>
+    </ToolMultiPicker>
   )
 }
 
@@ -442,6 +409,7 @@ export function UtilizationView() {
   const path = `/utilization?year=${year}&month=${month}`
 
   const { data, isLoading, error, refetch } = useRealtimeFetch<{ rows: UtilRow[] }>(path)
+  const { data: activeJobs } = useFetch<{ JobID: string; Rig: string | null; Well: string | null }[]>('/jobs?status=Active')
 
   // Sync from API data — skip if any cell is mid-flight to avoid stomping optimistic state
   useEffect(() => {
@@ -541,20 +509,6 @@ export function UtilizationView() {
     }
   }, [canEdit, localRows, year, month])
 
-  // When "Add Tool" modal adds a new row (already created in DB)
-  function handleToolAdded(newRow: UtilRow) {
-    setLocalRows(prev => {
-      // Replace if same toolId + jobId already exists, else append
-      const exists = prev.findIndex(r => r.toolId === newRow.toolId && r.jobId === newRow.jobId)
-      if (exists >= 0) {
-        const updated = [...prev]
-        updated[exists] = { ...prev[exists], days: { ...prev[exists].days, ...newRow.days } }
-        return updated
-      }
-      return [...prev, newRow]
-    })
-  }
-
   // ── Summary stats ─────────────────────────────────────────────────────────
   const totalOps = localRows.reduce((sum, row) =>
     sum + (Object.values(row.days) as Cell[]).filter(c => c.code === '1').length, 0)
@@ -578,13 +532,13 @@ export function UtilizationView() {
           </button>
         </div>
 
-        {/* Job filter */}
-        <input
-          className="input w-52"
-          placeholder="Filter by Job ID…"
-          value={jobId}
-          onChange={e => setJobId(e.target.value)}
-        />
+        {/* Job filter: the active jobs, picked rather than typed */}
+        <select className="input w-72" value={jobId} onChange={e => setJobId(e.target.value)}>
+          <option value="">All jobs this month</option>
+          {(activeJobs || []).map(j => (
+            <option key={j.JobID} value={j.JobID}>{j.JobID} — {j.Rig || '—'} / {j.Well || '—'}</option>
+          ))}
+        </select>
 
         <button onClick={refetch} className="btn-ghost" title="Refresh">
           <RefreshCw size={15} />
@@ -595,12 +549,12 @@ export function UtilizationView() {
           <button
             className="btn-primary flex items-center gap-1.5"
             onClick={() => {
-              if (!jobId) { toastErr('Enter a Job ID first'); return }
+              if (!jobId) { toastErr('Pick a job first'); return }
               setShowAddTool(true)
             }}
           >
             <PlusCircle size={15} />
-            Add Tool
+            Mark Days
           </button>
         )}
 
@@ -857,7 +811,7 @@ export function UtilizationView() {
           jobId={jobId}
           year={year}
           month={month}
-          onAdded={(newRow) => handleToolAdded(newRow)}
+          onAdded={() => refetch()}
           onClose={() => setShowAddTool(false)}
         />
       )}
