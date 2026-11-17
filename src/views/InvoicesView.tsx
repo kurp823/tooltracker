@@ -12,6 +12,7 @@ import { usePagedRows, Pager } from '../components/usePagedRows'
 import { AdnocTaxInvoice } from '../components/AdnocTaxInvoice'
 import { JobPicker } from '../components/JobPicker'
 import { HistoryPanel } from '../components/HistoryPanel'
+import { AttachmentsPanel } from '../components/AttachmentsPanel'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -337,6 +338,7 @@ function InvoiceDetailPanel({
   const [dirty,  setDirty]  = useState(false)
   const [showTax, setShowTax] = useState(false)
   const [showHist, setShowHist] = useState(false)
+  const [showAtt, setShowAtt] = useState(false)
   const isOnshore = /adnoc|onshore/i.test(inv.Client || '')
   const [saving, setSaving] = useState(false)
 
@@ -467,7 +469,8 @@ function InvoiceDetailPanel({
             LEGAL {inv.LegalInvoiceNumber}
           </span>
         )}
-        <button className="btn-mini !py-px ml-2" onClick={() => setShowHist(true)} title="Who changed this and when">History</button>
+        <button className="btn-mini !py-px ml-2" onClick={() => setShowAtt(true)} title="SES, client approval, signed documents">Attachments</button>
+        <button className="btn-mini !py-px ml-1" onClick={() => setShowHist(true)} title="Who changed this and when">History</button>
         {isMonthly && isOnshore && (
           <button className="btn-mini !py-px ml-2" onClick={() => setShowTax(true)}
                   title="ADNOC Onshore final tax invoice (print / PDF)">
@@ -476,6 +479,7 @@ function InvoiceDetailPanel({
         )}
       </div>
       {showTax && <AdnocTaxInvoice inv={inv} onClose={() => setShowTax(false)} />}
+      {showAtt && <AttachmentsPanel entity={isMonthly ? 'invoice' : 'job'} id={isMonthly ? String(inv.InvoiceID) : String(inv.JobID)} title={inv.InvoiceNumber || inv.JobID || ''} onClose={() => setShowAtt(false)} />}
       {showHist && <HistoryPanel entity={isMonthly ? 'invoice' : 'job'} id={isMonthly ? String(inv.InvoiceID) : String(inv.JobID)} title={inv.InvoiceNumber || inv.JobID || ''} onClose={() => setShowHist(false)} />}
 
       {/* Header fields */}

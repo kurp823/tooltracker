@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe , withLock, nextNumber , listControls } = require('../db')
+const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe , withLock, nextNumber , listControls , audit } = require('../db')
 
 // Real tbl_ReceivingTickets columns (confirmed via INFORMATION_SCHEMA):
 //   id, rtNumber, jobNumber, linkedDtNumber, clientCode, receivingDate,
@@ -565,6 +565,10 @@ module.exports = safe(async function (context, req) {
         { name: 'notes',    value: b.Notes  === undefined ? null : String(b.Notes) },
       ]
     )
+    {
+      const n = await query('SELECT TOP 1 rtNumber FROM tbl_ReceivingTickets WHERE id = @id', [{ name: 'id', value: Number(id) }])
+      if (n.recordset[0]) await audit(user, 'receiving-ticket', n.recordset[0].rtNumber, 'update-header', b)
+    }
     return jsonResponse(context, 200, { ok: true })
   }
 
