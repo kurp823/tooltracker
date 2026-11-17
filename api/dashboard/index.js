@@ -36,6 +36,9 @@ module.exports = safe(async function (context, req) {
     // 'JobCompleted' is a finished job too and must not count as active.
     totalActiveJobs: `SELECT COUNT(*) FROM tbl_Jobs WHERE Status NOT IN ('Completed','JobCompleted','Cancelled')`,
     totalJobs:       `SELECT COUNT(*) FROM tbl_Jobs`,
+    // Open jobs with no contract cannot be priced (decision D, 17 Nov).
+    jobsNoContract:  `SELECT COUNT(*) FROM tbl_Jobs WHERE Status NOT IN ('Completed','JobCompleted','Cancelled','Closed')
+                        AND NULLIF(LTRIM(RTRIM(Contract)),'') IS NULL`,
     totalInventory:  `SELECT COUNT(*) FROM tbl_Inventory`,
     pendingInspections: `SELECT COUNT(*) FROM tbl_InspectionRecords WHERE status = 'Pending'`,
     pendingMaintenance: `SELECT COUNT(*) FROM tbl_MaintenanceJobs WHERE status IN ('Open','In Progress')`,

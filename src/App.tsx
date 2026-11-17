@@ -41,6 +41,7 @@ import { RentalInwardView }        from './views/RentalInwardView'
 import { PendingRentalCostsView }  from './views/PendingRentalCostsView'
 import { SubAccrualsView }         from './views/SubAccrualsView'
 import { SupplierInvoicesView } from './views/SupplierInvoicesView'
+import { AuditLogView } from './views/AuditLogView'
 import { JobProfitabilityView }    from './views/JobProfitabilityView'
 import { MonthlyPLView }           from './views/MonthlyPLView'
 import { SubRatesView }            from './views/SubRatesView'
@@ -132,6 +133,7 @@ export default function App() {
               <Route path="invoices" element={<InvoicesView />} />
               <Route path="sub-accruals" element={<SubAccrualsView />} />
               <Route path="supplier-invoices" element={<SupplierInvoicesView />} />
+              <Route path="audit-log" element={<AuditLogView />} />
               <Route path="job-profitability" element={<JobProfitabilityView />} />
               <Route path="monthly-pl" element={<MonthlyPLView />} />
               <Route path="sub-rates" element={<SubRatesView />} />

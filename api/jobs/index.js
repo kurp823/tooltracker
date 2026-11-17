@@ -13,7 +13,7 @@
  * POST   /api/jobs/{id}/personnel  — add person
  * DELETE /api/jobs/{id}/personnel/{pid} — remove person
  */
-const { sql, query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe } = require('../db')
+const { sql, query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe , audit } = require('../db')
 const { ensureBillingStatus, billingStatusSql } = require('../billing-status')
 
 /**
@@ -126,6 +126,23 @@ async function toolsStillOut (sourceJobId) {
     [{ name: 'job', type: sql.NVarChar, value: sourceJobId }]
   )
   return r.recordset
+}
+
+/**
+ * Decision D (17 Nov): a job is priced from its contract, so a job for a
+ * client that has a contract in the register must say which one. Clients
+ * with no contract on file (internal, misc, trials) are not blocked.
+ */
+async function contractRuleError(client, contract) {
+  if (String(contract || '').trim()) return null
+  const c = String(client || '').trim()
+  if (!c) return null
+  const r = await query(
+    `SELECT COUNT(*) AS n FROM tbl_Contracts WHERE Status = 'Active' AND UPPER(LTRIM(RTRIM(Client))) = UPPER(@c)`,
+    [{ name: 'c', type: sql.NVarChar, value: c }])
+  return Number(r.recordset[0]?.n || 0) > 0
+    ? `${c} has an active contract in the register — pick the contract this job is billed under (its days cannot be priced without it)`
+    : null
 }
 
 module.exports = safe(async function (context, req) {
@@ -319,6 +336,8 @@ module.exports = safe(async function (context, req) {
     // 'Job-2026-…' id got into the table and broke numbering.
     if (b.FiscalYear && !/^\d{3}$/.test(String(b.FiscalYear)))
       return jsonResponse(context, 400, { error: "Fiscal year must be three digits, e.g. 026" })
+    const cr = await contractRuleError(b.Client, b.Contract)
+    if (cr) return jsonResponse(context, 400, { error: cr })
 
     try {
       const newId = await nextJobID(b.FiscalYear)
@@ -396,6 +415,13 @@ module.exports = safe(async function (context, req) {
       // Entering the legal invoice number is what finalises the invoice.
       if (String(b.LegalInvoiceNumber || '').trim() && !row.FinalInvoicedDate)
         b.FinalInvoicedDate = new Date()
+      const cr = await contractRuleError(b.Client, b.Contract)
+      if (cr) return jsonResponse(context, 400, { error: cr })
+      // What changed, for the audit log.
+      const changed = {}
+      for (const k of ['Client','Rig','Well','Contract','PONumber','ServiceType','HoleSection','Status','InvoicingType','Currency',
+                       'MobDate','DemobDate','LegalInvoiceNumber','InvoiceDate','InvoiceAmount','NetInvoiceAmount'])
+        if (String(b[k] ?? '') !== String(row[k] ?? '')) changed[k] = { old: row[k], new: b[k] }
       await query(
         `UPDATE tbl_Jobs SET
            Client = @client, Rig = @rig, Well = @well,
@@ -454,6 +480,7 @@ module.exports = safe(async function (context, req) {
           { name: 'by',       type: sql.NVarChar, value: user.Username },
         ]
       )
+      if (Object.keys(changed).length) await audit(user, 'job', jobId, 'update', changed)
       return jsonResponse(context, 200, { success: true })
     } catch (err) {
       context.log.error(err)

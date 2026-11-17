@@ -117,7 +117,9 @@ export function DashboardView() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <Kpi label="Active Rigs Deployed" value={s.activeRigs ?? 0} sub="on open jobs" edge="border-t-emerald-600" text="text-emerald-700" to="/jobs" />
         <Kpi label="Downhole Tools in Field" value={s.inFieldTools} sub={`${s.totalInventory.toLocaleString()} total fleet`} edge="border-t-blue-600" text="text-blue-700" to="/job-tools-list" />
-        <Kpi label="Active Jobs" value={s.activeJobs} sub={`${s.totalActiveJobs} not yet closed`} edge="border-t-sky-600" text="text-sky-700" to="/jobs" />
+        <Kpi label="Active Jobs" value={s.activeJobs}
+             sub={s.jobsNoContract ? `${s.totalActiveJobs} not yet closed · ${s.jobsNoContract} with no contract` : `${s.totalActiveJobs} not yet closed`}
+             edge={s.jobsNoContract ? 'border-t-amber-500' : 'border-t-sky-600'} text="text-sky-700" to="/jobs" />
         <Kpi label="Open Jobs" value={s.openJobs} sub="not yet started" edge="border-t-amber-500" text="text-amber-700" to="/jobs" flag={s.openJobs > 0 ? 'ACTION' : undefined} />
         <Kpi label="Pending Invoices" value={s.pendingInvoices} sub="draft / submitted" edge="border-t-[#1a3055]" text="text-[#1a3055]" to="/invoices" />
       </div>

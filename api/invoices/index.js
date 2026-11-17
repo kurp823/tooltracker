@@ -1,5 +1,5 @@
 'use strict'
-const { query, jsonResponse, requireAuth, safe, jobKey, jobKeyOf , withLock, nextNumber , listControls } = require('../db')
+const { query, jsonResponse, requireAuth, safe, jobKey, jobKeyOf , withLock, nextNumber , listControls , audit } = require('../db')
 const { ensureBillingStatus, setBillingStatus } = require('../billing-status')
 
 // Real tbl_Invoices columns (confirmed via INFORMATION_SCHEMA):
@@ -235,6 +235,7 @@ module.exports = safe(async function (context, req) {
       return jsonResponse(context, 409, { error: 'Lines can only be generated on a Draft invoice' })
     const out = await generateLines(inv)
     if (out.error) return jsonResponse(context, out.code || 400, { error: out.error })
+    await audit(user, 'invoice', String(id), 'generate-lines', { lines: out.lines, unpricedDays: out.unpricedDays })
     return jsonResponse(context, 200, { lines: out.lines, unpricedDays: out.unpricedDays })
   }
 
@@ -300,6 +301,7 @@ module.exports = safe(async function (context, req) {
               UpdatedAt = GETDATE()
         WHERE JobID = @j`, [{ name: 'n', value: InvoiceNumber }, { name: 'j', value: job.JobID }])
     await setBillingStatus(job.JobID, 'Draft Invoiced', user.Username)
+    await audit(user, 'invoice', String(newId), 'create-job-invoice', { job: job.JobID, number: InvoiceNumber, lines: gen.lines || 0 })
 
     return jsonResponse(context, 201, {
       InvoiceID: newId, InvoiceNumber,
@@ -542,6 +544,7 @@ module.exports = safe(async function (context, req) {
       if (String(lj.recordset[0]?.LegalInvoiceNumber || '').trim())
         return jsonResponse(context, 409, { error: `${id} is finally invoiced (legal invoice ${lj.recordset[0].LegalInvoiceNumber.trim()}); its status cannot change` })
       await setBillingStatus(String(id), st, user.Username)
+      await audit(user, 'job', String(id), 'billing-status', { new: st })
       return jsonResponse(context, 200, { ok: true })
     }
 
@@ -583,6 +586,9 @@ module.exports = safe(async function (context, req) {
       ]
     )
     if (!upd.rowsAffected[0]) return jsonResponse(context, 404, { error: `Invoice ${id} not found` })
+    await audit(user, 'invoice', String(id), legalNo ? 'legal-number' : 'update',
+      { legal: legalNo || undefined, legalDate: b.LegalInvoiceDate || undefined, status: b.Status || undefined,
+        invoiceDate: b.InvoiceDate || undefined, periodFrom: b.PeriodFrom || undefined, periodTo: b.PeriodTo || undefined, po: b.PONumber || undefined })
 
     // A legal number on a Job invoice is the job's final invoice: the job's
     // milestone fields take their figures from the invoice from here on.
