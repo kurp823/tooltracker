@@ -14,6 +14,9 @@ import { PageLoader, Spinner } from '../components/Spinner'
 import { ListOptions } from '../components/ListOptions'
 import { ToolMultiPicker, searchInventory, type PickItem } from '../components/ToolMultiPicker'
 import { JobPicker } from '../components/JobPicker'
+import { TicketPrint } from '../components/TicketPrint'
+import { AttachmentsPanel } from '../components/AttachmentsPanel'
+import { HistoryPanel } from '../components/HistoryPanel'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -177,6 +180,9 @@ function DTDetailPanel({
   const { success, error: toastErr } = useToast()
   const [showToolPicker, setShowToolPicker] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [showPrint, setShowPrint] = useState(false)
+  const [showAtt, setShowAtt] = useState(false)
+  const [showHist, setShowHist] = useState(false)
   // The register row carries only a few columns; the ticket itself has 24, so
   // fetch the full record before showing the header fields.
   const { data: full } = useFetch<DT>(`/delivery-tickets/${dt.DTID}`)
@@ -296,6 +302,21 @@ function DTDetailPanel({
         search={searchInventory}
       />
 
+      {showPrint && (
+        <TicketPrint onClose={() => setShowPrint(false)} t={{
+          kind: 'DT', number: d.DTNumber, client: d.Client, job: d.JobID, rig: form.Rig || d.Rig, well: form.Well || d.Well,
+          date: form.DTDate || d.DTDate, po: form.PONumber || d.PONumber, clientRef: form.ClientRef || d.ClientRef,
+          vehicle: form.VehicleVessel || d.VehicleVessel, driver: form.DriverName || d.DriverName, hole: form.HoleSection || d.HoleSection,
+          emdadRep: form.EmdadRep || d.EmdadRep, emdadSignDate: form.EmdadSignDate || d.EmdadSignDate,
+          clientSignedBy: form.ClientSignedBy || d.ClientSignedBy, clientSignDate: form.ClientSignDate || d.ClientSignDate,
+          notes: form.Notes || d.Notes,
+          lines: (lines || []).map(l => ({ n: l.LineNumber, assetNo: l.AssetNo, description: l.ToolDescription, size: l.SizeName, qty: l.Quantity,
+            category: l.CategoryName, supplier: l.Supplier, extra: [l.RgtNo, l.DateIn ? formatDate(l.DateIn) : null].filter(Boolean).join(' · '), remarks: l.Notes })),
+        }} />
+      )}
+      {showAtt && <AttachmentsPanel entity="delivery-ticket" id={d.DTNumber} title={d.DTNumber} onClose={() => setShowAtt(false)} />}
+      {showHist && <HistoryPanel entity="delivery-ticket" id={d.DTNumber} title={d.DTNumber} onClose={() => setShowHist(false)} />}
+
       {/*
         Full-width ticket, laid out like the old Rental Ticket screen: a dense
         three-row header, then the tool grid taking everything that's left, then
@@ -309,6 +330,9 @@ function DTDetailPanel({
             <X size={15} />
           </button>
           <span className="text-[13px] font-bold tracking-wide">DELIVERY TICKET</span>
+          <button className="btn-mini !py-px ml-3" onClick={() => setShowPrint(true)} title="Print the ticket for signature">Print</button>
+          <button className="btn-mini !py-px ml-1" onClick={() => setShowAtt(true)} title="Signed copy and other files">Attachments</button>
+          <button className="btn-mini !py-px ml-1" onClick={() => setShowHist(true)} title="Who changed this ticket">History</button>
           <span className="ml-auto text-[11px] text-slate-300">Ticket No</span>
           <span className="font-mono font-bold text-accent-400 text-[14px]">{d.DTNumber}</span>
         </div>

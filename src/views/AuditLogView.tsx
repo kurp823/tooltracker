@@ -5,7 +5,7 @@ import { PageLoader } from '../components/Spinner'
 import { describe, type AuditRow } from '../components/HistoryPanel'
 
 const when = (v: string) => new Date(v).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-const ENTITIES = ['', 'invoice', 'job', 'contract', 'utilization', 'expense', 'month']
+const ENTITIES = ['', 'invoice', 'job', 'contract', 'utilization', 'expense', 'month', 'delivery-ticket', 'receiving-ticket']
 
 /** The change log across the app: who changed what, when, old and new values. */
 export function AuditLogView() {

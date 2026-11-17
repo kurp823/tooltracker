@@ -14,6 +14,9 @@ import { PageLoader, Spinner } from '../components/Spinner'
 import { ListOptions } from '../components/ListOptions'
 import { ToolMultiPicker, searchInventory, type PickItem } from '../components/ToolMultiPicker'
 import { JobPicker } from '../components/JobPicker'
+import { TicketPrint } from '../components/TicketPrint'
+import { AttachmentsPanel } from '../components/AttachmentsPanel'
+import { HistoryPanel } from '../components/HistoryPanel'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -197,6 +200,9 @@ function RTDetailPanel({
   const { success, error: toastErr } = useToast()
   const [showToolPicker, setShowToolPicker] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [showPrint, setShowPrint] = useState(false)
+  const [showAtt, setShowAtt] = useState(false)
+  const [showHist, setShowHist] = useState(false)
   // The register row carries a few columns; the ticket has 24, so fetch the
   // full record before rendering the header fields.
   const { data: full } = useFetch<RT>(`/receiving-tickets/${rt.RTID}`)
@@ -398,6 +404,21 @@ function RTDetailPanel({
         search={searchInventory}
       />
 
+      {showPrint && (
+        <TicketPrint onClose={() => setShowPrint(false)} t={{
+          kind: 'RT', number: r.RTNumber, client: r.Client, job: r.JobID, rig: form.Rig || r.Rig, well: form.Well || r.Well,
+          date: form.RTDate || r.RTDate, po: null, clientRef: form.ClientRef || r.ClientRef, linkedDT: form.LinkedDT || r.LinkedDT,
+          manifest: form.ManifestNumber || r.ManifestNumber, vehicle: form.VehicleVessel || r.VehicleVessel,
+          emdadRep: form.EmdadRep || r.EmdadRep, emdadSignDate: form.EmdadSignDate || r.EmdadSignDate,
+          clientSignedBy: form.ClientSignedBy || r.ClientSignedBy, clientSignDate: form.ClientSignDate || r.ClientSignDate,
+          notes: form.Notes || r.Notes,
+          lines: (lines || []).map(l => ({ n: l.LineNumber, assetNo: l.AssetNo, description: l.ToolDescription, size: l.SizeName, qty: l.Quantity,
+            category: l.CategoryName, supplier: l.Supplier, extra: [l.UsedStatus, l.Condition].filter(Boolean).join(' · '), remarks: l.Notes })),
+        }} />
+      )}
+      {showAtt && <AttachmentsPanel entity="receiving-ticket" id={r.RTNumber} title={r.RTNumber} onClose={() => setShowAtt(false)} />}
+      {showHist && <HistoryPanel entity="receiving-ticket" id={r.RTNumber} title={r.RTNumber} onClose={() => setShowHist(false)} />}
+
       {/* Full-width ticket, same dense shape as the old Rental Ticket screen. */}
       <div className="screen">
         {/* Title row */}
@@ -406,6 +427,9 @@ function RTDetailPanel({
             <X size={15} />
           </button>
           <span className="text-[13px] font-bold tracking-wide">RECEIVING TICKET</span>
+          <button className="btn-mini !py-px ml-3" onClick={() => setShowPrint(true)} title="Print the ticket for signature">Print</button>
+          <button className="btn-mini !py-px ml-1" onClick={() => setShowAtt(true)} title="Signed copy and other files">Attachments</button>
+          <button className="btn-mini !py-px ml-1" onClick={() => setShowHist(true)} title="Who changed this ticket">History</button>
           <span className="ml-auto text-[11px] text-slate-300">Ticket No</span>
           <span className="font-mono font-bold text-accent-400 text-[14px]">{r.RTNumber}</span>
         </div>
