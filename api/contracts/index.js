@@ -75,155 +75,245 @@ module.exports = safe(async function (context, req) {
     }
   }
 
+  // ── Which rate rows belong to a contract ─────────────────────────────────
+  // tbl_Contracts.ContractID is a plain number ('8'); jobs and rate rows carry
+  // the contract NUMBER (ContractRef '4700024096'), and a scoped contract
+  // files its rates as '4700024608-UDR' / '-UZ'. So rates are matched on the
+  // ref, exact or with a scope suffix. The old code matched ContractCode to
+  // ContractID and so never found a single rate.
+  async function contractRow(cid) {
+    const r = await query(`SELECT TOP 1 * FROM tbl_Contracts WHERE ContractID = @id OR ContractRef = @id`,
+      [{ name: 'id', type: sql.VarChar, value: String(cid) }])
+    return r.recordset[0] || null
+  }
+  const RATE_COLS = `r.RateID, r.ContractCode, r.ContractRef, r.Category, r.EMDADShortDesc, r.Size, r.HoleSection,
+                     r.OpsRate, r.StandbyRate, r.RunCharges, r.Redress, r.MonthlyCharges, r.Currency, r.Notes, r.ActiveFlag`
+  const rateWhere = `(UPPER(LTRIM(RTRIM(r.ContractCode))) = UPPER(@ref) OR UPPER(LTRIM(RTRIM(r.ContractCode))) LIKE UPPER(@ref) + '-%'
+                      OR UPPER(LTRIM(RTRIM(r.ContractRef))) = UPPER(@ref))`
+
+  // ── GET /api/contracts/{id} — one contract with counts ───────────────────
+  if (method === 'GET' && id && !sub) {
+    const c = await contractRow(id)
+    if (!c) return jsonResponse(context, 404, { error: 'Contract not found' })
+    const ref = String(c.ContractRef || '').trim()
+    const n = await query(
+      `SELECT (SELECT COUNT(*) FROM tbl_ContractRates r WHERE ${rateWhere} AND r.ActiveFlag = 1) AS rates,
+              (SELECT COUNT(*) FROM tbl_Jobs j WHERE UPPER(LTRIM(RTRIM(j.Contract))) = UPPER(@ref)
+                  OR UPPER(LTRIM(RTRIM(j.Contract))) LIKE UPPER(@ref) + '-%') AS jobs,
+              (SELECT COUNT(*) FROM tbl_Jobs j WHERE (UPPER(LTRIM(RTRIM(j.Contract))) = UPPER(@ref)
+                  OR UPPER(LTRIM(RTRIM(j.Contract))) LIKE UPPER(@ref) + '-%')
+                  AND j.Status NOT IN ('Completed','JobCompleted','Cancelled','Closed')) AS openJobs,
+              (SELECT STRING_AGG(x.ContractCode, ',') FROM (SELECT DISTINCT r.ContractCode FROM tbl_ContractRates r WHERE ${rateWhere}) x) AS scopes`,
+      [{ name: 'ref', type: sql.VarChar, value: ref }])
+    const x = n.recordset[0] || {}
+    return jsonResponse(context, 200, {
+      ContractID: c.ContractID, ContractNumber: c.ContractRef, ClientName: c.Client, PONumber: c.PONumber,
+      Currency: c.Currency, StartDate: c.StartDate, EndDate: c.EndDate, Status: c.Status, Description: c.Notes,
+      ContractValue: c.ContractValue, InvoicedToDate: c.InvoicedToDate, PBGNumber: c.PBGNumber, PBGValue: c.PBGValue,
+      PBGIssueDate: c.PBGIssueDate, PBGExpiryDate: c.PBGExpiryDate,
+      rateCount: Number(x.rates || 0), jobCount: Number(x.jobs || 0), openJobs: Number(x.openJobs || 0),
+      scopes: String(x.scopes || '').split(',').filter(Boolean).sort(),
+    })
+  }
+
   // ── GET /api/contracts/{id}/rates ─────────────────────────────────────────
   if (method === 'GET' && id && sub === 'rates') {
-    try {
-      const result = await query(
-        // Previously returned 7 old PascalCase aliases that didn't match the
-        // ContractRateItem frontend type and dropped HoleSection, StandbyRate,
-        // RunCharges and Redress entirely. Now returns all rate fields using
-        // the camelCase keys the frontend ContractRateItem type expects.
-        // monthlyCharges lives on tbl_Contracts (not on tbl_ContractRates) so
-        // it is NULL here; the contracts GET endpoint returns it on the
-        // parent contract object.
-        `SELECT r.RateID          AS no,
-                r.ContractRef     AS contractRef,
-                r.Category        AS category,
-                r.EMDADShortDesc  AS shortDesc,
-                r.Size            AS size,
-                r.HoleSection     AS holeSection,
-                r.OpsRate         AS opsRate,
-                r.StandbyRate     AS standbyRate,
-                r.RunCharges      AS runCharges,
-                NULL              AS monthlyCharges,
-                r.Redress         AS redress,
-                r.Currency        AS currency,
-                r.ActiveFlag      AS isActive
-         FROM   tbl_ContractRates r
-         WHERE  r.ContractCode = @id
-         ORDER  BY r.Category, r.HoleSection, r.Size`,
-        [{ name: 'id', value: id }]
-      )
-      return jsonResponse(context, 200, result.recordset)
-    } catch (err) {
-      context.log.error(err)
-      return jsonResponse(context, 500, { error: 'Failed to load rates' })
-    }
+    const c = await contractRow(id)
+    if (!c) return jsonResponse(context, 404, { error: 'Contract not found' })
+    const result = await query(
+      `SELECT ${RATE_COLS} FROM tbl_ContractRates r WHERE ${rateWhere}
+        ORDER BY r.ActiveFlag DESC, r.ContractCode, r.Category, r.HoleSection, r.Size`,
+      [{ name: 'ref', type: sql.VarChar, value: String(c.ContractRef || '').trim() }])
+    return jsonResponse(context, 200, result.recordset)
   }
 
-  // ── POST /api/contracts ───────────────────────────────────────────────────
+  // ── POST /api/contracts — create ──────────────────────────────────────────
   if (method === 'POST' && !id) {
-    if (!['Admin', 'Operations', 'Finance'].includes(user.Role))
-      return jsonResponse(context, 403, { error: 'Insufficient permissions' })
+    if (!['Admin', 'Finance'].includes(user.Role))
+      return jsonResponse(context, 403, { error: 'Admin or Finance only' })
     const b = req.body || {}
-    if (!b.ContractNumber)
-      return jsonResponse(context, 400, { error: 'ContractNumber required' })
-
-    const newId = `CT-${b.ContractNumber}`
-
-    try {
-      await query(
-        `INSERT INTO tbl_Contracts
-           (ContractID, Client, ContractRef, Currency, StartDate, EndDate, Status, Notes)
-         VALUES (@id, @client, @ref, @currency, @start, @end, @status, @desc)`,
-        [
-          { name: 'id',       type: sql.VarChar,  value: newId },
-          { name: 'client',   type: sql.VarChar,  value: b.ClientName || b.ContractName || '' },
-          { name: 'ref',      type: sql.VarChar,  value: b.ContractNumber },
-          { name: 'currency', type: sql.VarChar,  value: b.Currency       || 'USD' },
-          { name: 'start',    type: sql.Date,     value: b.StartDate      ? new Date(b.StartDate) : null },
-          { name: 'end',      type: sql.Date,     value: b.EndDate        ? new Date(b.EndDate)   : null },
-          { name: 'status',   type: sql.VarChar,  value: b.Status         || 'Active' },
-          { name: 'desc',     type: sql.VarChar,  value: b.Description    || null },
-        ]
-      )
-      return jsonResponse(context, 201, { success: true, ContractID: newId })
-    } catch (err) {
-      context.log.error(err)
-      return jsonResponse(context, 500, { error: 'Failed to create contract' })
-    }
+    const ref = String(b.ContractNumber || '').trim()
+    if (!ref) return jsonResponse(context, 400, { error: 'Contract number (ref) is required' })
+    if (!String(b.ClientName || '').trim()) return jsonResponse(context, 400, { error: 'Client is required' })
+    const dup = await query(`SELECT TOP 1 ContractID FROM tbl_Contracts WHERE UPPER(ContractRef) = UPPER(@ref)`,
+      [{ name: 'ref', type: sql.VarChar, value: ref }])
+    if (dup.recordset.length) return jsonResponse(context, 409, { error: `${ref} is already in the register` })
+    // Ids are plain numbers; continue the series.
+    const nx = await query(`SELECT COALESCE(MAX(TRY_CAST(ContractID AS int)), 0) + 1 AS n FROM tbl_Contracts`, [])
+    const newId = String(nx.recordset[0].n)
+    await query(
+      `INSERT INTO tbl_Contracts
+         (ContractID, Client, ContractRef, PONumber, Currency, StartDate, EndDate, Status, Notes,
+          ContractValue, PBGNumber, PBGValue, PBGIssueDate, PBGExpiryDate)
+       VALUES (@id, @client, @ref, @po, @currency, @start, @end, @status, @desc, @val, @pbgno, @pbgval, @pbgiss, @pbgexp)`,
+      [
+        { name: 'id',       type: sql.VarChar,  value: newId },
+        { name: 'client',   type: sql.VarChar,  value: String(b.ClientName).trim() },
+        { name: 'ref',      type: sql.VarChar,  value: ref },
+        { name: 'po',       type: sql.VarChar,  value: b.PONumber || null },
+        { name: 'currency', type: sql.VarChar,  value: b.Currency || 'USD' },
+        { name: 'start',    type: sql.Date,     value: b.StartDate ? new Date(b.StartDate) : null },
+        { name: 'end',      type: sql.Date,     value: b.EndDate ? new Date(b.EndDate) : null },
+        { name: 'status',   type: sql.VarChar,  value: b.Status || 'Active' },
+        { name: 'desc',     type: sql.VarChar,  value: b.Description || null },
+        { name: 'val',      type: sql.Decimal(18, 2), value: b.ContractValue == null || b.ContractValue === '' ? null : Number(b.ContractValue) },
+        { name: 'pbgno',    type: sql.VarChar,  value: b.PBGNumber || null },
+        { name: 'pbgval',   type: sql.Decimal(18, 2), value: b.PBGValue == null || b.PBGValue === '' ? null : Number(b.PBGValue) },
+        { name: 'pbgiss',   type: sql.Date,     value: b.PBGIssueDate ? new Date(b.PBGIssueDate) : null },
+        { name: 'pbgexp',   type: sql.Date,     value: b.PBGExpiryDate ? new Date(b.PBGExpiryDate) : null },
+      ])
+    return jsonResponse(context, 201, { success: true, ContractID: newId, ContractNumber: ref })
   }
 
-  // ── PUT /api/contracts/{id} ───────────────────────────────────────────────
+  // ── PUT /api/contracts/{id} — header ──────────────────────────────────────
   if (method === 'PUT' && id && !sub) {
-    if (!['Admin', 'Operations', 'Finance'].includes(user.Role))
-      return jsonResponse(context, 403, { error: 'Insufficient permissions' })
+    if (!['Admin', 'Finance'].includes(user.Role))
+      return jsonResponse(context, 403, { error: 'Admin or Finance only' })
+    const c = await contractRow(id)
+    if (!c) return jsonResponse(context, 404, { error: 'Contract not found' })
     const b = req.body || {}
-    try {
-      await query(
-        `UPDATE tbl_Contracts SET
-           Client = @client, StartDate = @start, EndDate = @end,
-           Status = @status, Currency = @currency, Notes = @desc
-         WHERE ContractID = @id`,
-        [
-          { name: 'id',       type: sql.VarChar,  value: id },
-          { name: 'client',   type: sql.VarChar,  value: b.ClientName     || '' },
-          { name: 'start',    type: sql.Date,     value: b.StartDate      ? new Date(b.StartDate) : null },
-          { name: 'end',      type: sql.Date,     value: b.EndDate        ? new Date(b.EndDate)   : null },
-          { name: 'status',   type: sql.VarChar,  value: b.Status         || 'Active' },
-          { name: 'currency', type: sql.VarChar,  value: b.Currency       || 'USD' },
-          { name: 'desc',     type: sql.VarChar,  value: b.Description    || null },
-        ]
-      )
-      return jsonResponse(context, 200, { success: true })
-    } catch (err) {
-      context.log.error(err)
-      return jsonResponse(context, 500, { error: 'Failed to update contract' })
-    }
+    const num = (v) => (v === undefined ? null : (v === '' || v == null ? null : Number(v)))
+    const dt  = (v) => (v === undefined ? null : (v ? new Date(v) : null))
+    // Unsent fields keep their value; an empty string clears a text/date field.
+    await query(
+      `UPDATE tbl_Contracts SET
+         Client        = COALESCE(@client, Client),
+         PONumber      = CASE WHEN @po IS NULL THEN PONumber ELSE NULLIF(@po,'') END,
+         Currency      = COALESCE(@currency, Currency),
+         StartDate     = CASE WHEN @startSent = 1 THEN @start ELSE StartDate END,
+         EndDate       = CASE WHEN @endSent = 1 THEN @end ELSE EndDate END,
+         Status        = COALESCE(@status, Status),
+         Notes         = CASE WHEN @desc IS NULL THEN Notes ELSE NULLIF(@desc,'') END,
+         ContractValue = CASE WHEN @valSent = 1 THEN @val ELSE ContractValue END,
+         InvoicedToDate= CASE WHEN @invSent = 1 THEN @inv ELSE InvoicedToDate END,
+         PBGNumber     = CASE WHEN @pbgno IS NULL THEN PBGNumber ELSE NULLIF(@pbgno,'') END,
+         PBGValue      = CASE WHEN @pbgvalSent = 1 THEN @pbgval ELSE PBGValue END,
+         PBGIssueDate  = CASE WHEN @pbgissSent = 1 THEN @pbgiss ELSE PBGIssueDate END,
+         PBGExpiryDate = CASE WHEN @pbgexpSent = 1 THEN @pbgexp ELSE PBGExpiryDate END
+       WHERE ContractID = @id`,
+      [
+        { name: 'id',       type: sql.VarChar,  value: c.ContractID },
+        { name: 'client',   type: sql.VarChar,  value: b.ClientName === undefined ? null : String(b.ClientName) },
+        { name: 'po',       type: sql.VarChar,  value: b.PONumber === undefined ? null : String(b.PONumber) },
+        { name: 'currency', type: sql.VarChar,  value: b.Currency || null },
+        { name: 'startSent',type: sql.Bit,      value: b.StartDate !== undefined ? 1 : 0 },
+        { name: 'start',    type: sql.Date,     value: dt(b.StartDate) },
+        { name: 'endSent',  type: sql.Bit,      value: b.EndDate !== undefined ? 1 : 0 },
+        { name: 'end',      type: sql.Date,     value: dt(b.EndDate) },
+        { name: 'status',   type: sql.VarChar,  value: b.Status || null },
+        { name: 'desc',     type: sql.VarChar,  value: b.Description === undefined ? null : String(b.Description) },
+        { name: 'valSent',  type: sql.Bit,      value: b.ContractValue !== undefined ? 1 : 0 },
+        { name: 'val',      type: sql.Decimal(18, 2), value: num(b.ContractValue) },
+        { name: 'invSent',  type: sql.Bit,      value: b.InvoicedToDate !== undefined ? 1 : 0 },
+        { name: 'inv',      type: sql.Decimal(18, 2), value: num(b.InvoicedToDate) },
+        { name: 'pbgno',    type: sql.VarChar,  value: b.PBGNumber === undefined ? null : String(b.PBGNumber) },
+        { name: 'pbgvalSent',type: sql.Bit,     value: b.PBGValue !== undefined ? 1 : 0 },
+        { name: 'pbgval',   type: sql.Decimal(18, 2), value: num(b.PBGValue) },
+        { name: 'pbgissSent',type: sql.Bit,     value: b.PBGIssueDate !== undefined ? 1 : 0 },
+        { name: 'pbgiss',   type: sql.Date,     value: dt(b.PBGIssueDate) },
+        { name: 'pbgexpSent',type: sql.Bit,     value: b.PBGExpiryDate !== undefined ? 1 : 0 },
+        { name: 'pbgexp',   type: sql.Date,     value: dt(b.PBGExpiryDate) },
+      ])
+    return jsonResponse(context, 200, { success: true })
   }
 
-  // ── POST /api/contracts/{id}/rates ────────────────────────────────────────
-  if (method === 'POST' && id && sub === 'rates') {
-    if (!['Admin', 'Finance', 'Billing'].includes(user.Role))
-      return jsonResponse(context, 403, { error: 'Insufficient permissions' })
-    const b = req.body || {}
-    try {
-      // Look up ContractRef from tbl_Contracts so we can store the human-
-      // readable ref (e.g. "ADNOC-4700024608-SCH2") alongside the ContractCode
-      // (the PK "CT-ADNOC-4700024608-SCH2"). Fall back to b.contractRef if
-      // the body already carries it, or to the raw id as a last resort.
-      let contractRef = b.contractRef || id
-      if (!b.contractRef) {
-        try {
-          const refRow = await query(
-            `SELECT TOP 1 ContractRef FROM tbl_Contracts WHERE ContractID = @id`,
-            [{ name: 'id', type: sql.VarChar, value: id }]
-          )
-          if (refRow.recordset[0]?.ContractRef) contractRef = refRow.recordset[0].ContractRef
-        } catch (_) { /* non-fatal — fall back to id */ }
-      }
+  // ── Rates: add / edit / deactivate / paste ────────────────────────────────
+  const RATE_EDITORS = ['Admin', 'Finance', 'Billing']
+  const numOrNull = (v) => (v === '' || v == null ? null : (Number.isFinite(Number(v)) ? Number(v) : NaN))
 
-      // Previously wrote only 7 of 15 columns using old PascalCase body field
-      // aliases (Description, ItemCode, UnitPrice, UOM). Frontend now sends
-      // camelCase matching ContractRateItem. All rate columns now written.
-      await query(
-        `INSERT INTO tbl_ContractRates
-           (ContractCode, ContractRef, Category, EMDADShortDesc, Size,
-            HoleSection, OpsRate, StandbyRate, RunCharges, Redress,
-            Currency, Notes, ActiveFlag)
-         VALUES
-           (@cid, @ref, @category, @shortDesc, @size,
-            @holeSection, @opsRate, @standbyRate, @runCharges, @redress,
-            @currency, NULL, 1)`,
-        [
-          { name: 'cid',         type: sql.VarChar,  value: id },
-          { name: 'ref',         type: sql.VarChar,  value: contractRef },
-          { name: 'category',    type: sql.VarChar,  value: b.category    || null },
-          { name: 'shortDesc',   type: sql.VarChar,  value: b.shortDesc   || null },
-          { name: 'size',        type: sql.VarChar,  value: b.size        || null },
-          { name: 'holeSection', type: sql.VarChar,  value: b.holeSection || null },
-          { name: 'opsRate',     type: sql.Decimal,  value: b.opsRate     ?? 0 },
-          { name: 'standbyRate', type: sql.Decimal,  value: b.standbyRate ?? null },
-          { name: 'runCharges',  type: sql.Decimal,  value: b.runCharges  ?? null },
-          { name: 'redress',     type: sql.Decimal,  value: b.redress     ?? null },
-          { name: 'currency',    type: sql.VarChar,  value: b.currency    || 'USD' },
-        ]
-      )
-      return jsonResponse(context, 201, { success: true })
-    } catch (err) {
-      context.log.error(err)
-      return jsonResponse(context, 500, { error: 'Failed to add rate' })
+  function cleanRate(b, c) {
+    const category = String(b.Category || b.category || '').trim()
+    if (!category) return { error: 'Category is required' }
+    const vals = {
+      code:    String(b.ContractCode || b.contractCode || c.ContractRef).trim(),
+      category,
+      desc:    String(b.EMDADShortDesc || b.shortDesc || '').trim() || null,
+      size:    String(b.Size || b.size || '').trim() || null,
+      hole:    String(b.HoleSection || b.holeSection || '').trim() || null,
+      ops:     numOrNull(b.OpsRate ?? b.opsRate),
+      standby: numOrNull(b.StandbyRate ?? b.standbyRate),
+      run:     numOrNull(b.RunCharges ?? b.runCharges),
+      redress: numOrNull(b.Redress ?? b.redress),
+      monthly: numOrNull(b.MonthlyCharges ?? b.monthlyCharges),
+      currency:String(b.Currency || b.currency || c.Currency || 'USD').trim(),
+      notes:   String(b.Notes || b.notes || '').trim() || null,
     }
+    for (const k of ['ops','standby','run','redress','monthly']) if (Number.isNaN(vals[k])) return { error: `${k} rate must be a number` }
+    if (vals.ops == null && vals.monthly == null && vals.standby == null) return { error: 'Give an operating, standby or monthly rate' }
+    const base = String(c.ContractRef || '').trim().toUpperCase()
+    const code = vals.code.toUpperCase()
+    if (code !== base && !code.startsWith(base + '-')) return { error: `Scope must be ${c.ContractRef} or ${c.ContractRef}-<scope>` }
+    return { v: vals }
+  }
+  const rateParams = (v, c) => [
+    { name: 'code', type: sql.VarChar, value: v.code }, { name: 'ref', type: sql.VarChar, value: String(c.ContractRef || '').trim() },
+    { name: 'cat', type: sql.VarChar, value: v.category }, { name: 'desc', type: sql.VarChar, value: v.desc },
+    { name: 'size', type: sql.VarChar, value: v.size }, { name: 'hole', type: sql.VarChar, value: v.hole },
+    { name: 'ops', type: sql.Decimal(18, 2), value: v.ops }, { name: 'standby', type: sql.Decimal(18, 2), value: v.standby },
+    { name: 'run', type: sql.Decimal(18, 2), value: v.run }, { name: 'redress', type: sql.Decimal(18, 2), value: v.redress },
+    { name: 'monthly', type: sql.Decimal(18, 2), value: v.monthly }, { name: 'cur', type: sql.VarChar, value: v.currency },
+    { name: 'notes', type: sql.VarChar, value: v.notes },
+  ]
+  const INSERT_RATE = `INSERT INTO tbl_ContractRates
+      (ContractCode, ContractRef, Category, EMDADShortDesc, Size, HoleSection, OpsRate, StandbyRate, RunCharges, Redress, MonthlyCharges, Currency, Notes, ActiveFlag)
+    OUTPUT INSERTED.RateID
+    VALUES (@code, @ref, @cat, @desc, @size, @hole, @ops, @standby, @run, @redress, @monthly, @cur, @notes, 1)`
+
+  if (method === 'POST' && id && sub === 'rates' && !subId) {
+    if (!RATE_EDITORS.includes(user.Role)) return jsonResponse(context, 403, { error: 'Admin, Finance or Billing only' })
+    const c = await contractRow(id)
+    if (!c) return jsonResponse(context, 404, { error: 'Contract not found' })
+    const { error, v } = cleanRate(req.body || {}, c)
+    if (error) return jsonResponse(context, 400, { error })
+    const r = await query(INSERT_RATE, rateParams(v, c))
+    return jsonResponse(context, 201, { success: true, RateID: r.recordset[0].RateID })
+  }
+
+  // Paste from Excel: tab-separated, one rate a line. Columns in order:
+  // Category, Size, Hole section, Ops rate, Standby rate, Redress, Monthly, Run charges, Currency, Scope.
+  // A header row is skipped when its first cell says Category.
+  if (method === 'POST' && id && sub === 'rates' && subId === 'paste') {
+    if (!RATE_EDITORS.includes(user.Role)) return jsonResponse(context, 403, { error: 'Admin, Finance or Billing only' })
+    const c = await contractRow(id)
+    if (!c) return jsonResponse(context, 404, { error: 'Contract not found' })
+    const text = String((req.body || {}).text || '')
+    const lines = text.split(/\r?\n/).map(l => l.replace(/\s+$/, '')).filter(l => l.trim())
+    let added = 0
+    const rejected = []
+    for (let i = 0; i < lines.length; i++) {
+      const cells = lines[i].split('\t').map(x => x.trim())
+      if (i === 0 && /^categor/i.test(cells[0] || '')) continue
+      const [category, size, hole, ops, standby, redress, monthly, run, currency, scope] = cells
+      const { error, v } = cleanRate({ Category: category, Size: size, HoleSection: hole, OpsRate: ops, StandbyRate: standby,
+                                       Redress: redress, MonthlyCharges: monthly, RunCharges: run, Currency: currency, ContractCode: scope }, c)
+      if (error) { rejected.push({ line: i + 1, reason: error, text: lines[i].slice(0, 80) }); continue }
+      await query(INSERT_RATE, rateParams(v, c))
+      added++
+    }
+    return jsonResponse(context, 200, { added, rejected })
+  }
+
+  if (method === 'PUT' && id && sub === 'rates' && subId) {
+    if (!RATE_EDITORS.includes(user.Role)) return jsonResponse(context, 403, { error: 'Admin, Finance or Billing only' })
+    const c = await contractRow(id)
+    if (!c) return jsonResponse(context, 404, { error: 'Contract not found' })
+    const b = req.body || {}
+    // Active flag alone: deactivate / reactivate without touching the figures.
+    if (Object.keys(b).length === 1 && b.ActiveFlag !== undefined) {
+      const r = await query(`UPDATE tbl_ContractRates SET ActiveFlag = @a WHERE RateID = @rid`,
+        [{ name: 'a', type: sql.Bit, value: b.ActiveFlag ? 1 : 0 }, { name: 'rid', type: sql.Int, value: Number(subId) }])
+      if (!r.rowsAffected[0]) return jsonResponse(context, 404, { error: 'Rate not found' })
+      return jsonResponse(context, 200, { success: true })
+    }
+    const { error, v } = cleanRate(b, c)
+    if (error) return jsonResponse(context, 400, { error })
+    const r = await query(
+      `UPDATE tbl_ContractRates SET ContractCode=@code, ContractRef=@ref, Category=@cat, EMDADShortDesc=@desc, Size=@size, HoleSection=@hole,
+              OpsRate=@ops, StandbyRate=@standby, RunCharges=@run, Redress=@redress, MonthlyCharges=@monthly, Currency=@cur, Notes=@notes
+        WHERE RateID = @rid`,
+      [...rateParams(v, c), { name: 'rid', type: sql.Int, value: Number(subId) }])
+    if (!r.rowsAffected[0]) return jsonResponse(context, 404, { error: 'Rate not found' })
+    return jsonResponse(context, 200, { success: true })
   }
 
   // ── DELETE /api/contracts/{id} ───────────────────────────────────────────

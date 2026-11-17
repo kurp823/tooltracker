@@ -1,8 +1,13 @@
 import React, { useMemo, useState } from 'react'
-import { RefreshCw, Download, Search, FileText } from 'lucide-react'
+import { RefreshCw, Download, Search, FileText, Plus, X } from 'lucide-react'
 import { useFetch } from '../hooks/useFetch'
-import { PageLoader } from '../components/Spinner'
+import { PageLoader, Spinner } from '../components/Spinner'
 import { formatDate } from '../utils/format'
+import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../components/Toast'
+import { api } from '../utils/api'
+import { ListOptions } from '../components/ListOptions'
+import { ContractFilePanel } from '../components/ContractFilePanel'
 
 /**
  * Commercial Contracts Master Register.
@@ -42,11 +47,71 @@ const money = (v: number | null | undefined, cur?: string | null) =>
 
 const millions = (v: number) => (v / 1_000_000).toFixed(2) + 'M'
 
+function NewContractModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (id: string) => void }) {
+  const { showToast } = useToast()
+  const { data: clients } = useFetch<{ ClientName: string }[]>('/clients')
+  const [f, setF] = useState({ ContractNumber: '', ClientName: '', PONumber: '', Currency: 'USD', StartDate: '', EndDate: '', ContractValue: '', Description: '' })
+  const [saving, setSaving] = useState(false)
+  const set = (k: string, v: string) => setF(x => ({ ...x, [k]: v }))
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const r: any = await api.post('/contracts', f)
+      showToast(`${r.ContractNumber} added — now add its rates`, 'success')
+      onCreated(r.ContractID)
+      setF({ ContractNumber: '', ClientName: '', PONumber: '', Currency: 'USD', StartDate: '', EndDate: '', ContractValue: '', Description: '' })
+    } catch (err: any) { showToast(err.message || 'Could not add the contract', 'error') }
+    finally { setSaving(false) }
+  }
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-900 flex items-center gap-2"><FileText size={16} className="text-brand-600" /> New Contract</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+        </div>
+        <form onSubmit={submit} className="p-5 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">Contract no / SAP ref *</label>
+              <input className="input w-full font-mono" value={f.ContractNumber} onChange={e => set('ContractNumber', e.target.value)} required autoFocus /></div>
+            <div><label className="label">Client *</label>
+              <input className="input w-full" value={f.ClientName} onChange={e => set('ClientName', e.target.value)} required list="contract-clients" />
+              <datalist id="contract-clients">{(clients || []).map(c => <option key={c.ClientName} value={c.ClientName} />)}</datalist></div>
+            <div><label className="label">PO Number</label>
+              <input className="input w-full" value={f.PONumber} onChange={e => set('PONumber', e.target.value)} /></div>
+            <div><label className="label">Currency</label>
+              <select className="input w-full" value={f.Currency} onChange={e => set('Currency', e.target.value)}><ListOptions name="Currency" current={f.Currency} /></select></div>
+            <div><label className="label">Start</label>
+              <input type="date" className="input w-full" value={f.StartDate} onChange={e => set('StartDate', e.target.value)} /></div>
+            <div><label className="label">End</label>
+              <input type="date" className="input w-full" value={f.EndDate} onChange={e => set('EndDate', e.target.value)} /></div>
+            <div><label className="label">Contract value</label>
+              <input type="number" className="input w-full" value={f.ContractValue} onChange={e => set('ContractValue', e.target.value)} /></div>
+            <div><label className="label">Short description</label>
+              <input className="input w-full" value={f.Description} onChange={e => set('Description', e.target.value)} /></div>
+          </div>
+          <p className="text-xs text-gray-500">The rate schedule is added on the contract file after this — jobs on the contract cannot be priced until rates exist.</p>
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
+            <button type="submit" className="btn-primary" disabled={saving}>{saving ? <Spinner size="sm" /> : <Plus size={14} />} Add Contract</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export function ContractsView() {
+  const { hasRole } = useAuth()
   const { data: contracts, isLoading, error, refetch } = useFetch<Contract[]>('/contracts')
   const [filter, setFilter] = useState<Filter>('All')
   const [client, setClient] = useState('All')
   const [search, setSearch] = useState('')
+  const [open, setOpen] = useState<string | null>(null)
+  const [showNew, setShowNew] = useState(false)
 
   const rows = contracts ?? []
 
@@ -101,8 +166,11 @@ export function ContractsView() {
 
   if (isLoading) return <PageLoader />
 
+  if (open) return <ContractFilePanel key={open} contractId={open} onClose={() => setOpen(null)} onChanged={refetch} />
+
   return (
     <div className="screen gap-1.5">
+      <NewContractModal open={showNew} onClose={() => setShowNew(false)} onCreated={id => { setShowNew(false); refetch(); setOpen(id) }} />
       {/* Portfolio metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
         <div className="card px-4 py-2.5">
@@ -156,6 +224,9 @@ export function ContractsView() {
 
         <button className="btn-mini" onClick={refetch}><RefreshCw size={13} /> Refresh</button>
         <button className="btn-mini" onClick={exportCsv}><Download size={13} /> Export</button>
+        {hasRole('Admin', 'Finance') && (
+          <button className="btn-accent" onClick={() => setShowNew(true)}><Plus size={12} /> New Contract</button>
+        )}
       </div>
 
       {error && <div className="card p-3 text-red-600 text-sm shrink-0">{error}</div>}
@@ -189,7 +260,8 @@ export function ContractsView() {
                   </td>
                 </tr>
               ) : filtered.map(c => (
-                <tr key={c.ContractID} className="border-b border-gray-100 hover:bg-brand-50/50">
+                <tr key={c.ContractID} className="border-b border-gray-100 hover:bg-brand-50/50 cursor-pointer"
+                    onClick={() => setOpen(c.ContractID)} title="Open the contract file and its rate schedule">
                   <td className="table-td font-mono font-medium text-brand-700">{c.ContractNumber || c.ContractID}</td>
                   <td className="table-td font-medium">{c.ClientName || '—'}</td>
                   <td className="table-td font-mono text-[11px]">{c.PONumber || '—'}</td>
