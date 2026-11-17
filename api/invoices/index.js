@@ -533,15 +533,24 @@ module.exports = safe(async function (context, req) {
 
     const b = req.body
 
-    // A job-derived row (id is a Job number): only its billing status can be set.
+    // A job-derived row (id is a Job number): only its billing status can be set,
+    // and not once the job carries a legal invoice number - it is finally invoiced.
     if (!/^\d+$/.test(String(id))) {
       const st = String(b.Status || '').trim()
       if (!st) return jsonResponse(context, 400, { error: 'Status required' })
+      const lj = await query(`SELECT LegalInvoiceNumber FROM tbl_Jobs WHERE JobID = @j`, [{ name: 'j', value: String(id) }])
+      if (String(lj.recordset[0]?.LegalInvoiceNumber || '').trim())
+        return jsonResponse(context, 409, { error: `${id} is finally invoiced (legal invoice ${lj.recordset[0].LegalInvoiceNumber.trim()}); its status cannot change` })
       await setBillingStatus(String(id), st, user.Username)
       return jsonResponse(context, 200, { ok: true })
     }
 
     const legalNo = b.LegalInvoiceNumber === undefined ? null : String(b.LegalInvoiceNumber || '').trim()
+    // An app invoice that already carries a legal number is final: no further edits.
+    const cur0 = await query(`SELECT legalInvoiceNumber FROM tbl_Invoices WHERE id = @id`, [{ name: 'id', value: Number(id) }])
+    if (!cur0.recordset.length) return jsonResponse(context, 404, { error: `Invoice ${id} not found` })
+    if (String(cur0.recordset[0].legalInvoiceNumber || '').trim() && user.Role !== 'Admin')
+      return jsonResponse(context, 409, { error: `Legal invoice ${cur0.recordset[0].legalInvoiceNumber.trim()} is recorded; this invoice is final` })
     const upd = await query(
       `UPDATE tbl_Invoices
           SET invoiceDate  = COALESCE(@date,     invoiceDate),

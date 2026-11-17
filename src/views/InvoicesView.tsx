@@ -79,8 +79,8 @@ function CreateInvoiceModal({
     Notes:       '',
   })
   // Monthly: one invoice per billing period. Job: one invoice for the whole
-  // job, every marked day (decision 2). The job's own InvoicingType picks the
-  // default once a job is chosen.
+  // job, every marked day (decision 2). The job decides: its InvoicingType is
+  // set when the job is created, so it is not asked again here.
   const [kind, setKind] = useState<'Monthly' | 'Job'>('Job')
 
   const { data: jobs } = useFetch<{ JobID: string; Rig: string; Well: string; Client: string; InvoicingType?: string | null }[]>(
@@ -149,17 +149,14 @@ function CreateInvoiceModal({
             </select>
           </div>
 
-          {/* Kind */}
-          <div className="flex items-center gap-4 text-sm">
-            <label className="flex items-center gap-1.5">
-              <input type="radio" name="inv-kind" checked={kind === 'Job'} onChange={() => setKind('Job')} />
-              Job invoice <span className="text-xs text-gray-500">— whole job, all marked days</span>
-            </label>
-            <label className="flex items-center gap-1.5">
-              <input type="radio" name="inv-kind" checked={kind === 'Monthly'} onChange={() => setKind('Monthly')} />
-              Monthly <span className="text-xs text-gray-500">— one billing period</span>
-            </label>
-          </div>
+          {/* Kind — read from the job */}
+          {form.JobID && (
+            <div className="text-sm text-gray-700">
+              {kind === 'Monthly'
+                ? <>Monthly job — <span className="text-gray-500">one invoice per billing period</span></>
+                : <>Per-job billing — <span className="text-gray-500">one invoice for the whole job, all marked days</span></>}
+            </div>
+          )}
 
           {/* Billing period (monthly only) */}
           {kind === 'Monthly' && (
@@ -176,7 +173,7 @@ function CreateInvoiceModal({
               </div>
             </div>
           )}
-          {kind === 'Job' && (
+          {kind === 'Job' && form.JobID && (
             <p className="text-xs text-gray-500">
               Lines are built from every day marked on the job's utilization grid, priced from the contract.
               A job that already has a legal invoice number, or already has a job invoice, is refused.
@@ -528,7 +525,8 @@ function InvoiceDetailPanel({
         )}
 
         <span className="field-label">Billing status</span>
-        <BillingStatusSelect value={inv.Status} id={inv.InvoiceID} disabled={!canSetStatus}
+        {/* Once a legal invoice exists the job is finally invoiced; the status is no longer a choice. */}
+        <BillingStatusSelect value={inv.Status} id={inv.InvoiceID} disabled={!canSetStatus || hasLegal}
                              onSaved={onRefresh} />
 
         {isMonthly && (
@@ -857,9 +855,12 @@ export function InvoicesView() {
                     {formatCurrency(inv.TotalAmount ?? 0)}
                   </td>
                   <td className="table-td pin-r">
-                    {canSetStatus
+                    {canSetStatus && !inv.LegalInvoiceNumber
                       ? <BillingStatusSelect compact value={inv.Status} id={inv.InvoiceID} onSaved={refetch} />
-                      : <span className={`badge ${billingStatusClass(inv.Status)}`}>{inv.Status || '—'}</span>}
+                      : <span className={`badge ${billingStatusClass(inv.Status)}`}
+                              title={inv.LegalInvoiceNumber ? `Legal invoice ${inv.LegalInvoiceNumber} — final` : ''}>
+                          {inv.Status || '—'}
+                        </span>}
                   </td>
                 </tr>
               ))}
