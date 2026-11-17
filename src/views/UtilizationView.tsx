@@ -395,6 +395,7 @@ export function UtilizationView() {
   const [jobId, setJobId] = useState('')
   const [showAddTool, setShowAddTool] = useState(false)
   const [rateEditRow, setRateEditRow] = useState<UtilRow | null>(null)
+  const [repricing, setRepricing] = useState(false)
 
   // Local rows for optimistic updates
   const [localRows, setLocalRows] = useState<UtilRow[]>([])
@@ -555,6 +556,31 @@ export function UtilizationView() {
           >
             <PlusCircle size={15} />
             Mark Days
+          </button>
+        )}
+
+        {/* Reprice: price the days that have no rate (after rates or a
+            category mapping were added). Never touches priced, hand-edited
+            or already-invoiced days. */}
+        {canBill && jobId && totalUnpriced > 0 && (
+          <button className="btn-secondary flex items-center gap-1.5" disabled={repricing}
+                  title="Resolve a rate for the unpriced days on this job"
+                  onClick={async () => {
+                    setRepricing(true)
+                    try {
+                      const r = await api.post<{ considered: number; priced: number; skippedInvoiced: number;
+                        stillUnpriced: { tool: string; days: number; reason: string }[] }>('/utilization/reprice',
+                        { JobID: jobId, YearMonth: `${year}-${String(month).padStart(2, '0')}` })
+                      if (r.priced) success(`${r.priced} day${r.priced === 1 ? '' : 's'} priced` +
+                        (r.skippedInvoiced ? ` · ${r.skippedInvoiced} left alone (already invoiced)` : ''))
+                      else toastErr(r.considered === 0 ? 'No unpriced days this month' :
+                        `Nothing could be priced: ${r.stillUnpriced.slice(0, 3).map(x => `${x.tool} (${x.reason})`).join('; ')}`)
+                      refetch()
+                    } catch (e: any) { toastErr(e.message || 'Reprice failed') }
+                    finally { setRepricing(false) }
+                  }}>
+            <RefreshCw size={14} className={repricing ? 'animate-spin' : ''} />
+            Reprice {totalUnpriced} unpriced
           </button>
         )}
 

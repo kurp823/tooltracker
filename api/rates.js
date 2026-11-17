@@ -217,6 +217,46 @@ function compareHoleSections (a, b) {
   return d !== 0 ? d : String(a).localeCompare(String(b))
 }
 
+// ── category mapping ───────────────────────────────────────────────────────
+/**
+ * Inventory names do not always match the contract's. The inventory says
+ * 'HYD DRILLING JAR' (69 tools) and 'HYD-MECH DRILLING JAR' (64); the
+ * contract says 'DRILLING JAR'. tbl_CategoryMap holds those pairs, kept by
+ * Admin on the Categories screen - nothing is renamed and nothing is coded
+ * here. The map is created on first use.
+ *
+ * Returns Map: norm(inventory category) -> contract category (raw).
+ */
+async function loadCategoryMap () {
+  await query(`
+    IF OBJECT_ID('dbo.tbl_CategoryMap', 'U') IS NULL
+      CREATE TABLE dbo.tbl_CategoryMap (
+        InventoryCategory nvarchar(128) NOT NULL PRIMARY KEY,
+        ContractCategory  nvarchar(128) NOT NULL,
+        Notes             nvarchar(255) NULL,
+        UpdatedBy         nvarchar(100) NULL,
+        UpdatedAt         datetime      NOT NULL DEFAULT GETDATE()
+      )`)
+  const r = await query(`SELECT InventoryCategory, ContractCategory FROM tbl_CategoryMap`, [])
+  const m = new Map()
+  for (const row of r.recordset) m.set(norm(row.InventoryCategory), row.ContractCategory)
+  return m
+}
+
+/**
+ * The category to price under: the tool's own when the contract has rates
+ * for it, otherwise the mapped one when a mapping exists. The contract's own
+ * name always wins, so a mapping can never override a direct match.
+ */
+function effectiveCategory (rates, category, map) {
+  const cat = norm(category)
+  if (!cat || !map || !map.size) return { category: cat, mapped: false }
+  const direct = rates.some(r => norm(r.Category) === cat)
+  if (direct) return { category: cat, mapped: false }
+  const to = map.get(cat)
+  return to ? { category: norm(to), mapped: true } : { category: cat, mapped: false }
+}
+
 // ── resolution ─────────────────────────────────────────────────────────────
 /**
  * Pick the rate row for one tool.
@@ -232,12 +272,18 @@ function compareHoleSections (a, b) {
  * provenance. `candidates` is what the Edit box offers when the match was
  * ambiguous or absent.
  */
-function pickRate (rates, tool) {
-  const cat  = norm(tool && tool.category)
+function pickRate (rates, tool, map) {
+  const eff  = effectiveCategory(rates, tool && tool.category, map)
+  const cat  = eff.category
   const size = norm(tool && tool.size)
   const hole = norm(tool && tool.holeSection)
 
   if (!cat) return { rate: null, matchedOn: 'no-category', candidates: [] }
+  if (eff.mapped) {
+    // Resolve under the mapped name and say so in matchedOn.
+    const inner = pickRate(rates, { ...tool, category: cat }, null)
+    return { ...inner, matchedOn: inner.matchedOn + '+mapped', mappedTo: cat }
+  }
 
   // Deduped, so a contract filed under two scope suffixes does not read as
   // two competing rates for the same tool.
@@ -310,8 +356,8 @@ function dayRate (rate, statusType) {
  * Free numeric entry stays available in the UI for cases no row covers,
  * such as a redress charged per inch.
  */
-function listRateOptions (rates, category) {
-  const cat = norm(category)
+function listRateOptions (rates, category, map) {
+  const cat = effectiveCategory(rates, category, map).category
   return dedupe(rates)
     .filter(r => norm(r.Category) === cat)
     .map(r => ({
@@ -327,6 +373,7 @@ function listRateOptions (rates, category) {
 }
 
 module.exports = {
+  loadCategoryMap, effectiveCategory,
   norm, isBlankish, baseCode, dedupe,
   loadContractRates, listScopes,
   holePricedCategories, listHoleSections, compareHoleSections,
