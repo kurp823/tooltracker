@@ -30,6 +30,13 @@ module.exports = safe(async function (context, req) {
   const sub    = context.bindingData.sub   // 'rates'
   const subId  = context.bindingData.subId // rate ID
 
+  // Prime contract end vs extensions. EndDate is the current validity (after
+  // any extension); PrimeEndDate is the original contract's end and
+  // ExtensionRef says what extended it, so the register can show which
+  // validity is the prime term and which an extension.
+  await query(`IF COL_LENGTH('dbo.tbl_Contracts','PrimeEndDate') IS NULL ALTER TABLE dbo.tbl_Contracts ADD PrimeEndDate date NULL;
+               IF COL_LENGTH('dbo.tbl_Contracts','ExtensionRef') IS NULL ALTER TABLE dbo.tbl_Contracts ADD ExtensionRef nvarchar(300) NULL;`, [])
+
   // ── GET /api/contracts ────────────────────────────────────────────────────
   if (method === 'GET' && !id) {
     try {
@@ -57,6 +64,8 @@ module.exports = safe(async function (context, req) {
                 c.Notes            AS Description,
                 c.ContractValue,
                 c.InvoicedToDate,
+                c.PrimeEndDate,
+                c.ExtensionRef,
                 c.PBGNumber,
                 c.PBGValue,
                 c.PBGIssueDate,
@@ -109,7 +118,8 @@ module.exports = safe(async function (context, req) {
     return jsonResponse(context, 200, {
       ContractID: c.ContractID, ContractNumber: c.ContractRef, ClientName: c.Client, PONumber: c.PONumber,
       Currency: c.Currency, StartDate: c.StartDate, EndDate: c.EndDate, Status: c.Status, Description: c.Notes,
-      ContractValue: c.ContractValue, InvoicedToDate: c.InvoicedToDate, PBGNumber: c.PBGNumber, PBGValue: c.PBGValue,
+      ContractValue: c.ContractValue, InvoicedToDate: c.InvoicedToDate, PrimeEndDate: c.PrimeEndDate, ExtensionRef: c.ExtensionRef,
+      PBGNumber: c.PBGNumber, PBGValue: c.PBGValue,
       PBGIssueDate: c.PBGIssueDate, PBGExpiryDate: c.PBGExpiryDate,
       rateCount: Number(x.rates || 0), jobCount: Number(x.jobs || 0), openJobs: Number(x.openJobs || 0),
       scopes: String(x.scopes || '').split(',').filter(Boolean).sort(),
@@ -189,7 +199,9 @@ module.exports = safe(async function (context, req) {
          PBGNumber     = CASE WHEN @pbgno IS NULL THEN PBGNumber ELSE NULLIF(@pbgno,'') END,
          PBGValue      = CASE WHEN @pbgvalSent = 1 THEN @pbgval ELSE PBGValue END,
          PBGIssueDate  = CASE WHEN @pbgissSent = 1 THEN @pbgiss ELSE PBGIssueDate END,
-         PBGExpiryDate = CASE WHEN @pbgexpSent = 1 THEN @pbgexp ELSE PBGExpiryDate END
+         PBGExpiryDate = CASE WHEN @pbgexpSent = 1 THEN @pbgexp ELSE PBGExpiryDate END,
+         PrimeEndDate  = CASE WHEN @primeSent = 1 THEN @prime ELSE PrimeEndDate END,
+         ExtensionRef  = CASE WHEN @extref IS NULL THEN ExtensionRef ELSE NULLIF(@extref,'') END
        WHERE ContractID = @id`,
       [
         { name: 'id',       type: sql.VarChar,  value: c.ContractID },
@@ -213,6 +225,9 @@ module.exports = safe(async function (context, req) {
         { name: 'pbgiss',   type: sql.Date,     value: dt(b.PBGIssueDate) },
         { name: 'pbgexpSent',type: sql.Bit,     value: b.PBGExpiryDate !== undefined ? 1 : 0 },
         { name: 'pbgexp',   type: sql.Date,     value: dt(b.PBGExpiryDate) },
+        { name: 'primeSent',type: sql.Bit,      value: b.PrimeEndDate !== undefined ? 1 : 0 },
+        { name: 'prime',    type: sql.Date,     value: dt(b.PrimeEndDate) },
+        { name: 'extref',   type: sql.NVarChar, value: b.ExtensionRef === undefined ? null : String(b.ExtensionRef) },
       ])
     await audit(user, 'contract', String(c.ContractRef || c.ContractID), 'update-header', b)
     return jsonResponse(context, 200, { success: true })

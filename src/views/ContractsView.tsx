@@ -33,7 +33,16 @@ interface Contract {
   PBGValue: number | null
   PBGIssueDate: string | null
   PBGExpiryDate: string | null
+  PrimeEndDate: string | null
+  ExtensionRef: string | null
   IsActive: number
+}
+
+// Days from today to a date (negative = past). Used for PBG expiry warnings.
+function daysUntil(d: string | null): number | null {
+  if (!d) return null
+  const t = new Date(d).getTime(); if (isNaN(t)) return null
+  return Math.round((t - Date.now()) / 86400000)
 }
 
 // No Archived state: EMDAD does not archive contracts, and the only rows
@@ -287,7 +296,15 @@ export function ContractsView() {
                   <td className="table-td text-center">{c.Currency || '—'}</td>
                   <td className="table-td whitespace-nowrap text-[11px]">
                     {c.StartDate || c.EndDate
-                      ? `${formatDate(c.StartDate) || '—'} → ${formatDate(c.EndDate) || '—'}`
+                      ? (() => {
+                          const ext = c.PrimeEndDate && c.EndDate && c.PrimeEndDate.slice(0, 10) !== c.EndDate.slice(0, 10)
+                          return (
+                            <span title={ext ? `Prime contract to ${formatDate(c.PrimeEndDate)}; extended to ${formatDate(c.EndDate)}${c.ExtensionRef ? ` (${c.ExtensionRef})` : ''}` : ''}>
+                              {formatDate(c.StartDate) || '—'} → {formatDate(ext ? c.PrimeEndDate : c.EndDate) || '—'}
+                              {ext && <span className="ml-1 badge bg-blue-100 text-blue-700" style={{ fontSize: 9 }}>ext. → {formatDate(c.EndDate)}</span>}
+                            </span>
+                          )
+                        })()
                       : '—'}
                   </td>
                   <td className="table-td text-center">
@@ -302,7 +319,13 @@ export function ContractsView() {
                   <td className="table-td font-mono text-[11px]">{c.PBGNumber || '—'}</td>
                   <td className="table-td text-right">{money(c.PBGValue, 'AED')}</td>
                   <td className="table-td text-center text-[11px] whitespace-nowrap">
-                    {c.PBGExpiryDate ? formatDate(c.PBGExpiryDate) : (c.PBGValue ? 'OPEN ENDED' : '—')}
+                    {(() => {
+                      if (!c.PBGExpiryDate) return c.PBGValue ? 'OPEN ENDED' : '—'
+                      const d = daysUntil(c.PBGExpiryDate)
+                      const cls = d !== null && d < 0 ? 'text-red-600 font-semibold' : d !== null && d <= 60 ? 'text-orange-600 font-semibold' : ''
+                      const tip = d !== null && d < 0 ? `PBG expired ${-d} days ago` : d !== null && d <= 60 ? `PBG expires in ${d} days` : ''
+                      return <span className={cls} title={tip}>{formatDate(c.PBGExpiryDate)}</span>
+                    })()}
                   </td>
                 </tr>
               ))}

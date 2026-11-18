@@ -13,7 +13,7 @@ interface ContractFull {
   ContractID: string; ContractNumber: string | null; ClientName: string | null; PONumber: string | null
   Currency: string | null; StartDate: string | null; EndDate: string | null; Status: string | null; Description: string | null
   ContractValue: number | null; InvoicedToDate: number | null; PBGNumber: string | null; PBGValue: number | null
-  PBGIssueDate: string | null; PBGExpiryDate: string | null
+  PBGIssueDate: string | null; PBGExpiryDate: string | null; PrimeEndDate: string | null; ExtensionRef: string | null
   rateCount: number; jobCount: number; openJobs: number; scopes: string[]
 }
 interface Rate {
@@ -70,6 +70,7 @@ export function ContractFilePanel({ contractId, onClose, onChanged }: { contract
       ContractValue: c.ContractValue == null ? '' : String(c.ContractValue), InvoicedToDate: c.InvoicedToDate == null ? '' : String(c.InvoicedToDate),
       PBGNumber: c.PBGNumber || '', PBGValue: c.PBGValue == null ? '' : String(c.PBGValue),
       PBGIssueDate: day(c.PBGIssueDate), PBGExpiryDate: day(c.PBGExpiryDate),
+      PrimeEndDate: day(c.PrimeEndDate), ExtensionRef: c.ExtensionRef || '',
     })
   }, [c, head])
 
@@ -128,9 +129,9 @@ export function ContractFilePanel({ contractId, onClose, onChanged }: { contract
 
   // A plain render helper, not a component: a component defined inside the
   // render is a new type every time and remounts its input on each keystroke.
-  const F = ({ label, k, type = 'text', list }: { label: string; k: string; type?: string; list?: string }) => (
+  const F = ({ label, k, type = 'text', list, tip }: { label: string; k: string; type?: string; list?: string; tip?: string }) => (
     <React.Fragment key={k}>
-      <span className="field-label">{label}</span>
+      <span className="field-label" title={tip}>{label}</span>
       {list ? (
         <select className="field-input" value={head[k] || ''} disabled={!canHead} onChange={e => setH(k, e.target.value)}>
           <ListOptions name={list} current={head[k]} />
@@ -188,7 +189,9 @@ export function ContractFilePanel({ contractId, onClose, onChanged }: { contract
           <option value="Active">Active</option><option value="Closed">Closed</option>
         </select>
         {F({ label: "Start", k: "StartDate", type: "date" })}
-        {F({ label: "End", k: "EndDate", type: "date" })}
+        {F({ label: "Current End", k: "EndDate", type: "date", tip: "Validity end including any extension — drives expiry and active status" })}
+        {F({ label: "Prime End", k: "PrimeEndDate", type: "date", tip: "End date of the original (prime) contract before any extension; leave blank if never extended" })}
+        {F({ label: "Extension Ref", k: "ExtensionRef", tip: "Extension letter / amendment reference, e.g. Ext-1 dated …" })}
         {F({ label: "Contract Value", k: "ContractValue", type: "number" })}
         {F({ label: "Invoiced To Date", k: "InvoicedToDate", type: "number" })}
         {F({ label: "PBG Number", k: "PBGNumber" })}
