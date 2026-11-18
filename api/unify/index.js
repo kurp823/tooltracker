@@ -88,7 +88,8 @@ module.exports = safe(async function (context, req) {
       }
     })
     // Master duplicates even when only one spelling is in use
-    const masterDupes = [...byKey.values()].filter(l => l.length > 1).map(l => ({ keep: canonical.get(l[0].key), others: l.map(x => x.CategoryName).filter(n => n !== canonical.get(l[0].key)) }))
+    // Only active masters count as duplicates; a retired spelling is already dealt with.
+    const masterDupes = [...byKey.values()].map(l => l.filter(x => x.ActiveFlag)).filter(l => l.length > 1).map(l => ({ keep: canonical.get(l[0].key), others: l.map(x => x.CategoryName).filter(n => n !== canonical.get(l[0].key)) }))
     return jsonResponse(context, 200, { rows: rows.sort((a, b) => (a.issue ? 0 : 1) - (b.issue ? 0 : 1) || b.tools - a.tools), masterDupes, masters: masters.filter(m => m.ActiveFlag).map(m => m.CategoryName).sort() })
   }
 
@@ -154,7 +155,7 @@ module.exports = safe(async function (context, req) {
     })
     const masterDupes = []
     const groups = new Map()
-    for (const m of masters) if (m.inches != null) { const k = m.inches.toFixed(4); const a = groups.get(k) || []; a.push(m.label); groups.set(k, a) }
+    for (const m of masters) if (m.inches != null && m.ActiveFlag) { const k = m.inches.toFixed(4); const a = groups.get(k) || []; a.push(m.label); groups.set(k, a) }
     for (const [k, labels] of groups) if (labels.length > 1) masterDupes.push({ keep: masterByInches.get(k).label, others: labels.filter(l => l !== masterByInches.get(k).label) })
     return jsonResponse(context, 200, { rows: rows.sort((a, b) => (a.issue ? 0 : 1) - (b.issue ? 0 : 1) || (a.inches ?? 1e9) - (b.inches ?? 1e9)), masterDupes, masters: masters.filter(m => m.ActiveFlag).map(m => m.label) })
   }
