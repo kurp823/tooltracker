@@ -66,20 +66,22 @@ module.exports = safe(async function (context, req) {
         ORDER BY TABLE_NAME`
     )
     const counts = await query(
-      `SELECT t.name AS TableName, SUM(p.rows) AS ApproxRows
+      `SELECT t.name AS TableName, SUM(p.rows) AS ApproxRows,
+              (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_NAME = t.name) AS Cols
          FROM sys.tables t
          JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0,1)
         GROUP BY t.name
         ORDER BY t.name`
     )
-    const countMap = {}
-    for (const r of counts.recordset) countMap[r.TableName] = Number(r.ApproxRows)
+    const countMap = {}, colMap = {}
+    for (const r of counts.recordset) { countMap[r.TableName] = Number(r.ApproxRows); colMap[r.TableName] = Number(r.Cols) }
 
     return jsonResponse(context, 200, {
       tableCount: tables.recordset.length,
       tables: tables.recordset.map(r => ({
         name: r.TABLE_NAME,
         rows: countMap[r.TABLE_NAME] ?? null,
+        cols: colMap[r.TABLE_NAME] ?? null,
       })),
     })
   } catch (err) {

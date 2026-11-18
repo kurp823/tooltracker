@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { api } from '../utils/api'
 import { Database, Search, Table2 } from 'lucide-react'
 import { useFetch } from '../hooks/useFetch'
 import { PageLoader } from '../components/Spinner'
@@ -16,7 +17,7 @@ import { Stat, Panel } from '../components/Stat'
 interface Col { name?: string; Name?: string; type?: string; Type?: string
                 nullable?: boolean; Nullable?: boolean }
 interface Tbl { name?: string; Name?: string; TableName?: string
-                rows?: number; Rows?: number; rowCount?: number; RowCount?: number
+                rows?: number; Rows?: number; rowCount?: number; RowCount?: number; cols?: number
                 columns?: Col[]; Columns?: Col[] }
 interface Schema { tableCount?: number; tables?: Tbl[] }
 
@@ -30,6 +31,17 @@ export function DbInspectorView() {
   const { data, isLoading, error } = useFetch<Schema>('/schema')
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<string | null>(null)
+  const [colCache, setColCache] = useState<Record<string, string[]>>({})
+  const [colBusy, setColBusy] = useState<string | null>(null)
+  // Columns are loaded on demand: the list call returns names and counts only.
+  useEffect(() => {
+    if (!open || colCache[open]) return
+    setColBusy(open)
+    api.get<Record<string, { columns?: string[] }>>(`/schema?table=${encodeURIComponent(open)}`)
+      .then(r => setColCache(c => ({ ...c, [open]: r[open]?.columns || [] })))
+      .catch(() => setColCache(c => ({ ...c, [open]: [] })))
+      .finally(() => setColBusy(null))
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const m = useMemo(() => {
     const tables = (data?.tables ?? []).slice()
@@ -103,16 +115,28 @@ export function DbInspectorView() {
                     className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
                   >
                     <td className="px-4 py-2 font-medium text-gray-800">{name}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-gray-600">{tCols(t).length || '—'}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-gray-600">{t.cols ?? tCols(t).length ?? '—'}</td>
                     <td className={`px-4 py-2 text-right tabular-nums font-medium ${
                           tRows(t) === 0 ? 'text-amber-700' : 'text-gray-900'}`}>
                       {tRows(t).toLocaleString()}
                     </td>
                   </tr>,
-                  isOpen && tCols(t).length > 0 && (
+                  isOpen && (
                     <tr key={`${name}-cols`} className="bg-gray-50/70">
                       <td colSpan={3} className="px-4 py-3">
                         <div className="flex flex-wrap gap-1.5">
+                          {colBusy === name && <span className="text-xs text-gray-400">Loading columns…</span>}
+                          {(colCache[name] || []).map(line => {
+                            const [cn, ...rest] = line.split(' ')
+                            return (
+                              <span key={cn}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded
+                                               bg-white border border-gray-200 text-xs">
+                                <span className="text-gray-800">{cn}</span>
+                                <span className="text-gray-400">{rest.join(' ')}</span>
+                              </span>
+                            )
+                          })}
                           {tCols(t).map(c => (
                             <span key={cName(c)}
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded

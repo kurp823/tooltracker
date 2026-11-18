@@ -42,6 +42,7 @@ import { PendingRentalCostsView }  from './views/PendingRentalCostsView'
 import { SubAccrualsView }         from './views/SubAccrualsView'
 import { SupplierInvoicesView } from './views/SupplierInvoicesView'
 import { AuditLogView } from './views/AuditLogView'
+import { DataEditorView } from './views/DataEditorView'
 import { JobProfitabilityView }    from './views/JobProfitabilityView'
 import { MonthlyPLView }           from './views/MonthlyPLView'
 import { SubRatesView }            from './views/SubRatesView'
@@ -167,6 +168,14 @@ export default function App() {
                 element={
                   <RequireRole roles={['Admin']}>
                     <DataImportView />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="data-editor"
+                element={
+                  <RequireRole roles={['Admin']}>
+                    <DataEditorView />
                   </RequireRole>
                 }
               />
