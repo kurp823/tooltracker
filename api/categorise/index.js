@@ -52,7 +52,7 @@ const CANON = {
 const SIZE_RE = /(\d{1,2}\s*-\s*\d{1,2}\/\d{1,2}|\d{1,2}\/\d{1,2}|\d{1,2}(?:\.\d{1,3})?)\s*(?:"|''|”|\s?IN\b|\s?INCH)/i
 
 function words(s) {
-  return String(s || '').toUpperCase()
+  return uncomma(String(s || '')).toUpperCase()
     .replace(/\d+\s*-\s*\d+\/\d+\s*("|'')?/g, ' ')   // 9-1/2"
     .replace(/\d+\/\d+\s*("|'')?/g, ' ')               // 7/8"
     .replace(/\d+(\.\d+)?\s*("|''|FT|PSI|K)\b/g, ' ')   // 15", 500 PSI, 2K
@@ -72,6 +72,30 @@ function catWords(name) {
   }
   return words(out.join(' '))
 }
+// A category whose name carries a size ('STRING STAB - 7.5/8"') applies only
+// when that size appears in the description; otherwise the generic category.
+function sizeReq(name) {
+  const m = /(\d+)\s*[.-]\s*(\d+\/\d+)/.exec(String(name))
+  return m ? `${m[1]}-${m[2]}` : null
+}
+const normSizes = s => String(s || '').replace(/(\d+)\s*[.-]\s*(\d+\/\d+)/g, '$1-$2')
+// Does the category's word sequence appear in the description in that order?
+function orderedIn(seq, ws) {
+  // Contiguous phrase: 'MILL CONTROL' inside 'MILL CONTROL PACKER', not 'MILL … CONTROL'.
+  outer: for (let i = 0; i + seq.length <= ws.length; i++) {
+    for (let j = 0; j < seq.length; j++) if (ws[i + j] !== seq[j]) continue outer
+    return true
+  }
+  return false
+}
+// Catalogue style 'PACKER, MILL CONTROL, 3-1/2"' lists the noun first and its
+// qualifier after the comma; read it as 'MILL CONTROL PACKER' so phrases line up.
+function uncomma(s) {
+  const segs = String(s || '').split(',').map(x => x.trim()).filter(Boolean)
+  const lettered = segs.filter(x => /[A-Za-z]{3,}/.test(x))
+  if (lettered.length < 2) return s
+  return [...lettered].reverse().join(' ') + ' ' + segs.filter(x => !/[A-Za-z]{3,}/.test(x)).join(' ')
+}
 function sizeOf(desc) {
   const m = SIZE_RE.exec(String(desc || ''))
   if (!m) return null
@@ -87,16 +111,20 @@ async function loadKnowledge() {
       WHERE NULLIF(LTRIM(RTRIM(ShortDesc)),'') IS NOT NULL AND ShortDesc <> @p AND NULLIF(LTRIM(RTRIM(Description)),'') IS NOT NULL
       GROUP BY ShortDesc, Description`, [{ name: 'p', type: sql.NVarChar, value: PLACEHOLDER }])
   const examples = known.recordset.map(r => ({ cat: r.ShortDesc.trim(), set: new Set(words(r.Description)), n: Number(r.n) })).filter(e => e.set.size)
-  const catDefs = names.map(n => ({ name: n, set: new Set(catWords(n)) })).filter(c => c.set.size)
-  return { names, examples, catDefs }
+  const catDefs = names.map(n => ({ name: n, seq: catWords(n), set: new Set(catWords(n)), size: sizeReq(n) })).filter(c => c.set.size)
+  const sizeOfCat = Object.fromEntries(names.map(n => [n, sizeReq(n)]))
+  return { names, examples, catDefs, sizeOfCat }
 }
 
 function propose(desc, k) {
   const ws = words(desc); const set = new Set(ws)
   if (!set.size) return { ShortDesc: null, confidence: 'none', why: 'no usable words' }
+  const dn = normSizes(desc)
+  const sizeOk = cat => { const r = k.sizeOfCat[cat]; return !r || dn.includes(r) }
   // 1. Nearest categorised neighbour (Jaccard over tool words, weighted by how many rows say so)
   let best = null
   for (const e of k.examples) {
+    if (!sizeOk(e.cat)) continue
     let inter = 0; for (const w of e.set) if (set.has(w)) inter++
     if (!inter) continue
     const j = inter / (e.set.size + set.size - inter)
@@ -106,11 +134,20 @@ function propose(desc, k) {
   // 2. Category-name match: all words of the category name present
   let cbest = null
   for (const c of k.catDefs) {
+    if (!sizeOk(c.name)) continue
     let inter = 0; for (const w of c.set) if (set.has(w)) inter++
-    // All words of the category name present. More words beat fewer; on a tie the
-    // shorter (more generic) name wins, so 'RISER' is preferred to 'RISER - 4FT'.
-    if (inter === c.set.size) { const sc = c.set.size * 10 - (c.name.length / 100); if (!cbest || sc > cbest.score) cbest = { cat: c.name, score: sc, inter } }
+    // All words of the category name present. More words beat fewer; the name
+    // whose words appear in order in the description ('MILL CONTROL' inside
+    // 'PACKER, MILL CONTROL') beats one that does not ('PACKER MILL'); on a
+    // tie the shorter (more generic) name wins, so 'RISER' beats 'RISER - 4FT'.
+    if (inter === c.set.size) {
+      const sc = c.set.size * 10 + (orderedIn(c.seq, ws) ? 5 : 0) - (c.name.length / 100)
+      if (!cbest || sc > cbest.score) cbest = { cat: c.name, score: sc, inter, ordered: orderedIn(c.seq, ws) }
+    }
   }
+  // An ordered category-name match outranks a neighbour that disagrees with it.
+  if (cbest && cbest.ordered && cbest.inter >= 2 && best && best.cat !== cbest.cat && best.j < 0.8)
+    return { ShortDesc: cbest.cat, confidence: 'high', why: 'category name found in description' }
   if (best && best.j >= 0.6) return { ShortDesc: best.cat, confidence: 'high', why: `matches catalogue tools described alike (${Math.round(best.j * 100)}%)` }
   if (cbest && cbest.inter >= 2) return { ShortDesc: cbest.cat, confidence: 'high', why: 'category name found in description' }
   if (best && best.j >= 0.34) return { ShortDesc: best.cat, confidence: 'medium', why: `similar to catalogue tools (${Math.round(best.j * 100)}%)` }
