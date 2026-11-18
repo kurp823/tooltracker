@@ -136,7 +136,12 @@ module.exports = safe(async function (context, req) {
     const rows = used.recordset.map(u => {
       const inches = parseInches(u.label)
       const m = masterByUpper.get(u.label.toUpperCase())
-      const target = inches != null ? (masterByInches.get(inches.toFixed(4))?.label || canonicalLabel(inches)) : null
+      // Target: the master label for that inch value if one exists; otherwise a
+      // fraction form when the value is an exact fraction, else the label as
+      // written (5.970" stays 5.970" — no rounding of a decimal size).
+      const canon = inches != null ? canonicalLabel(inches) : null
+      const isFraction = canon != null && !/\.\d/.test(canon)
+      const target = inches != null ? (masterByInches.get(inches.toFixed(4))?.label || (isFraction ? canon : u.label)) : null
       const proposed = target && target !== u.label ? target : null
       return {
         label: u.label, tools: Number(u.tools), rateLines: rateLineCount.get(u.label.toUpperCase()) || 0,
