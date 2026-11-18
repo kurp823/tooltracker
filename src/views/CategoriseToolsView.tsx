@@ -38,6 +38,7 @@ export function CategoriseToolsView() {
   const [edits, setEdits] = useState<Record<string, { ShortDesc: string; Size: string }>>({})
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [dups, setDups] = useState<Dup[] | null>(null)
   const [merging, setMerging] = useState<string | null>(null)
   const [confirmMerge, setConfirmMerge] = useState<Dup | null>(null)
@@ -64,16 +65,25 @@ export function CategoriseToolsView() {
     const items = ids.map(id => { const r = data!.rows.find(x => x.SystemID === id)!; const v = valueOf(r); return { SystemID: id, ShortDesc: v.ShortDesc, Size: v.Size } })
       .filter(i => i.ShortDesc)
     if (!items.length) { showToast('Nothing to apply — pick a category first', 'error'); return }
-    setBusy(true)
+    // A managed function is cut off at 45 s, so a large apply goes in batches
+    // of 100; each batch that returns is removed from the list immediately.
+    const BATCH = 100
+    setBusy(true); setProgress({ done: 0, total: items.length })
+    let updated = 0; const rejected: { SystemID: string; error: string }[] = []
     try {
-      const res = await api.post<{ updated: number; rejected: { SystemID: string; error: string }[] }>('/categorise/apply', { items })
-      showToast(`${res.updated} tool(s) categorised${res.rejected.length ? `, ${res.rejected.length} rejected` : ''}`, res.rejected.length ? 'error' : 'success')
-      if (res.rejected.length) console.warn(res.rejected)
-      const done = new Set(items.map(i => i.SystemID).filter(id => !res.rejected.some(r => r.SystemID === id)))
-      setData(d => d && { ...d, total: d.total - done.size, rows: d.rows.filter(r => !done.has(r.SystemID)) })
-      setSel(s => { const n = new Set(s); done.forEach(id => n.delete(id)); return n })
-    } catch (e: any) { showToast(e.message || 'Apply failed', 'error') }
-    finally { setBusy(false) }
+      for (let i = 0; i < items.length; i += BATCH) {
+        const chunk = items.slice(i, i + BATCH)
+        const res = await api.post<{ updated: number; rejected: { SystemID: string; error: string }[] }>('/categorise/apply', { items: chunk })
+        updated += res.updated; rejected.push(...res.rejected)
+        const done = new Set(chunk.map(c => c.SystemID).filter(id => !res.rejected.some(r => r.SystemID === id)))
+        setData(d => d && { ...d, total: d.total - done.size, rows: d.rows.filter(r => !done.has(r.SystemID)) })
+        setSel(s => { const n = new Set(s); done.forEach(id => n.delete(id)); return n })
+        setProgress({ done: Math.min(i + BATCH, items.length), total: items.length })
+      }
+      showToast(`${updated} tool(s) categorised${rejected.length ? `, ${rejected.length} rejected` : ''}`, rejected.length ? 'error' : 'success')
+      if (rejected.length) console.warn(rejected)
+    } catch (e: any) { showToast(`${e.message || 'Apply failed'} — ${updated} saved before the error; press again to continue`, 'error') }
+    finally { setBusy(false); setProgress(null) }
   }
 
   const merge = async (d: Dup) => {
@@ -112,7 +122,7 @@ export function CategoriseToolsView() {
             <div className="ml-auto flex items-center gap-1.5">
               <button className="btn-mini" disabled={busy || !sel.size} onClick={() => apply([...sel])}><Check size={12} /> Apply selected ({sel.size})</button>
               <button className="btn-accent" disabled={busy || !highIds.length} onClick={() => apply(highIds)} title="Apply every high-confidence proposal in the current list">
-                {busy ? <Spinner size="sm" /> : <CheckCheck size={12} />} Apply all high ({highIds.length})
+                {busy ? <Spinner size="sm" /> : <CheckCheck size={12} />} {progress ? `Applying ${progress.done} / ${progress.total}…` : `Apply all high (${highIds.length})`}
               </button>
             </div>
           </>
