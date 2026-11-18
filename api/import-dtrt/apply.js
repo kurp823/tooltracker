@@ -91,7 +91,9 @@ const STAGES = {
      WHERE s.batchId = @b
        AND NULLIF(LTRIM(RTRIM(s.partNum)), '') IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM tbl_Inventory i
-                        WHERE i.AssetNo = s.partNum OR i.SystemID = s.partNum)
+                        WHERE i.AssetNo = s.partNum OR i.SystemID = s.partNum
+                           OR UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(i.AssetNo, i.SystemID),'-',''),' ',''),'/',''),'_',''),'.',''))
+                            = UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(s.partNum,'-',''),' ',''),'/',''),'_',''),'.','')))
      GROUP BY s.partNum`,
 
   /* ------------------------------------------------------ 3. DT headers --- */

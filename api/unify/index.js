@@ -1,5 +1,6 @@
 'use strict'
 const { sql, query, jsonResponse, requireAuth, safe, audit } = require('../db')
+const master = require('../master')
 
 /**
  * Inventory → Master Data Clean-up. Admin only.
@@ -105,6 +106,7 @@ module.exports = safe(async function (context, req) {
           AND NOT EXISTS (SELECT 1 FROM tbl_CategoryMap x WHERE UPPER(x.InventoryCategory) = UPPER(@t))`, p)).rowsAffected[0] || 0
     if (!tgt.recordset[0].ActiveFlag) await query(`UPDATE tbl_ToolCategories SET ActiveFlag = 1 WHERE UPPER(CategoryName) = UPPER(@t)`, p)
     moved.masterDeactivated = (await query(`UPDATE tbl_ToolCategories SET ActiveFlag = 0, Notes = LEFT(ISNULL(Notes,'') + ' Merged into ' + @t + ' ' + CONVERT(varchar(10), GETDATE(), 120), 500) WHERE UPPER(CategoryName) = UPPER(@f)`, p)).rowsAffected[0]
+    master.bust()
     await audit(user, 'category', from, 'rename-category', { to, moved })
     return jsonResponse(context, 200, { from, to, moved })
   }
@@ -176,12 +178,28 @@ module.exports = safe(async function (context, req) {
     moved.jobTools = from === to ? 0 : (await query(`UPDATE tbl_JobTools SET Size = @t WHERE UPPER(LTRIM(RTRIM(Size))) = UPPER(@f)`, p)).rowsAffected[0]
     moved.rateLines = from === to ? 0 : (await query(`UPDATE tbl_ContractRates SET Size = @t WHERE UPPER(LTRIM(RTRIM(Size))) = UPPER(@f)`, p)).rowsAffected[0]
     moved.masterDeactivated = (await query(`UPDATE tbl_ToolSizes SET ActiveFlag = 0 WHERE UPPER(LTRIM(RTRIM(SizeLabel))) = UPPER(@f) AND UPPER(@f) <> UPPER(@t)`, p)).rowsAffected[0]
+    master.bust()
     await audit(user, 'size', from, 'rename-size', { to, moved })
     return jsonResponse(context, 200, { from, to, moved })
   }
 
   // ── duplicate assets ─────────────────────────────────────────────────────
+  // Pairs the user has judged to be different tools are remembered so they stop appearing.
+  const ensureExcl = () => query(`IF OBJECT_ID('dbo.tbl_DuplicateExclusions','U') IS NULL
+      CREATE TABLE dbo.tbl_DuplicateExclusions (Id int IDENTITY PRIMARY KEY, AId nvarchar(100) NOT NULL, BId nvarchar(100) NOT NULL, Reason nvarchar(300) NULL, CreatedBy nvarchar(100) NULL, CreatedAt datetime NOT NULL DEFAULT GETDATE())`, [])
+
+  if (action === 'duplicates' && sub === 'exclude' && method === 'POST') {
+    const a = String(body.aId || '').trim(), b2 = String(body.bId || '').trim()
+    if (!a || !b2) return jsonResponse(context, 400, { error: 'aId and bId required' })
+    await ensureExcl()
+    await query(`INSERT INTO tbl_DuplicateExclusions (AId, BId, Reason, CreatedBy) VALUES (@a, @b, @r, @by)`,
+      [{ name: 'a', type: sql.NVarChar, value: a }, { name: 'b', type: sql.NVarChar, value: b2 }, { name: 'r', type: sql.NVarChar, value: String(body.reason || 'Different tools') }, { name: 'by', type: sql.NVarChar, value: by }])
+    await audit(user, 'inventory', a, 'not-duplicate', { of: b2 })
+    return jsonResponse(context, 200, { ok: true })
+  }
+
   if (action === 'duplicates' && method === 'GET') {
+    await ensureExcl()
     const r = await query(
       `;WITH n AS (SELECT SystemID, AssetNo, ShortDesc, Size, Description, Location, Status, AddedDate,
                           UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(AssetNo,'-',''),' ',''),'/',''),'_',''),'.','')) AS k
@@ -198,12 +216,17 @@ module.exports = safe(async function (context, req) {
                hb.dt AS bDt, hb.rt AS bRt, hb.days AS bDays, hb.jobs AS bJobs
           FROM n a JOIN n b ON a.k = b.k AND a.SystemID < b.SystemID
           JOIN h ha ON ha.SystemID = a.SystemID JOIN h hb ON hb.SystemID = b.SystemID
+         WHERE NOT EXISTS (SELECT 1 FROM tbl_DuplicateExclusions x WHERE (x.AId = a.SystemID AND x.BId = b.SystemID) OR (x.AId = b.SystemID AND x.BId = a.SystemID))
          ORDER BY a.AssetNo`, [])
     // Suggest which to keep: more history, then the one added first.
     const out = r.recordset.map(x => {
       const sa = x.aDt + x.aRt + x.aDays + x.aJobs, sb = x.bDt + x.bRt + x.bDays + x.bJobs
       const keep = sa > sb ? 'a' : sb > sa ? 'b' : (new Date(x.aAdded || 0) <= new Date(x.bAdded || 0) ? 'a' : 'b')
-      return { ...x, suggestKeep: keep }
+      // Different categories (or sizes) usually means two different tools that
+      // happen to share a number pattern; flagged so they are not merged blindly.
+      const sameCat = !x.aCat || !x.bCat || master.normKey(x.aCat) === master.normKey(x.bCat)
+      const sameSize = !x.aSize || !x.bSize || master.normKey(x.aSize) === master.normKey(x.bSize) || (master.parseInches(x.aSize) != null && master.parseInches(x.aSize) === master.parseInches(x.bSize))
+      return { ...x, suggestKeep: keep, likely: sameCat && sameSize, warn: !sameCat ? 'different categories' : !sameSize ? 'different sizes' : null }
     })
     return jsonResponse(context, 200, out)
   }
@@ -232,7 +255,9 @@ module.exports = safe(async function (context, req) {
     await query(`UPDATE k SET ShortDesc = COALESCE(NULLIF(k.ShortDesc,''), r.ShortDesc), Size = COALESCE(NULLIF(k.Size,''), r.Size),
                         LastUpdated = GETDATE(), LastUpdatedBy = @by
                    FROM tbl_Inventory k JOIN tbl_Inventory r ON r.SystemID = @r WHERE k.SystemID = @k`, p)
-    await query(`UPDATE tbl_Inventory SET Status = 'Merged', Location = 'MERGED INTO ' + @k, Qty = 0, LastUpdated = GETDATE(), LastUpdatedBy = @by WHERE SystemID = @r`, p)
+    await master.ensureColumns()
+    await query(`UPDATE tbl_Inventory SET Status = 'Merged', MergedInto = @k, Location = 'MERGED INTO ' + @k, Qty = 0, LastUpdated = GETDATE(), LastUpdatedBy = @by WHERE SystemID = @r`, p)
+    master.bust()
     await audit(user, 'inventory', retire, 'merge-into', { into: keep, moved })
     return jsonResponse(context, 200, { retire, keep, moved })
   }

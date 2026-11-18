@@ -20,6 +20,7 @@
  * output back to the PascalCase names the frontend already expects.)
  */
 const { sql, query, jsonResponse, requireAuth, safe , audit } = require('../db')
+const master = require('../master')
 
 module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
@@ -262,14 +263,14 @@ module.exports = safe(async function (context, req) {
   const RATE_EDITORS = ['Admin', 'Finance', 'Billing']
   const numOrNull = (v) => (v === '' || v == null ? null : (Number.isFinite(Number(v)) ? Number(v) : NaN))
 
-  function cleanRate(b, c) {
+  async function cleanRate(b, c) {
     const category = String(b.Category || b.category || '').trim()
     if (!category) return { error: 'Category is required' }
     const vals = {
       code:    String(b.ContractCode || b.contractCode || c.ContractRef).trim(),
       category,
       desc:    String(b.EMDADShortDesc || b.shortDesc || '').trim() || null,
-      size:    String(b.Size || b.size || '').trim() || null,
+      size:    String(b.Size || b.size || '').trim() || null,   // standardised below
       hole:    String(b.HoleSection || b.holeSection || '').trim() || null,
       ops:     numOrNull(b.OpsRate ?? b.opsRate),
       standby: numOrNull(b.StandbyRate ?? b.standbyRate),
@@ -279,6 +280,9 @@ module.exports = safe(async function (context, req) {
       currency:String(b.Currency || b.currency || c.Currency || 'USD').trim(),
       notes:   String(b.Notes || b.notes || '').trim() || null,
     }
+    // A plain inch size takes the master label (8.250" → 8-1/4"); a range such
+    // as 10"-15" or a text size stays as typed, since it is the contract's wording.
+    if (vals.size) { const std = await master.standardiseSize(vals.size, { allowUnknown: true }); vals.size = std.value }
     for (const k of ['ops','standby','run','redress','monthly']) if (Number.isNaN(vals[k])) return { error: `${k} rate must be a number` }
     if (vals.ops == null && vals.monthly == null && vals.standby == null) return { error: 'Give an operating, standby or monthly rate' }
     const base = String(c.ContractRef || '').trim().toUpperCase()
@@ -304,7 +308,7 @@ module.exports = safe(async function (context, req) {
     if (!RATE_EDITORS.includes(user.Role)) return jsonResponse(context, 403, { error: 'Admin, Finance or Billing only' })
     const c = await contractRow(id)
     if (!c) return jsonResponse(context, 404, { error: 'Contract not found' })
-    const { error, v } = cleanRate(req.body || {}, c)
+    const { error, v } = await cleanRate(req.body || {}, c)
     if (error) return jsonResponse(context, 400, { error })
     const r = await query(INSERT_RATE, rateParams(v, c))
     await audit(user, 'contract', String(c.ContractRef), 'add-rate', { RateID: r.recordset[0].RateID, ...v })
@@ -326,7 +330,7 @@ module.exports = safe(async function (context, req) {
       const cells = lines[i].split('\t').map(x => x.trim())
       if (i === 0 && /^categor/i.test(cells[0] || '')) continue
       const [category, size, hole, ops, standby, redress, monthly, run, currency, scope] = cells
-      const { error, v } = cleanRate({ Category: category, Size: size, HoleSection: hole, OpsRate: ops, StandbyRate: standby,
+      const { error, v } = await cleanRate({ Category: category, Size: size, HoleSection: hole, OpsRate: ops, StandbyRate: standby,
                                        Redress: redress, MonthlyCharges: monthly, RunCharges: run, Currency: currency, ContractCode: scope }, c)
       if (error) { rejected.push({ line: i + 1, reason: error, text: lines[i].slice(0, 80) }); continue }
       await query(INSERT_RATE, rateParams(v, c))
@@ -350,7 +354,7 @@ module.exports = safe(async function (context, req) {
       return jsonResponse(context, 200, { success: true })
     }
     const before = await query(`SELECT * FROM tbl_ContractRates WHERE RateID = @rid`, [{ name: 'rid', type: sql.Int, value: Number(subId) }])
-    const { error, v } = cleanRate(b, c)
+    const { error, v } = await cleanRate(b, c)
     if (error) return jsonResponse(context, 400, { error })
     const r = await query(
       `UPDATE tbl_ContractRates SET ContractCode=@code, ContractRef=@ref, Category=@cat, EMDADShortDesc=@desc, Size=@size, HoleSection=@hole,

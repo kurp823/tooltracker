@@ -22,7 +22,7 @@ interface Sizes { rows: SizeRow[]; masterDupes: { keep: string; others: string[]
 interface Dup {
   aId: string; aAsset: string; aCat: string; aSize: string; aDesc: string; aLoc: string; aStatus: string; aDt: number; aRt: number; aDays: number; aJobs: number
   bId: string; bAsset: string; bCat: string; bSize: string; bDesc: string; bLoc: string; bStatus: string; bDt: number; bRt: number; bDays: number; bJobs: number
-  suggestKeep: 'a' | 'b'
+  suggestKeep: 'a' | 'b'; likely: boolean; warn: string | null
 }
 
 export function MasterCleanupView() {
@@ -42,6 +42,24 @@ export function MasterCleanupView() {
   const [bulkConfirm, setBulkConfirm] = useState(false)
 
   const pairKey = (d: Dup) => d.aId + '|' + d.bId
+  const notDuplicate = async (d: Dup) => {
+    setBusy(d.aId)
+    try {
+      await api.post('/unify/duplicates/exclude', { aId: d.aId, bId: d.bId, reason: d.warn || 'Different tools' })
+      setDups(x => (x || []).filter(y => pairKey(y) !== pairKey(d)))
+      setSelDup(x => { const n = new Set(x); n.delete(pairKey(d)); return n })
+    } catch (e: any) { showToast(e.message || 'Failed', 'error') }
+    finally { setBusy(null) }
+  }
+  const retireMaster = async (kind: 'cat' | 'size', from: string, to: string) => {
+    setBusy(from)
+    try {
+      if (kind === 'cat') { await api.post('/unify/categories/rename', { from, to }); await loadCats() }
+      else { await api.post('/unify/sizes/rename', { from, to }); await loadSizes() }
+      showToast(`${from} retired — ${to} is the standard`, 'success')
+    } catch (e: any) { showToast(e.message || 'Failed', 'error') }
+    finally { setBusy(null) }
+  }
   const mergeSelected = async () => {
     const list = (dups || []).filter(d => selDup.has(pairKey(d)))
     setBulkConfirm(false); if (!list.length) return
@@ -143,7 +161,13 @@ export function MasterCleanupView() {
         <div className="flex-1 min-h-0 overflow-auto bg-white border border-gray-300 rounded">
           {cats.masterDupes.length > 0 && (
             <div className="px-3 py-1.5 text-[11px] text-amber-800 bg-amber-50 border-b border-amber-200">
-              Master list has duplicate names: {cats.masterDupes.map(d => `${d.others.join(', ')} → ${d.keep}`).join(' · ')}. Renaming the variant below retires the duplicate master.
+              Master list has duplicate names:
+              {cats.masterDupes.map(d => d.others.map(o => (
+                <span key={o} className="inline-flex items-center gap-1 ml-2">
+                  <b>{o}</b> → {d.keep}
+                  <button className="btn-mini !py-0" disabled={!!busy} onClick={() => retireMaster('cat', o, d.keep)}>{busy === o ? <Spinner size="sm" /> : 'Retire duplicate'}</button>
+                </span>
+              )))}
             </div>
           )}
           <table className="w-full border-collapse text-[11px]">
@@ -181,7 +205,12 @@ export function MasterCleanupView() {
             <>
               <div className="px-3 py-1.5 text-[11px] text-gray-600 border-b border-gray-200">
                 One standard list for inventory <b>and</b> contract rate sheets. Sizes are read as inches, so 8.250", 8 1/4" and 8-1/4" are one size; the proposal is the master label in fraction form, and Rename changes the tools, their job-tool lines and the contract rate lines together. Non-numeric sizes (XT-39, N/A, 2-7/8 x 3-1/2) are left as they are.
-                {sizes.masterDupes.length > 0 && <> Master duplicates: {sizes.masterDupes.map(d => `${d.others.join(', ')} → ${d.keep}`).join(' · ')}.</>}
+                {sizes.masterDupes.length > 0 && <> Master duplicates:
+                  {sizes.masterDupes.map(d => d.others.map(o => (
+                    <span key={o} className="inline-flex items-center gap-1 ml-2"><b>{o}</b> → {d.keep}
+                      <button className="btn-mini !py-0" disabled={!!busy} onClick={() => retireMaster('size', o, d.keep)}>{busy === o ? <Spinner size="sm" /> : 'Retire duplicate'}</button>
+                    </span>
+                  )))}</>}
               </div>
               <table className="w-full border-collapse text-[11px]">
                 <thead className="sticky top-0 z-10"><tr>
@@ -230,13 +259,13 @@ export function MasterCleanupView() {
       {tab === 'dup' && (
         <div className="flex-1 min-h-0 overflow-auto bg-white border border-gray-300 rounded">
           <div className="px-3 py-1.5 text-[11px] text-gray-600 border-b border-gray-200">
-            Two assets whose numbers are equal once dashes, slashes, dots and spaces are ignored. The one with more history is suggested as <b>Keep</b>; click the other side to swap. Merge moves the retired asset's ticket lines, job-tool lines and rig days onto the kept one; the retired row stays, marked Merged.
+            Two assets whose numbers are equal once dashes, slashes, dots and spaces are ignored. The one with more history is suggested as <b>Keep</b>; click the other side to swap. Merge moves the retired asset's ticket lines, job-tool lines and rig days onto the kept one; the retired row stays, marked Merged. Pairs with different categories or sizes are flagged ⚠ and left out of select-all — use <b>Not duplicates</b> to dismiss them for good.
           </div>
           {!dups ? <div className="p-6"><Spinner /></div> : (
             <table className="w-full border-collapse text-[11px]">
               <thead className="sticky top-0 z-10"><tr>
-                <th className="table-th w-6"><input type="checkbox" title="Select all" checked={dups.length > 0 && dups.every(d => selDup.has(pairKey(d)))}
-                       onChange={e => setSelDup(e.target.checked ? new Set(dups.map(pairKey)) : new Set())} /></th>
+                <th className="table-th w-6"><input type="checkbox" title="Select all likely duplicates (same category and size)" checked={dups.filter(d => d.likely).length > 0 && dups.filter(d => d.likely).every(d => selDup.has(pairKey(d)))}
+                       onChange={e => setSelDup(e.target.checked ? new Set(dups.filter(d => d.likely).map(pairKey)) : new Set())} /></th>
                 <th className="table-th w-6"></th><th className="table-th">Asset A</th><th className="table-th">Category / size</th><th className="table-th">Description</th><th className="table-th text-right">History</th>
                 <th className="table-th w-6"></th><th className="table-th">Asset B</th><th className="table-th">Category / size</th><th className="table-th">Description</th><th className="table-th text-right">History</th><th className="table-th w-24"></th>
               </tr></thead>
@@ -258,11 +287,13 @@ export function MasterCleanupView() {
                       <td className={`table-td whitespace-nowrap ${side('b')}`}>{d.bCat || '—'}<div className="text-[10px] text-gray-400">{d.bSize || ''}</div></td>
                       <td className={`table-td max-w-[220px] truncate ${side('b')}`} title={d.bDesc}>{d.bDesc}</td>
                       <td className={`table-td text-right whitespace-nowrap ${side('b')}`}>{d.bDt} DT · {d.bRt} RT · {d.bDays} d</td>
-                      <td className="table-td">
+                      <td className="table-td whitespace-nowrap">
+                        {d.warn && <div className="text-[10px] text-amber-700 mb-0.5" title="Probably two different tools sharing a number pattern">⚠ {d.warn}</div>}
                         <button className="btn-mini" disabled={!!busy}
                                 onClick={() => setConfirm({ kind: 'dup', from: retire, to: keep, label: `Merge ${retire === d.aId ? d.aAsset : d.bAsset} into ${keep === d.aId ? d.aAsset : d.bAsset}? Its tickets and rig days move to the kept asset; it is marked Merged.` })}>
                           {busy === retire ? <Spinner size="sm" /> : 'Merge'}
                         </button>
+                        <button className="btn-mini ml-1" disabled={!!busy} title="These are two different tools — stop showing this pair" onClick={() => notDuplicate(d)}>Not duplicates</button>
                       </td>
                     </tr>
                   )

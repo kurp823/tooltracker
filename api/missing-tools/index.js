@@ -1,5 +1,6 @@
 'use strict'
 const { sql, query, jsonResponse, requireAuth, jobKey, safe } = require('../db')
+const master = require('../master')
 
 /**
  * Tools on live jobs that have no inventory record.
@@ -171,6 +172,14 @@ module.exports = safe(async function (context, req) {
       if (!String(t.ShortDesc || '').trim()) {
         skipped.push({ AssetNo: assetNo, reason: 'Category required' }); continue
       }
+      const catStd = await master.standardiseCategory(t.ShortDesc)
+      if (catStd.error) { skipped.push({ AssetNo: assetNo, reason: catStd.error }); continue }
+      t.ShortDesc = catStd.value
+      const szStd = await master.standardiseSize(t.Size)
+      if (szStd.error) { skipped.push({ AssetNo: assetNo, reason: szStd.error }); continue }
+      t.Size = szStd.value
+      const clash = await master.assetClash(assetNo)
+      if (clash) { skipped.push({ AssetNo: assetNo, reason: clash }); continue }
 
       try {
         // Guard inside the statement, not just above it: two users working the

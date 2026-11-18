@@ -20,6 +20,7 @@
  * there is nothing to join. There is no category column at all.
  */
 const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
+const master = require('../master')
 
 // The frontend's InventoryItem type expects `Serial`; the column is OEMSerial.
 const SELECT_COLS = `
@@ -53,7 +54,7 @@ module.exports = safe(async function (context, req) {
       `SELECT COUNT(*) AS total,
               SUM(CASE WHEN IsEmdad = 1 THEN 1 ELSE 0 END) AS own,
               SUM(CASE WHEN IsEmdad = 1 THEN 0 ELSE 1 END) AS sub
-         FROM tbl_Inventory`, [])
+         FROM tbl_Inventory WHERE ISNULL(Status,'') <> 'Merged'`, [])
     return jsonResponse(context, 200, r.recordset[0])
   }
 
@@ -61,7 +62,8 @@ module.exports = safe(async function (context, req) {
   if (method === 'GET' && !id) {
     const { search, owner, status, location, limit, top: topQ } = req.query || {}
     try {
-      const where = ['1=1']
+      // Merged duplicates stay in the table for history but are not tools.
+      const where = [status === 'Merged' || req.query.includeMerged ? '1=1' : "ISNULL(i.Status,'') <> 'Merged'"]
       const params = []
       // ?limit= caps a picker search; the pickers only show the first page
       // anyway and the full 3 MB list is never what a search box wants.
@@ -125,6 +127,13 @@ module.exports = safe(async function (context, req) {
     const b = req.body || {}
     if (!b.SystemID || !b.ShortDesc)
       return jsonResponse(context, 400, { error: 'SystemID and ShortDesc required' })
+    // One spelling per category and size, one record per asset number.
+    const cat = await master.standardiseCategory(b.ShortDesc); if (cat.error) return jsonResponse(context, 400, { error: cat.error })
+    const sz = await master.standardiseSize(b.Size); if (sz.error) return jsonResponse(context, 400, { error: sz.error })
+    b.ShortDesc = cat.value; b.Size = sz.value
+    for (const no of [...new Set([b.SystemID, b.AssetNo].filter(Boolean))]) {
+      const clash = await master.assetClash(no); if (clash) return jsonResponse(context, 409, { error: clash })
+    }
     try {
       await query(
         `INSERT INTO tbl_Inventory
@@ -164,6 +173,10 @@ module.exports = safe(async function (context, req) {
       return jsonResponse(context, 403, { error: 'Insufficient permissions' })
     }
     const b = req.body || {}
+    const cat = await master.standardiseCategory(b.ShortDesc); if (cat.error) return jsonResponse(context, 400, { error: cat.error })
+    const sz = await master.standardiseSize(b.Size); if (sz.error) return jsonResponse(context, 400, { error: sz.error })
+    b.ShortDesc = cat.value; b.Size = sz.value
+    if (b.AssetNo) { const clash = await master.assetClash(b.AssetNo, id); if (clash) return jsonResponse(context, 409, { error: clash }) }
     try {
       await query(
         `UPDATE tbl_Inventory SET
