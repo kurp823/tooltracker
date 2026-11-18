@@ -111,11 +111,20 @@ module.exports = safe(async function (context, req) {
 
   // ── sizes ────────────────────────────────────────────────────────────────
   if (action === 'sizes' && method === 'GET') {
+    // One standard list for both sides: sizes as inventory writes them and as
+    // the contract rate sheets write them, so a rename fixes both at once and
+    // the rate lookup matches exactly.
     const [used, master] = await Promise.all([
-      query(`SELECT LTRIM(RTRIM(Size)) AS label, COUNT(*) AS tools FROM tbl_Inventory
-              WHERE NULLIF(LTRIM(RTRIM(Size)),'') IS NOT NULL AND ISNULL(Status,'') <> 'Merged' GROUP BY LTRIM(RTRIM(Size))`, []),
+      query(`SELECT label, SUM(tools) AS tools, SUM(rateLines) AS rateLines, STRING_AGG(contracts, ',') AS contracts FROM (
+               SELECT LTRIM(RTRIM(Size)) AS label, COUNT(*) AS tools, 0 AS rateLines, CAST(NULL AS nvarchar(max)) AS contracts FROM tbl_Inventory
+                WHERE NULLIF(LTRIM(RTRIM(Size)),'') IS NOT NULL AND ISNULL(Status,'') <> 'Merged' GROUP BY LTRIM(RTRIM(Size))
+               UNION ALL
+               SELECT LTRIM(RTRIM(Size)), 0, COUNT(*), STRING_AGG(ContractCode, ',') WITHIN GROUP (ORDER BY ContractCode) FROM (SELECT DISTINCT Size, ContractCode FROM tbl_ContractRates WHERE ActiveFlag = 1) d
+                WHERE NULLIF(LTRIM(RTRIM(Size)),'') IS NOT NULL GROUP BY LTRIM(RTRIM(Size))
+             ) u GROUP BY label`, []),
       query(`SELECT SizeID, SizeLabel, ActiveFlag FROM tbl_ToolSizes`, []),
     ])
+    const rateLineCount = new Map((await query(`SELECT LTRIM(RTRIM(Size)) AS label, COUNT(*) AS n FROM tbl_ContractRates WHERE ActiveFlag = 1 AND NULLIF(LTRIM(RTRIM(Size)),'') IS NOT NULL GROUP BY LTRIM(RTRIM(Size))`, [])).recordset.map(r => [r.label.toUpperCase(), Number(r.n)]))
     const masters = master.recordset.map(m => ({ ...m, label: String(m.SizeLabel).trim(), inches: parseInches(m.SizeLabel) }))
     const masterByUpper = new Map(masters.map(m => [m.label.toUpperCase(), m]))
     // Canonical label per inch value: the master label that is already in fraction form, else the computed one.
@@ -130,7 +139,8 @@ module.exports = safe(async function (context, req) {
       const target = inches != null ? (masterByInches.get(inches.toFixed(4))?.label || canonicalLabel(inches)) : null
       const proposed = target && target !== u.label ? target : null
       return {
-        label: u.label, tools: Number(u.tools), inches, inMaster: !!m,
+        label: u.label, tools: Number(u.tools), rateLines: rateLineCount.get(u.label.toUpperCase()) || 0,
+        contracts: [...new Set(String(u.contracts || '').split(',').filter(Boolean))], inches, inMaster: !!m,
         proposed, proposedInMaster: proposed ? masterByUpper.has(proposed.toUpperCase()) : null,
         issue: proposed ? (inches != null && m ? 'variant of ' + proposed : 'should be ' + proposed) : !m ? 'not in master' : null,
       }
@@ -159,6 +169,7 @@ module.exports = safe(async function (context, req) {
     }
     moved.inventory = from === to ? 0 : (await query(`UPDATE tbl_Inventory SET Size = @t, LastUpdated = GETDATE(), LastUpdatedBy = @by WHERE UPPER(LTRIM(RTRIM(Size))) = UPPER(@f)`, p)).rowsAffected[0]
     moved.jobTools = from === to ? 0 : (await query(`UPDATE tbl_JobTools SET Size = @t WHERE UPPER(LTRIM(RTRIM(Size))) = UPPER(@f)`, p)).rowsAffected[0]
+    moved.rateLines = from === to ? 0 : (await query(`UPDATE tbl_ContractRates SET Size = @t WHERE UPPER(LTRIM(RTRIM(Size))) = UPPER(@f)`, p)).rowsAffected[0]
     moved.masterDeactivated = (await query(`UPDATE tbl_ToolSizes SET ActiveFlag = 0 WHERE UPPER(LTRIM(RTRIM(SizeLabel))) = UPPER(@f) AND UPPER(@f) <> UPPER(@t)`, p)).rowsAffected[0]
     await audit(user, 'size', from, 'rename-size', { to, moved })
     return jsonResponse(context, 200, { from, to, moved })

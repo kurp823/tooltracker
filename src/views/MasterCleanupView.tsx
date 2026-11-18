@@ -17,7 +17,7 @@ import { PageLoader, Spinner } from '../components/Spinner'
 
 interface CatRow { name: string; tools: number; onRig: number; inMaster: boolean; masterActive: boolean | null; family: string | null; proposed: string | null; issue: string | null }
 interface Cats { rows: CatRow[]; masterDupes: { keep: string; others: string[] }[]; masters: string[] }
-interface SizeRow { label: string; tools: number; inches: number | null; inMaster: boolean; proposed: string | null; proposedInMaster: boolean | null; issue: string | null }
+interface SizeRow { label: string; tools: number; rateLines: number; contracts: string[]; inches: number | null; inMaster: boolean; proposed: string | null; proposedInMaster: boolean | null; issue: string | null }
 interface Sizes { rows: SizeRow[]; masterDupes: { keep: string; others: string[] }[]; masters: string[] }
 interface Dup {
   aId: string; aAsset: string; aCat: string; aSize: string; aDesc: string; aLoc: string; aStatus: string; aDt: number; aRt: number; aDays: number; aJobs: number
@@ -60,7 +60,7 @@ export function MasterCleanupView() {
         await loadCats()
       } else if (c.kind === 'size') {
         const r = await api.post<{ moved: any }>('/unify/sizes/rename', { from: c.from, to: c.to, addToMaster: !!c.add })
-        showToast(`${c.from} → ${c.to}: ${r.moved.inventory} tools${r.moved.masterAdded ? ' (size added to master)' : ''}`, 'success')
+        showToast(`${c.from} → ${c.to}: ${r.moved.inventory} tools, ${r.moved.rateLines} rate lines${r.moved.masterAdded ? ' (size added to master)' : ''}`, 'success')
         await loadSizes()
       } else {
         const r = await api.post<{ moved: any }>('/unify/merge', { retire: c.from, keep: c.to })
@@ -141,16 +141,16 @@ export function MasterCleanupView() {
           {!sizes ? <div className="p-6"><Spinner /></div> : (
             <>
               <div className="px-3 py-1.5 text-[11px] text-gray-600 border-b border-gray-200">
-                Sizes are read as inches, so 8.250", 8 1/4" and 8-1/4" are one size; the proposal is the master label in fraction form. Non-numeric sizes (XT-39, N/A, 2-7/8 x 3-1/2) are left as they are.
+                One standard list for inventory <b>and</b> contract rate sheets. Sizes are read as inches, so 8.250", 8 1/4" and 8-1/4" are one size; the proposal is the master label in fraction form, and Rename changes the tools, their job-tool lines and the contract rate lines together. Non-numeric sizes (XT-39, N/A, 2-7/8 x 3-1/2) are left as they are.
                 {sizes.masterDupes.length > 0 && <> Master duplicates: {sizes.masterDupes.map(d => `${d.others.join(', ')} → ${d.keep}`).join(' · ')}.</>}
               </div>
               <table className="w-full border-collapse text-[11px]">
                 <thead className="sticky top-0 z-10"><tr>
-                  <th className="table-th">Size as used</th><th className="table-th text-right">Tools</th><th className="table-th text-right">Inches</th>
+                  <th className="table-th">Size as used</th><th className="table-th text-right">Tools</th><th className="table-th text-right" title="Active contract rate lines carrying this size">Rate lines</th><th className="table-th text-right">Inches</th>
                   <th className="table-th">In master</th><th className="table-th">Issue</th><th className="table-th">Rename all to</th><th className="table-th w-24"></th>
                 </tr></thead>
                 <tbody>
-                  {sizeRows.length === 0 ? <tr><td colSpan={7} className="table-td text-center text-gray-400 py-10">Nothing to fix.</td></tr> : sizeRows.map(r => {
+                  {sizeRows.length === 0 ? <tr><td colSpan={8} className="table-td text-center text-gray-400 py-10">Nothing to fix.</td></tr> : sizeRows.map(r => {
                     // A label that is already canonical but missing from the master defaults to itself (add-only).
                     const to = target['s:' + r.label] ?? r.proposed ?? (r.inMaster ? '' : r.label)
                     const toInMaster = sizes.masters.some(m => m.toUpperCase() === to.toUpperCase())
@@ -159,6 +159,7 @@ export function MasterCleanupView() {
                       <tr key={r.label} className="table-tr">
                         <td className="table-td font-mono whitespace-nowrap">{r.label}</td>
                         <td className="table-td text-right">{r.tools}</td>
+                        <td className="table-td text-right whitespace-nowrap" title={r.contracts.join(', ')}>{r.rateLines || '—'}{r.contracts.length ? <span className="text-[10px] text-gray-400 ml-1">({r.contracts.length} contract{r.contracts.length > 1 ? 's' : ''})</span> : null}</td>
                         <td className="table-td text-right tabular-nums">{r.inches == null ? '—' : r.inches.toFixed(3).replace(/\.?0+$/, '')}</td>
                         <td className="table-td">{r.inMaster ? <span className="text-green-700">yes</span> : <span className="text-red-600">no</span>}</td>
                         <td className="table-td whitespace-nowrap text-amber-800">{r.issue || '—'}</td>
@@ -166,8 +167,8 @@ export function MasterCleanupView() {
                         <td className="table-td whitespace-nowrap">
                           <button className="btn-mini" disabled={!to || (to === r.label && toInMaster) || !!busy}
                                   onClick={() => setConfirm({ kind: 'size', from: r.label, to, add: !toInMaster,
-                                    label: addOnly ? `Add "${to}" to the size master (${r.tools} tools already carry it)?`
-                                                   : `Rename size "${r.label}" → "${to}" on ${r.tools} tools${toInMaster ? '' : ` and add "${to}" to the size master`}?` })}>
+                                    label: addOnly ? `Add "${to}" to the size master (${r.tools} tools / ${r.rateLines} rate lines already carry it)?`
+                                                   : `Rename size "${r.label}" → "${to}" on ${r.tools} tools and ${r.rateLines} contract rate lines${toInMaster ? '' : `, and add "${to}" to the size master`}?` })}>
                             {busy === r.label ? <Spinner size="sm" /> : addOnly ? <><Check size={12} /> Add to master</> : <><ArrowRight size={12} /> Rename{toInMaster ? '' : ' + add'}</>}
                           </button>
                         </td>
