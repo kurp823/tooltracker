@@ -45,6 +45,22 @@ function norm (v) {
     .toUpperCase()
 }
 
+// Sizes compare by value, not spelling: '8.250"', '8 1/4"' and '8-1/4"' are
+// one size. Anything that is not a plain inch measure (XT-39, '2-7/8 x 3-1/2')
+// falls back to the normalised text.
+function parseInches (label) {
+  let s = norm(label).replace(/"|\bINCH(ES)?\b|\bIN\b/g, '').trim()
+  if (!s || /X/.test(s) || (/[A-Z]/.test(s) && !/^\d/.test(s))) return null
+  let m = /^(\d+)\s*[- ]\s*(\d+)\s*\/\s*(\d+)$/.exec(s); if (m) return +m[1] + (+m[2]) / (+m[3])
+  m = /^(\d+)\s*\/\s*(\d+)$/.exec(s); if (m) return (+m[1]) / (+m[2])
+  m = /^(\d+(?:\.\d+)?)$/.exec(s); if (m) return +m[1]
+  return null
+}
+function sizeKey (v) {
+  const n = parseInches(v)
+  return n == null ? norm(v) : 'IN:' + n.toFixed(4)
+}
+
 // A HoleSection or Size cell carrying no information. Blank, or a
 // placeholder of the 'N/A' family. Judged by shape, not by a list of
 // contract-specific strings.
@@ -275,7 +291,7 @@ function effectiveCategory (rates, category, map) {
 function pickRate (rates, tool, map) {
   const eff  = effectiveCategory(rates, tool && tool.category, map)
   const cat  = eff.category
-  const size = norm(tool && tool.size)
+  const size = isBlankish(tool && tool.size) ? '' : sizeKey(tool && tool.size)
   const hole = norm(tool && tool.holeSection)
 
   if (!cat) return { rate: null, matchedOn: 'no-category', candidates: [] }
@@ -305,7 +321,7 @@ function pickRate (rates, tool, map) {
       return { rate: hit[0], matchedOn: 'category+holeSection', candidates: forCat }
     if (hit.length > 1) {
       // more than one row in the same band - narrow by size if we can
-      const bySize = hit.filter(r => norm(r.Size) === size)
+      const bySize = hit.filter(r => sizeKey(r.Size) === size)
       if (bySize.length === 1)
         return { rate: bySize[0], matchedOn: 'category+holeSection+size', candidates: hit }
       return { rate: null, matchedOn: 'ambiguous-in-hole-section', candidates: hit }
@@ -315,7 +331,7 @@ function pickRate (rates, tool, map) {
 
   // Everything else prices on size.
   if (size) {
-    const exact = forCat.filter(r => norm(r.Size) === size)
+    const exact = forCat.filter(r => sizeKey(r.Size) === size)
     if (exact.length === 1)
       return { rate: exact[0], matchedOn: 'category+size', candidates: forCat }
     if (exact.length > 1)
