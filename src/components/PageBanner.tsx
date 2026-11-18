@@ -62,6 +62,10 @@ const PAGES: Record<string, Page> = {
     title: 'Tools Not in Inventory', badge: 'Exceptions',
     sub: 'Serials seen on tickets that match no inventory record.',
   },
+  '/master-cleanup': {
+    title: 'Master Data Clean-up', badge: 'Inventory',
+    sub: 'Unify category and size spellings against the masters and merge assets recorded twice. Audited; nothing deleted.',
+  },
   '/categorise-tools': {
     title: 'Categorise Tools', badge: 'Inventory',
     sub: 'Tools the history import could not place. Accept the proposed category, or pick one, and merge spelling-variant duplicates.',

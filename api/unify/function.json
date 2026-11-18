@@ -1,0 +1,6 @@
+{
+  "bindings": [
+    { "authLevel": "anonymous", "type": "httpTrigger", "direction": "in", "name": "req", "route": "unify/{action}/{sub?}", "methods": ["get", "post"] },
+    { "type": "http", "direction": "out", "name": "res" }
+  ]
+}
