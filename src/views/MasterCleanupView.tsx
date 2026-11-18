@@ -37,6 +37,30 @@ export function MasterCleanupView() {
   const [busy, setBusy] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<{ kind: 'cat' | 'size' | 'dup'; from: string; to: string; label: string; add?: boolean } | null>(null)
   const [keepSide, setKeepSide] = useState<Record<string, 'a' | 'b'>>({})
+  const [selDup, setSelDup] = useState<Set<string>>(new Set())
+  const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null)
+  const [bulkConfirm, setBulkConfirm] = useState(false)
+
+  const pairKey = (d: Dup) => d.aId + '|' + d.bId
+  const mergeSelected = async () => {
+    const list = (dups || []).filter(d => selDup.has(pairKey(d)))
+    setBulkConfirm(false); if (!list.length) return
+    setBulk({ done: 0, total: list.length }); setBusy('bulk')
+    let ok = 0; const failed: string[] = []
+    for (const d of list) {
+      const k = keepSide[d.aId + d.bId] || d.suggestKeep
+      const keep = k === 'a' ? d.aId : d.bId, retire = k === 'a' ? d.bId : d.aId
+      try {
+        await api.post('/unify/merge', { retire, keep }); ok++
+        setDups(x => (x || []).filter(y => pairKey(y) !== pairKey(d)))
+        setSelDup(x => { const n = new Set(x); n.delete(pairKey(d)); return n })
+      } catch (e: any) { failed.push(`${retire}: ${e.message || 'failed'}`) }
+      setBulk(b => b && { ...b, done: b.done + 1 })
+    }
+    setBusy(null); setBulk(null)
+    showToast(`${ok} pair(s) merged${failed.length ? `, ${failed.length} failed` : ''}`, failed.length ? 'error' : 'success')
+    if (failed.length) console.warn(failed)
+  }
 
   const loadCats = () => api.get<Cats>('/unify/categories').then(setCats).catch(e => showToast(e.message, 'error'))
   const loadSizes = () => api.get<Sizes>('/unify/sizes').then(setSizes).catch(e => showToast(e.message, 'error'))
@@ -90,7 +114,22 @@ export function MasterCleanupView() {
           </>
         )}
         <button className="btn-mini" onClick={() => { tab === 'cat' ? loadCats() : tab === 'size' ? loadSizes() : loadDups() }}><RefreshCw size={12} /></button>
+        {tab === 'dup' && dups && (
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className="text-[11px] text-gray-500">{selDup.size} of {dups.length} selected</span>
+            <button className="btn-accent" disabled={!!busy || !selDup.size} onClick={() => setBulkConfirm(true)}>
+              {bulk ? <><Spinner size="sm" /> Merging {bulk.done} / {bulk.total}…</> : <><Check size={12} /> Merge selected ({selDup.size})</>}
+            </button>
+          </div>
+        )}
       </div>
+      {bulkConfirm && (
+        <div className="shrink-0 card p-2 border-amber-300 bg-amber-50 text-[11px] flex items-center gap-2 flex-wrap">
+          <span>Merge {selDup.size} pair(s), each into its green <b>Keep</b> side? Ticket lines, job-tool lines and rig days move to the kept asset; the other is marked Merged. Nothing is deleted.</span>
+          <button className="btn-accent !py-0.5" onClick={mergeSelected}><Check size={12} /> Confirm</button>
+          <button className="btn-mini" onClick={() => setBulkConfirm(false)}><X size={12} /> Cancel</button>
+        </div>
+      )}
 
       {confirm && (
         <div className="shrink-0 card p-2 border-amber-300 bg-amber-50 text-[11px] flex items-center gap-2 flex-wrap">
@@ -196,16 +235,19 @@ export function MasterCleanupView() {
           {!dups ? <div className="p-6"><Spinner /></div> : (
             <table className="w-full border-collapse text-[11px]">
               <thead className="sticky top-0 z-10"><tr>
+                <th className="table-th w-6"><input type="checkbox" title="Select all" checked={dups.length > 0 && dups.every(d => selDup.has(pairKey(d)))}
+                       onChange={e => setSelDup(e.target.checked ? new Set(dups.map(pairKey)) : new Set())} /></th>
                 <th className="table-th w-6"></th><th className="table-th">Asset A</th><th className="table-th">Category / size</th><th className="table-th">Description</th><th className="table-th text-right">History</th>
                 <th className="table-th w-6"></th><th className="table-th">Asset B</th><th className="table-th">Category / size</th><th className="table-th">Description</th><th className="table-th text-right">History</th><th className="table-th w-24"></th>
               </tr></thead>
               <tbody>
-                {dups.length === 0 ? <tr><td colSpan={11} className="table-td text-center text-gray-400 py-10">No duplicate assets.</td></tr> : dups.map(d => {
+                {dups.length === 0 ? <tr><td colSpan={12} className="table-td text-center text-gray-400 py-10">No duplicate assets.</td></tr> : dups.map(d => {
                   const k = keepSide[d.aId + d.bId] || d.suggestKeep
                   const keep = k === 'a' ? d.aId : d.bId, retire = k === 'a' ? d.bId : d.aId
                   const side = (s: 'a' | 'b') => `cursor-pointer ${k === s ? 'bg-green-50' : 'hover:bg-gray-50'}`
                   return (
-                    <tr key={d.aId + d.bId} className="table-tr">
+                    <tr key={d.aId + d.bId} className={`table-tr ${selDup.has(pairKey(d)) ? 'bg-brand-50/40' : ''}`}>
+                      <td className="table-td"><input type="checkbox" checked={selDup.has(pairKey(d))} onChange={e => setSelDup(x => { const n = new Set(x); e.target.checked ? n.add(pairKey(d)) : n.delete(pairKey(d)); return n })} /></td>
                       <td className={`table-td ${side('a')}`} onClick={() => setKeepSide(x => ({ ...x, [d.aId + d.bId]: 'a' }))}><input type="radio" readOnly checked={k === 'a'} /></td>
                       <td className={`table-td font-mono whitespace-nowrap ${side('a')}`} onClick={() => setKeepSide(x => ({ ...x, [d.aId + d.bId]: 'a' }))}>{d.aAsset}<div className="text-[10px] text-gray-400">{d.aLoc} · {d.aStatus}</div></td>
                       <td className={`table-td whitespace-nowrap ${side('a')}`}>{d.aCat || '—'}<div className="text-[10px] text-gray-400">{d.aSize || ''}</div></td>
