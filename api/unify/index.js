@@ -144,9 +144,11 @@ module.exports = safe(async function (context, req) {
 
   if (action === 'sizes' && sub === 'rename' && method === 'POST') {
     const from = String(body.from || '').trim(), to = String(body.to || '').trim()
-    if (!from || !to || from === to) return jsonResponse(context, 400, { error: 'from and to required' })
+    if (!from || !to) return jsonResponse(context, 400, { error: 'from and to required' })
+    // from === to with addToMaster: the label is already right, it only needs a master row.
     const p = [{ name: 'f', type: sql.NVarChar, value: from }, { name: 't', type: sql.NVarChar, value: to }, { name: 'by', type: sql.NVarChar, value: by }]
     const inMaster = (await query(`SELECT 1 AS x FROM tbl_ToolSizes WHERE UPPER(LTRIM(RTRIM(SizeLabel))) = UPPER(@t)`, p)).recordset.length > 0
+    if (from === to && inMaster) return jsonResponse(context, 400, { error: 'Nothing to change' })
     const moved = {}
     if (!inMaster) {
       if (!body.addToMaster) return jsonResponse(context, 400, { error: `'${to}' is not in Tool Sizes — tick "add to master" or pick an existing size` })
@@ -155,8 +157,8 @@ module.exports = safe(async function (context, req) {
         [...p, { name: 'd', type: sql.Float, value: parseInches(to) }])
       moved.masterAdded = 1
     }
-    moved.inventory = (await query(`UPDATE tbl_Inventory SET Size = @t, LastUpdated = GETDATE(), LastUpdatedBy = @by WHERE UPPER(LTRIM(RTRIM(Size))) = UPPER(@f)`, p)).rowsAffected[0]
-    moved.jobTools = (await query(`UPDATE tbl_JobTools SET Size = @t WHERE UPPER(LTRIM(RTRIM(Size))) = UPPER(@f)`, p)).rowsAffected[0]
+    moved.inventory = from === to ? 0 : (await query(`UPDATE tbl_Inventory SET Size = @t, LastUpdated = GETDATE(), LastUpdatedBy = @by WHERE UPPER(LTRIM(RTRIM(Size))) = UPPER(@f)`, p)).rowsAffected[0]
+    moved.jobTools = from === to ? 0 : (await query(`UPDATE tbl_JobTools SET Size = @t WHERE UPPER(LTRIM(RTRIM(Size))) = UPPER(@f)`, p)).rowsAffected[0]
     moved.masterDeactivated = (await query(`UPDATE tbl_ToolSizes SET ActiveFlag = 0 WHERE UPPER(LTRIM(RTRIM(SizeLabel))) = UPPER(@f) AND UPPER(@f) <> UPPER(@t)`, p)).rowsAffected[0]
     await audit(user, 'size', from, 'rename-size', { to, moved })
     return jsonResponse(context, 200, { from, to, moved })

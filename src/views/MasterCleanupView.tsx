@@ -151,8 +151,10 @@ export function MasterCleanupView() {
                 </tr></thead>
                 <tbody>
                   {sizeRows.length === 0 ? <tr><td colSpan={7} className="table-td text-center text-gray-400 py-10">Nothing to fix.</td></tr> : sizeRows.map(r => {
-                    const to = target['s:' + r.label] ?? r.proposed ?? ''
+                    // A label that is already canonical but missing from the master defaults to itself (add-only).
+                    const to = target['s:' + r.label] ?? r.proposed ?? (r.inMaster ? '' : r.label)
                     const toInMaster = sizes.masters.some(m => m.toUpperCase() === to.toUpperCase())
+                    const addOnly = to === r.label && !toInMaster
                     return (
                       <tr key={r.label} className="table-tr">
                         <td className="table-td font-mono whitespace-nowrap">{r.label}</td>
@@ -162,9 +164,11 @@ export function MasterCleanupView() {
                         <td className="table-td whitespace-nowrap text-amber-800">{r.issue || '—'}</td>
                         <td className="table-td min-w-[200px]"><ComboBox value={to} onChange={v => setTarget(x => ({ ...x, ['s:' + r.label]: v }))} options={sizeOpts} placeholder="Master size…" /></td>
                         <td className="table-td whitespace-nowrap">
-                          <button className="btn-mini" disabled={!to || to === r.label || !!busy}
-                                  onClick={() => setConfirm({ kind: 'size', from: r.label, to, add: !toInMaster, label: `Rename size "${r.label}" → "${to}" on ${r.tools} tools${toInMaster ? '' : ` and add "${to}" to the size master`}?` })}>
-                            {busy === r.label ? <Spinner size="sm" /> : <><ArrowRight size={12} /> Rename{toInMaster ? '' : ' + add'}</>}
+                          <button className="btn-mini" disabled={!to || (to === r.label && toInMaster) || !!busy}
+                                  onClick={() => setConfirm({ kind: 'size', from: r.label, to, add: !toInMaster,
+                                    label: addOnly ? `Add "${to}" to the size master (${r.tools} tools already carry it)?`
+                                                   : `Rename size "${r.label}" → "${to}" on ${r.tools} tools${toInMaster ? '' : ` and add "${to}" to the size master`}?` })}>
+                            {busy === r.label ? <Spinner size="sm" /> : addOnly ? <><Check size={12} /> Add to master</> : <><ArrowRight size={12} /> Rename{toInMaster ? '' : ' + add'}</>}
                           </button>
                         </td>
                       </tr>
