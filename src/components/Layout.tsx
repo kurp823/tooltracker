@@ -27,12 +27,14 @@ export function Layout() {
           opens the same way the old app's did without thirty files having to
           agree with each other.
 
-          The page itself never scrolls — screens use `.screen` to fill the box
-          below and put their scrollbars inside the grid, both directions.
+          Grid screens use `.screen` (h-full, overflow hidden) and put their
+          scrollbars inside the grid, so they fill the box and never scroll
+          here. Stacked pages (dashboards, masters, settings) have no inner
+          grid, so the box below the banner scrolls for them — both ways.
         */}
         <main className="flex-1 min-h-0 overflow-hidden p-2 flex flex-col gap-2">
           <PageBanner />
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 overflow-auto">
             <Outlet />
           </div>
         </main>
