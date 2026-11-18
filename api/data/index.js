@@ -17,7 +17,11 @@ const { sql, query, jsonResponse, requireAuth, safe, audit } = require('../db')
  * delete: a wrong row is corrected, or flagged, never removed from here.
  */
 
-const HIDDEN = new Set(['tbl_AuditLog', 'tbl_Users', 'tbl_ImportDTRT', 'tbl_ImportDTRTResolved', 'tbl_AppSettings'])
+// Retired old-app tables (schema review 24 Oct: batches, vendor orders, work
+// orders, documents, job costs) are empty and unused; kept out of the editor.
+const RETIRED = ['tbl_DTBatches', 'tbl_DTBatchLines', 'tbl_RTBatches', 'tbl_RTBatchLines', 'tbl_VendorOrders', 'tbl_VendorOrderLines',
+  'tbl_WorkOrders', 'tbl_Documents', 'tbl_JobCosts', 'tbl_Callouts', 'tbl_CalloutItems', 'tbl_CalloutSerials']
+const HIDDEN = new Set(['tbl_AuditLog', 'tbl_Users', 'tbl_ImportDTRT', 'tbl_ImportDTRTResolved', 'tbl_AppSettings', ...RETIRED])
 const PAGE_MAX = 500
 
 const isTable = n => /^tbl_[A-Za-z0-9_]+$/.test(n) && !HIDDEN.has(n)

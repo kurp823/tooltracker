@@ -43,6 +43,7 @@ import { SubAccrualsView }         from './views/SubAccrualsView'
 import { SupplierInvoicesView } from './views/SupplierInvoicesView'
 import { AuditLogView } from './views/AuditLogView'
 import { DataEditorView } from './views/DataEditorView'
+import { CategoriseToolsView } from './views/CategoriseToolsView'
 import { JobProfitabilityView }    from './views/JobProfitabilityView'
 import { MonthlyPLView }           from './views/MonthlyPLView'
 import { SubRatesView }            from './views/SubRatesView'
@@ -153,6 +154,7 @@ export default function App() {
               <Route path="contracts" element={<ContractsView />} />
               <Route path="suppliers" element={<SuppliersView />} />
               <Route path="categories" element={<CategoriesSizesView />} />
+              <Route path="categorise-tools" element={<RequireRole roles={['Admin', 'Operations']}><CategoriseToolsView /></RequireRole>} />
 
               {/* Admin */}
               <Route
