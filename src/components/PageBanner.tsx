@@ -62,6 +62,10 @@ const PAGES: Record<string, Page> = {
     title: 'Tools Not in Inventory', badge: 'Exceptions',
     sub: 'Serials seen on tickets that match no inventory record.',
   },
+  '/categorise-tools': {
+    title: 'Categorise Tools', badge: 'Inventory',
+    sub: 'Tools the history import could not place. Accept the proposed category, or pick one, and merge spelling-variant duplicates.',
+  },
   '/categories': {
     title: 'Tool Categories & Sizes', badge: 'Master Data',
     sub: 'The category and size vocabulary the contracts are priced against.',
