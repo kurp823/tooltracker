@@ -37,6 +37,28 @@ module.exports = safe(async function (context, req) {
   await query(`IF COL_LENGTH('dbo.tbl_Contracts','PrimeEndDate') IS NULL ALTER TABLE dbo.tbl_Contracts ADD PrimeEndDate date NULL;
                IF COL_LENGTH('dbo.tbl_Contracts','ExtensionRef') IS NULL ALTER TABLE dbo.tbl_Contracts ADD ExtensionRef nvarchar(300) NULL;`, [])
 
+  // ── GET /api/contracts/rate-scopes ───────────────────────────────────────
+  // Every distinct ContractCode / ContractRef in tbl_ContractRates with its
+  // row counts and the contract it resolves to (if any). This is how to see
+  // rate rows that are filed under a code no contract register row carries.
+  if (method === 'GET' && id === 'rate-scopes') {
+    try {
+      const r = await query(
+        `SELECT LTRIM(RTRIM(ISNULL(r.ContractCode,''))) AS ContractCode,
+                LTRIM(RTRIM(ISNULL(r.ContractRef,'')))  AS ContractRef,
+                COUNT(*) AS Rows_, SUM(CASE WHEN r.ActiveFlag = 1 THEN 1 ELSE 0 END) AS Active,
+                MIN(r.ContractName) AS ContractName,
+                (SELECT TOP 1 c.ContractID FROM tbl_Contracts c
+                  WHERE UPPER(LTRIM(RTRIM(r.ContractCode))) = UPPER(c.ContractRef)
+                     OR UPPER(LTRIM(RTRIM(r.ContractCode))) LIKE UPPER(c.ContractRef) + '-%'
+                     OR UPPER(LTRIM(RTRIM(r.ContractRef))) = UPPER(c.ContractRef)) AS MatchedContractID
+           FROM tbl_ContractRates r
+          GROUP BY LTRIM(RTRIM(ISNULL(r.ContractCode,''))), LTRIM(RTRIM(ISNULL(r.ContractRef,'')))
+          ORDER BY 1`, [])
+      return jsonResponse(context, 200, r.recordset.map(x => ({ ...x, Rows: x.Rows_, Rows_: undefined })))
+    } catch (e) { return jsonResponse(context, 500, { error: e.message }) }
+  }
+
   // ── GET /api/contracts ────────────────────────────────────────────────────
   if (method === 'GET' && !id) {
     try {
