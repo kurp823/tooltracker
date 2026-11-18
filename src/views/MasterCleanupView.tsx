@@ -163,7 +163,13 @@ export function MasterCleanupView() {
                         <td className="table-td text-right tabular-nums">{r.inches == null ? '—' : r.inches.toFixed(3).replace(/\.?0+$/, '')}</td>
                         <td className="table-td">{r.inMaster ? <span className="text-green-700">yes</span> : <span className="text-red-600">no</span>}</td>
                         <td className="table-td whitespace-nowrap text-amber-800">{r.issue || '—'}</td>
-                        <td className="table-td min-w-[200px]"><ComboBox value={to} onChange={v => setTarget(x => ({ ...x, ['s:' + r.label]: v }))} options={sizeOpts} placeholder="Master size…" /></td>
+                        <td className="table-td min-w-[200px]">
+                          <div className="flex items-center gap-1">
+                            <ComboBox value={to} onChange={v => setTarget(x => ({ ...x, ['s:' + r.label]: v }))} options={sizeOpts} placeholder="Master size…" className="flex-1" />
+                            <input className="field-input !h-6 !text-[11px] w-24" placeholder="or type…" value={target['s:' + r.label] ?? ''} title="Type the exact label you want (added to the master if new)"
+                                   onChange={e => setTarget(x => ({ ...x, ['s:' + r.label]: e.target.value }))} />
+                          </div>
+                        </td>
                         <td className="table-td whitespace-nowrap">
                           <button className="btn-mini" disabled={!to || (to === r.label && toInMaster) || !!busy}
                                   onClick={() => setConfirm({ kind: 'size', from: r.label, to, add: !toInMaster,
