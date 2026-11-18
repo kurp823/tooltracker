@@ -263,5 +263,35 @@ module.exports = safe(async function (context, req) {
     return jsonResponse(context, 200, { retire, keep, moved })
   }
 
+  // ── consistency check / repair ───────────────────────────────────────────
+  // GET  /unify/repair  → what is still inconsistent
+  // POST /unify/repair  → bring the job-tool copies of category/size in line
+  //                       with inventory and backfill MergedInto; audited
+  if (action === 'repair') {
+    await master.ensureColumns()
+    const report = async () => {
+      const off = await query(`SELECT i.SystemID, i.AssetNo, i.ShortDesc, i.Size, i.Description, i.Location, i.Status FROM tbl_Inventory i
+          WHERE ISNULL(i.Status,'') <> 'Merged' AND NOT EXISTS (SELECT 1 FROM tbl_ToolCategories c WHERE c.ActiveFlag = 1 AND UPPER(LTRIM(RTRIM(c.CategoryName))) = UPPER(LTRIM(RTRIM(ISNULL(i.ShortDesc,'')))))`, [])
+      const offSize = await query(`SELECT i.SystemID, i.AssetNo, i.ShortDesc, i.Size FROM tbl_Inventory i
+          WHERE ISNULL(i.Status,'') <> 'Merged' AND NULLIF(LTRIM(RTRIM(i.Size)),'') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM tbl_ToolSizes s WHERE s.ActiveFlag = 1 AND UPPER(LTRIM(RTRIM(s.SizeLabel))) = UPPER(LTRIM(RTRIM(i.Size))))`, [])
+      const n = await query(`SELECT
+          (SELECT COUNT(*) FROM tbl_JobTools j JOIN tbl_Inventory i ON i.SystemID = j.SystemID WHERE ISNULL(j.ShortDesc,'') <> ISNULL(i.ShortDesc,'') OR ISNULL(j.Size,'') <> ISNULL(i.Size,'')) AS staleJobTools,
+          (SELECT COUNT(*) FROM tbl_Inventory WHERE Status = 'Merged' AND MergedInto IS NULL AND Location LIKE 'MERGED INTO %') AS mergedNoInto,
+          (SELECT COUNT(*) FROM tbl_DeliveryTicketLines l JOIN tbl_Inventory i ON i.SystemID = l.serial WHERE i.Status = 'Merged') AS dtOnMerged,
+          (SELECT COUNT(*) FROM tbl_ReceivingTicketLines l JOIN tbl_Inventory i ON i.SystemID = l.serial WHERE i.Status = 'Merged') AS rtOnMerged,
+          (SELECT COUNT(*) FROM tbl_DailyFieldLogs f JOIN tbl_Inventory i ON i.SystemID = f.ToolSerial WHERE i.Status = 'Merged') AS daysOnMerged`, [])
+      return { offMasterCategory: off.recordset, offMasterSize: offSize.recordset, ...n.recordset[0] }
+    }
+    if (method === 'GET') return jsonResponse(context, 200, await report())
+    if (method === 'POST') {
+      const fixed = {}
+      fixed.jobTools = (await query(`UPDATE j SET ShortDesc = i.ShortDesc, Size = i.Size FROM tbl_JobTools j JOIN tbl_Inventory i ON i.SystemID = j.SystemID
+          WHERE ISNULL(j.ShortDesc,'') <> ISNULL(i.ShortDesc,'') OR ISNULL(j.Size,'') <> ISNULL(i.Size,'')`, [])).rowsAffected[0]
+      fixed.mergedInto = (await query(`UPDATE tbl_Inventory SET MergedInto = LTRIM(SUBSTRING(Location, 13, 100)) WHERE Status = 'Merged' AND MergedInto IS NULL AND Location LIKE 'MERGED INTO %'`, [])).rowsAffected[0]
+      await audit(user, 'inventory', 'repair', 'sync-copies', fixed)
+      return jsonResponse(context, 200, { fixed, after: await report() })
+    }
+  }
+
   return jsonResponse(context, 404, { error: 'Not found' })
 })
