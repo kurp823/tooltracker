@@ -44,17 +44,20 @@ module.exports = safe(async function (context, req) {
   if (method === 'GET' && id === 'rate-scopes') {
     try {
       const r = await query(
-        `SELECT LTRIM(RTRIM(ISNULL(r.ContractCode,''))) AS ContractCode,
-                LTRIM(RTRIM(ISNULL(r.ContractRef,'')))  AS ContractRef,
-                COUNT(*) AS Rows_, SUM(CASE WHEN r.ActiveFlag = 1 THEN 1 ELSE 0 END) AS Active,
-                MIN(r.ContractName) AS ContractName,
+        `WITH g AS (
+           SELECT LTRIM(RTRIM(ISNULL(ContractCode,''))) AS ContractCode,
+                  LTRIM(RTRIM(ISNULL(ContractRef,'')))  AS ContractRef,
+                  COUNT(*) AS Rows_, SUM(CASE WHEN ActiveFlag = 1 THEN 1 ELSE 0 END) AS Active,
+                  MIN(ContractName) AS ContractName
+             FROM tbl_ContractRates
+            GROUP BY LTRIM(RTRIM(ISNULL(ContractCode,''))), LTRIM(RTRIM(ISNULL(ContractRef,'')))
+         )
+         SELECT g.*,
                 (SELECT TOP 1 c.ContractID FROM tbl_Contracts c
-                  WHERE UPPER(LTRIM(RTRIM(r.ContractCode))) = UPPER(c.ContractRef)
-                     OR UPPER(LTRIM(RTRIM(r.ContractCode))) LIKE UPPER(c.ContractRef) + '-%'
-                     OR UPPER(LTRIM(RTRIM(r.ContractRef))) = UPPER(c.ContractRef)) AS MatchedContractID
-           FROM tbl_ContractRates r
-          GROUP BY LTRIM(RTRIM(ISNULL(r.ContractCode,''))), LTRIM(RTRIM(ISNULL(r.ContractRef,'')))
-          ORDER BY 1`, [])
+                  WHERE UPPER(g.ContractCode) = UPPER(c.ContractRef)
+                     OR UPPER(g.ContractCode) LIKE UPPER(c.ContractRef) + '-%'
+                     OR UPPER(g.ContractRef) = UPPER(c.ContractRef)) AS MatchedContractID
+           FROM g ORDER BY g.ContractCode`, [])
       return jsonResponse(context, 200, r.recordset.map(x => ({ ...x, Rows: x.Rows_, Rows_: undefined })))
     } catch (e) { return jsonResponse(context, 500, { error: e.message }) }
   }
