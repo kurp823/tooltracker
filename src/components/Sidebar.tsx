@@ -5,7 +5,7 @@ import {
   Truck, RotateCcw, ClipboardCheck, Wrench, DoorOpen,
   Receipt, Building2, BarChart3, Settings, ChevronDown, Upload,
   ChevronRight, BookOpen, Factory, Tag, History, Boxes,
-  ShoppingCart, PackagePlus, Database, LogOut, KeyRound,
+  ShoppingCart, PackagePlus, Database, LogOut, KeyRound, Table2,
   Gauge, ClipboardList, Coins, FileSpreadsheet, HardHat, PackageSearch,
   AlertTriangle
 } from 'lucide-react'
@@ -128,6 +128,7 @@ const MODULES: NavModule[] = [
       { label: 'System Database Inspector', to: '/db-inspector', icon: <Database size={ICON} /> },
       { label: 'Users',                     to: '/users',        icon: <Users size={ICON} /> },
       { label: 'Audit Log',                 to: '/audit-log',    icon: <History size={ICON} /> },
+      { label: 'Data Editor',               to: '/data-editor',  icon: <Table2 size={ICON} /> },
       { label: 'Data Import',               to: '/data-import',  icon: <Upload size={ICON} /> },
       { label: 'Global Configurations',     to: '/settings',     icon: <Settings size={ICON} /> },
     ],

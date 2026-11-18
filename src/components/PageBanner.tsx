@@ -170,6 +170,10 @@ const PAGES: Record<string, Page> = {
     title: 'Data Import', badge: 'Administration',
     sub: 'Bringing ticket and tool data in from spreadsheets.',
   },
+  '/data-editor': {
+    title: 'Data Editor', badge: 'Administration',
+    sub: 'Open any table, correct a cell, or load rows from a sheet. Every change is audited; nothing is deleted.',
+  },
   '/db-inspector': {
     title: 'Database Inspector', badge: 'Administration',
     sub: 'Tables, row counts and columns as the live database actually holds them.',
