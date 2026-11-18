@@ -1,5 +1,6 @@
 'use strict'
 const { sql, query, jsonResponse, requireAuth, safe , withLock, nextNumber } = require('../db')
+const master = require('../master')
 const { refreshStatus } = require('../po-status')
 
 /**
@@ -302,13 +303,14 @@ module.exports = safe(async function (context, req) {
         const assetNo = String(l.assetNo || '').trim()
         if (!assetNo) { skipped.push({ lineNo: l.lineNo, reason: 'No asset number' }); continue }
 
-        const clash = await query(
-          `SELECT TOP 1 SystemID FROM tbl_Inventory WHERE SystemID = @a OR AssetNo = @a`,
-          [{ name: 'a', type: sql.VarChar, value: assetNo }]
-        )
-        if (clash.recordset.length) {
-          skipped.push({ lineNo: l.lineNo, assetNo, reason: 'Already in inventory' }); continue
-        }
+        const clash = await master.assetClash(assetNo)
+        if (clash) { skipped.push({ lineNo: l.lineNo, assetNo, reason: clash }); continue }
+        const catStd = await master.standardiseCategory(l.shortDesc || l.description)
+        if (catStd.error) { skipped.push({ lineNo: l.lineNo, assetNo, reason: catStd.error }); continue }
+        if (catStd.value) l.shortDesc = catStd.value
+        const szStd = await master.standardiseSize(l.size)
+        if (szStd.error) { skipped.push({ lineNo: l.lineNo, assetNo, reason: szStd.error }); continue }
+        l.size = szStd.value
 
         await query(
           `INSERT INTO tbl_Inventory

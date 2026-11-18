@@ -1,5 +1,6 @@
 'use strict'
 const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe , withLock, nextNumber , listControls , audit } = require('../db')
+const master = require('../master')
 
 // Real tbl_ReceivingTickets columns (confirmed via INFORMATION_SCHEMA):
 //   id, rtNumber, jobNumber, linkedDtNumber, clientCode, receivingDate,
@@ -300,8 +301,9 @@ module.exports = safe(async function (context, req) {
       return jsonResponse(context, 403, { error: 'Forbidden' })
 
     const b = req.body || {}
-    const serials = Array.isArray(b.serials) ? b.serials.filter(Boolean) : []
+    let serials = Array.isArray(b.serials) ? b.serials.filter(Boolean) : []
     if (!serials.length) return jsonResponse(context, 400, { error: 'No tools selected' })
+    { const fm = await master.followMerges(serials); serials = [...new Set(serials.map(s => fm.get(String(s).trim()) || s))] }
     if (serials.length > 500) return jsonResponse(context, 400, { error: 'Too many tools in one call (max 500)' })
 
     try {

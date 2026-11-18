@@ -1,5 +1,6 @@
 'use strict'
 const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe , withLock, nextNumber , listControls , audit } = require('../db')
+const master = require('../master')
 const { loadContractRates, listHoleSections } = require('../rates')
 
 // Real tbl_DeliveryTickets columns (confirmed via INFORMATION_SCHEMA):
@@ -141,6 +142,8 @@ module.exports = safe(async function (context, req) {
                      qty: Number(t.Quantity) > 0 ? Number(t.Quantity) : 1, notes: t.Notes || null }))
         .filter(t => t.serial)
       if (!clean.length) return jsonResponse(context, 400, { error: 'No tools selected' })
+      // A number that was merged away is written as the kept asset.
+      { const fm = await master.followMerges(clean.map(t => t.serial)); for (const t of clean) if (fm.has(t.serial)) t.serial = fm.get(t.serial) }
       if (clean.length > 300) return jsonResponse(context, 400, { error: 'Too many tools in one call (max 300)' })
 
       const params = [{ name: 'id', value: Number(id) }]

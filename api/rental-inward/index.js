@@ -1,5 +1,6 @@
 'use strict'
 const { sql, query, jsonResponse, requireAuth, safe } = require('../db')
+const master = require('../master')
 
 /**
  * Third-party rental inward, and the sub-contractor rental report.
@@ -195,11 +196,19 @@ module.exports = safe(async function (context, req) {
 
       const created = []
       for (const l of lines) {
-        const category = String(l.category || '').trim()
+        let category = String(l.category || '').trim()
         if (!category)
           return jsonResponse(context, 400, { error: 'Every line needs a category' })
+        // Master spellings only, and no second record for a number already held.
+        const catStd = await master.standardiseCategory(category); if (catStd.error) return jsonResponse(context, 400, { error: `Line ${l.lineNo || ''}: ${catStd.error}` })
+        category = catStd.value
+        const szStd = await master.standardiseSize(l.size); if (szStd.error) return jsonResponse(context, 400, { error: `Line ${l.lineNo || ''}: ${szStd.error}` })
+        l.size = szStd.value
 
         const assetNo = String(l.assetNo || '').trim()
+        if (assetNo && l.destination !== 'Consumable') {
+          const clash = await master.assetClash(assetNo); if (clash) return jsonResponse(context, 409, { error: `Line ${l.lineNo || ''}: ${clash}` })
+        }
         const r = await query(
           `INSERT INTO tbl_RentalInward
              (rentalRef, receiptRef, supplierName, poNumber, assetNo, shortDesc,
@@ -326,14 +335,12 @@ module.exports = safe(async function (context, req) {
       // Checked before the hire is written, so a clash does not leave a
       // record claiming an inventory link it never made.
       if (toStock) {
-        const clash = await query(
-          `SELECT TOP 1 SystemID FROM tbl_Inventory WHERE SystemID = @a OR AssetNo = @a`,
-          [{ name: 'a', type: sql.VarChar, value: assetNo }]
-        )
-        if (clash.recordset.length)
-          return jsonResponse(context, 409, {
-            error: `${assetNo} is already in inventory. Use a different number, or untick "add to inventory".`,
-          })
+        const clash = await master.assetClash(assetNo)
+        if (clash) return jsonResponse(context, 409, { error: `${clash} Or untick "add to inventory".` })
+        const catStd = await master.standardiseCategory(b.shortDesc); if (catStd.error) return jsonResponse(context, 400, { error: catStd.error })
+        if (catStd.value) b.shortDesc = catStd.value
+        const szStd = await master.standardiseSize(b.size); if (szStd.error) return jsonResponse(context, 400, { error: szStd.error })
+        b.size = szStd.value
       }
 
       const r = await query(

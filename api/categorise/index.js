@@ -1,5 +1,6 @@
 'use strict'
 const { sql, query, jsonResponse, requireAuth, safe, audit } = require('../db')
+const master = require('../master')
 
 /**
  * Inventory → Categorise Tools.
@@ -242,7 +243,8 @@ module.exports = safe(async function (context, req) {
       `UPDATE f SET ToolSerial = @r FROM tbl_DailyFieldLogs f WHERE f.ToolSerial = @s
           AND NOT EXISTS (SELECT 1 FROM tbl_DailyFieldLogs x WHERE x.JobID = f.JobID AND x.ToolSerial = @r AND x.LogDate = f.LogDate)`, p)).rowsAffected[0]
     moved.fieldLogsLeftOnStub = (await query(`SELECT COUNT(*) AS n FROM tbl_DailyFieldLogs WHERE ToolSerial = @s`, p)).recordset[0].n
-    await query(`UPDATE tbl_Inventory SET Status = 'Merged', Location = 'MERGED INTO ' + @r, Qty = 0, LastUpdated = GETDATE(), LastUpdatedBy = @by WHERE SystemID = @s`,
+    await master.ensureColumns()
+    await query(`UPDATE tbl_Inventory SET Status = 'Merged', MergedInto = @r, Location = 'MERGED INTO ' + @r, Qty = 0, LastUpdated = GETDATE(), LastUpdatedBy = @by WHERE SystemID = @s`,
       [...p, { name: 'by', type: sql.NVarChar, value: user.Username || user.FullName || 'app' }])
     await audit(user, 'inventory', stub, 'merge-into', { into: real, moved })
     return jsonResponse(context, 200, { stub, real, moved })
