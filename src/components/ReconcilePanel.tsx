@@ -36,7 +36,8 @@ export function ReconcilePanel({ onApplied }: { onApplied?: () => void }) {
   }
 
   if (!rep) return <div className="card p-4 text-sm text-gray-500 flex items-center gap-2"><Spinner size="sm" /> Checking tool status against tickets…</div>
-  const safeCodes = rep.cases.filter(c => c.code !== 'B').map(c => c.code)
+  const REVIEW: Record<string, string> = { B: 'the tool may still be on the rig; apply only if you know it came back', E: 'DBR may be genuine (scrapped); apply only for tools that are back in service' }
+  const safeCodes = rep.cases.filter(c => !REVIEW[c.code]).map(c => c.code)
   return (
     <div className={`card p-4 border-l-4 ${rep.differences ? 'border-l-amber-400' : 'border-l-green-500'}`}>
       <div className="flex items-start gap-3 flex-wrap">
@@ -71,7 +72,7 @@ export function ReconcilePanel({ onApplied }: { onApplied?: () => void }) {
               <React.Fragment key={c.code}>
                 <tr className="border-t border-gray-100">
                   <td className="py-1.5 pr-2 font-mono text-gray-500 w-6">{c.code}</td>
-                  <td className="py-1.5 pr-2">{c.label}{c.code === 'B' && <span className="ml-1 text-amber-700">(review — the tool may still be on the rig; apply only if you know it came back)</span>}</td>
+                  <td className="py-1.5 pr-2">{c.label}{REVIEW[c.code] && <span className="ml-1 text-amber-700">(review — {REVIEW[c.code]})</span>}</td>
                   <td className="py-1.5 pr-2 text-right font-semibold tabular-nums w-16">{c.count.toLocaleString()}</td>
                   <td className="py-1.5 whitespace-nowrap w-40 text-right">
                     <button className="btn-mini" onClick={() => setOpen(open === c.code ? null : c.code)}>{open === c.code ? 'Hide' : 'Examples'}</button>
