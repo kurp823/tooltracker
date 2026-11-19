@@ -436,6 +436,7 @@ export interface DashboardStats {
   completedThisMonth: number
   totalInventory: number
   inFieldTools: number
+  onRigClosedJobs?: number
   pendingInvoices: number
   pendingInspections: number
   pendingMaintenance: number

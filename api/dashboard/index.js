@@ -39,25 +39,28 @@ module.exports = safe(async function (context, req) {
     // Open jobs with no contract cannot be priced (decision D, 17 Nov).
     jobsNoContract:  `SELECT COUNT(*) FROM tbl_Jobs WHERE Status NOT IN ('Completed','JobCompleted','Cancelled','Closed')
                         AND NULLIF(LTRIM(RTRIM(Contract)),'') IS NULL`,
-    totalInventory:  `SELECT COUNT(*) FROM tbl_Inventory`,
-    pendingInspections: `SELECT COUNT(*) FROM tbl_InspectionRecords WHERE status = 'Pending'`,
+    totalInventory:  `SELECT COUNT(*) FROM tbl_Inventory WHERE ISNULL(Status,'') <> 'Merged'`,
+    pendingInspections: `SELECT COUNT(*) FROM tbl_InspectionRecords WHERE status IN ('Open','Pending')`,
     pendingMaintenance: `SELECT COUNT(*) FROM tbl_MaintenanceJobs WHERE status IN ('Open','In Progress')`,
     pendingInvoices:    `SELECT COUNT(*) FROM tbl_Invoices WHERE status IN ('Draft','Submitted')`,
     // "In field" = a tool serial sent out on a delivery ticket with no matching
     // receiving-ticket line for the same job. Real schema: lines carry
     // serial + dtNumber/rtNumber; headers carry dtNumber/rtNumber + jobNumber.
-    inFieldTools: `
-      SELECT COUNT(DISTINCT dtl.serial)
-      FROM   tbl_DeliveryTicketLines dtl
-      JOIN   tbl_DeliveryTickets     dt ON dtl.dtNumber = dt.dtNumber
-      WHERE  NULLIF(dtl.serial, '') IS NOT NULL
-        AND  NOT EXISTS (
-               SELECT 1
-               FROM   tbl_ReceivingTicketLines rtl
-               JOIN   tbl_ReceivingTickets     rt ON rtl.rtNumber = rt.rtNumber
-               WHERE  rt.jobNumber = dt.jobNumber
-                 AND  rtl.serial   = dtl.serial
-             )`,
+    // "In field" = tools the inventory holds as On Rig. Since the 19 Nov
+    // reconciliation that status means exactly: out on a delivery ticket to a
+    // job that is still open (the ticket flows keep it so). The dashboards
+    // and the inventory register therefore agree on one number.
+    inFieldTools: `SELECT COUNT(*) FROM tbl_Inventory WHERE Status = 'On Rig'`,
+    // On Rig but the job has closed with no return ticket on record — the
+    // physical whereabouts need confirming (reconcile case B).
+    onRigClosedJobs: `
+      SELECT COUNT(*) FROM tbl_Inventory i
+      WHERE i.Status = 'On Rig' AND NOT EXISTS (
+        SELECT 1 FROM tbl_DeliveryTicketLines l
+        JOIN tbl_DeliveryTickets d ON d.dtNumber = l.dtNumber
+        JOIN tbl_Jobs j ON UPPER(REPLACE(REPLACE(REPLACE(j.JobID,'-',''),' ',''),'/','')) = UPPER(REPLACE(REPLACE(REPLACE(d.jobNumber,'-',''),' ',''),'/',''))
+        WHERE (l.serial = i.SystemID OR l.serial = i.AssetNo)
+          AND j.Status NOT IN ('Completed','JobCompleted','Cancelled','Closed'))`,
   }
 
   const stats = {}

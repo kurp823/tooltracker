@@ -116,7 +116,9 @@ export function DashboardView() {
       {/* Primary KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <Kpi label="Active Rigs Deployed" value={s.activeRigs ?? 0} sub="on open jobs" edge="border-t-emerald-600" text="text-emerald-700" to="/jobs" />
-        <Kpi label="Downhole Tools in Field" value={s.inFieldTools} sub={`${s.totalInventory.toLocaleString()} total fleet`} edge="border-t-blue-600" text="text-blue-700" to="/job-tools-list" />
+        <Kpi label="Downhole Tools in Field" value={s.inFieldTools}
+             sub={s.onRigClosedJobs ? `${s.totalInventory.toLocaleString()} total fleet · ${s.onRigClosedJobs} on closed jobs, no return ticket` : `${s.totalInventory.toLocaleString()} total fleet`}
+             edge={s.onRigClosedJobs ? 'border-t-amber-500' : 'border-t-blue-600'} text="text-blue-700" to={s.onRigClosedJobs ? '/inventory-dashboard' : '/job-tools-list'} />
         <Kpi label="Active Jobs" value={s.activeJobs}
              sub={s.jobsNoContract ? `${s.totalActiveJobs} not yet closed · ${s.jobsNoContract} with no contract` : `${s.totalActiveJobs} not yet closed`}
              edge={s.jobsNoContract ? 'border-t-amber-500' : 'border-t-sky-600'} text="text-sky-700" to="/jobs" />
