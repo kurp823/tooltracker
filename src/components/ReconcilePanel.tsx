@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { Check, RefreshCw, ScanSearch } from 'lucide-react'
+import { Check, Download, RefreshCw, ScanSearch } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { api } from '../utils/api'
 import { useToast } from './Toast'
 import { Spinner } from './Spinner'
@@ -22,6 +23,25 @@ export function ReconcilePanel({ onApplied }: { onApplied?: () => void }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<string[] | null>(null)
+  const [full, setFull] = useState<{ code: string; rows: any[] } | null>(null)
+  const loadFull = async (code: string) => {
+    if (full?.code === code) { setFull(null); return }
+    setBusy('full')
+    try { const r = await api.get<{ code: string; rows: any[] }>(`/reconcile/inventory?case=${code}`); setFull({ code, rows: r.rows }) }
+    catch (e: any) { showToast(e.message, 'error') } finally { setBusy(null) }
+  }
+  const fmtD = (v: any) => v ? new Date(v).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : ''
+  const exportFull = () => {
+    if (!full) return
+    const ws = XLSX.utils.json_to_sheet(full.rows.map(r => ({
+      Job: r.JobID, 'Job status': r.jobStatus, Client: r.Client, Rig: r.Rig, Well: r.Well, 'Demob date': fmtD(r.DemobDate),
+      'Legal invoice': r.LegalInvoiceNumber || '', 'Invoiced on': fmtD(r.FinalInvoicedDate), 'Invoicing type': r.InvoicingType || '',
+      Asset: r.AssetNo, Category: r.ShortDesc, Size: r.Size, 'Current status': r.Status, 'Current location': r.Location,
+      'Last DT': r.lastDT, 'DT date': fmtD(r.deliveryDate), 'Last RT': r.lastRT || '', 'RT date': fmtD(r.receivingDate), 'Would become': r.to,
+    })))
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, `Case ${full.code}`)
+    XLSX.writeFile(wb, `tool_status_case_${full.code}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
   const canApply = !!user && ['Admin', 'Operations'].includes(String((user as any).Role))
 
   const load = () => { setBusy('load'); api.get<Report>('/reconcile/inventory').then(setRep).catch(e => showToast(e.message, 'error')).finally(() => setBusy(null)) }
@@ -76,9 +96,39 @@ export function ReconcilePanel({ onApplied }: { onApplied?: () => void }) {
                   <td className="py-1.5 pr-2 text-right font-semibold tabular-nums w-16">{c.count.toLocaleString()}</td>
                   <td className="py-1.5 whitespace-nowrap w-40 text-right">
                     <button className="btn-mini" onClick={() => setOpen(open === c.code ? null : c.code)}>{open === c.code ? 'Hide' : 'Examples'}</button>
+                    <button className="btn-mini ml-1" disabled={busy === 'full'} onClick={() => loadFull(c.code)}>{full?.code === c.code ? 'Hide list' : 'List all by job'}</button>
                     {canApply && <button className="btn-mini ml-1" disabled={!!busy} onClick={() => setConfirm([c.code])}>Apply</button>}
                   </td>
                 </tr>
+                {full?.code === c.code && (
+                  <tr><td colSpan={4} className="pb-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] text-gray-600">{full.rows.length} tools on {new Set(full.rows.map(r => r.JobID)).size} jobs — grouped by job, newest demob first</span>
+                      <button className="btn-mini" onClick={exportFull}><Download size={12} /> Excel</button>
+                    </div>
+                    <div className="max-h-[420px] overflow-auto border border-gray-200 rounded">
+                      <table className="w-full text-[11px]">
+                        <thead className="sticky top-0 bg-gray-100"><tr className="text-gray-600"><th className="text-left px-2 py-1">Job</th><th className="text-left px-2">Status</th><th className="text-left px-2">Client · Rig</th><th className="text-left px-2">Demob</th><th className="text-left px-2">Legal invoice</th><th className="text-left px-2">Asset</th><th className="text-left px-2">Category</th><th className="text-left px-2">Last DT</th></tr></thead>
+                        <tbody>
+                          {Object.entries(full.rows.reduce((a: Record<string, any[]>, r) => { (a[r.JobID || '—'] = a[r.JobID || '—'] || []).push(r); return a }, {}))
+                            .sort((x, y) => new Date(y[1][0].DemobDate || 0).getTime() - new Date(x[1][0].DemobDate || 0).getTime())
+                            .map(([job, rows]) => rows.map((r, i) => (
+                              <tr key={r.SystemID} className={`border-t ${i === 0 ? 'border-gray-300' : 'border-gray-100'}`}>
+                                <td className="px-2 py-0.5 font-mono">{i === 0 ? job : ''}</td>
+                                <td className="px-2">{i === 0 ? r.jobStatus : ''}</td>
+                                <td className="px-2">{i === 0 ? `${r.Client || ''} · ${r.Rig || ''}` : ''}</td>
+                                <td className="px-2 whitespace-nowrap">{i === 0 ? fmtD(r.DemobDate) : ''}</td>
+                                <td className="px-2 whitespace-nowrap">{i === 0 ? (r.LegalInvoiceNumber ? `${r.LegalInvoiceNumber} (${fmtD(r.FinalInvoicedDate)})` : <span className="text-amber-700">not invoiced</span>) : ''}</td>
+                                <td className="px-2 font-mono">{r.AssetNo}</td>
+                                <td className="px-2">{r.ShortDesc}</td>
+                                <td className="px-2 whitespace-nowrap">{r.lastDT} {fmtD(r.deliveryDate)}</td>
+                              </tr>
+                            )))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </td></tr>
+                )}
                 {open === c.code && (
                   <tr><td colSpan={4} className="pb-2">
                     <table className="w-full text-[11px] bg-gray-50 rounded">

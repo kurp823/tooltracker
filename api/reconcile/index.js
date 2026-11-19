@@ -76,7 +76,7 @@ rigs AS (SELECT DISTINCT UPPER(LTRIM(RTRIM(Rig))) AS Rig FROM tbl_Jobs WHERE NUL
 SELECT i.SystemID, i.AssetNo, i.ShortDesc, i.Size, i.Status, i.Location, i.IsEmdad,
        o.dtNumber, o.deliveryDate, o.jobNumber, o.rig AS dtRig,
        r.rtNumber, r.receivingDate,
-       j.JobID, j.Status AS jobStatus, j.Rig AS jobRig,
+       j.JobID, j.Status AS jobStatus, j.Rig AS jobRig, j.Client AS jobClient, j.Well AS jobWell, j.DemobDate, j.LegalInvoiceNumber, j.FinalInvoicedDate, j.InvoicingType,
        CASE WHEN o.dtNumber IS NOT NULL AND (r.receivingDate IS NULL OR r.receivingDate < o.deliveryDate
                  OR (r.receivingDate = o.deliveryDate AND r.rtId < o.dtId)) THEN 1 ELSE 0 END AS isOut,
        CASE WHEN j.JobID IS NOT NULL AND ${OPEN_JOB} THEN 1 ELSE 0 END AS jobOpen,
@@ -138,6 +138,19 @@ module.exports = safe(async function (context, req) {
   const rows = (await query(DERIVE, [])).recordset
   const diffs = []
   for (const t of rows) { const d = classify(t); if (d) diffs.push({ ...d, t }) }
+
+  // GET ?case=B → every row of that case with job detail, for the yard to act on
+  if (method === 'GET' && req.query && req.query.case) {
+    const code = String(req.query.case).toUpperCase()
+    const list = diffs.filter(d => d.c === code).map(d => ({
+      SystemID: d.t.SystemID, AssetNo: d.t.AssetNo, ShortDesc: d.t.ShortDesc, Size: d.t.Size, Status: d.t.Status, Location: d.t.Location,
+      lastDT: d.t.dtNumber, deliveryDate: d.t.deliveryDate, lastRT: d.t.rtNumber, receivingDate: d.t.receivingDate,
+      JobID: d.t.JobID || d.t.jobNumber, jobStatus: d.t.jobStatus, Client: d.t.jobClient, Rig: d.t.jobRig || d.t.dtRig, Well: d.t.jobWell,
+      DemobDate: d.t.DemobDate, LegalInvoiceNumber: d.t.LegalInvoiceNumber, FinalInvoicedDate: d.t.FinalInvoicedDate, InvoicingType: d.t.InvoicingType,
+      to: `${d.status} @ ${d.location || '—'}`,
+    }))
+    return jsonResponse(context, 200, { code, label: CASES[code], count: list.length, rows: list })
+  }
 
   if (method === 'GET') {
     const byCase = {}
