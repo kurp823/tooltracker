@@ -4,6 +4,7 @@ import { Boxes, Truck, ShieldCheck, Wrench, Building2, CheckCircle } from 'lucid
 import { useFetch } from '../hooks/useFetch'
 import { PageLoader } from '../components/Spinner'
 import { Stat, Panel, Bar } from '../components/Stat'
+import { ReconcilePanel } from '../components/ReconcilePanel'
 
 /*
  * Inventory Dashboard.
@@ -32,7 +33,7 @@ interface InvItem {
 const BASE_LOCATIONS = ['emdad base', 'base', 'our base']
 
 export function InventoryDashboardView() {
-  const { data, isLoading, error } = useFetch<InvItem[]>('/inventory')
+  const { data, isLoading, error, refetch } = useFetch<InvItem[]>('/inventory')
 
   const m = useMemo(() => {
     const rows = data || []
@@ -92,6 +93,8 @@ export function InventoryDashboardView() {
               sub="not Emdad owned"
               icon={<Building2 size={22} className="text-purple-600" />} iconBg="bg-purple-100" />
       </div>
+
+      <ReconcilePanel onApplied={refetch} />
 
       {(m.uncategorised > 0 || m.noSize > 0) && (
         <div className="card p-4 border-l-4 border-l-amber-400">
