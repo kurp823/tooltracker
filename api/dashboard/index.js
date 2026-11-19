@@ -51,7 +51,7 @@ module.exports = safe(async function (context, req) {
     // job that is still open (the ticket flows keep it so). The dashboards
     // and the inventory register therefore agree on one number.
     inFieldTools: `SELECT COUNT(*) FROM tbl_Inventory WHERE Status = 'On Rig'`,
-    // On Rig but the job has closed with no return ticket on record — the
+    // On Rig but the job is no longer Ongoing, with no return ticket on record — the
     // physical whereabouts need confirming (reconcile case B).
     onRigClosedJobs: `
       SELECT COUNT(*) FROM tbl_Inventory i
@@ -60,7 +60,7 @@ module.exports = safe(async function (context, req) {
         JOIN tbl_DeliveryTickets d ON d.dtNumber = l.dtNumber
         JOIN tbl_Jobs j ON UPPER(REPLACE(REPLACE(REPLACE(j.JobID,'-',''),' ',''),'/','')) = UPPER(REPLACE(REPLACE(REPLACE(d.jobNumber,'-',''),' ',''),'/',''))
         WHERE (l.serial = i.SystemID OR l.serial = i.AssetNo)
-          AND j.Status NOT IN ('Completed','JobCompleted','Cancelled','Closed'))`,
+          AND j.Status = 'Ongoing')`,
   }
 
   const stats = {}
