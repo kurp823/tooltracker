@@ -118,7 +118,7 @@ const CASES = {
   B: 'On Rig on a job that is already closed, with no return ticket → flag (Good at Emdad Base when applied)',
   C: 'Out on an open job but not marked On Rig → On Rig at the job\'s rig',
   D: 'Inspection with no open inspection record → Good',
-  E: 'DBR / workshop with no open maintenance job → Good',
+  E: 'DBR / workshop with no open maintenance job → Good (review: DBR may be genuine)',
   G: 'On Rig on the right job but Location is not its rig → Location = rig',
   H: 'On Rig with no ticket history at all → Good at Emdad Base',
   F: 'Good but Location is a rig name → Emdad Base',
