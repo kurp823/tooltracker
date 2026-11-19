@@ -44,8 +44,8 @@ export function ReconcilePanel({ onApplied }: { onApplied?: () => void }) {
         <div className="flex-1 min-w-[280px]">
           <p className="text-sm font-medium text-gray-900 flex items-center gap-2"><ScanSearch size={16} /> Status check against tickets</p>
           <p className="text-xs text-gray-600 mt-1">
-            From the tickets: <b>{rep.expected.onRigOpenJobs.toLocaleString()}</b> tools are out on open jobs (should read On Rig), <b>{rep.expected.atBase.toLocaleString()}</b> are back at base
-            {rep.expected.outOnClosedJobs > 0 && <>, <b>{rep.expected.outOnClosedJobs.toLocaleString()}</b> went out on a job that has since closed with no return ticket</>}.
+            From the tickets: <b>{rep.expected.onRigOpenJobs.toLocaleString()}</b> tools are out on Ongoing jobs (should read On Rig), <b>{rep.expected.atBase.toLocaleString()}</b> are back at base
+            {rep.expected.outOnClosedJobs > 0 && <>, <b>{rep.expected.outOnClosedJobs.toLocaleString()}</b> went out on a job that is no longer Ongoing, with no return ticket on record</>}.
             {rep.differences === 0 ? <> Stored status and location agree everywhere.</> : <> <b className="text-amber-700">{rep.differences.toLocaleString()}</b> records disagree:</>}
           </p>
         </div>

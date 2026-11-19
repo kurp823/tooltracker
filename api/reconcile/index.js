@@ -10,7 +10,7 @@ const { sql, query, jsonResponse, requireAuth, safe, audit } = require('../db')
  *
  * The truth comes from movements: a tool's last delivery ticket (out to a
  * job) and last receiving ticket (back). The rule Ravi set:
- *   - On Rig  only while the tool is out on a job that is still open;
+ *   - On Rig  only while the tool is out on a job that is still Ongoing;
  *             Location = that job's rig.
  *   - Otherwise it is at base: Good — or Inspection / DBR only when an open
  *             inspection or maintenance record says so.
@@ -26,7 +26,10 @@ const { sql, query, jsonResponse, requireAuth, safe, audit } = require('../db')
  *   F  Good but Location is a rig name                         → Emdad Base
  */
 
-const OPEN_JOB = `j.Status NOT IN ('Completed','JobCompleted','Cancelled','Closed')`
+// Ravi, 19 Nov: a tool is on the rig only while its job is Ongoing. Draft
+// Invoice Submitted is a billing stage — the field work is over and the
+// tools are expected back; any still On Rig are flagged (case B).
+const OPEN_JOB = `j.Status = 'Ongoing'`
 const BASE = 'Emdad Base'
 
 // One row per live tool with its last out / last in and the job state.
@@ -115,8 +118,8 @@ function classify (t) {
 
 const CASES = {
   A: 'On Rig, but the last movement is a return ticket → Good at Emdad Base',
-  B: 'On Rig on a job that is already closed, with no return ticket → flag (Good at Emdad Base when applied)',
-  C: 'Out on an open job but not marked On Rig → On Rig at the job\'s rig',
+  B: 'On Rig on a job that is no longer Ongoing (completed or at invoice stage), with no return ticket → flag (Good at Emdad Base when applied)',
+  C: 'Out on an Ongoing job but not marked On Rig → On Rig at the job\'s rig',
   D: 'Inspection with no open inspection record → Good',
   E: 'DBR / workshop with no open maintenance job → Good (review: DBR may be genuine)',
   G: 'On Rig on the right job but Location is not its rig → Location = rig',
