@@ -378,6 +378,11 @@ async function runStage(stage, batchId, fromId, username) {
     { name: 'by', type: sql.NVarChar, value: username || '' },
   ]
   if (WINDOWED.has(stage)) {
+    if (!fromId) {
+      const mn = await query('SELECT ISNULL(MIN(id), 0) - 1 AS minId FROM tbl_ImportDTRT WHERE batchId = @b',
+        [{ name: 'b', type: sql.NVarChar, value: batchId }])
+      fromId = Math.max(0, mn.recordset[0].minId)
+    }
     p.push({ name: 'fromId', type: sql.Int, value: fromId })
     p.push({ name: 'toId', type: sql.Int, value: fromId + WINDOW })
   }

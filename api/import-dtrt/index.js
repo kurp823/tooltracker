@@ -212,8 +212,16 @@ module.exports = safe(async function (context, req) {
     try {
       const t0 = Date.now()
       if (step === 'rows') {
-        const toId = fromId + WINDOW
-        p.push({ name: 'fromId', type: sql.Int, value: fromId })
+        // Staged ids are global, so a new batch starts far above 0: jump the
+        // window to the batch's first row instead of walking empty ranges.
+        let from = fromId
+        if (from === 0) {
+          const mn = await query('SELECT ISNULL(MIN(id), 0) - 1 AS minId FROM tbl_ImportDTRT WHERE batchId = @b',
+            [{ name: 'b', type: sql.NVarChar, value: batchId }])
+          from = Math.max(0, mn.recordset[0].minId)
+        }
+        const toId = from + WINDOW
+        p.push({ name: 'fromId', type: sql.Int, value: from })
         p.push({ name: 'toId', type: sql.Int, value: toId })
         const r = await query(STEPS.rows, p)
         // Is there anything left beyond this window?
@@ -224,7 +232,7 @@ module.exports = safe(async function (context, req) {
         return jsonResponse(context, 200, {
           step, ms: Date.now() - t0,
           inserted: r.rowsAffected ? r.rowsAffected[0] : 0,
-          fromId, toId, nextFromId: toId < maxId ? toId : null,
+          fromId: from, toId, nextFromId: toId < maxId ? toId : null,
         })
       }
       const r = await query(STEPS[step], p)
