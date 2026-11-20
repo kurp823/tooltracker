@@ -28,9 +28,11 @@ const RESOLVE = `
   OUTER APPLY (
     SELECT TOP 1 u.SystemID, u.AssetNo, u.ShortDesc, u.[Size], u.IsEmdad
       FROM (
-        SELECT 0 AS pri, i.SystemID, i.AssetNo, i.ShortDesc, i.[Size], i.IsEmdad FROM tbl_Inventory i WHERE i.AssetNo = s.partNum
+        -- partNum is nvarchar, AssetNo/SystemID are varchar: without the CAST the
+        -- engine converts the indexed side and scans the catalogue per row.
+        SELECT 0 AS pri, i.SystemID, i.AssetNo, i.ShortDesc, i.[Size], i.IsEmdad FROM tbl_Inventory i WHERE i.AssetNo = CAST(s.partNum AS varchar(50))
         UNION ALL
-        SELECT 1, i.SystemID, i.AssetNo, i.ShortDesc, i.[Size], i.IsEmdad FROM tbl_Inventory i WHERE i.SystemID = s.partNum
+        SELECT 1, i.SystemID, i.AssetNo, i.ShortDesc, i.[Size], i.IsEmdad FROM tbl_Inventory i WHERE i.SystemID = CAST(s.partNum AS varchar(20))
       ) u
      ORDER BY u.pri, u.SystemID
   ) inv`
@@ -96,9 +98,9 @@ const STAGES = {
       FROM tbl_ImportDTRT s
      WHERE s.batchId = @b
        AND NULLIF(LTRIM(RTRIM(s.partNum)), '') IS NOT NULL
-       AND NOT EXISTS (SELECT 1 FROM tbl_Inventory i WHERE i.AssetNo = s.partNum)
-       AND NOT EXISTS (SELECT 1 FROM tbl_Inventory i WHERE i.SystemID = s.partNum)
-       AND NOT EXISTS (SELECT 1 FROM tbl_Inventory i WHERE i.AssetKeyNorm = s.PartKeyNorm)
+       AND NOT EXISTS (SELECT 1 FROM tbl_Inventory i WHERE i.AssetNo = CAST(s.partNum AS varchar(50)))
+       AND NOT EXISTS (SELECT 1 FROM tbl_Inventory i WHERE i.SystemID = CAST(s.partNum AS varchar(20)))
+       AND NOT EXISTS (SELECT 1 FROM tbl_Inventory i WHERE i.AssetKeyNorm = CAST(s.PartKeyNorm AS varchar(50)))
      GROUP BY s.partNum`,
 
   /* ------------------------------------------------------ 3. DT headers --- */
