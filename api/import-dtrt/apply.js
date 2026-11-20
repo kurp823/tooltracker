@@ -392,6 +392,11 @@ async function ensureJobKeys () {
   await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ImportDTRT_Batch' AND object_id = OBJECT_ID('dbo.tbl_ImportDTRT')) CREATE INDEX IX_ImportDTRT_Batch ON dbo.tbl_ImportDTRT (batchId, id) INCLUDE (jobNum, dtNo, rtNo, partNum, JobKeyNorm)`, [])
   // RESOLVE looks every staged part number up by AssetNo or SystemID; SystemID is the key, AssetNo was not indexed.
   await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Inventory_AssetNo' AND object_id = OBJECT_ID('dbo.tbl_Inventory')) CREATE INDEX IX_Inventory_AssetNo ON dbo.tbl_Inventory (AssetNo) INCLUDE (SystemID, ShortDesc, [Size], IsEmdad, Status)`, [])
+  // The line stages test NOT EXISTS (ticket, serial) against 45k-row line tables; without these the test is a scan per staged row.
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_DTLines_Ticket_Serial' AND object_id = OBJECT_ID('dbo.tbl_DeliveryTicketLines')) CREATE INDEX IX_DTLines_Ticket_Serial ON dbo.tbl_DeliveryTicketLines (dtNumber, serial)`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_RTLines_Ticket_Serial' AND object_id = OBJECT_ID('dbo.tbl_ReceivingTicketLines')) CREATE INDEX IX_RTLines_Ticket_Serial ON dbo.tbl_ReceivingTicketLines (rtNumber, serial)`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_DTLines_Serial' AND object_id = OBJECT_ID('dbo.tbl_DeliveryTicketLines')) CREATE INDEX IX_DTLines_Serial ON dbo.tbl_DeliveryTicketLines (serial) INCLUDE (dtNumber)`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_RTLines_Serial' AND object_id = OBJECT_ID('dbo.tbl_ReceivingTicketLines')) CREATE INDEX IX_RTLines_Serial ON dbo.tbl_ReceivingTicketLines (serial) INCLUDE (rtNumber)`, [])
   keysReady = true
 }
 
