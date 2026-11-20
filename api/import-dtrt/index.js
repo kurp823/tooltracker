@@ -264,6 +264,30 @@ module.exports = safe(async function (context, req) {
     const p = [{ name: 'b', type: sql.NVarChar, value: batchId }]
 
     const PARTS = {
+      /*
+       * Presence by number, Epicor (the staged sheet) against the app — jobs,
+       * DTs, RTs. Ravi, 20 Nov: anything only in the app (dummy RTs / DTs made
+       * to close a job) stays as it is; anything only in Epicor is to be loaded.
+       */
+      compare: `
+        WITH sj AS (SELECT DISTINCT JobKeyNorm AS k, MIN(jobNum) AS no FROM tbl_ImportDTRT WHERE batchId = @b AND NULLIF(LTRIM(RTRIM(jobNum)),'') IS NOT NULL GROUP BY JobKeyNorm),
+             sd AS (SELECT DISTINCT LTRIM(RTRIM(dtNo)) AS no, MIN(jobNum) AS job, MIN(dtDate) AS d FROM tbl_ImportDTRT WHERE batchId = @b AND NULLIF(LTRIM(RTRIM(dtNo)),'') IS NOT NULL GROUP BY LTRIM(RTRIM(dtNo))),
+             sr AS (SELECT DISTINCT LTRIM(RTRIM(rtNo)) AS no, MIN(jobNum) AS job, MIN(rtDate) AS d FROM tbl_ImportDTRT WHERE batchId = @b AND NULLIF(LTRIM(RTRIM(rtNo)),'') IS NOT NULL AND rtNo NOT LIKE '%DUMMY%' GROUP BY LTRIM(RTRIM(rtNo))),
+             aj AS (SELECT JobKeyNorm AS k, JobID AS no, Status FROM tbl_Jobs),
+             ad AS (SELECT dtNumber AS no, jobNumber AS job, deliveryDate AS d, createdBy FROM tbl_DeliveryTickets),
+             ar AS (SELECT rtNumber AS no, jobNumber AS job, receivingDate AS d, createdBy FROM tbl_ReceivingTickets)
+        SELECT 'job' AS kind, 'epicor-only' AS side, sj.no AS no, NULL AS job, NULL AS d, NULL AS who FROM sj WHERE NOT EXISTS (SELECT 1 FROM aj WHERE aj.k = sj.k)
+        UNION ALL SELECT 'dt', 'epicor-only', sd.no, sd.job, sd.d, NULL FROM sd WHERE NOT EXISTS (SELECT 1 FROM ad WHERE ad.no = sd.no)
+        UNION ALL SELECT 'dt', 'app-only', ad.no, ad.job, CONVERT(varchar(10), ad.d, 120), ad.createdBy FROM ad WHERE NOT EXISTS (SELECT 1 FROM sd WHERE sd.no = ad.no)
+        UNION ALL SELECT 'rt', 'epicor-only', sr.no, sr.job, sr.d, NULL FROM sr WHERE NOT EXISTS (SELECT 1 FROM ar WHERE ar.no = sr.no)
+        UNION ALL SELECT 'rt', 'app-only', ar.no, ar.job, CONVERT(varchar(10), ar.d, 120), ar.createdBy FROM ar WHERE NOT EXISTS (SELECT 1 FROM sr WHERE sr.no = ar.no)
+        UNION ALL SELECT 'total', 'epicor', CAST(COUNT(*) AS varchar(10)), 'jobs', NULL, NULL FROM sj
+        UNION ALL SELECT 'total', 'epicor', CAST(COUNT(*) AS varchar(10)), 'dts', NULL, NULL FROM sd
+        UNION ALL SELECT 'total', 'epicor', CAST(COUNT(*) AS varchar(10)), 'rts', NULL, NULL FROM sr
+        UNION ALL SELECT 'total', 'app', CAST(COUNT(*) AS varchar(10)), 'jobs', NULL, NULL FROM aj
+        UNION ALL SELECT 'total', 'app', CAST(COUNT(*) AS varchar(10)), 'dts', NULL, NULL FROM ad
+        UNION ALL SELECT 'total', 'app', CAST(COUNT(*) AS varchar(10)), 'rts', NULL, NULL FROM ar`,
+
       shape: `WITH d AS (
                 SELECT DISTINCT dtNo, partNum, rtNo, jobKey, rtKind
                   FROM tbl_ImportDTRTResolved WHERE batchId = @b
