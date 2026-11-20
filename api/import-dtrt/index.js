@@ -423,17 +423,20 @@ module.exports = safe(async function (context, req) {
     const batchId = text((req.query || {}).batchId)
     const { RESOLVE_SQL } = require('./apply')
     const p = [{ name: 'b', type: sql.NVarChar, value: batchId }]
-    const out = {}
-    const time = async (name, q, params) => { const t0 = Date.now(); try { const r = await query(q, params); out[name] = { ms: Date.now() - t0, rows: r.recordset ? (r.recordset[0] && (r.recordset[0].n ?? r.recordset.length)) : r.rowsAffected } } catch (e) { out[name] = { error: e.message } } }
-    await time('batchRows', 'SELECT COUNT(*) AS n FROM tbl_ImportDTRT WHERE batchId = @b', p)
-    await time('resolveOnly', `SELECT COUNT(*) AS n FROM tbl_ImportDTRT s ${RESOLVE_SQL} WHERE s.batchId = @b AND inv.SystemID IS NOT NULL`, p)
-    await time('notExistsOnly', `SELECT COUNT(*) AS n FROM tbl_ImportDTRT s WHERE s.batchId = @b AND NOT EXISTS (SELECT 1 FROM tbl_DeliveryTicketLines l WHERE l.dtNumber = s.dtNo AND l.serial = s.partNum)`, p)
-    await time('indexes', `SELECT name FROM sys.indexes WHERE object_id IN (OBJECT_ID('dbo.tbl_DeliveryTicketLines'), OBJECT_ID('dbo.tbl_Inventory'), OBJECT_ID('dbo.tbl_ImportDTRT')) AND name IS NOT NULL`, [])
-    const idx = await query(`SELECT OBJECT_NAME(object_id) AS t, name FROM sys.indexes WHERE object_id IN (OBJECT_ID('dbo.tbl_DeliveryTicketLines'), OBJECT_ID('dbo.tbl_Inventory'), OBJECT_ID('dbo.tbl_ImportDTRT'), OBJECT_ID('dbo.tbl_Jobs')) AND name IS NOT NULL`, [])
-    out.indexList = idx.recordset.map(r => r.t + '.' + r.name)
-    const cols = await query(`SELECT TABLE_NAME + '.' + COLUMN_NAME AS c FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME IN ('JobKeyNorm','AssetKeyNorm','PartKeyNorm')`, [])
-    out.computedCols = cols.recordset.map(r => r.c)
-    return jsonResponse(context, 200, out)
+    const check = text((req.query || {}).check) || 'meta'
+    const CHECKS = {
+      batchRows: ['SELECT COUNT(*) AS n, MIN(id) AS minId, MAX(id) AS maxId FROM tbl_ImportDTRT WHERE batchId = @b', p],
+      resolveOnly: [`SELECT COUNT(*) AS n FROM tbl_ImportDTRT s ${RESOLVE_SQL} WHERE s.batchId = @b AND inv.SystemID IS NOT NULL`, p],
+      notExistsOnly: [`SELECT COUNT(*) AS n FROM tbl_ImportDTRT s WHERE s.batchId = @b AND NOT EXISTS (SELECT 1 FROM tbl_DeliveryTicketLines l WHERE l.dtNumber = s.dtNo AND l.serial = s.partNum)`, p],
+      blocking: [`SELECT r.session_id, r.blocking_session_id, r.status, r.command, r.wait_type, r.wait_time, r.total_elapsed_time, LEFT(t.text, 160) AS sqltext
+                   FROM sys.dm_exec_requests r CROSS APPLY sys.dm_exec_sql_text(r.sql_handle) t WHERE r.session_id <> @@SPID AND r.database_id = DB_ID()`, []],
+      meta: [`SELECT OBJECT_NAME(object_id) + '.' + name AS n FROM sys.indexes WHERE object_id IN (OBJECT_ID('dbo.tbl_DeliveryTicketLines'), OBJECT_ID('dbo.tbl_ReceivingTicketLines'), OBJECT_ID('dbo.tbl_Inventory'), OBJECT_ID('dbo.tbl_ImportDTRT'), OBJECT_ID('dbo.tbl_Jobs')) AND name IS NOT NULL
+                 UNION ALL SELECT TABLE_NAME + '.' + COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME IN ('JobKeyNorm','AssetKeyNorm','PartKeyNorm')`, []],
+    }
+    if (!CHECKS[check]) return jsonResponse(context, 400, { error: 'unknown check', checks: Object.keys(CHECKS) })
+    const t0 = Date.now()
+    try { const r = await query(CHECKS[check][0], CHECKS[check][1]); return jsonResponse(context, 200, { check, ms: Date.now() - t0, rows: r.recordset }) }
+    catch (e) { return jsonResponse(context, 500, { check, ms: Date.now() - t0, error: e.message }) }
   }
 
   return jsonResponse(context, 404, { error: 'Unknown import-dtrt route' })
