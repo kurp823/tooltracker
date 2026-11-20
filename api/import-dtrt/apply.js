@@ -441,4 +441,4 @@ async function runStage(stage, batchId, fromId, username) {
   return { stage, ms: Date.now() - t0, written, fromId, nextFromId }
 }
 
-module.exports = { STAGES, WINDOWED, ORDER, runStage, ensureJobKeys }
+module.exports = { STAGES, WINDOWED, ORDER, runStage, ensureJobKeys, RESOLVE_SQL: RESOLVE }
