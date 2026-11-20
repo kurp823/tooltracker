@@ -31,7 +31,7 @@ const PARTS = ['shape', 'onrig', 'dt', 'rt', 'unknown', 'linkage'] as const
 const APPLY_ORDER = [
   'jobs', 'inventory', 'dt-headers', 'dt-lines', 'rt-headers', 'rt-lines',
   'dummy-headers', 'dummy-lines', 'jobtools', 'fieldlogs',
-  'inv-status-onrig', 'inv-status-returned', 'job-status',
+  'inv-status-onrig', 'inv-status-returned',
 ] as const
 const APPLY_WINDOWED = new Set(['dt-lines', 'rt-lines', 'dummy-lines', 'jobtools', 'fieldlogs'])
 type Part = typeof PARTS[number]
@@ -201,12 +201,10 @@ export function DataImportView() {
    * Ravi runs this, not Claude: a write to the live tables needs an approval
    * that only he can give, so the screen walks the stages itself.
    */
+  const [confirmApply, setConfirmApply] = useState(false)
   async function applyToLive() {
     if (!batchId) return
-    if (!window.confirm(
-      'This writes the sheet into the live tables: jobs, inventory, delivery and return tickets, '
-      + 'dummy return tickets, the job tool lists, utilization, and inventory and job status.\n\n'
-      + 'Every stage is safe to repeat. Continue?')) return
+    setConfirmApply(false)
     setApplied([]); setError('')
     for (const stage of APPLY_ORDER) {
       setApplying(stage)
@@ -255,13 +253,21 @@ export function DataImportView() {
               ? `Uploading ${sent.toLocaleString()} / ${rows.length.toLocaleString()}`
               : busy === 'checking' ? 'Comparing…' : 'Upload and compare'}
           </button>
-          <button
-            className="btn-primary" onClick={applyToLive}
-            disabled={!batchId || busy !== '' || applying !== ''}
-            title="Writes the staged sheet into the live tables"
-          >
-            {applying ? `Applying: ${applying}` : 'Apply to live data'}
-          </button>
+          {confirmApply ? (
+            <span className="inline-flex items-center gap-1.5 text-[12px] bg-amber-50 border border-amber-200 rounded px-2 py-1">
+              Writes the sheet into the live tables (jobs, inventory, DT/RT, job tool lists, utilization, inventory status). Every stage is safe to repeat.
+              <button className="btn-primary !py-0.5" onClick={applyToLive}>Confirm</button>
+              <button className="btn-ghost !py-0.5" onClick={() => setConfirmApply(false)}>Cancel</button>
+            </span>
+          ) : (
+            <button
+              className="btn-primary" onClick={() => setConfirmApply(true)}
+              disabled={!batchId || busy !== '' || applying !== ''}
+              title="Writes the staged sheet into the live tables"
+            >
+              {applying ? `Applying: ${applying}` : 'Apply to live data'}
+            </button>
+          )}
           <button className="btn-ghost" onClick={reset} disabled={busy !== '' || applying !== ''}>Clear</button>
         </div>
       </div>

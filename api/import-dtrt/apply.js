@@ -60,8 +60,9 @@ const CONDITION = `CASE WHEN UPPER(LTRIM(RTRIM(COALESCE(s.remark, '')))) LIKE 'L
                         ELSE 'Available' END`
 
 /* Job statuses that mean the job is still running, so kit on them is genuinely
- * out on a rig rather than missing paperwork. */
-const LIVE = `('Ongoing', 'Draft Invoice Submitted', 'Open', 'Waiting on Signed Docs')`
+ * out on a rig rather than missing paperwork. Ravi, 19 Nov 2026: Ongoing only —
+ * Draft Invoice Submitted is a billing stage, the field work is over. */
+const LIVE = `('Ongoing', 'Open')`
 
 const STAGES = {
   /* ------------------------------------------------------------ 1. jobs --- */
@@ -361,10 +362,14 @@ const STAGES = {
 /** Stages that walk the staged rows in windows rather than aggregating. */
 const WINDOWED = new Set(['dt-lines', 'rt-lines', 'dummy-lines', 'jobtools', 'fieldlogs'])
 
+/* 'job-status' (re-open a Completed job that still has kit out) is no longer
+ * run: since 19 Nov such tools are flagged on the Inventory Dashboard status
+ * check (case B) for the yard to confirm, rather than the job being re-opened
+ * silently. The stage stays callable for a deliberate one-off. */
 const ORDER = [
   'jobs', 'inventory', 'dt-headers', 'dt-lines', 'rt-headers', 'rt-lines',
   'dummy-headers', 'dummy-lines', 'jobtools', 'fieldlogs',
-  'inv-status-onrig', 'inv-status-returned', 'job-status',
+  'inv-status-onrig', 'inv-status-returned',
 ]
 
 async function runStage(stage, batchId, fromId, username) {
