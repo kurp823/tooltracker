@@ -418,5 +418,23 @@ module.exports = safe(async function (context, req) {
     }
   }
 
+  // Timing of the dt-lines building blocks for one batch (Admin diagnostics).
+  if (sub === 'diag' && method === 'GET') {
+    const batchId = text((req.query || {}).batchId)
+    const { RESOLVE_SQL } = require('./apply')
+    const p = [{ name: 'b', type: sql.NVarChar, value: batchId }]
+    const out = {}
+    const time = async (name, q, params) => { const t0 = Date.now(); try { const r = await query(q, params); out[name] = { ms: Date.now() - t0, rows: r.recordset ? (r.recordset[0] && (r.recordset[0].n ?? r.recordset.length)) : r.rowsAffected } } catch (e) { out[name] = { error: e.message } } }
+    await time('batchRows', 'SELECT COUNT(*) AS n FROM tbl_ImportDTRT WHERE batchId = @b', p)
+    await time('resolveOnly', `SELECT COUNT(*) AS n FROM tbl_ImportDTRT s ${RESOLVE_SQL} WHERE s.batchId = @b AND inv.SystemID IS NOT NULL`, p)
+    await time('notExistsOnly', `SELECT COUNT(*) AS n FROM tbl_ImportDTRT s WHERE s.batchId = @b AND NOT EXISTS (SELECT 1 FROM tbl_DeliveryTicketLines l WHERE l.dtNumber = s.dtNo AND l.serial = s.partNum)`, p)
+    await time('indexes', `SELECT name FROM sys.indexes WHERE object_id IN (OBJECT_ID('dbo.tbl_DeliveryTicketLines'), OBJECT_ID('dbo.tbl_Inventory'), OBJECT_ID('dbo.tbl_ImportDTRT')) AND name IS NOT NULL`, [])
+    const idx = await query(`SELECT OBJECT_NAME(object_id) AS t, name FROM sys.indexes WHERE object_id IN (OBJECT_ID('dbo.tbl_DeliveryTicketLines'), OBJECT_ID('dbo.tbl_Inventory'), OBJECT_ID('dbo.tbl_ImportDTRT'), OBJECT_ID('dbo.tbl_Jobs')) AND name IS NOT NULL`, [])
+    out.indexList = idx.recordset.map(r => r.t + '.' + r.name)
+    const cols = await query(`SELECT TABLE_NAME + '.' + COLUMN_NAME AS c FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME IN ('JobKeyNorm','AssetKeyNorm','PartKeyNorm')`, [])
+    out.computedCols = cols.recordset.map(r => r.c)
+    return jsonResponse(context, 200, out)
+  }
+
   return jsonResponse(context, 404, { error: 'Unknown import-dtrt route' })
 })
