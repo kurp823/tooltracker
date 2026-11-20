@@ -194,8 +194,10 @@ module.exports = safe(async function (context, req) {
                          WHEN s.rtNo LIKE '%DUMMY%' THEN 2 ELSE 1 END,
                     i.SystemID
                FROM tbl_ImportDTRT s
-               LEFT JOIN tbl_Inventory i
-                      ON i.AssetNo = s.partNum OR i.SystemID = s.partNum
+               OUTER APPLY (SELECT TOP 1 u.SystemID FROM (
+                        SELECT 0 AS pri, x.SystemID FROM tbl_Inventory x WHERE x.AssetNo = CAST(s.partNum AS varchar(50))
+                        UNION ALL SELECT 1, x.SystemID FROM tbl_Inventory x WHERE x.SystemID = CAST(s.partNum AS varchar(20))) u
+                      ORDER BY u.pri, u.SystemID) i
               WHERE s.batchId = @b
                 AND s.id > @fromId AND s.id <= @toId
                 AND NULLIF(LTRIM(RTRIM(s.dtNo)), '') IS NOT NULL`,
