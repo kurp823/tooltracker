@@ -22,12 +22,17 @@ const WINDOW = 8000
 
 /** Resolve the sheet's AssetNo to one SystemID. TOP 1 because inventory holds
  *  duplicate asset numbers, and a plain join would fan every line out. */
+// Two index seeks (AssetNo, then SystemID) instead of one OR predicate, which
+// the optimiser turned into a scan of the catalogue per staged row.
 const RESOLVE = `
   OUTER APPLY (
-    SELECT TOP 1 i.SystemID, i.AssetNo, i.ShortDesc, i.[Size], i.IsEmdad
-      FROM tbl_Inventory i
-     WHERE i.AssetNo = s.partNum OR i.SystemID = s.partNum
-     ORDER BY CASE WHEN i.AssetNo = s.partNum THEN 0 ELSE 1 END, i.SystemID
+    SELECT TOP 1 u.SystemID, u.AssetNo, u.ShortDesc, u.[Size], u.IsEmdad
+      FROM (
+        SELECT 0 AS pri, i.SystemID, i.AssetNo, i.ShortDesc, i.[Size], i.IsEmdad FROM tbl_Inventory i WHERE i.AssetNo = s.partNum
+        UNION ALL
+        SELECT 1, i.SystemID, i.AssetNo, i.ShortDesc, i.[Size], i.IsEmdad FROM tbl_Inventory i WHERE i.SystemID = s.partNum
+      ) u
+     ORDER BY u.pri, u.SystemID
   ) inv`
 
 /*
@@ -91,10 +96,9 @@ const STAGES = {
       FROM tbl_ImportDTRT s
      WHERE s.batchId = @b
        AND NULLIF(LTRIM(RTRIM(s.partNum)), '') IS NOT NULL
-       AND NOT EXISTS (SELECT 1 FROM tbl_Inventory i
-                        WHERE i.AssetNo = s.partNum OR i.SystemID = s.partNum
-                           OR UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(i.AssetNo, i.SystemID),'-',''),' ',''),'/',''),'_',''),'.',''))
-                            = UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(s.partNum,'-',''),' ',''),'/',''),'_',''),'.','')))
+       AND NOT EXISTS (SELECT 1 FROM tbl_Inventory i WHERE i.AssetNo = s.partNum)
+       AND NOT EXISTS (SELECT 1 FROM tbl_Inventory i WHERE i.SystemID = s.partNum)
+       AND NOT EXISTS (SELECT 1 FROM tbl_Inventory i WHERE i.AssetKeyNorm = s.PartKeyNorm)
      GROUP BY s.partNum`,
 
   /* ------------------------------------------------------ 3. DT headers --- */
@@ -397,6 +401,11 @@ async function ensureJobKeys () {
   await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_RTLines_Ticket_Serial' AND object_id = OBJECT_ID('dbo.tbl_ReceivingTicketLines')) CREATE INDEX IX_RTLines_Ticket_Serial ON dbo.tbl_ReceivingTicketLines (rtNumber, serial)`, [])
   await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_DTLines_Serial' AND object_id = OBJECT_ID('dbo.tbl_DeliveryTicketLines')) CREATE INDEX IX_DTLines_Serial ON dbo.tbl_DeliveryTicketLines (serial) INCLUDE (dtNumber)`, [])
   await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_RTLines_Serial' AND object_id = OBJECT_ID('dbo.tbl_ReceivingTicketLines')) CREATE INDEX IX_RTLines_Serial ON dbo.tbl_ReceivingTicketLines (serial) INCLUDE (rtNumber)`, [])
+  // Spelling-variant check for new part numbers: persisted normalised keys, indexed, instead of REPLACE chains per row pair.
+  const akey = (col) => `UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${col},'-',''),' ',''),'/',''),'_',''),'.',''))`
+  await query(`IF COL_LENGTH('dbo.tbl_Inventory','AssetKeyNorm') IS NULL ALTER TABLE dbo.tbl_Inventory ADD AssetKeyNorm AS (${akey('ISNULL(AssetNo, SystemID)')}) PERSISTED`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Inventory_AssetKeyNorm' AND object_id = OBJECT_ID('dbo.tbl_Inventory')) CREATE INDEX IX_Inventory_AssetKeyNorm ON dbo.tbl_Inventory (AssetKeyNorm)`, [])
+  await query(`IF COL_LENGTH('dbo.tbl_ImportDTRT','PartKeyNorm') IS NULL ALTER TABLE dbo.tbl_ImportDTRT ADD PartKeyNorm AS (${akey('partNum')}) PERSISTED`, [])
   keysReady = true
 }
 
