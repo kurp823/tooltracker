@@ -75,8 +75,8 @@ const STAGES = {
      WHERE s.batchId = @b
        AND NULLIF(LTRIM(RTRIM(s.jobNum)), '') IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM tbl_Jobs j
-                        WHERE ${jobKey('j.JobID')} = ${jobKey('s.jobNum')})
-     GROUP BY ${jobKey('s.jobNum')}`,
+                        WHERE j.JobKeyNorm = s.JobKeyNorm)
+     GROUP BY s.JobKeyNorm`,
 
   /* ------------------------------------------------------- 2. inventory --- */
   // An asset the catalogue does not hold. Created so ticket lines have a
@@ -105,7 +105,7 @@ const STAGES = {
            TRY_CONVERT(date, MIN(s.dtDate)),
            MAX(s.rig), MAX(s.well), '', @by, GETDATE()
       FROM tbl_ImportDTRT s
-      LEFT JOIN tbl_Jobs j ON ${jobKey('j.JobID')} = ${jobKey('s.jobNum')}
+      LEFT JOIN tbl_Jobs j ON j.JobKeyNorm = s.JobKeyNorm
      WHERE s.batchId = @b
        AND NULLIF(LTRIM(RTRIM(s.dtNo)), '') IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets t WHERE t.dtNumber = s.dtNo)
@@ -134,7 +134,7 @@ const STAGES = {
            TRY_CONVERT(date, MIN(s.rtDate)),
            MAX(s.rig), MAX(s.well), '', @by, GETDATE()
       FROM tbl_ImportDTRT s
-      LEFT JOIN tbl_Jobs j ON ${jobKey('j.JobID')} = ${jobKey('s.jobNum')}
+      LEFT JOIN tbl_Jobs j ON j.JobKeyNorm = s.JobKeyNorm
      WHERE s.batchId = @b
        AND NULLIF(LTRIM(RTRIM(s.rtNo)), '') IS NOT NULL
        AND s.rtNo NOT LIKE '%DUMMY%'
@@ -170,7 +170,7 @@ const STAGES = {
    */
   'dummy-headers': `
     WITH jb AS (
-      SELECT ${jobKey('JobID')} AS jobKey, Client, Status, LegalInvoiceNumber FROM tbl_Jobs
+      SELECT JobKeyNorm AS jobKey, Client, Status, LegalInvoiceNumber FROM tbl_Jobs
     ),
     need AS (
       SELECT ${DUMMY_NO('s.jobNum')} AS rtNo,
@@ -180,7 +180,7 @@ const STAGES = {
              MAX(s.well)     AS well,
              MAX(s.dtDate)   AS lastOut
         FROM tbl_ImportDTRT s
-        LEFT JOIN jb ON jb.jobKey = ${jobKey('s.jobNum')}
+        LEFT JOIN jb ON jb.jobKey = s.JobKeyNorm
        WHERE s.batchId = @b
          AND NULLIF(LTRIM(RTRIM(s.jobNum)), '') IS NOT NULL
          AND ( s.rtNo LIKE '%DUMMY%'
@@ -203,7 +203,7 @@ const STAGES = {
   /* ----------------------------------------------------- 8. dummy lines --- */
   'dummy-lines': `
     WITH jb AS (
-      SELECT ${jobKey('JobID')} AS jobKey, Status, LegalInvoiceNumber FROM tbl_Jobs
+      SELECT JobKeyNorm AS jobKey, Status, LegalInvoiceNumber FROM tbl_Jobs
     )
     INSERT INTO tbl_ReceivingTicketLines
       (rtNumber, itemNo, serial, toolDescription, qty, usedStatus, condition, routedTo, routedAt, routedBy)
@@ -214,7 +214,7 @@ const STAGES = {
                inv.SystemID, s.partDesc,
                ${USED} AS used, ${CONDITION} AS cond, ${ROUTED} AS routed
           FROM tbl_ImportDTRT s
-          LEFT JOIN jb ON jb.jobKey = ${jobKey('s.jobNum')}
+          LEFT JOIN jb ON jb.jobKey = s.JobKeyNorm
           ${RESOLVE}
          WHERE s.batchId = @b AND s.id > @fromId AND s.id <= @toId
            AND inv.SystemID IS NOT NULL
@@ -244,9 +244,9 @@ const STAGES = {
        AND inv.SystemID IS NOT NULL
        AND NULLIF(LTRIM(RTRIM(s.jobNum)), '') IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM tbl_JobTools jt
-                        WHERE ${jobKey('jt.JobID')} = ${jobKey('s.jobNum')}
+                        WHERE jt.JobKeyNorm = s.JobKeyNorm
                           AND jt.SystemID = inv.SystemID)
-     GROUP BY ${jobKey('s.jobNum')}, inv.SystemID`,
+     GROUP BY s.JobKeyNorm, inv.SystemID`,
 
   /* ------------------------------------------------------ 10. field logs --- */
   // Keyed (ToolSerial, DTNumber) — what the revenue rollup joins on, so without
@@ -255,7 +255,7 @@ const STAGES = {
     INSERT INTO tbl_DailyFieldLogs (JobID, DTNumber, ToolSerial, LogDate, StatusType, CreatedDate)
     SELECT MIN(x.jobNum), MIN(x.dtNo), x.SystemID, x.LogDate, '1', GETDATE()
       FROM (
-        SELECT s.jobNum, s.dtNo, inv.SystemID, TRY_CONVERT(date, s.dtDate) AS LogDate
+        SELECT s.jobNum, s.JobKeyNorm, s.dtNo, inv.SystemID, TRY_CONVERT(date, s.dtDate) AS LogDate
           FROM tbl_ImportDTRT s
           ${RESOLVE}
          WHERE s.batchId = @b AND s.id > @fromId AND s.id <= @toId
@@ -265,10 +265,10 @@ const STAGES = {
            AND TRY_CONVERT(date, s.dtDate) IS NOT NULL
       ) x
      WHERE NOT EXISTS (SELECT 1 FROM tbl_DailyFieldLogs d
-                        WHERE ${jobKey('d.JobID')} = ${jobKey('x.jobNum')}
+                        WHERE d.JobKeyNorm = x.JobKeyNorm
                           AND d.ToolSerial = x.SystemID
                           AND d.LogDate    = x.LogDate)
-     GROUP BY ${jobKey('x.jobNum')}, x.SystemID, x.LogDate`,
+     GROUP BY x.JobKeyNorm, x.SystemID, x.LogDate`,
 
   /* ------------------------------------------------ 11. inventory status --- */
   /*
@@ -277,13 +277,13 @@ const STAGES = {
    * Maintenance and Lost in Hole each belong to another workflow.
    */
   'inv-status-onrig': `
-    WITH j AS (SELECT ${jobKey('JobID')} AS jobKey, Status FROM tbl_Jobs),
+    WITH j AS (SELECT JobKeyNorm AS jobKey, Status FROM tbl_Jobs),
     outstanding AS (
       SELECT DISTINCT inv.SystemID,
              FIRST_VALUE(s.rig) OVER (PARTITION BY inv.SystemID
                                       ORDER BY s.dtDate DESC) AS rig
         FROM tbl_ImportDTRT s
-        JOIN j ON j.jobKey = ${jobKey('s.jobNum')}
+        JOIN j ON j.jobKey = s.JobKeyNorm
         ${RESOLVE}
        WHERE s.batchId = @b
          AND NULLIF(LTRIM(RTRIM(s.rtNo)), '') IS NULL
@@ -309,11 +309,11 @@ const STAGES = {
    * 'outstanding' here is the same set stage 10 marks.
    */
   'inv-status-returned': `
-    WITH j AS (SELECT ${jobKey('JobID')} AS jobKey, Status FROM tbl_Jobs),
+    WITH j AS (SELECT JobKeyNorm AS jobKey, Status FROM tbl_Jobs),
     outstanding AS (
       SELECT DISTINCT inv.SystemID
         FROM tbl_ImportDTRT s
-        JOIN j ON j.jobKey = ${jobKey('s.jobNum')}
+        JOIN j ON j.jobKey = s.JobKeyNorm
         ${RESOLVE}
        WHERE s.batchId = @b
          AND NULLIF(LTRIM(RTRIM(s.rtNo)), '') IS NULL
@@ -347,14 +347,14 @@ const STAGES = {
    */
   'job-status': `
     WITH stillOut AS (
-      SELECT DISTINCT ${jobKey('s.jobNum')} AS jobKey
+      SELECT DISTINCT s.JobKeyNorm AS jobKey
         FROM tbl_ImportDTRT s
        WHERE s.batchId = @b AND NULLIF(LTRIM(RTRIM(s.rtNo)), '') IS NULL
     )
     UPDATE j
        SET Status = 'Ongoing'
       FROM tbl_Jobs j
-      JOIN stillOut o ON o.jobKey = ${jobKey('j.JobID')}
+      JOIN stillOut o ON o.jobKey = j.JobKeyNorm
      WHERE j.Status IN ('Completed', 'JobCompleted')
        AND NULLIF(LTRIM(RTRIM(j.LegalInvoiceNumber)), '') IS NULL`,
 }
@@ -372,7 +372,31 @@ const ORDER = [
   'inv-status-onrig', 'inv-status-returned',
 ]
 
+/*
+ * The job key (upper-case, '-0' runs collapsed) used to be recomputed on both
+ * sides of every join, so a stage over 2,000 staged rows evaluated it millions
+ * of times and overran the 45-second cap on this SQL tier. It is now a
+ * persisted computed column, indexed, on both tables; added once if missing.
+ */
+let keysReady = false
+async function ensureJobKeys () {
+  if (keysReady) return
+  const expr = (col) => `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(LTRIM(RTRIM(${col}))),'-0','-'),'-0','-'),'-0','-'),'-0','-'),'-0','-')`
+  await query(`IF COL_LENGTH('dbo.tbl_Jobs','JobKeyNorm') IS NULL ALTER TABLE dbo.tbl_Jobs ADD JobKeyNorm AS (${expr('JobID')}) PERSISTED`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Jobs_JobKeyNorm' AND object_id = OBJECT_ID('dbo.tbl_Jobs')) CREATE INDEX IX_Jobs_JobKeyNorm ON dbo.tbl_Jobs (JobKeyNorm) INCLUDE (Client, Status, LegalInvoiceNumber)`, [])
+  await query(`IF COL_LENGTH('dbo.tbl_ImportDTRT','JobKeyNorm') IS NULL ALTER TABLE dbo.tbl_ImportDTRT ADD JobKeyNorm AS (${expr('jobNum')}) PERSISTED`, [])
+  await query(`IF COL_LENGTH('dbo.tbl_JobTools','JobKeyNorm') IS NULL ALTER TABLE dbo.tbl_JobTools ADD JobKeyNorm AS (${expr('JobID')}) PERSISTED`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_JobTools_JobKeyNorm' AND object_id = OBJECT_ID('dbo.tbl_JobTools')) CREATE INDEX IX_JobTools_JobKeyNorm ON dbo.tbl_JobTools (JobKeyNorm, SystemID)`, [])
+  await query(`IF COL_LENGTH('dbo.tbl_DailyFieldLogs','JobKeyNorm') IS NULL ALTER TABLE dbo.tbl_DailyFieldLogs ADD JobKeyNorm AS (${expr('JobID')}) PERSISTED`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_FieldLogs_JobKeyNorm' AND object_id = OBJECT_ID('dbo.tbl_DailyFieldLogs')) CREATE INDEX IX_FieldLogs_JobKeyNorm ON dbo.tbl_DailyFieldLogs (JobKeyNorm, ToolSerial, LogDate)`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ImportDTRT_Batch' AND object_id = OBJECT_ID('dbo.tbl_ImportDTRT')) CREATE INDEX IX_ImportDTRT_Batch ON dbo.tbl_ImportDTRT (batchId, id) INCLUDE (jobNum, dtNo, rtNo, partNum, JobKeyNorm)`, [])
+  // RESOLVE looks every staged part number up by AssetNo or SystemID; SystemID is the key, AssetNo was not indexed.
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Inventory_AssetNo' AND object_id = OBJECT_ID('dbo.tbl_Inventory')) CREATE INDEX IX_Inventory_AssetNo ON dbo.tbl_Inventory (AssetNo) INCLUDE (SystemID, ShortDesc, [Size], IsEmdad, Status)`, [])
+  keysReady = true
+}
+
 async function runStage(stage, batchId, fromId, username) {
+  await ensureJobKeys()
   const p = [
     { name: 'b', type: sql.NVarChar, value: batchId },
     { name: 'by', type: sql.NVarChar, value: username || '' },
@@ -403,4 +427,4 @@ async function runStage(stage, batchId, fromId, username) {
   return { stage, ms: Date.now() - t0, written, fromId, nextFromId }
 }
 
-module.exports = { STAGES, WINDOWED, ORDER, runStage }
+module.exports = { STAGES, WINDOWED, ORDER, runStage, ensureJobKeys }

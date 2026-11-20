@@ -1,6 +1,6 @@
 'use strict'
 const { sql, query, jsonResponse, requireAuth, jobKey, safe } = require('../db')
-const { ORDER, STAGES, WINDOWED, runStage } = require('./apply')
+const { ORDER, STAGES, WINDOWED, runStage, ensureJobKeys } = require('./apply')
 
 /**
  * /api/import-dtrt — ingest and check a corrected DT/RT sheet. Admin only.
@@ -210,6 +210,7 @@ module.exports = safe(async function (context, req) {
     }
 
     try {
+      await ensureJobKeys()
       const t0 = Date.now()
       if (step === 'rows') {
         // Staged ids are global, so a new batch starts far above 0: jump the
