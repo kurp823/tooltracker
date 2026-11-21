@@ -156,9 +156,8 @@ module.exports = safe(async function (context, req) {
     const tool = String(qs.serial || qs.asset || '').trim()
     if (tool) {
       params.push({ name: 'tool', type: sql.NVarChar, value: tool })
-      where.push(`(i.asset = @tool OR i.serial = @tool OR EXISTS (SELECT 1 FROM tbl_Inventory t
-                    WHERE (t.SystemID = @tool OR t.AssetNo = @tool OR t.OEMSerial = @tool)
-                      AND (i.serial = t.SystemID OR (NULLIF(i.asset,'') IS NOT NULL AND i.asset = t.AssetNo))))`)
+      // Resolve the tool once, then seek: a correlated EXISTS over tbl_Inventory scanned per row.
+      where.push(`(i.serial IN (@tool, @sysId) OR i.asset IN (@tool, @assetNo))`)
     }
     if (qs.job) { params.push({ name: 'job', type: sql.NVarChar, value: String(qs.job).trim() }); where.push(`UPPER(i.jobNumber) = UPPER(@job)`) }
     if (qs.wo)  { params.push({ name: 'wo', type: sql.Int, value: parseInt(qs.wo, 10) || 0 }); where.push(`i.WONumber = @wo`) }
@@ -169,7 +168,11 @@ module.exports = safe(async function (context, req) {
     let limit = parseInt(qs.limit, 10); if (!Number.isFinite(limit) || limit <= 0) limit = 1000; limit = Math.min(limit, 5000)
     params.push({ name: 'limit', type: sql.Int, value: limit })
     const result = await query(
-      `;WITH pick AS (SELECT TOP (@limit) i.id FROM tbl_InspectionRecords i
+      `DECLARE @sysId nvarchar(100) = NULL, @assetNo nvarchar(100) = NULL;
+       ${tool ? `SELECT TOP 1 @sysId = SystemID, @assetNo = AssetNo FROM tbl_Inventory
+                  WHERE SystemID = @tool OR AssetNo = @tool OR OEMSerial = @tool;
+                SET @sysId = COALESCE(@sysId, @tool); SET @assetNo = COALESCE(NULLIF(@assetNo,''), @tool);` : ''}
+       ;WITH pick AS (SELECT TOP (@limit) i.id FROM tbl_InspectionRecords i
                       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
                       ORDER BY i.inspectionDate DESC, i.WONumber DESC, i.LineNum, i.id DESC)
        ${SELECT} JOIN pick ON pick.id = i.id
