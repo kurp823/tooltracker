@@ -466,11 +466,15 @@ export function InspectionView() {
       <div className="flex gap-0 h-full">
         <div className="flex-1 min-w-0 space-y-4 overflow-y-auto">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-48">
+            <form className="relative flex-1 min-w-48 flex gap-2" onSubmit={e => { e.preventDefault(); setQ(search.trim()) }}>
+              <div className="relative flex-1">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input className="input pl-9" placeholder="Search report no, asset, serial, job, WO…"
+              <input className="input pl-9 w-full" placeholder="Search report no, asset, serial, job, WO… (Enter)"
                 value={search} onChange={e => setSearch(e.target.value)} />
-            </div>
+              </div>
+              <button type="submit" className="btn-ghost border border-gray-200"><Search size={14} /> Search</button>
+              {q && <button type="button" className="btn-ghost" onClick={() => { setSearch(''); setQ('') }}>Clear</button>}
+            </form>
             <select className="input w-auto" value={result} onChange={e => setResult(e.target.value)}>
               <option value="All">All decisions</option>
               <option value="Stock">Stock</option>
@@ -494,7 +498,7 @@ export function InspectionView() {
           </div>
 
           {error && <div className="card p-3 text-red-600 text-sm">{error}</div>}
-          <p className="text-xs text-gray-500">{filtered.length} inspection lines{q.length < 2 ? ' (newest 1000 — type to search the full history)' : ''}</p>
+          <p className="text-xs text-gray-500">{filtered.length} inspection lines{q.length < 2 ? ' (newest 1000 — type and press Enter to search the full history)' : ` matching "${q}" — exact matches first`}</p>
 
           <div className="card overflow-hidden">
             <table className="w-full">

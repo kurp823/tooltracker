@@ -159,6 +159,41 @@ module.exports = safe(async function (context, req) {
     return jsonResponse(context, 200, await importRows(user, rows))
   }
 
+  // ── GET summary (Maintenance & QC dashboard) ─────────────────────────────
+  if (id === 'summary' && method === 'GET') {
+    const r = await query(
+      `SELECT (SELECT COUNT(*) FROM tbl_InspectionRecords) AS inspTotal,
+              (SELECT COUNT(*) FROM tbl_InspectionRecords WHERE status = 'Open') AS inspOpen,
+              (SELECT COUNT(*) FROM tbl_InspectionRecords WHERE status = 'Report received') AS inspAwaitingQC,
+              (SELECT COUNT(*) FROM tbl_InspectionRecords WHERE status = 'Closed') AS inspClosed,
+              (SELECT COUNT(*) FROM tbl_InspectionRecords WHERE status = 'Closed' AND MONTH(ISNULL(qcApprovedDate, inspectionDate)) = MONTH(GETDATE()) AND YEAR(ISNULL(qcApprovedDate, inspectionDate)) = YEAR(GETDATE())) AS inspClosedThisMonth,
+              (SELECT COUNT(*) FROM tbl_InspectionRecords WHERE status = 'Closed' AND actions = 'DMR' AND MONTH(ISNULL(qcApprovedDate, inspectionDate)) = MONTH(GETDATE()) AND YEAR(ISNULL(qcApprovedDate, inspectionDate)) = YEAR(GETDATE())) AS dmrThisMonth,
+              (SELECT COUNT(*) FROM tbl_MaintenanceJobs WHERE status NOT IN ('Completed','Closed','Done','Scrapped','DBR')) AS maintOpen,
+              (SELECT COUNT(*) FROM tbl_MaintenanceJobs) AS maintTotal,
+              (SELECT COUNT(*) FROM tbl_Inventory WHERE Status = 'Inspection' AND ISNULL(MergedInto,'') = '') AS invInspection,
+              (SELECT COUNT(*) FROM tbl_Inventory WHERE Status IN ('Maintenance','Repair','Redress') AND ISNULL(MergedInto,'') = '') AS invWorkshop,
+              (SELECT COUNT(*) FROM tbl_Inventory WHERE Status = 'DBR' AND ISNULL(MergedInto,'') = '') AS invDBR`, [])
+    const maintByStatus = (await query(`SELECT status AS k, COUNT(*) AS n FROM tbl_MaintenanceJobs GROUP BY status ORDER BY n DESC`, [])).recordset
+    // Tools the inventory says are in the bay / workshop but with no open line or card: work happening without a record.
+    const bayNoLine = (await query(
+      `SELECT TOP 200 i.SystemID, i.AssetNo, i.ShortDesc, i.[Size], i.Status, i.Location
+         FROM tbl_Inventory i
+        WHERE i.Status = 'Inspection' AND ISNULL(i.MergedInto,'') = ''
+          AND NOT EXISTS (SELECT 1 FROM tbl_InspectionRecords r WHERE r.status <> 'Closed'
+                            AND (r.serial = i.SystemID OR (NULLIF(r.asset,'') IS NOT NULL AND r.asset = i.AssetNo)))
+        ORDER BY i.ShortDesc, i.AssetNo`, [])).recordset
+    const workshopNoCard = (await query(
+      `SELECT TOP 200 i.SystemID, i.AssetNo, i.ShortDesc, i.[Size], i.Status, i.Location
+         FROM tbl_Inventory i
+        WHERE i.Status IN ('Maintenance','Repair','Redress') AND ISNULL(i.MergedInto,'') = ''
+          AND NOT EXISTS (SELECT 1 FROM tbl_MaintenanceJobs m WHERE m.status NOT IN ('Completed','Closed','Done','Scrapped','DBR')
+                            AND (m.serial = i.SystemID OR (NULLIF(m.asset,'') IS NOT NULL AND m.asset = i.AssetNo)))
+        ORDER BY i.ShortDesc, i.AssetNo`, [])).recordset
+    const openLines = (await query(
+      `${SELECT} WHERE i.status <> 'Closed' ORDER BY i.status DESC, i.WONumber, i.LineNum`, [])).recordset
+    return jsonResponse(context, 200, { ...r.recordset[0], maintByStatus, bayNoLine, workshopNoCard, openLines })
+  }
+
   // ── GET list ─────────────────────────────────────────────────────────────
   //   ?serial= / ?asset=  one tool (matched by asset no, system id or OEM serial)
   //   ?job=               one job      ?wo=  one work order
@@ -177,6 +212,7 @@ module.exports = safe(async function (context, req) {
     if (qs.wo)  { params.push({ name: 'wo', type: sql.Int, value: parseInt(qs.wo, 10) || 0 }); where.push(`i.WONumber = @wo`) }
     if (qs.search) {
       params.push({ name: 'q', type: sql.NVarChar, value: `%${String(qs.search).trim()}%` })
+      params.push({ name: 'qx', type: sql.NVarChar, value: String(qs.search).trim() })
       where.push(`(i.certNumber LIKE @q OR i.asset LIKE @q OR i.serial LIKE @q OR i.jobNumber LIKE @q OR i.ToolDescription LIKE @q OR CAST(i.WONumber AS varchar) LIKE @q)`)
     }
     let limit = parseInt(qs.limit, 10); if (!Number.isFinite(limit) || limit <= 0) limit = 1000; limit = Math.min(limit, 5000)
@@ -188,9 +224,9 @@ module.exports = safe(async function (context, req) {
                 SET @sysId = COALESCE(@sysId, @tool); SET @assetNo = COALESCE(NULLIF(@assetNo,''), @tool);` : ''}
        ;WITH pick AS (SELECT TOP (@limit) i.id FROM tbl_InspectionRecords i
                       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-                      ORDER BY i.inspectionDate DESC, i.WONumber DESC, i.LineNum, i.id DESC)
+                      ORDER BY ${qs.search ? `CASE WHEN i.asset = @qx OR i.serial = @qx OR i.certNumber = @qx OR i.jobNumber = @qx THEN 0 ELSE 1 END,` : ''} i.inspectionDate DESC, i.WONumber DESC, i.LineNum, i.id DESC)
        ${SELECT} JOIN pick ON pick.id = i.id
-        ORDER BY i.inspectionDate DESC, i.WONumber DESC, i.LineNum, i.id DESC`, params)
+        ORDER BY ${qs.search ? `CASE WHEN i.asset = @qx OR i.serial = @qx OR i.certNumber = @qx OR i.jobNumber = @qx THEN 0 ELSE 1 END,` : ''} i.inspectionDate DESC, i.WONumber DESC, i.LineNum, i.id DESC`, params)
     return jsonResponse(context, 200, result.recordset)
   }
 
