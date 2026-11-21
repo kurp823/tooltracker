@@ -159,6 +159,66 @@ module.exports = safe(async function (context, req) {
     return jsonResponse(context, 200, await importRows(user, rows))
   }
 
+  // ── Bay sync: tools whose inventory says 'Inspection' vs what Epicor/app inspection lines say ──
+  //   GET  /inspections/bay-sync          preview: per tool, last RT, latest inspection line after it, proposal
+  //   POST /inspections/bay-sync {apply}  apply: Stock -> Good @ Emdad Base; DMR -> Maintenance @ Workshop + card;
+  //                                       none -> open inspection line (stays in the bay for QC). Audited.
+  if (id === 'bay-sync' && (method === 'GET' || method === 'POST')) {
+    if (method === 'POST' && !['Admin','QAQC'].includes(user.Role)) return jsonResponse(context, 403, { error: 'Admin / QC only' })
+    const BAY = `
+      ;WITH bay AS (
+        SELECT i.SystemID, i.AssetNo, i.OEMSerial, i.ShortDesc, i.[Size], i.Status, i.Location
+          FROM tbl_Inventory i WHERE i.Status = 'Inspection' AND ISNULL(i.MergedInto,'') = ''),
+      lastrt AS (
+        SELECT b.SystemID,
+               (SELECT MAX(rth.receivingDate) FROM tbl_ReceivingTicketLines rtl JOIN tbl_ReceivingTickets rth ON rth.rtNumber = rtl.rtNumber
+                 WHERE rtl.serial IN (b.SystemID, b.AssetNo, b.OEMSerial)) AS LastRT,
+               (SELECT TOP 1 rth.rtNumber FROM tbl_ReceivingTicketLines rtl JOIN tbl_ReceivingTickets rth ON rth.rtNumber = rtl.rtNumber
+                 WHERE rtl.serial IN (b.SystemID, b.AssetNo, b.OEMSerial) ORDER BY rth.receivingDate DESC) AS LastRTNo
+          FROM bay b),
+      pick AS (
+        SELECT b.*, l.LastRT, l.LastRTNo, x.id AS InspID, x.WONumber, x.inspectionDate AS InspDate, x.certNumber AS CertNumber, x.actions AS Action, x.jobNumber AS InspJob
+          FROM bay b JOIN lastrt l ON l.SystemID = b.SystemID
+          OUTER APPLY (SELECT TOP 1 r.id, r.WONumber, r.inspectionDate, r.certNumber, r.actions, r.jobNumber
+                         FROM tbl_InspectionRecords r
+                        WHERE (r.serial = b.SystemID OR r.asset IN (b.AssetNo, b.SystemID) OR (b.OEMSerial IS NOT NULL AND r.asset = b.OEMSerial))
+                          AND r.actions IS NOT NULL
+                          AND (l.LastRT IS NULL OR r.inspectionDate >= CAST(l.LastRT AS date))
+                        ORDER BY r.inspectionDate DESC, r.id DESC) x)
+      SELECT p.*, CASE WHEN p.Action = 'Stock' THEN 'Good' WHEN p.Action = 'DMR' THEN 'Maintenance' ELSE 'Open line' END AS Proposal
+        FROM pick p ORDER BY p.Proposal, p.ShortDesc, p.AssetNo`
+    const rows = (await query(BAY, [])).recordset
+    if (method === 'GET') {
+      const n = { Good: 0, Maintenance: 0, 'Open line': 0 }
+      rows.forEach(r => { n[r.Proposal] = (n[r.Proposal] || 0) + 1 })
+      return jsonResponse(context, 200, { rows, counts: n })
+    }
+    let good = 0, maint = 0, opened = 0; const cards = []
+    for (const r of rows) {
+      if (r.Proposal === 'Good') {
+        await query(`UPDATE tbl_Inventory SET Status = 'Good', Location = 'Emdad Base', LastUpdated = GETDATE() WHERE SystemID = @s AND Status = 'Inspection'`, [{ name: 's', value: r.SystemID }]); good++
+      } else if (r.Proposal === 'Maintenance') {
+        await query(`UPDATE tbl_Inventory SET Status = 'Maintenance', Location = 'Workshop', LastUpdated = GETDATE() WHERE SystemID = @s AND Status = 'Inspection'`, [{ name: 's', value: r.SystemID }]); maint++
+        cards.push(await raiseMaintenanceCard(user, r.InspID))
+      } else {
+        // No decided line after the last return: open one so QC works it in the app.
+        const wo = r.LastRTNo || null
+        await query(
+          `IF NOT EXISTS (SELECT 1 FROM tbl_InspectionRecords WHERE serial = @s AND status <> 'Closed')
+           BEGIN
+             DECLARE @wo int = COALESCE((SELECT TOP 1 WONumber FROM tbl_InspectionRecords WHERE rtNumber = @rt AND @rt IS NOT NULL AND WONumber IS NOT NULL ORDER BY id DESC),
+                                        (SELECT ISNULL(MAX(WONumber),0) + 1 FROM tbl_InspectionRecords));
+             INSERT INTO tbl_InspectionRecords (WONumber, LineNum, rtNumber, serial, asset, ToolDescription, inspectionType, status, Source, createdBy, createdAt)
+             VALUES (@wo, (SELECT ISNULL(MAX(LineNum),0) + 1 FROM tbl_InspectionRecords WHERE WONumber = @wo), @rt, @s, @a, @d, 'Post-job', 'Open', 'App', @by, GETDATE())
+           END`,
+          [{ name: 's', value: r.SystemID }, { name: 'a', value: r.AssetNo || r.SystemID }, { name: 'd', value: r.ShortDesc || null },
+           { name: 'rt', value: wo }, { name: 'by', value: user.Username }]); opened++
+      }
+    }
+    await audit(user, 'inspection', 'bay-sync', 'apply', JSON.stringify({ good, maintenance: maint, opened, cards }))
+    return jsonResponse(context, 200, { good, maintenance: maint, opened, cards })
+  }
+
   // ── GET summary (Maintenance & QC dashboard) ─────────────────────────────
   if (id === 'summary' && method === 'GET') {
     const r = await query(
