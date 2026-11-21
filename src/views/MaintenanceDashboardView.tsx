@@ -1,4 +1,9 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { api } from '../utils/api'
+import { useToast } from '../components/Toast'
+import { useAuth } from '../contexts/AuthContext'
+import { Spinner } from '../components/Spinner'
 import { HardHat, ShieldCheck, Wrench, ClipboardCheck, AlertTriangle } from 'lucide-react'
 import { useFetch } from '../hooks/useFetch'
 import { PageLoader } from '../components/Spinner'
@@ -55,7 +60,7 @@ function InvTable ({ rows }: { rows: InvRow[] }) {
 }
 
 export function MaintenanceDashboardView() {
-  const { data: s, isLoading, error } = useFetch<Summary>('/inspections/summary')
+  const { data: s, isLoading, error, refetch } = useFetch<Summary>('/inspections/summary')
   if (isLoading) return <PageLoader />
   if (error || !s) return <div className="card p-6 text-center text-sm text-red-600">{error || 'No data'}</div>
 
@@ -101,6 +106,8 @@ export function MaintenanceDashboardView() {
           <LineTable rows={awaitingReport} />
         </Panel>
       )}
+
+      {s.invInspection > 0 && <BaySync onDone={refetch} />}
 
       {s.bayNoLine.length > 0 && (
         <Panel title="In the inspection bay without an inspection line"
@@ -159,5 +166,70 @@ function LineTable ({ rows }: { rows: InspectionLine[] }) {
         </tbody>
       </table>
     </div>
+  )
+}
+
+// ─── Bay sync: inventory 'Inspection' vs the inspection lines ────────────────
+
+interface BayRow { SystemID: string; AssetNo: string | null; ShortDesc: string | null; Size: string | null
+  LastRT: string | null; LastRTNo: string | null; WONumber: number | null; InspDate: string | null; CertNumber: string | null
+  Action: string | null; InspJob: string | null; Proposal: 'Good' | 'Maintenance' | 'Open line' }
+
+function BaySync ({ onDone }: { onDone: () => void }) {
+  const { hasRole } = useAuth()
+  const { success, error: toastErr } = useToast()
+  const { data, isLoading, refetch } = useFetch<{ rows: BayRow[]; counts: Record<string, number> }>('/inspections/bay-sync')
+  const [applying, setApplying] = useState(false)
+  const [confirm, setConfirm] = useState(false)
+  if (isLoading || !data) return null
+  const { rows, counts } = data
+  const apply = async () => {
+    setApplying(true)
+    try {
+      const r = await api.post<{ good: number; maintenance: number; opened: number; cards: string[] }>('/inspections/bay-sync', { apply: true })
+      success(`Synced: ${r.good} to stock, ${r.maintenance} to workshop (${r.cards.length} cards), ${r.opened} lines opened for QC`)
+      setConfirm(false); refetch(); onDone()
+    } catch (e: any) { toastErr(e.message || 'Sync failed') } finally { setApplying(false) }
+  }
+  const tone = (p: string) => p === 'Good' ? 'bg-emerald-100 text-emerald-800' : p === 'Maintenance' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
+  return (
+    <Panel title="Inspection bay vs inspection records"
+           subtitle={`${rows.length} tools in the bay · latest inspection line after the tool's last return: ${counts.Good || 0} Stock → Good, ${counts.Maintenance || 0} DMR → workshop, ${counts['Open line'] || 0} no decision yet → open line for QC`}
+           action={hasRole('Admin', 'QAQC') ? (
+             confirm ? (
+               <span className="flex items-center gap-2 text-xs">
+                 <span className="text-gray-600">Apply to {rows.length} tools?</span>
+                 <button className="btn-primary" onClick={apply} disabled={applying}>{applying ? <Spinner size="sm" /> : null} Yes, sync</button>
+                 <button className="btn-ghost" onClick={() => setConfirm(false)} disabled={applying}>Cancel</button>
+               </span>
+             ) : <button className="btn-primary" onClick={() => setConfirm(true)}>Sync bay with records</button>
+           ) : undefined}>
+      <div className="max-h-96 overflow-y-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 sticky top-0"><tr>
+            <th className="text-left px-4 py-2 font-medium text-gray-600">Asset</th>
+            <th className="text-left px-4 py-2 font-medium text-gray-600">Category</th>
+            <th className="text-left px-4 py-2 font-medium text-gray-600">Last RT</th>
+            <th className="text-left px-4 py-2 font-medium text-gray-600">Inspection after it</th>
+            <th className="text-left px-4 py-2 font-medium text-gray-600">Report No</th>
+            <th className="text-left px-4 py-2 font-medium text-gray-600">Epicor action</th>
+            <th className="text-left px-4 py-2 font-medium text-gray-600">Will become</th>
+          </tr></thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.SystemID} className="border-t border-gray-100">
+                <td className="px-4 py-2 font-mono text-xs">{r.AssetNo || r.SystemID}</td>
+                <td className="px-4 py-2 text-gray-600 truncate max-w-xs">{r.ShortDesc || '—'}{r.Size ? ` · ${r.Size}` : ''}</td>
+                <td className="px-4 py-2 text-xs text-gray-600">{r.LastRTNo || '—'}{r.LastRT ? ` · ${formatDate(r.LastRT)}` : ''}</td>
+                <td className="px-4 py-2 text-xs text-gray-600">{r.WONumber ? `WO ${r.WONumber} · ${formatDate(r.InspDate)}` : '—'}</td>
+                <td className="px-4 py-2 font-mono text-xs">{r.CertNumber || '—'}</td>
+                <td className="px-4 py-2">{r.Action ? actionBadge(r.Action, null) : <span className="text-xs text-gray-400">none</span>}</td>
+                <td className="px-4 py-2"><span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${tone(r.Proposal)}`}>{r.Proposal === 'Good' ? 'Good @ Emdad Base' : r.Proposal === 'Maintenance' ? 'Maintenance @ Workshop + card' : 'Stays in bay — line opened for QC'}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
   )
 }

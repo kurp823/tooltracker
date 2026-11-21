@@ -33,6 +33,7 @@ async function columnsOf(table) {
             c.IS_NULLABLE AS nullable, c.ORDINAL_POSITION AS pos,
             COLUMNPROPERTY(OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME), c.COLUMN_NAME, 'IsIdentity') AS isIdentity,
             COLUMNPROPERTY(OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME), c.COLUMN_NAME, 'IsComputed') AS isComputed,
+            CASE WHEN c.COLUMN_DEFAULT IS NULL THEN 0 ELSE 1 END AS hasDefault,
             CASE WHEN k.COLUMN_NAME IS NULL THEN 0 ELSE 1 END AS isPk
        FROM INFORMATION_SCHEMA.COLUMNS c
        LEFT JOIN (SELECT ku.TABLE_NAME, ku.COLUMN_NAME
@@ -46,7 +47,7 @@ async function columnsOf(table) {
     [{ name: 't', type: sql.NVarChar, value: table }])
   return cols.recordset.map(c => ({
     name: c.name, type: c.type, len: c.len, nullable: c.nullable === 'YES',
-    identity: !!c.isIdentity, computed: !!c.isComputed, pk: !!c.isPk,
+    identity: !!c.isIdentity, computed: !!c.isComputed, pk: !!c.isPk, hasDefault: !!c.hasDefault,
   }))
 }
 
@@ -155,10 +156,11 @@ module.exports = safe(async function (context, req) {
     const rows = Array.isArray(body.rows) ? body.rows : []
     if (!rows.length) return jsonResponse(context, 400, { error: 'No rows' })
     if (rows.length > 2000) return jsonResponse(context, 400, { error: 'At most 2,000 rows per import' })
-    const insertable = cols.filter(c => !c.identity && !c.computed)
+    const insertable = cols.filter(c => !c.identity && !c.computed && !/^(timestamp|rowversion)$/i.test(c.type))
     const used = insertable.filter(c => rows.some(r => r[c.name] !== undefined && r[c.name] !== ''))
     if (!used.length) return jsonResponse(context, 400, { error: 'No column in the sheet matches this table' })
-    const required = insertable.filter(c => !c.nullable && !used.includes(c))
+    // A NOT NULL column with a default (rowver, CreatedDate GETDATE()) does not need a value; only ask for the ones with no default.
+    const required = insertable.filter(c => !c.nullable && !used.includes(c) && !c.hasDefault)
     if (required.length) return jsonResponse(context, 400, { error: `Required column(s) missing: ${required.map(c => c.name).join(', ')}` })
     let inserted = 0
     const errors = []
