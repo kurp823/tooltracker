@@ -186,7 +186,7 @@ module.exports = safe(async function (context, req) {
                           AND (l.LastRT IS NULL OR r.inspectionDate >= CAST(l.LastRT AS date))
                         ORDER BY r.inspectionDate DESC, r.id DESC) x)
       SELECT p.*, CASE WHEN p.Action = 'Stock' THEN 'Good' WHEN p.Action = 'DMR' THEN 'Maintenance' ELSE 'Open line' END AS Proposal
-        FROM pick p ORDER BY p.Proposal, p.ShortDesc, p.AssetNo`
+        FROM pick p ORDER BY Proposal, p.ShortDesc, p.AssetNo`
     let rows
     try {
       rows = (await query(BAY, [])).recordset.map(r => {
