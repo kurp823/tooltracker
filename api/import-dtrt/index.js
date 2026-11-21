@@ -282,21 +282,25 @@ module.exports = safe(async function (context, req) {
           UNION ALL SELECT 'total-app', CAST(COUNT(*) AS varchar(10)) FROM tbl_Jobs
         ) x`,
       'compare-dts': `
-        WITH sd AS (SELECT DISTINCT LTRIM(RTRIM(dtNo)) AS no FROM tbl_ImportDTRT WHERE batchId = @b AND NULLIF(LTRIM(RTRIM(dtNo)),'') IS NOT NULL)
+        SELECT DISTINCT LTRIM(RTRIM(dtNo)) AS no INTO #sd FROM tbl_ImportDTRT WHERE batchId = @b AND NULLIF(LTRIM(RTRIM(dtNo)),'') IS NOT NULL;
+        CREATE UNIQUE CLUSTERED INDEX ix ON #sd (no);
         SELECT side, no, job, d, who FROM (
-          SELECT 'epicor-only' AS side, sd.no, NULL AS job, NULL AS d, NULL AS who FROM sd WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets a WHERE a.dtNumber = sd.no)
-          UNION ALL SELECT 'app-only', a.dtNumber, a.jobNumber, CONVERT(varchar(10), a.deliveryDate, 120), a.createdBy FROM tbl_DeliveryTickets a WHERE NOT EXISTS (SELECT 1 FROM sd WHERE sd.no = a.dtNumber)
-          UNION ALL SELECT 'total-epicor', CAST(COUNT(*) AS varchar(10)), NULL, NULL, NULL FROM sd
+          SELECT 'epicor-only' AS side, sd.no, NULL AS job, NULL AS d, NULL AS who FROM #sd sd WHERE NOT EXISTS (SELECT 1 FROM tbl_DeliveryTickets a WHERE a.dtNumber = sd.no)
+          UNION ALL SELECT 'app-only', a.dtNumber, a.jobNumber, CONVERT(varchar(10), a.deliveryDate, 120), a.createdBy FROM tbl_DeliveryTickets a WHERE NOT EXISTS (SELECT 1 FROM #sd sd WHERE sd.no = a.dtNumber)
+          UNION ALL SELECT 'total-epicor', CAST(COUNT(*) AS varchar(10)), NULL, NULL, NULL FROM #sd
           UNION ALL SELECT 'total-app', CAST(COUNT(*) AS varchar(10)), NULL, NULL, NULL FROM tbl_DeliveryTickets
-        ) x`,
+        ) x;
+        DROP TABLE #sd;`,
       'compare-rts': `
-        WITH sr AS (SELECT DISTINCT LTRIM(RTRIM(rtNo)) AS no FROM tbl_ImportDTRT WHERE batchId = @b AND NULLIF(LTRIM(RTRIM(rtNo)),'') IS NOT NULL AND rtNo NOT LIKE '%DUMMY%')
+        SELECT DISTINCT LTRIM(RTRIM(rtNo)) AS no INTO #sr FROM tbl_ImportDTRT WHERE batchId = @b AND NULLIF(LTRIM(RTRIM(rtNo)),'') IS NOT NULL AND rtNo NOT LIKE '%DUMMY%';
+        CREATE UNIQUE CLUSTERED INDEX ix ON #sr (no);
         SELECT side, no, job, d, who FROM (
-          SELECT 'epicor-only' AS side, sr.no, NULL AS job, NULL AS d, NULL AS who FROM sr WHERE NOT EXISTS (SELECT 1 FROM tbl_ReceivingTickets a WHERE a.rtNumber = sr.no)
-          UNION ALL SELECT 'app-only', a.rtNumber, a.jobNumber, CONVERT(varchar(10), a.receivingDate, 120), a.createdBy FROM tbl_ReceivingTickets a WHERE NOT EXISTS (SELECT 1 FROM sr WHERE sr.no = a.rtNumber)
-          UNION ALL SELECT 'total-epicor', CAST(COUNT(*) AS varchar(10)), NULL, NULL, NULL FROM sr
+          SELECT 'epicor-only' AS side, sr.no, NULL AS job, NULL AS d, NULL AS who FROM #sr sr WHERE NOT EXISTS (SELECT 1 FROM tbl_ReceivingTickets a WHERE a.rtNumber = sr.no)
+          UNION ALL SELECT 'app-only', a.rtNumber, a.jobNumber, CONVERT(varchar(10), a.receivingDate, 120), a.createdBy FROM tbl_ReceivingTickets a WHERE NOT EXISTS (SELECT 1 FROM #sr sr WHERE sr.no = a.rtNumber)
+          UNION ALL SELECT 'total-epicor', CAST(COUNT(*) AS varchar(10)), NULL, NULL, NULL FROM #sr
           UNION ALL SELECT 'total-app', CAST(COUNT(*) AS varchar(10)), NULL, NULL, NULL FROM tbl_ReceivingTickets
-        ) x`,
+        ) x;
+        DROP TABLE #sr;`,
 
       shape: `WITH d AS (
                 SELECT DISTINCT dtNo, partNum, rtNo, jobKey, rtKind
