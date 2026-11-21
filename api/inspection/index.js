@@ -1,5 +1,5 @@
 'use strict'
-const { sql, query, jsonResponse, requireAuth, safe, hasId, audit } = require('../db')
+const { sql, query, jsonResponse, requireAuth, safe, hasId, audit, withLock, nextNumber } = require('../db')
 
 // Inspection work orders. Epicor grouped inspections into a work order (WO)
 // with one line per tool, a third-party report number per line and an action
@@ -96,36 +96,47 @@ async function importRows (user, rows) {
 }
 
 
-/** Pass -> Good, Fail -> DBR, for a tool that is in the bay. */
+/**
+ * QC decision moves the tool (only if it is in the bay):
+ *   Stock -> Good @ Emdad Base
+ *   DMR   -> Maintenance @ Workshop + a maintenance work order (card) is raised,
+ *            as in Epicor where DMR = maintenance work order.
+ */
 async function applyResult (recordId, result) {
   const res = String(result || '').trim()
   if (res !== 'Pass' && res !== 'Fail') return 0
   const r = await query(
-    `UPDATE i SET i.Status = @st, i.Location = CASE WHEN @st = 'Good' THEN 'Emdad Base' ELSE i.Location END, i.LastUpdated = GETDATE()
+    `UPDATE i SET i.Status = @st, i.Location = @loc, i.LastUpdated = GETDATE()
        FROM tbl_Inventory i JOIN tbl_InspectionRecords r ON r.id = @id
         AND ( (NULLIF(r.asset,'') IS NOT NULL AND i.AssetNo = r.asset)
            OR (NULLIF(r.serial,'') IS NOT NULL AND (i.SystemID = r.serial OR i.OEMSerial = r.serial)) )
       WHERE i.Status = 'Inspection'`,
-    [{ name: 'id', value: Number(recordId) }, { name: 'st', value: res === 'Pass' ? 'Good' : 'DBR' }])
+    [{ name: 'id', value: Number(recordId) },
+     { name: 'st', value: res === 'Pass' ? 'Good' : 'Maintenance' },
+     { name: 'loc', value: res === 'Pass' ? 'Emdad Base' : 'Workshop' }])
   return r.rowsAffected[0] || 0
 }
 
-
-// NOTE: the table this code originally assumed, `tbl_Inspections`, does
-// not exist. There are two real candidates — `tbl_Inspection` (tied to a
-// specific receiving-ticket workflow: WONumber/RTNumber/FromRTBatchID)
-// and `tbl_InspectionRecords` (a standalone certification/QC record:
-// serial, asset, jobNumber, inspectionType, result, qcApprovedBy, etc).
-// The frontend's fields (InspectionType, Result, Status, Inspector,
-// Notes, CreatedBy/CreatedDate) match tbl_InspectionRecords far more
-// closely, so this endpoint is built against that table. There is no
-// InspectionNumber column — a display number is derived from id.
-//
-// Real tbl_InspectionRecords columns (confirmed via INFORMATION_SCHEMA):
-//   id, serial, asset, jobNumber, rtNumber, inspectionType, inspectionDate,
-//   nextDueDate, certNumber, inspector, inspectionCompany, standard, result,
-//   findings, actions, qcApprovedBy, qcApprovedDate, vendorOrderRef, cost,
-//   status, attachmentRef, notes, createdBy, createdAt, updatedAt
+/** DMR: raise the maintenance work order from the inspection line (once per line). */
+async function raiseMaintenanceCard (user, recordId) {
+  const ex = await query(`SELECT TOP 1 m.jobCardNumber FROM tbl_MaintenanceJobs m WHERE m.triggeredBy = @trg`,
+    [{ name: 'trg', value: `INS-${recordId}` }])
+  if (ex.recordset.length) return ex.recordset[0].jobCardNumber
+  const yr = new Date().getFullYear()
+  return withLock('maintenance-number', async (tq) => {
+    const num = await nextNumber(tq, 'tbl_MaintenanceJobs', 'jobCardNumber', `MJ-${yr}-`, 5)
+    await tq(
+      `INSERT INTO tbl_MaintenanceJobs
+         (jobCardNumber, serial, asset, jobNumber, jobType, priority, triggeredBy, dateIn, description, scopeOfWork, status, createdBy, createdAt)
+       SELECT @num, r.serial, r.asset, r.jobNumber, 'Repair', 'Medium', @trg, CAST(GETDATE() AS date),
+              'DMR from inspection WO ' + ISNULL(CAST(r.WONumber AS varchar), '') + ISNULL(' / report ' + r.certNumber, ''),
+              r.findings, 'Open', @by, GETDATE()
+         FROM tbl_InspectionRecords r WHERE r.id = @id`,
+      [{ name: 'num', value: num }, { name: 'trg', value: `INS-${recordId}` },
+       { name: 'id', value: Number(recordId) }, { name: 'by', value: user.Username }])
+    return num
+  })
+}
 
 module.exports = safe(async function (context, req) {
   const user   = requireAuth(context, req)
@@ -277,12 +288,13 @@ module.exports = safe(async function (context, req) {
     // QC's decision is what moves the tool: Stock -> Good @ Emdad Base, DMR -> DBR.
     // Only a tool that is actually in the bay is moved, so a stray record can
     // never override a tool that is on a rig.
-    let toolsUpdated = 0
+    let toolsUpdated = 0, maintenanceCard = null
     if (decision) {
       toolsUpdated = await applyResult(id, decision === 'Stock' ? 'Pass' : 'Fail')
-      await audit(user, 'inspection', String(id), 'qc-validate', JSON.stringify({ decision, toolsUpdated }))
+      if (decision === 'DMR') maintenanceCard = await raiseMaintenanceCard(user, id)
+      await audit(user, 'inspection', String(id), 'qc-validate', JSON.stringify({ decision, toolsUpdated, maintenanceCard }))
     }
-    return jsonResponse(context, 200, { ok: true, toolsUpdated })
+    return jsonResponse(context, 200, { ok: true, toolsUpdated, maintenanceCard })
   }
 
   return jsonResponse(context, 405, { error: 'Method not allowed' })

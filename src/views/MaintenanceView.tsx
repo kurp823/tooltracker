@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   Plus, Search, RefreshCw, X, ChevronRight, Save, Wrench,
 } from 'lucide-react'
@@ -25,6 +25,14 @@ interface MJob {
   Status: string
   TechnicianName: string | null
   Notes: string | null
+  ScopeOfWork?: string | null
+  WorkDone?: string | null
+  PartsUsed?: string | null
+  LaborHours?: number | null
+  Cost?: number | null
+  SupplierName?: string | null
+  VendorOrderRef?: string | null
+  TriggeredBy?: string | null
   CreatedDate: string | null
   CreatedBy: string | null
 }
@@ -172,7 +180,27 @@ function MJobDetailPanel({ job, onClose, onRefresh }: {
     CompletedDate:  job.CompletedDate?.split('T')[0] ?? '',
     TechnicianName: job.TechnicianName ?? '',
     Notes:          job.Notes ?? '',
+    MaintenanceType: job.MaintenanceType ?? '',
+    SupplierName:   job.SupplierName ?? '',
+    VendorOrderRef: job.VendorOrderRef ?? '',
+    ScopeOfWork:    job.ScopeOfWork ?? '',
+    WorkDone:       job.WorkDone ?? '',
+    LaborHours:     job.LaborHours == null ? '' : String(job.LaborHours),
+    Cost:           job.Cost == null ? '' : String(job.Cost),
   })
+  const [full, setFull] = useState<MJob | null>(null)
+  useEffect(() => {
+    let alive = true
+    api.get<MJob>(`/maintenance/${job.MaintenanceJobID}`).then(j => {
+      if (!alive || !j) return
+      setFull(j)
+      setForm(p => ({ ...p,
+        SupplierName: j.SupplierName ?? '', VendorOrderRef: j.VendorOrderRef ?? '', ScopeOfWork: j.ScopeOfWork ?? '',
+        WorkDone: j.WorkDone ?? '', LaborHours: j.LaborHours == null ? '' : String(j.LaborHours), Cost: j.Cost == null ? '' : String(j.Cost),
+        MaintenanceType: j.MaintenanceType ?? p.MaintenanceType }))
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [job.MaintenanceJobID])
 
   const canEdit = hasRole('Admin', 'Operations', 'QAQC')
   const f = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
@@ -246,16 +274,69 @@ function MJobDetailPanel({ job, onClose, onRefresh }: {
               onChange={e => f('CompletedDate', e.target.value)} disabled={!canEdit} />
           </div>
         </div>
-        <div>
-          <label className="label">Technician</label>
-          <input className="input w-full" value={form.TechnicianName}
-            onChange={e => f('TechnicianName', e.target.value)} disabled={!canEdit} />
-        </div>
-        <div>
-          <label className="label">Notes / Work Done</label>
-          <textarea className="input w-full" rows={4} value={form.Notes}
-            onChange={e => f('Notes', e.target.value)} disabled={!canEdit} />
-        </div>
+        {(full?.TriggeredBy || job.TriggeredBy) && (
+          <p className="text-[11px] text-gray-500">Raised from inspection {(full?.TriggeredBy || job.TriggeredBy)} (QC decision: DMR)</p>
+        )}
+
+        {/* Service details */}
+        <section className="border-t border-gray-100 pt-3 space-y-3">
+          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Service details</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Type / repair by</label>
+              <select className="input w-full" value={form.MaintenanceType}
+                onChange={e => f('MaintenanceType', e.target.value)} disabled={!canEdit}>
+                <ListOptions name="MaintenanceType" current={form.MaintenanceType} blank blankLabel="— select —" />
+              </select>
+            </div>
+            <div>
+              <label className="label">Technician</label>
+              <input className="input w-full" value={form.TechnicianName}
+                onChange={e => f('TechnicianName', e.target.value)} disabled={!canEdit} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Third-party vendor (if sent out)</label>
+              <input className="input w-full" value={form.SupplierName} placeholder="Vendor name"
+                onChange={e => f('SupplierName', e.target.value)} disabled={!canEdit} />
+            </div>
+            <div>
+              <label className="label">Vendor order / PO ref</label>
+              <input className="input w-full font-mono" value={form.VendorOrderRef}
+                onChange={e => f('VendorOrderRef', e.target.value)} disabled={!canEdit} />
+            </div>
+          </div>
+          <div>
+            <label className="label">Scope of work</label>
+            <textarea className="input w-full" rows={2} value={form.ScopeOfWork}
+              onChange={e => f('ScopeOfWork', e.target.value)} disabled={!canEdit} />
+          </div>
+          <div>
+            <label className="label">Work done</label>
+            <textarea className="input w-full" rows={3} value={form.WorkDone}
+              onChange={e => f('WorkDone', e.target.value)} disabled={!canEdit} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Labour hours</label>
+              <input type="number" step="0.5" min="0" className="input w-full" value={form.LaborHours}
+                onChange={e => f('LaborHours', e.target.value)} disabled={!canEdit} />
+            </div>
+            <div>
+              <label className="label">Cost (AED)</label>
+              <input type="number" step="0.01" min="0" className="input w-full" value={form.Cost}
+                onChange={e => f('Cost', e.target.value)} disabled={!canEdit} />
+            </div>
+          </div>
+          <div>
+            <label className="label">Notes</label>
+            <textarea className="input w-full" rows={2} value={form.Notes}
+              onChange={e => f('Notes', e.target.value)} disabled={!canEdit} />
+          </div>
+        </section>
+
+        {/* Redress kits / spares issued from inventory */}
         <MaintenanceConsumables mjNumber={job.MaintenanceJobNumber} />
 
         {canEdit && (
