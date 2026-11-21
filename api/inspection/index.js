@@ -26,8 +26,9 @@ const SELECT = `SELECT i.id AS InspectionID, 'INS-' + CAST(i.id AS varchar) AS I
               i.status AS Status, i.certNumber AS CertNumber, i.vendorOrderRef AS ServiceTicket,
               i.notes AS Notes, i.createdAt AS CreatedDate, i.createdBy AS CreatedBy
          FROM tbl_InspectionRecords i
-         OUTER APPLY (SELECT TOP 1 x.ShortDesc, x.[Size] FROM tbl_Inventory x
-                       WHERE x.SystemID = i.serial OR (NULLIF(i.asset,'') IS NOT NULL AND x.AssetNo = i.asset)) inv`
+         OUTER APPLY (SELECT TOP 1 x.ShortDesc, x.[Size] FROM tbl_Inventory x WHERE x.SystemID = i.serial) invS
+         OUTER APPLY (SELECT TOP 1 x.ShortDesc, x.[Size] FROM tbl_Inventory x WHERE x.AssetNo = i.asset AND invS.ShortDesc IS NULL) invA
+         CROSS APPLY (SELECT COALESCE(invS.ShortDesc, invA.ShortDesc) AS ShortDesc, COALESCE(invS.[Size], invA.[Size]) AS [Size]) inv`
 
 /** Import Epicor inspection history rows as they are. Idempotent on (WO, line, part, action, report). */
 async function importRows (user, rows) {
@@ -68,7 +69,8 @@ async function importRows (user, rows) {
               CASE WHEN s.act IS NULL THEN 'Open' ELSE 'Closed' END,
               'Epicor', 'Epicor', @by, GETDATE()
          FROM src s
-         OUTER APPLY (SELECT TOP 1 x.SystemID FROM tbl_Inventory x WHERE x.AssetNo = s.part OR x.SystemID = s.part) inv
+         OUTER APPLY (SELECT TOP 1 COALESCE((SELECT TOP 1 x.SystemID FROM tbl_Inventory x WHERE x.AssetNo = s.part),
+                                           (SELECT TOP 1 x.SystemID FROM tbl_Inventory x WHERE x.SystemID = s.part)) AS SystemID) inv
         WHERE NOT EXISTS (SELECT 1 FROM tbl_InspectionRecords e
                            WHERE e.Source = 'Epicor' AND e.WONumber = s.wo AND ISNULL(e.LineNum,-1) = ISNULL(s.ln,-1)
                              AND ISNULL(e.actions,'') = ISNULL(s.act,'') AND ISNULL(e.certNumber,'') = ISNULL(s.report,'')
@@ -155,8 +157,10 @@ module.exports = safe(async function (context, req) {
     let limit = parseInt(qs.limit, 10); if (!Number.isFinite(limit) || limit <= 0) limit = 1000; limit = Math.min(limit, 5000)
     params.push({ name: 'limit', type: sql.Int, value: limit })
     const result = await query(
-      `${SELECT.replace('SELECT i.id', 'SELECT TOP (@limit) i.id')}
-        ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      `;WITH pick AS (SELECT TOP (@limit) i.id FROM tbl_InspectionRecords i
+                      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+                      ORDER BY i.inspectionDate DESC, i.WONumber DESC, i.LineNum, i.id DESC)
+       ${SELECT} JOIN pick ON pick.id = i.id
         ORDER BY i.inspectionDate DESC, i.WONumber DESC, i.LineNum, i.id DESC`, params)
     return jsonResponse(context, 200, result.recordset)
   }
