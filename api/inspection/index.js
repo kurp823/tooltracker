@@ -22,6 +22,9 @@ async function ensureCols () {
   // Epicor history carries the QC decision already taken (its Action column).
   await query(`UPDATE tbl_InspectionRecords SET qcApprovedBy = 'Epicor', qcApprovedDate = inspectionDate
                 WHERE Source = 'Epicor' AND actions IS NOT NULL AND qcApprovedBy IS NULL`, [])
+  // All Epicor history is closed (Ravi, 21 Nov): the app's own flow starts from new lines only.
+  await query(`UPDATE tbl_InspectionRecords SET status = 'Closed', notes = CONCAT(ISNULL(notes + ' | ',''), 'Closed on import: no action recorded in Epicor')
+                WHERE Source = 'Epicor' AND status <> 'Closed'`, [])
   colsReady = true
 }
 
