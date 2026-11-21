@@ -187,11 +187,23 @@ module.exports = safe(async function (context, req) {
                         ORDER BY r.inspectionDate DESC, r.id DESC) x)
       SELECT p.*, CASE WHEN p.Action = 'Stock' THEN 'Good' WHEN p.Action = 'DMR' THEN 'Maintenance' ELSE 'Open line' END AS Proposal
         FROM pick p ORDER BY p.Proposal, p.ShortDesc, p.AssetNo`
-    const rows = (await query(BAY, [])).recordset
+    let rows
+    try {
+      rows = (await query(BAY, [])).recordset.map(r => {
+        const o = {}
+        for (const k of Object.keys(r)) { const v = r[k]; o[k] = v instanceof Date ? v.toISOString() : (Buffer.isBuffer(v) ? null : v) }
+        return o
+      })
+    } catch (e) {
+      context.log.error('bay-sync query failed', e)
+      return jsonResponse(context, 500, { error: 'bay-sync query failed', detail: String(e && e.message || e) })
+    }
     if (method === 'GET') {
       const n = { Good: 0, Maintenance: 0, 'Open line': 0 }
       rows.forEach(r => { n[r.Proposal] = (n[r.Proposal] || 0) + 1 })
-      return jsonResponse(context, 200, { rows, counts: n })
+      const body = JSON.stringify({ rows, counts: n })
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(body)) }, body }
+      return
     }
     let good = 0, maint = 0, opened = 0; const cards = []
     for (const r of rows) {
