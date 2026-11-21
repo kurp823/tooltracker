@@ -352,10 +352,10 @@ function ImportHistoryModal({ onClose }: { onClose: () => void }) {
     setBusy(true)
     let inserted = 0, skipped = 0
     try {
-      for (let i = 0; i < rows.length; i += 1000) {
-        const r = await api.post<{ inserted: number; skipped: number }>('/inspections/import', { rows: rows.slice(i, i + 1000) })
+      for (let i = 0; i < rows.length; i += 250) {
+        const r = await api.post<{ inserted: number; skipped: number }>('/inspections/import', { rows: rows.slice(i, i + 250) })
         inserted += r.inserted; skipped += r.skipped
-        setDone(Math.min(i + 1000, rows.length)); setTotals({ inserted, skipped })
+        setDone(Math.min(i + 250, rows.length)); setTotals({ inserted, skipped })
       }
     } catch (err: any) {
       toastErr(err.message || 'Import failed — run it again; rows already loaded are skipped')
