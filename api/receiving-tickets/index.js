@@ -32,6 +32,26 @@ const nzDate = (v) => (v === undefined || v === null || v === '' ? null : v)
  */
 const USED_STATES = ['USED', 'NOT USED', 'LIH']
 
+/** Open inspection line for a USED tool on this RT — one WO per ticket, idempotent per (RT, tool). */
+async function openInspectionLine (user, rtId, serial) {
+  if (await (async () => { try { await query(`SELECT TOP 0 WONumber FROM tbl_InspectionRecords`, []); return false } catch (e) { return true } })()) return
+  await query(
+    `DECLARE @rt nvarchar(50), @job nvarchar(50);
+     SELECT TOP 1 @rt = rtNumber, @job = jobNumber FROM tbl_ReceivingTickets WHERE id = @id;
+     IF @rt IS NOT NULL AND NOT EXISTS (SELECT 1 FROM tbl_InspectionRecords WHERE rtNumber = @rt AND serial = @serial AND status <> 'Closed')
+     BEGIN
+       DECLARE @wo int = (SELECT TOP 1 WONumber FROM tbl_InspectionRecords WHERE rtNumber = @rt AND WONumber IS NOT NULL ORDER BY id DESC);
+       IF @wo IS NULL SET @wo = (SELECT ISNULL(MAX(WONumber),0) + 1 FROM tbl_InspectionRecords);
+       INSERT INTO tbl_InspectionRecords (WONumber, LineNum, rtNumber, jobNumber, serial, asset, ToolDescription, inspectionType, status, Source, createdBy, createdAt)
+       SELECT TOP 1 @wo, (SELECT ISNULL(MAX(LineNum),0) + 1 FROM tbl_InspectionRecords WHERE WONumber = @wo),
+              @rt, @job, i.SystemID, i.AssetNo, i.ShortDesc, 'Post-job', 'Open', 'App', @by, GETDATE()
+         FROM tbl_Inventory i WHERE i.SystemID = @serial OR i.AssetNo = @serial OR i.OEMSerial = @serial
+       UNION ALL SELECT @wo, (SELECT ISNULL(MAX(LineNum),0) + 1 FROM tbl_InspectionRecords WHERE WONumber = @wo), @rt, @job, @serial, @serial, NULL, 'Post-job', 'Open', 'App', @by, GETDATE()
+        WHERE NOT EXISTS (SELECT 1 FROM tbl_Inventory i WHERE i.SystemID = @serial OR i.AssetNo = @serial OR i.OEMSerial = @serial);
+     END`,
+    [{ name: 'id', value: Number(rtId) }, { name: 'serial', value: String(serial) }, { name: 'by', value: user.Username }])
+}
+
 function routeFor(usedStatus) {
   const u = String(usedStatus || '').trim().toUpperCase()
   if (u === 'LIH') {
@@ -197,6 +217,10 @@ module.exports = safe(async function (context, req) {
       )
       const serial = r.recordset[0] && r.recordset[0].serial
       if (serial) await setInventoryStatus(serial, route.invStatus, route.location)
+      // A USED tool goes to the inspection bay: open its inspection line now
+      // (one work order per receiving ticket), so QC only records the report
+      // and its decision instead of raising the inspection by hand.
+      if (serial && route.invStatus === 'Inspection') await openInspectionLine(user, id, serial)
 
       return jsonResponse(context, 200, { ok: true, ...route })
     }

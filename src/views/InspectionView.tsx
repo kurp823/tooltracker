@@ -23,6 +23,10 @@ interface Inspection {
   Action: string | null
   Source: string | null
   ServiceTicket: string | null
+  InspectionCompany: string | null
+  Findings: string | null
+  QCValidatedBy: string | null
+  QCValidatedDate: string | null
   JobID: string | null
   SerialNumber: string | null
   AssetNo: string | null
@@ -48,7 +52,7 @@ function CreateInspectionModal({ open, onClose, onCreated }: {
   const [form, setForm] = useState({
     JobID: '', SerialNumber: '', AssetNo: '', ToolDescription: '', SizeName: '',
     InspectionType: 'Visual', InspectionDate: new Date().toISOString().split('T')[0],
-    Inspector: '', Result: 'Pending', Notes: '', CertNumber: '', WONumber: '',
+    Inspector: '', Notes: '', CertNumber: '', WONumber: '', InspectionCompany: '', Findings: '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -64,7 +68,7 @@ function CreateInspectionModal({ open, onClose, onCreated }: {
       onCreated()
       setForm({ JobID:'', SerialNumber:'', AssetNo:'', ToolDescription:'', SizeName:'',
         InspectionType:'Visual', InspectionDate:new Date().toISOString().split('T')[0],
-        Inspector:'', Result:'Pending', Notes:'', CertNumber:'', WONumber:'' })
+        Inspector:'', Notes:'', CertNumber:'', WONumber:'', InspectionCompany:'', Findings:'' })
     } catch (err: any) {
       toastErr(err.message || 'Failed to create inspection')
     } finally { setSaving(false) }
@@ -136,18 +140,17 @@ function CreateInspectionModal({ open, onClose, onCreated }: {
             </div>
             <div className="grid grid-cols-2 gap-3 mt-3">
               <div>
+                <label className="label">Inspection company (third party)</label>
+                <input className="input w-full" value={form.InspectionCompany} placeholder="e.g. GIS"
+                  onChange={e => f('InspectionCompany', e.target.value)} />
+              </div>
+              <div>
                 <label className="label">Inspector</label>
                 <input className="input w-full" value={form.Inspector}
                   onChange={e => f('Inspector', e.target.value)} />
               </div>
-              <div>
-                <label className="label">Result</label>
-                <select className="input w-full" value={form.Result}
-                  onChange={e => f('Result', e.target.value)}>
-                  <ListOptions name="InspectionResult" />
-                </select>
-              </div>
             </div>
+            <p className="text-[11px] text-gray-400 mt-2">Leave the report fields blank if the report has not come back yet — the line opens as <b>Open</b>. QC decides Stock / DMR afterwards from the detail panel.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -163,6 +166,11 @@ function CreateInspectionModal({ open, onClose, onCreated }: {
             </div>
           </div>
 
+          <div>
+            <label className="label">Report findings / recommendation</label>
+            <textarea className="input w-full" rows={2} value={form.Findings}
+              onChange={e => f('Findings', e.target.value)} />
+          </div>
           <div>
             <label className="label">Notes</label>
             <textarea className="input w-full" rows={2} value={form.Notes}
@@ -183,6 +191,10 @@ function CreateInspectionModal({ open, onClose, onCreated }: {
 }
 
 // ─── Detail Panel ─────────────────────────────────────────────────────────────
+//
+// Two steps, as the yard works:
+//   1. Third-party inspection report (company, report no, date, findings)
+//   2. QC validation — QC decides Stock or DMR; only this moves the tool.
 
 function InspectionDetailPanel({ ins, onClose, onRefresh }: {
   ins: Inspection; onClose: () => void; onRefresh: () => void
@@ -190,16 +202,19 @@ function InspectionDetailPanel({ ins, onClose, onRefresh }: {
   const { hasRole } = useAuth()
   const { success, error: toastErr } = useToast()
   const [saving, setSaving] = useState(false)
+  const [deciding, setDeciding] = useState<string | null>(null)
   const [form, setForm] = useState({
     InspectionDate: ins.InspectionDate?.split('T')[0] ?? '',
     Inspector: ins.Inspector ?? '',
-    Result: ins.Result ?? 'Pending',
-    Status: ins.Status,
-    Notes: ins.Notes ?? '',
+    InspectionCompany: ins.InspectionCompany ?? '',
     CertNumber: ins.CertNumber ?? '',
+    Findings: ins.Findings ?? '',
+    Notes: ins.Notes ?? '',
   })
 
-  const canEdit = hasRole('Admin', 'Operations', 'QAQC')
+  const closed = ins.Status === 'Closed'
+  const canReport = hasRole('Admin', 'Operations', 'QAQC', 'ThirdParty') && !closed
+  const canQC = hasRole('Admin', 'QAQC') && !closed
 
   const f = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
 
@@ -207,106 +222,123 @@ function InspectionDetailPanel({ ins, onClose, onRefresh }: {
     setSaving(true)
     try {
       await api.put(`/inspections/${ins.InspectionID}`, form)
-      success('Saved')
+      success('Report saved')
       onRefresh()
     } catch (err: any) {
       toastErr(err.message || 'Save failed')
     } finally { setSaving(false) }
   }
 
-  const resultColor =
-    ins.Result === 'Pass'        ? 'bg-green-100 text-green-700' :
-    ins.Result === 'Fail'        ? 'bg-red-100 text-red-700'     :
-    ins.Result === 'Conditional' ? 'bg-yellow-100 text-yellow-700' :
-    'bg-gray-100 text-gray-600'
+  const decide = async (decision: 'Stock' | 'DMR') => {
+    setDeciding(decision)
+    try {
+      const r = await api.put<{ toolsUpdated: number }>(`/inspections/${ins.InspectionID}`, { ...form, Decision: decision })
+      success(decision === 'Stock'
+        ? `Validated — tool to stock${r.toolsUpdated ? ' (Good @ Emdad Base)' : ''}`
+        : `Validated — DMR${r.toolsUpdated ? ' (tool set to DBR)' : ''}`)
+      onRefresh()
+    } catch (err: any) {
+      toastErr(err.message || 'Validation failed')
+    } finally { setDeciding(null) }
+  }
 
   return (
     <div className="w-[460px] shrink-0 bg-white border-l border-gray-200 flex flex-col h-full overflow-hidden shadow-lg">
-      {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50">
         <div>
-          <p className="font-semibold text-gray-900">{ins.InspectionNumber}</p>
+          <p className="font-semibold text-gray-900">WO {ins.WONumber ?? '—'}{ins.LineNum ? ` · line ${ins.LineNum}` : ''}</p>
           <p className="text-xs text-gray-500 mt-0.5">
-            {ins.SerialNumber || ins.AssetNo || '—'} · {ins.ToolDescription || '—'}
+            {ins.AssetNo || ins.SerialNumber || '—'} · {ins.ToolDescription || '—'}
             {ins.JobID && ` · Job: ${ins.JobID}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {ins.Result && (
-            <span className={`badge text-xs ${resultColor}`}>{ins.Result}</span>
-          )}
+          {actionBadge(ins.Action, ins.Result)}
+          <span className={`badge ${statusBadgeClass(ins.Status)}`}>{ins.Status}</span>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
         </div>
       </div>
 
-      {/* Tool info (read-only) */}
       <div className="px-5 py-3 bg-blue-50/40 border-b border-blue-100">
-        <p className="text-xs text-gray-500 font-medium mb-2 uppercase tracking-wide">Tool</p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-          <span className="text-gray-400">Serial</span>
-          <span className="font-mono text-gray-700">{ins.SerialNumber || '—'}</span>
-          <span className="text-gray-400">Asset No</span>
-          <span className="font-mono text-gray-700">{ins.AssetNo || '—'}</span>
-          <span className="text-gray-400">Description</span>
-          <span className="text-gray-700">{ins.ToolDescription || '—'}</span>
-          <span className="text-gray-400">Size</span>
-          <span className="text-gray-700">{ins.SizeName || '—'}</span>
-          <span className="text-gray-400">Type</span>
-          <span className="text-gray-700">{ins.InspectionType || '—'}</span>
-          <span className="text-gray-400">Work order</span>
-          <span className="font-mono text-gray-700">{ins.WONumber ?? '—'}{ins.LineNum ? ` / line ${ins.LineNum}` : ''}{ins.Source ? ` · ${ins.Source}` : ''}</span>
+          <span className="text-gray-400">Serial</span><span className="font-mono text-gray-700">{ins.SerialNumber || '—'}</span>
+          <span className="text-gray-400">Asset No</span><span className="font-mono text-gray-700">{ins.AssetNo || '—'}</span>
+          <span className="text-gray-400">Size</span><span className="text-gray-700">{ins.SizeName || '—'}</span>
+          <span className="text-gray-400">Type</span><span className="text-gray-700">{ins.InspectionType || '—'}{ins.Source ? ` · ${ins.Source}` : ''}</span>
           {ins.ServiceTicket && <><span className="text-gray-400">Service ticket</span><span className="font-mono text-gray-700">{ins.ServiceTicket}</span></>}
         </div>
       </div>
 
-      {/* Editable fields */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label">Inspection Date</label>
-            <input type="date" className="input w-full" value={form.InspectionDate}
-              onChange={e => f('InspectionDate', e.target.value)} disabled={!canEdit} />
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+        {/* Step 1 — third-party report */}
+        <section>
+          <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">1 · Third-party inspection report</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Inspection company</label>
+              <input className="input w-full" value={form.InspectionCompany} placeholder="e.g. GIS"
+                onChange={e => f('InspectionCompany', e.target.value)} disabled={!canReport} />
+            </div>
+            <div>
+              <label className="label">Report No</label>
+              <input className="input w-full font-mono" value={form.CertNumber}
+                onChange={e => f('CertNumber', e.target.value)} disabled={!canReport} />
+            </div>
+            <div>
+              <label className="label">Inspection date</label>
+              <input type="date" className="input w-full" value={form.InspectionDate}
+                onChange={e => f('InspectionDate', e.target.value)} disabled={!canReport} />
+            </div>
+            <div>
+              <label className="label">Inspector</label>
+              <input className="input w-full" value={form.Inspector}
+                onChange={e => f('Inspector', e.target.value)} disabled={!canReport} />
+            </div>
           </div>
-          <div>
-            <label className="label">Inspector</label>
-            <input className="input w-full" value={form.Inspector}
-              onChange={e => f('Inspector', e.target.value)} disabled={!canEdit} />
+          <div className="mt-3">
+            <label className="label">Findings / recommendation</label>
+            <textarea className="input w-full" rows={3} value={form.Findings}
+              onChange={e => f('Findings', e.target.value)} disabled={!canReport} />
           </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label">Result</label>
-            <select className="input w-full" value={form.Result}
-              onChange={e => f('Result', e.target.value)} disabled={!canEdit}>
-              <ListOptions name="InspectionResult" />
-            </select>
+          <div className="mt-3">
+            <label className="label">Notes</label>
+            <textarea className="input w-full" rows={2} value={form.Notes}
+              onChange={e => f('Notes', e.target.value)} disabled={!canReport} />
           </div>
-          <div>
-            <label className="label">Status</label>
-            <select className="input w-full" value={form.Status}
-              onChange={e => f('Status', e.target.value)} disabled={!canEdit}>
-              <ListOptions name="InspectionStatus" />
-            </select>
-          </div>
-        </div>
-        <div>
-          <label className="label">Report No (inspection certificate)</label>
-          <input className="input w-full font-mono" value={form.CertNumber}
-            onChange={e => f('CertNumber', e.target.value)} disabled={!canEdit} />
-        </div>
-        <div>
-          <label className="label">Notes / Findings</label>
-          <textarea className="input w-full" rows={4} value={form.Notes}
-            onChange={e => f('Notes', e.target.value)} disabled={!canEdit} />
-        </div>
-        {canEdit && (
-          <div className="flex justify-end">
-            <button className="btn-primary" onClick={handleSave} disabled={saving}>
-              {saving ? <Spinner size="sm" /> : <Save size={14} />}
-              Save Changes
-            </button>
-          </div>
-        )}
+          {canReport && (
+            <div className="flex justify-end mt-2">
+              <button className="btn-ghost" onClick={handleSave} disabled={saving}>
+                {saving ? <Spinner size="sm" /> : <Save size={14} />} Save report
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* Step 2 — QC validation */}
+        <section className="border-t border-gray-100 pt-4">
+          <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">2 · QC validation</p>
+          {closed ? (
+            <div className="text-sm text-gray-700 flex items-center gap-2">
+              Decision {actionBadge(ins.Action, ins.Result)}
+              <span className="text-xs text-gray-500">by {ins.QCValidatedBy || '—'}{ins.QCValidatedDate ? ` on ${formatDate(ins.QCValidatedDate)}` : ''}</span>
+            </div>
+          ) : canQC ? (
+            <>
+              <p className="text-xs text-gray-500 mb-3">Review the report above, then decide. Saves the report fields as well and closes the line.</p>
+              <div className="flex gap-2">
+                <button className="btn-primary flex-1 justify-center" onClick={() => decide('Stock')} disabled={!!deciding}>
+                  {deciding === 'Stock' ? <Spinner size="sm" /> : <ClipboardCheck size={14} />} Validate → Stock
+                </button>
+                <button className="btn-ghost flex-1 justify-center text-red-700 border border-red-200" onClick={() => decide('DMR')} disabled={!!deciding}>
+                  {deciding === 'DMR' ? <Spinner size="sm" /> : <X size={14} />} Validate → DMR (repair)
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-2">Stock → tool Good @ Emdad Base · DMR → tool DBR, raise a maintenance card.</p>
+            </>
+          ) : (
+            <p className="text-xs text-gray-500">Awaiting QC validation.</p>
+          )}
+        </section>
       </div>
 
       <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 text-xs text-gray-400">
@@ -413,7 +445,7 @@ export function InspectionView() {
   const filtered = useMemo(() => {
     if (!inspections) return []
     return inspections.filter(i => {
-      if (result !== 'All' && i.Result  !== result) return false
+      if (result === 'Pending' ? !!i.Action : (result !== 'All' && (i.Action || '') !== result)) return false
       if (status !== 'All' && i.Status  !== status) return false
       return true
     })
@@ -440,7 +472,10 @@ export function InspectionView() {
                 value={search} onChange={e => setSearch(e.target.value)} />
             </div>
             <select className="input w-auto" value={result} onChange={e => setResult(e.target.value)}>
-              <ListOptions name="InspectionResult" includeAll allLabel="All Results" />
+              <option value="All">All decisions</option>
+              <option value="Stock">Stock</option>
+              <option value="DMR">DMR</option>
+              <option value="Pending">Awaiting QC</option>
             </select>
             <select className="input w-auto" value={status} onChange={e => setStatus(e.target.value)}>
               <ListOptions name="InspectionStatus" includeAll allLabel="All Statuses" />
