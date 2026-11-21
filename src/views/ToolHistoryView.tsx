@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast'
 import { SearchSelect, type SearchOption } from '../components/SearchSelect'
 import { ColumnPicker, loadColumnPrefs, saveColumnPrefs } from '../components/ColumnPicker'
 import { MovementTable, MOVEMENT_COLUMNS } from '../components/MovementTable'
+import { InspectionHistory } from '../components/InspectionHistory'
 import type { ToolMovement, InventoryItem } from '../types'
 
 const PREF_KEY = 'tt_cols_tool_history'
@@ -115,6 +116,7 @@ export function ToolHistoryView() {
           prompt={<>Pick an asset above to see its movement history.<br />Nothing is loaded until you choose one.</>}
         />
       </div>
+      <InspectionHistory query={asset ? `serial=${encodeURIComponent(asset)}` : null} showTool={false} />
     </div>
   )
 }

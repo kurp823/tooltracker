@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast'
 import { SearchSelect, type SearchOption } from '../components/SearchSelect'
 import { ColumnPicker, loadColumnPrefs, saveColumnPrefs } from '../components/ColumnPicker'
 import { MovementTable, MOVEMENT_COLUMNS } from '../components/MovementTable'
+import { InspectionHistory } from '../components/InspectionHistory'
 import type { ToolMovement, Job } from '../types'
 
 const PREF_KEY = 'tt_cols_job_history'
@@ -132,6 +133,7 @@ export function JobHistoryView() {
           prompt={<>Pick a job above to see its tools list.<br />Nothing is loaded until you choose one.</>}
         />
       </div>
+      <InspectionHistory query={job ? `job=${encodeURIComponent(job)}` : null} showTool={true} />
     </div>
   )
 }
