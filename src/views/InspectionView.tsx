@@ -232,10 +232,10 @@ function InspectionDetailPanel({ ins, onClose, onRefresh }: {
   const decide = async (decision: 'Stock' | 'DMR') => {
     setDeciding(decision)
     try {
-      const r = await api.put<{ toolsUpdated: number }>(`/inspections/${ins.InspectionID}`, { ...form, Decision: decision })
+      const r = await api.put<{ toolsUpdated: number; maintenanceCard: string | null }>(`/inspections/${ins.InspectionID}`, { ...form, Decision: decision })
       success(decision === 'Stock'
         ? `Validated — tool to stock${r.toolsUpdated ? ' (Good @ Emdad Base)' : ''}`
-        : `Validated — DMR${r.toolsUpdated ? ' (tool set to DBR)' : ''}`)
+        : `Validated — DMR${r.maintenanceCard ? ` · maintenance work order ${r.maintenanceCard} raised` : ''}`)
       onRefresh()
     } catch (err: any) {
       toastErr(err.message || 'Validation failed')
@@ -330,10 +330,10 @@ function InspectionDetailPanel({ ins, onClose, onRefresh }: {
                   {deciding === 'Stock' ? <Spinner size="sm" /> : <ClipboardCheck size={14} />} Validate → Stock
                 </button>
                 <button className="btn-ghost flex-1 justify-center text-red-700 border border-red-200" onClick={() => decide('DMR')} disabled={!!deciding}>
-                  {deciding === 'DMR' ? <Spinner size="sm" /> : <X size={14} />} Validate → DMR (repair)
+                  {deciding === 'DMR' ? <Spinner size="sm" /> : <X size={14} />} Validate → DMR (maintenance)
                 </button>
               </div>
-              <p className="text-[11px] text-gray-400 mt-2">Stock → tool Good @ Emdad Base · DMR → tool DBR, raise a maintenance card.</p>
+              <p className="text-[11px] text-gray-400 mt-2">Stock → tool Good @ Emdad Base · DMR → tool to Workshop and a maintenance work order is raised automatically.</p>
             </>
           ) : (
             <p className="text-xs text-gray-500">Awaiting QC validation.</p>
