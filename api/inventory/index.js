@@ -75,6 +75,8 @@ module.exports = safe(async function (context, req) {
       if (search) {
         where.push(`(i.SystemID LIKE @s OR i.OEMSerial LIKE @s OR i.AssetNo LIKE @s OR i.ShortDesc LIKE @s OR i.Description LIKE @s)`)
         params.push({ name: 's', type: sql.NVarChar, value: `%${search}%` })
+        params.push({ name: 'sx', type: sql.NVarChar, value: String(search).trim() })
+        params.push({ name: 'sp', type: sql.NVarChar, value: `${String(search).trim()}%` })
       }
       if (status) {
         where.push(`i.Status = @st`)
@@ -91,7 +93,9 @@ module.exports = safe(async function (context, req) {
         `SELECT ${topClause} ${SELECT_COLS}
          FROM   tbl_Inventory i
          WHERE  ${where.join(' AND ')}
-         ORDER  BY i.ShortDesc, i.AssetNo`,
+         ORDER  BY ${search ? `CASE WHEN i.AssetNo = @sx OR i.SystemID = @sx OR i.OEMSerial = @sx THEN 0
+                                    WHEN i.AssetNo LIKE @sp OR i.SystemID LIKE @sp OR i.OEMSerial LIKE @sp THEN 1
+                                    ELSE 2 END,` : ''} i.ShortDesc, i.AssetNo`,
         params
       )
       return jsonResponse(context, 200, result.recordset)
