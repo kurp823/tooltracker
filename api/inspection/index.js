@@ -1,6 +1,21 @@
 'use strict'
 const { query, jsonResponse, requireAuth, safe, hasId } = require('../db')
 
+/** Pass -> Good, Fail -> DBR, for a tool that is in the bay. */
+async function applyResult (recordId, result) {
+  const res = String(result || '').trim()
+  if (res !== 'Pass' && res !== 'Fail') return 0
+  const r = await query(
+    `UPDATE i SET i.Status = @st, i.Location = CASE WHEN @st = 'Good' THEN 'Emdad Base' ELSE i.Location END, i.LastUpdated = GETDATE()
+       FROM tbl_Inventory i JOIN tbl_InspectionRecords r ON r.id = @id
+        AND ( (NULLIF(r.asset,'') IS NOT NULL AND i.AssetNo = r.asset)
+           OR (NULLIF(r.serial,'') IS NOT NULL AND (i.SystemID = r.serial OR i.OEMSerial = r.serial)) )
+      WHERE i.Status = 'Inspection'`,
+    [{ name: 'id', value: Number(recordId) }, { name: 'st', value: res === 'Pass' ? 'Good' : 'DBR' }])
+  return r.rowsAffected[0] || 0
+}
+
+
 // NOTE: the table this code originally assumed, `tbl_Inspections`, does
 // not exist. There are two real candidates — `tbl_Inspection` (tied to a
 // specific receiving-ticket workflow: WONumber/RTNumber/FromRTBatchID)
@@ -86,7 +101,9 @@ module.exports = safe(async function (context, req) {
       ]
     )
     const newId = r.recordset[0].id
-    return jsonResponse(context, 201, { InspectionID: newId, InspectionNumber: `INS-${newId}` })
+    // A record raised with its result already decided moves the tool at once.
+    const toolsUpdated = await applyResult(newId, b.Result)
+    return jsonResponse(context, 201, { InspectionID: newId, InspectionNumber: `INS-${newId}`, toolsUpdated })
   }
 
   // ── PUT update ───────────────────────────────────────────────────────────
@@ -120,23 +137,7 @@ module.exports = safe(async function (context, req) {
     // today) whatever the result. Only a tool that is actually in the bay is
     // moved, so a stray record can never override a tool that is on a rig.
     //   Pass -> 'Good'   Fail -> 'DBR'   Conditional / Pending -> stays
-    let tool = null
-    const res = String(b.Result || '').trim()
-    if (res === 'Pass' || res === 'Fail') {
-      const r = await query(
-        `UPDATE i
-            SET i.Status = @st, i.LastUpdated = GETDATE()
-           FROM tbl_Inventory i
-           JOIN tbl_InspectionRecords r
-             ON r.id = @id
-            AND ( (NULLIF(r.asset,'')  IS NOT NULL AND i.AssetNo  = r.asset)
-               OR (NULLIF(r.serial,'') IS NOT NULL AND (i.SystemID = r.serial OR i.OEMSerial = r.serial)) )
-          WHERE i.Status = 'Inspection'`,
-        [{ name: 'id', value: Number(id) },
-         { name: 'st', value: res === 'Pass' ? 'Good' : 'DBR' }]
-      )
-      tool = r.rowsAffected[0] || 0
-    }
+    const tool = await applyResult(id, b.Result)
     return jsonResponse(context, 200, { ok: true, toolsUpdated: tool })
   }
 
