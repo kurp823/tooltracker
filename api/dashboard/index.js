@@ -31,6 +31,7 @@ const rates = require('../rates')
  * Categories & Sizes → Contract mapping) is one action per row.
  */
 async function rateGaps () {
+  await require('../master').ensureJobKeys()
   const rows = (await query(`
     SELECT j.Contract, i.ShortDesc AS Category, COUNT(DISTINCT i.SystemID) AS tools, COUNT(DISTINCT j.JobID) AS jobs, MIN(j.JobID) AS exampleJob
       FROM tbl_Inventory i

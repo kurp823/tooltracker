@@ -1,6 +1,26 @@
 'use strict'
 const { query, jsonResponse, requireAuth, safe , withLock, nextNumber, hasId } = require('../db')
 
+/**
+ * The card decides the tool's status: an open card puts a tool that is at
+ * base or in the bay into the workshop; a completed card returns it to Good
+ * at Emdad Base; a card closed as Scrapped / DBR marks it DBR. A tool on a rig
+ * is never moved by a card.
+ */
+async function moveForCard (cardId, to) {
+  const st = to === 'Completed' ? 'Good' : to === 'DBR' ? 'DBR' : 'Maintenance'
+  const loc = st === 'Good' ? 'Emdad Base' : st === 'Maintenance' ? 'Workshop' : null
+  const r = await query(
+    `UPDATE i SET i.Status = @st, i.Location = COALESCE(@loc, i.Location), i.LastUpdated = GETDATE()
+       FROM tbl_Inventory i JOIN tbl_MaintenanceJobs m ON m.id = @id
+        AND ( (NULLIF(m.asset,'') IS NOT NULL AND i.AssetNo = m.asset)
+           OR (NULLIF(m.serial,'') IS NOT NULL AND (i.SystemID = m.serial OR i.OEMSerial = m.serial)) )
+      WHERE i.Status IN ('Good','Inspection','Maintenance','Repair','Redress') AND i.Status <> @st`,
+    [{ name: 'id', value: Number(cardId) }, { name: 'st', value: st }, { name: 'loc', value: loc }])
+  return r.rowsAffected[0] || 0
+}
+
+
 // Real tbl_MaintenanceJobs columns (confirmed via INFORMATION_SCHEMA):
 //   id, jobCardNumber, serial, asset, jobNumber, jobType, priority,
 //   triggeredBy, supplierCode, supplierName, vendorOrderRef, dateIn,
@@ -92,7 +112,8 @@ module.exports = safe(async function (context, req) {
     )
     return { newId: r.recordset[0].id, MaintenanceJobNumber }
     })
-    return jsonResponse(context, 201, { MaintenanceJobID: newId, MaintenanceJobNumber })
+    const toolsUpdated = await moveForCard(newId, 'Open')
+    return jsonResponse(context, 201, { MaintenanceJobID: newId, MaintenanceJobNumber, toolsUpdated })
   }
 
   // ── PUT update ───────────────────────────────────────────────────────────
@@ -123,7 +144,13 @@ module.exports = safe(async function (context, req) {
       ]
     )
     if (!upd.rowsAffected[0]) return jsonResponse(context, 404, { error: `Maintenance card ${id} not found` })
-    return jsonResponse(context, 200, { ok: true })
+    // Status drives the tool: Completed/Closed -> Good at base; Scrapped/DBR -> DBR; anything else open -> workshop.
+    const st = String(b.Status || '').trim()
+    let toolsUpdated = 0
+    if (/^(Completed|Closed|Done)$/i.test(st) || b.CompletedDate) toolsUpdated = await moveForCard(id, 'Completed')
+    else if (/^(Scrapped|DBR|Beyond Repair)$/i.test(st)) toolsUpdated = await moveForCard(id, 'DBR')
+    else if (st) toolsUpdated = await moveForCard(id, 'Open')
+    return jsonResponse(context, 200, { ok: true, toolsUpdated })
   }
 
   return jsonResponse(context, 405, { error: 'Method not allowed' })
