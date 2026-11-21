@@ -3,7 +3,7 @@ import {
   Plus, Search, RefreshCw, X, ChevronRight, Save, ClipboardCheck, Upload,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { actionBadge } from '../components/InspectionHistory'
+import { actionBadge, InspectionHistory } from '../components/InspectionHistory'
 import { useRealtimeFetch } from '../hooks/useRealtimeFetch'
 import { useFetch }         from '../hooks/useFetch'
 import { useAuth }          from '../contexts/AuthContext'
@@ -338,6 +338,11 @@ function InspectionDetailPanel({ ins, onClose, onRefresh }: {
           ) : (
             <p className="text-xs text-gray-500">Awaiting QC validation.</p>
           )}
+        </section>
+
+        {/* Every inspection of this tool, newest first */}
+        <section className="border-t border-gray-100 pt-2">
+          <InspectionHistory query={`serial=${encodeURIComponent(ins.AssetNo || ins.SerialNumber || '')}`} />
         </section>
       </div>
 
