@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { RefreshCw, ChevronLeft, ChevronRight, PlusCircle, X, Search, Edit2 } from 'lucide-react'
+import { RefreshCw, ChevronLeft, ChevronRight, PlusCircle, X, Search, Edit2, CalendarCheck } from 'lucide-react'
 import { useRealtimeFetch } from '../hooks/useRealtimeFetch'
 import { useFetch } from '../hooks/useFetch'
 import { useAuth } from '../contexts/AuthContext'
@@ -397,6 +397,7 @@ export function UtilizationView() {
   const [showAddTool, setShowAddTool] = useState(false)
   const [rateEditRow, setRateEditRow] = useState<UtilRow | null>(null)
   const [repricing, setRepricing] = useState(false)
+  const [filling, setFilling] = useState(false)
 
   // Local rows for optimistic updates
   const [localRows, setLocalRows] = useState<UtilRow[]>([])
@@ -552,6 +553,27 @@ export function UtilizationView() {
           >
             <PlusCircle size={15} />
             Mark Days
+          </button>
+        )}
+
+        {/* Fill from tickets: every tool on the job is on the rig from its DT
+            date to its RT date; the missing days in this month are created and
+            priced. Hand-marked days are never touched. */}
+        {canEdit && jobId && (
+          <button className="btn-secondary flex items-center gap-1.5" disabled={filling}
+                  title="Create the missing days in this month from the delivery and return tickets"
+                  onClick={async () => {
+                    setFilling(true)
+                    try {
+                      const r = await api.post<{ tools: number; inserted: number; unpriced: { tool: string; reason: string }[] }>('/utilization/fill', { JobID: jobId, Year: year, Month: month })
+                      if (r.inserted) success(`${r.inserted} day${r.inserted === 1 ? '' : 's'} added across ${r.tools} tool${r.tools === 1 ? '' : 's'}` + (r.unpriced.length ? ` · ${r.unpriced.length} tool(s) without a rate — see Reprice` : ''))
+                      else toastErr(r.tools ? 'Nothing to add — every ticket day in this month already has a log' : 'No delivery tickets on this job up to today')
+                      refetch()
+                    } catch (e: any) { toastErr(e.message || 'Fill failed') }
+                    finally { setFilling(false) }
+                  }}>
+            <CalendarCheck size={14} className={filling ? 'animate-pulse' : ''} />
+            Fill from tickets
           </button>
         )}
 

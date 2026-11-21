@@ -137,4 +137,38 @@ async function ensureColumns () {
   migrated = true
 }
 
-module.exports = { followMerges, standardiseCategory, standardiseSize, findAssetVariant, assetClash, resolveSystemId, parseInches, normKey, assetKey, bust, ensureColumns }
+let keysReady = false
+async function ensureJobKeys () {
+  if (keysReady) return
+  await ensureColumns()
+  const expr = (col) => `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(LTRIM(RTRIM(${col}))),'-0','-'),'-0','-'),'-0','-'),'-0','-'),'-0','-')`
+  await query(`IF COL_LENGTH('dbo.tbl_Jobs','JobKeyNorm') IS NULL ALTER TABLE dbo.tbl_Jobs ADD JobKeyNorm AS (${expr('JobID')}) PERSISTED`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Jobs_JobKeyNorm' AND object_id = OBJECT_ID('dbo.tbl_Jobs')) CREATE INDEX IX_Jobs_JobKeyNorm ON dbo.tbl_Jobs (JobKeyNorm) INCLUDE (Client, Status, LegalInvoiceNumber)`, [])
+  await query(`IF COL_LENGTH('dbo.tbl_ImportDTRT','JobKeyNorm') IS NULL ALTER TABLE dbo.tbl_ImportDTRT ADD JobKeyNorm AS (${expr('jobNum')}) PERSISTED`, [])
+  await query(`IF COL_LENGTH('dbo.tbl_JobTools','JobKeyNorm') IS NULL ALTER TABLE dbo.tbl_JobTools ADD JobKeyNorm AS (${expr('JobID')}) PERSISTED`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_JobTools_JobKeyNorm' AND object_id = OBJECT_ID('dbo.tbl_JobTools')) CREATE INDEX IX_JobTools_JobKeyNorm ON dbo.tbl_JobTools (JobKeyNorm, SystemID)`, [])
+  await query(`IF COL_LENGTH('dbo.tbl_DailyFieldLogs','JobKeyNorm') IS NULL ALTER TABLE dbo.tbl_DailyFieldLogs ADD JobKeyNorm AS (${expr('JobID')}) PERSISTED`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_FieldLogs_JobKeyNorm' AND object_id = OBJECT_ID('dbo.tbl_DailyFieldLogs')) CREATE INDEX IX_FieldLogs_JobKeyNorm ON dbo.tbl_DailyFieldLogs (JobKeyNorm, ToolSerial, LogDate)`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ImportDTRT_Batch' AND object_id = OBJECT_ID('dbo.tbl_ImportDTRT')) CREATE INDEX IX_ImportDTRT_Batch ON dbo.tbl_ImportDTRT (batchId, id) INCLUDE (jobNum, dtNo, rtNo, partNum, JobKeyNorm)`, [])
+  // RESOLVE looks every staged part number up by AssetNo or SystemID; SystemID is the key, AssetNo was not indexed.
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Inventory_AssetNo' AND object_id = OBJECT_ID('dbo.tbl_Inventory')) CREATE INDEX IX_Inventory_AssetNo ON dbo.tbl_Inventory (AssetNo) INCLUDE (SystemID, ShortDesc, [Size], IsEmdad, Status)`, [])
+  // The line stages test NOT EXISTS (ticket, serial) against 45k-row line tables; without these the test is a scan per staged row.
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_DTLines_Ticket_Serial' AND object_id = OBJECT_ID('dbo.tbl_DeliveryTicketLines')) CREATE INDEX IX_DTLines_Ticket_Serial ON dbo.tbl_DeliveryTicketLines (dtNumber, serial)`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_RTLines_Ticket_Serial' AND object_id = OBJECT_ID('dbo.tbl_ReceivingTicketLines')) CREATE INDEX IX_RTLines_Ticket_Serial ON dbo.tbl_ReceivingTicketLines (rtNumber, serial)`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_DTLines_Serial' AND object_id = OBJECT_ID('dbo.tbl_DeliveryTicketLines')) CREATE INDEX IX_DTLines_Serial ON dbo.tbl_DeliveryTicketLines (serial) INCLUDE (dtNumber)`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_RTLines_Serial' AND object_id = OBJECT_ID('dbo.tbl_ReceivingTicketLines')) CREATE INDEX IX_RTLines_Serial ON dbo.tbl_ReceivingTicketLines (serial) INCLUDE (rtNumber)`, [])
+  // Spelling-variant check for new part numbers: persisted normalised keys, indexed, instead of REPLACE chains per row pair.
+  const akey = (col) => `UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${col},'-',''),' ',''),'/',''),'_',''),'.',''))`
+  await query(`IF COL_LENGTH('dbo.tbl_Inventory','AssetKeyNorm') IS NULL ALTER TABLE dbo.tbl_Inventory ADD AssetKeyNorm AS (${akey('ISNULL(AssetNo, SystemID)')}) PERSISTED`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Inventory_AssetKeyNorm' AND object_id = OBJECT_ID('dbo.tbl_Inventory')) CREATE INDEX IX_Inventory_AssetKeyNorm ON dbo.tbl_Inventory (AssetKeyNorm)`, [])
+  await query(`IF COL_LENGTH('dbo.tbl_ImportDTRT','PartKeyNorm') IS NULL ALTER TABLE dbo.tbl_ImportDTRT ADD PartKeyNorm AS (${akey('partNum')}) PERSISTED`, [])
+  // Ticket headers: the fill-from-tickets and reconcile queries join them to jobs by key.
+  await query(`IF COL_LENGTH('dbo.tbl_DeliveryTickets','JobKeyNorm') IS NULL ALTER TABLE dbo.tbl_DeliveryTickets ADD JobKeyNorm AS (${expr('jobNumber')}) PERSISTED`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_DT_JobKeyNorm' AND object_id = OBJECT_ID('dbo.tbl_DeliveryTickets')) CREATE INDEX IX_DT_JobKeyNorm ON dbo.tbl_DeliveryTickets (JobKeyNorm, deliveryDate) INCLUDE (dtNumber)`, [])
+  await query(`IF COL_LENGTH('dbo.tbl_ReceivingTickets','JobKeyNorm') IS NULL ALTER TABLE dbo.tbl_ReceivingTickets ADD JobKeyNorm AS (${expr('jobNumber')}) PERSISTED`, [])
+  await query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_RT_JobKeyNorm' AND object_id = OBJECT_ID('dbo.tbl_ReceivingTickets')) CREATE INDEX IX_RT_JobKeyNorm ON dbo.tbl_ReceivingTickets (JobKeyNorm, receivingDate) INCLUDE (rtNumber)`, [])
+  keysReady = true
+}
+
+
+module.exports = { ensureJobKeys, followMerges, standardiseCategory, standardiseSize, findAssetVariant, assetClash, resolveSystemId, parseInches, normKey, assetKey, bust, ensureColumns }

@@ -5,8 +5,10 @@
       "type": "httpTrigger",
       "direction": "in",
       "name": "req",
-      "methods": ["get"],
-      "route": "dashboard/stats"
+      "methods": [
+        "get"
+      ],
+      "route": "dashboard/{part?}"
     },
     {
       "type": "http",
