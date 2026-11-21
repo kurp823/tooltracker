@@ -21,9 +21,47 @@ async function scalar(sqlText) {
   }
 }
 
+const rates = require('../rates')
+
+/**
+ * GET /api/dashboard/rate-gaps
+ * Tools on rig right now (Ongoing jobs) whose category has no rate line on
+ * the job's contract — the days being marked for them cannot be priced.
+ * Grouped by contract and category so the fix (a rate line, or a mapping on
+ * Categories & Sizes → Contract mapping) is one action per row.
+ */
+async function rateGaps () {
+  const rows = (await query(`
+    SELECT j.Contract, i.ShortDesc AS Category, COUNT(DISTINCT i.SystemID) AS tools, COUNT(DISTINCT j.JobID) AS jobs, MIN(j.JobID) AS exampleJob
+      FROM tbl_Inventory i
+      JOIN tbl_DeliveryTicketLines l ON l.serial = i.SystemID OR l.serial = i.AssetNo
+      JOIN tbl_DeliveryTickets d ON d.dtNumber = l.dtNumber
+      JOIN tbl_Jobs j ON j.JobKeyNorm = d.JobKeyNorm
+     WHERE i.Status = 'On Rig' AND j.Status = 'Ongoing' AND NULLIF(LTRIM(RTRIM(j.Contract)),'') IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM tbl_ReceivingTicketLines rl JOIN tbl_ReceivingTickets r ON r.rtNumber = rl.rtNumber
+                        WHERE (rl.serial = i.SystemID OR rl.serial = i.AssetNo) AND r.JobKeyNorm = j.JobKeyNorm AND r.receivingDate >= d.deliveryDate)
+     GROUP BY j.Contract, i.ShortDesc`, [])).recordset
+  const map = await rates.loadCategoryMap()
+  const cache = new Map()
+  const gaps = []
+  for (const r of rows) {
+    if (!cache.has(r.Contract)) cache.set(r.Contract, await rates.loadContractRates(r.Contract))
+    const cr = cache.get(r.Contract)
+    if (!cr.length) { gaps.push({ ...r, reason: 'contract has no rate sheet' }); continue }
+    const eff = rates.effectiveCategory(cr, r.Category, map)
+    if (!cr.some(x => rates.norm(x.Category) === eff.category)) gaps.push({ ...r, reason: eff.mapped ? `mapped to ${eff.category}, not on this contract` : 'category not on contract — add a rate line or map it' })
+  }
+  return gaps.sort((a, b) => b.tools - a.tools)
+}
+
 module.exports = safe(async function (context, req) {
   const user = requireAuth(context, req)
   if (!user) return
+  const part = req.params && req.params.part
+  if (part === 'rate-gaps') {
+    try { return jsonResponse(context, 200, await rateGaps()) }
+    catch (e) { return jsonResponse(context, 500, { error: e.message }) }
+  }
 
   const issues = {}
 

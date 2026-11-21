@@ -1,5 +1,6 @@
 'use strict'
 const { query, jsonResponse, requireAuth, jobKey, jobKeyOf, safe , audit, blockIfClosed } = require('../db')
+const master = require('../master')
 const R = require('../rates')
 
 /**
@@ -412,6 +413,60 @@ module.exports = safe(async function (context, req) {
       priced,
       stillUnpriced: still,
     })
+  }
+
+  // ── POST /utilization/fill — days from the tickets, for a job and month ──
+  // Body: { JobID, Year, Month }  (Admin/Operations/Billing)
+  // For every delivery-ticket line on the job, the tool is on the rig from
+  // the DT date to the first RT for that tool on the job after it (or to the
+  // end of the month / today if not yet returned). Missing days in the month
+  // are inserted as '1' and priced the same way as a manual mark; days that
+  // already carry a log (any code) are left alone, so standby or exceptions
+  // marked by hand survive. Idempotent.
+  if (id === 'fill' && method === 'POST') {
+    if (!['Admin','Operations','Billing'].includes(user.Role))
+      return jsonResponse(context, 403, { error: 'Forbidden' })
+    const b = req.body || {}
+    const y = Number(b.Year), m = Number(b.Month)
+    if (!b.JobID || !y || !m || m < 1 || m > 12) return jsonResponse(context, 400, { error: 'JobID, Year, Month required' })
+    const mStart = `${y}-${String(m).padStart(2, '0')}-01`
+    const mEndD = new Date(Date.UTC(y, m, 0)); const today = new Date()
+    const mEnd = mEndD.toISOString().slice(0, 10)
+    const cap = (today < mEndD ? today : mEndD).toISOString().slice(0, 10)   // never fill future days
+    if (await blockIfClosed(context, user, mStart, 'utilization', b.JobID, 'fill from tickets')) return
+    await master.ensureJobKeys()
+
+    const spans = await query(
+      `SELECT l.serial AS tool, d.dtNumber, CONVERT(varchar(10), d.deliveryDate, 120) AS dtDate,
+              (SELECT MIN(CONVERT(varchar(10), r.receivingDate, 120))
+                 FROM tbl_ReceivingTicketLines rl JOIN tbl_ReceivingTickets r ON r.rtNumber = rl.rtNumber
+                WHERE rl.serial = l.serial AND r.JobKeyNorm = d.JobKeyNorm AND r.receivingDate >= d.deliveryDate) AS rtDate
+         FROM tbl_DeliveryTicketLines l
+         JOIN tbl_DeliveryTickets d ON d.dtNumber = l.dtNumber
+        WHERE d.JobKeyNorm = @jk AND d.deliveryDate <= @cap`,
+      [{ name: 'jk', value: jobKeyOf(b.JobID) }, { name: 'cap', value: cap }])
+
+    let inserted = 0, tools = 0, unpriced = []
+    for (const sp of spans.recordset) {
+      const from = sp.dtDate > mStart ? sp.dtDate : mStart
+      let to = sp.rtDate || cap; if (to > cap) to = cap
+      if (from > to) continue
+      tools++
+      const ctx = await contextFor(b.JobID, sp.tool, sp.dtNumber)
+      const price = await priceDay(load, ctx, '1')
+      const r = await query(
+        `WITH days AS (SELECT CAST(@from AS date) AS d UNION ALL SELECT DATEADD(day, 1, d) FROM days WHERE d < CAST(@to AS date))
+         INSERT INTO tbl_DailyFieldLogs (JobID, DTNumber, ToolSerial, LogDate, StatusType, RateCharged, RateSource, CreatedDate)
+         SELECT @job, @dt, @tool, days.d, '1', @rate, @src, GETDATE() FROM days
+          WHERE NOT EXISTS (SELECT 1 FROM tbl_DailyFieldLogs x WHERE x.JobKeyNorm = @jk AND x.ToolSerial = @tool AND CAST(x.LogDate AS date) = days.d)
+         OPTION (MAXRECURSION 400)`,
+        [{ name: 'from', value: from }, { name: 'to', value: to }, { name: 'job', value: b.JobID }, { name: 'jk', value: jobKeyOf(b.JobID) },
+         { name: 'dt', value: sp.dtNumber }, { name: 'tool', value: sp.tool }, { name: 'rate', value: price.rate }, { name: 'src', value: price.source }])
+      inserted += r.rowsAffected[0]
+      if (price.rate == null && r.rowsAffected[0]) unpriced.push({ tool: sp.tool, reason: price.reason })
+    }
+    await audit(user, 'utilization', b.JobID, 'fill-from-tickets', { period: `${y}-${m}`, tools, inserted, unpriced: unpriced.length })
+    return jsonResponse(context, 200, { tools, inserted, unpriced })
   }
 
   // ── POST /utilization/bulk — mark a run of days for one tool ─────────────

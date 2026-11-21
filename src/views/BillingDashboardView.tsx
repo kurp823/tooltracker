@@ -123,6 +123,7 @@ function Trend({ points, ccy }: { points: { m: string; v: number }[]; ccy: strin
 export function BillingDashboardView() {
   const { data, isLoading, error } = useFetch<Invoice[]>('/invoices')
   const { data: stages } = useFetch<ListRow[]>('/lists/BillingStatus')
+  const { data: gaps } = useFetch<{ Contract: string; Category: string; tools: number; jobs: number; exampleJob: string; reason: string }[]>('/dashboard/rate-gaps')
   const [ccyPick, setCcy] = useState<string | null>(null)
 
   const rows = data || []
@@ -211,6 +212,29 @@ export function BillingDashboardView() {
           <Tile label="Waiting over 30 days" value={m.stale.toLocaleString()} tone={m.stale ? 'warn' : undefined}
                 sub="not final, invoice dated over 30 days ago" />
         </div>
+
+        {/* Days being marked for these tools cannot be priced until the
+            contract has a rate line (or a mapping) for the category. Shown
+            here so it is fixed before invoicing, not discovered at invoice time. */}
+        {gaps && gaps.length > 0 && (
+          <div className="card p-3 border-l-4 border-l-amber-400">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium text-gray-900">Tools on rig with no rate on their contract</span>
+              <span className="text-xs text-gray-500">{gaps.reduce((n, g) => n + g.tools, 0)} tools · {gaps.length} contract/category pairs</span>
+              <Link to="/categories" className="btn-mini ml-auto">Contract mapping</Link>
+              <Link to="/contracts" className="btn-mini">Contract register</Link>
+            </div>
+            <table className="w-full text-xs mt-2">
+              <thead><tr className="text-gray-500"><th className="text-left py-1">Contract</th><th className="text-left">Category</th><th className="text-right">Tools</th><th className="text-right">Jobs</th><th className="text-left pl-3">Example job</th><th className="text-left pl-3">Why</th></tr></thead>
+              <tbody>{gaps.slice(0, 15).map(g => (
+                <tr key={g.Contract + g.Category} className="border-t border-gray-100">
+                  <td className="py-1 font-mono">{g.Contract}</td><td>{g.Category}</td><td className="text-right">{g.tools}</td><td className="text-right">{g.jobs}</td>
+                  <td className="pl-3 font-mono">{g.exampleJob}</td><td className="pl-3 text-amber-800">{g.reason}</td>
+                </tr>))}</tbody>
+            </table>
+            {gaps.length > 15 && <div className="text-[11px] text-gray-500 mt-1">… and {gaps.length - 15} more</div>}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
           <Card title="Where invoices stand" note={`value by billing status, ${ccy}`}>
